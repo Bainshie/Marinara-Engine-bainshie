@@ -293,13 +293,20 @@ export async function generatePrivatePost(
     access: input.request.access,
     ppvPrice: input.request.access === "ppv" ? (input.request.ppvPrice ?? null) : null,
     imageAssetId: input.request.imageAssetId,
-    metadata: input.request.poll ? { poll: createNoodlePoll(input.request.poll) } : {},
+    metadata: {
+      ...(input.request.poll ? { poll: createNoodlePoll(input.request.poll) } : {}),
+      ...(input.request.imageCrop ? { imageCrop: input.request.imageCrop } : {}),
+    },
   };
 
   const persist = async (
     extra: { id?: string; imagePrompt?: string | null; imageUrl?: string | null; metadata?: Record<string, unknown> } = {},
   ): Promise<NoodlerManagedPost> => {
-    const post = await noodle.createPrivatePost({ ...baseInput, ...extra });
+    const post = await noodle.createPrivatePost({
+      ...baseInput,
+      ...extra,
+      metadata: { ...baseInput.metadata, ...extra.metadata },
+    });
     if (!post) throw new Error("Failed to persist the generated private NoodleR post.");
     return post;
   };

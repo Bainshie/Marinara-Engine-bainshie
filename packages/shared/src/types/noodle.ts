@@ -88,6 +88,15 @@ export interface NoodlePoll {
   options: NoodlePollOption[];
 }
 
+export interface NoodlePostImageCrop {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  sourceWidth: number;
+  sourceHeight: number;
+}
+
 export interface NoodleSettings {
   refreshesPerDay: number;
   participantSelectionMode: NoodleParticipantSelectionMode;

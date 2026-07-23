@@ -27,6 +27,7 @@ import {
   NOODLE_PRIVATE_POST_CONTENT_MAX_LENGTH,
   NOODLE_PRIVATE_POST_GUIDE_MAX_LENGTH,
   NOODLE_PRIVATE_POST_TITLE_MAX_LENGTH,
+  noodlePollInputSchema,
 } from "@marinara-engine/shared";
 import type {
   NoodleIdentityDisclosure,
@@ -37,6 +38,7 @@ import type {
   NoodlerPostView,
   NoodleStageProfileInput,
   NoodlePollInput,
+  NoodlePostImageCrop,
   NoodlerManagedStageProfile,
   NoodlerManagedPost,
   NoodlerStageProfile,
@@ -54,6 +56,8 @@ import {
   useRunNoodlerAutoPostNow,
   useRefreshAllNoodlerCreatorsNow,
   useGenerateNoodlerStageProfileDraft,
+  useImportNoodlerPostImageUrl,
+  useLoadNoodlerPostImage,
   useNoodle,
   useNoodlerAccounts,
   useNoodlerEligibleAccounts,
@@ -89,14 +93,15 @@ import {
   NoodlePostCard,
   NoodleToolButton,
   type NoodlePostCardModel,
+  type NoodlePostImageUpdate,
   useNoodlePostCardController,
 } from "./NoodlePostCard";
-import { Avatar, NoodleShell, NOODLE_PERSONA_SWITCHER_PAGE_SIZE, NOODLE_PINK, useNoodleAccent } from "./NoodleShell";
+import { Avatar, NoodleShell, NOODLE_PERSONA_SWITCHER_PAGE_SIZE, useNoodleAccent } from "./NoodleShell";
 import { NoodleProfileSurface } from "./NoodleProfileSurface";
-import {
-  ConversationMediaPickerPanel,
-  type ConversationMediaPickerTabId,
-} from "../chat/ConversationMediaPickerPanel";
+import { NoodleImageComposer } from "./NoodleImageComposer";
+import { NoodlePollComposer } from "./NoodlePollComposer";
+import { PostImageCropEditor, PostImageFrame } from "./PostImageCropEditor";
+import { ConversationMediaPickerPanel, type ConversationMediaPickerTabId } from "../chat/ConversationMediaPickerPanel";
 import { HelpTooltip } from "../ui/HelpTooltip";
 import { Modal } from "../ui/Modal";
 import type { NoodleNavigationState } from "./noodle-navigation.types";
@@ -113,6 +118,7 @@ interface PrivatePostSubmission {
   access: NoodlePostAccess;
   ppvPrice: number | null;
   imageAssetId: string | null;
+  imageCrop: NoodlePostImageCrop | null;
   poll: { question: string; options: string[] } | null;
 }
 
@@ -121,7 +127,7 @@ interface PrivatePostDraft {
   body: string;
   access: NoodlePostAccess;
   ppvPrice: string;
-  image: { id: string; imageUrl: string } | null;
+  image: { id: string; imageUrl: string; crop: NoodlePostImageCrop } | null;
   poll: NoodlePollInput | null;
 }
 
@@ -139,7 +145,9 @@ function isEmptyPrivatePostDraft(draft: PrivatePostDraft): boolean {
     draft.title === EMPTY_PRIVATE_POST_DRAFT.title &&
     draft.body === EMPTY_PRIVATE_POST_DRAFT.body &&
     draft.access === EMPTY_PRIVATE_POST_DRAFT.access &&
-    draft.ppvPrice === EMPTY_PRIVATE_POST_DRAFT.ppvPrice && !draft.image && !draft.poll
+    draft.ppvPrice === EMPTY_PRIVATE_POST_DRAFT.ppvPrice &&
+    !draft.image &&
+    !draft.poll
   );
 }
 
@@ -303,6 +311,8 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
     };
   }, [accountSwitcherOpen]);
   const deleteStagedImage = useDeleteNoodlerPostImage();
+  const uploadEditedPostImage = useUploadNoodlerPostImage();
+  const loadPostImage = useLoadNoodlerPostImage();
   const [privatePostDrafts, setPrivatePostDrafts] = useState<Record<string, PrivatePostDraft>>({});
   const updatePrivatePostDraft = (profileId: string, patch: Partial<PrivatePostDraft>) => {
     setPrivatePostDrafts((current) => {
@@ -331,17 +341,18 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
     });
   };
   const confirmDiscardPrivatePostDrafts = () =>
-    Object.keys(privatePostDrafts).length === 0 ||
-    window.confirm("Discard unpublished NoodleR post drafts?");
+    Object.keys(privatePostDrafts).length === 0 || window.confirm("Discard unpublished NoodleR post drafts?");
   const exitToPublic = () => {
     if (!confirmDiscardPrivatePostDrafts()) return;
-    for (const [profileId, draft] of Object.entries(privatePostDrafts)) if (draft.image) deleteStagedImage.mutate({ accountId: profileId, imageId: draft.image.id });
+    for (const [profileId, draft] of Object.entries(privatePostDrafts))
+      if (draft.image) deleteStagedImage.mutate({ accountId: profileId, imageId: draft.image.id });
     setPrivatePostDrafts({});
     onNavigate({ mode: "public", view: "home" });
   };
   const openSettings = () => {
     if (!confirmDiscardPrivatePostDrafts()) return;
-    for (const [profileId, draft] of Object.entries(privatePostDrafts)) if (draft.image) deleteStagedImage.mutate({ accountId: profileId, imageId: draft.image.id });
+    for (const [profileId, draft] of Object.entries(privatePostDrafts))
+      if (draft.image) deleteStagedImage.mutate({ accountId: profileId, imageId: draft.image.id });
     setPrivatePostDrafts({});
     onNavigate({ mode: "settings" });
   };
@@ -417,7 +428,7 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
   const confirmDiscardProfileDraft = (): boolean => {
     if (!profileDraft) return true;
     const editing = editingProfileId
-      ? accountsQuery.data?.find((profile) => profile.id === editingProfileId) ?? null
+      ? (accountsQuery.data?.find((profile) => profile.id === editingProfileId) ?? null)
       : null;
     if (editing) {
       const savedDraft: NoodleStageProfileInput = {
@@ -450,14 +461,22 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
   };
   const reactToReply = (post: NoodlePostCardModel, reply: NoodleInteraction, active: boolean) => {
     if (!viewerPersonaId) return;
-    const payload = { postId: post.id, personaId: viewerPersonaId, type: "like" as const, parentInteractionId: reply.id };
+    const payload = {
+      postId: post.id,
+      personaId: viewerPersonaId,
+      type: "like" as const,
+      parentInteractionId: reply.id,
+    };
     const onError = (error: unknown) => toast.error(errorMessage(error, "Could not react to this reply."));
     if (active) removeInteraction.mutate(payload, { onError });
     else createInteraction.mutate(payload, { onError });
   };
   const voteInPoll = (post: NoodlePostCardModel, optionId: string, selectedOptionId: string | null) => {
     if (!viewerPersonaId || optionId === selectedOptionId) return;
-    createInteraction.mutate({ postId: post.id, personaId: viewerPersonaId, type: "vote", content: optionId }, { onError: (error) => toast.error(errorMessage(error, "Could not vote in this poll.")) });
+    createInteraction.mutate(
+      { postId: post.id, personaId: viewerPersonaId, type: "vote", content: optionId },
+      { onError: (error) => toast.error(errorMessage(error, "Could not vote in this poll.")) },
+    );
   };
   const submitReply = async (
     post: NoodlePostCardModel,
@@ -477,19 +496,49 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
       },
     );
   };
-  const savePost = async (post: NoodlePostCardModel, input: { title: string | null; content: string }) => {
-    await updatePost.mutateAsync(
-      { id: post.id, accountId: post.authorAccountId, title: input.title, content: input.content },
-      {
-        onError: (error) => toast.error(errorMessage(error, "Could not update this post.")),
-      },
-    );
+  const savePost = async (
+    post: NoodlePostCardModel,
+    input: { title: string | null; content: string; image: NoodlePostImageUpdate | null },
+  ) => {
+    let stagedImageId: string | null = null;
+    try {
+      if (input.image?.kind === "replace") {
+        const staged = await uploadEditedPostImage.mutateAsync({
+          accountId: post.authorAccountId,
+          file: input.image.file,
+        });
+        stagedImageId = staged.id;
+      }
+      await updatePost.mutateAsync({
+        id: post.id,
+        accountId: post.authorAccountId,
+        title: input.title,
+        content: input.content,
+        ...(input.image?.kind === "replace" && {
+          imageAssetId: stagedImageId,
+          imageCrop: input.image.crop,
+        }),
+        ...(input.image?.kind === "crop" && { imageCrop: input.image.crop }),
+        ...(input.image?.kind === "remove" && { imageAssetId: null }),
+      });
+    } catch (error) {
+      if (stagedImageId) {
+        await deleteStagedImage
+          .mutateAsync({ accountId: post.authorAccountId, imageId: stagedImageId })
+          .catch(() => {});
+      }
+      toast.error(errorMessage(error, "Could not update this post."));
+      throw error;
+    }
   };
   const deleteNoodlePost = (post: NoodlePostCardModel) => {
     if (!window.confirm("Delete this NoodleR post along with its likes, reposts, and replies?")) return;
-    deletePost.mutate({ id: post.id, accountId: post.authorAccountId }, {
+    deletePost.mutate(
+      { id: post.id, accountId: post.authorAccountId },
+      {
       onError: (error) => toast.error(errorMessage(error, "Could not delete this post.")),
-    });
+      },
+    );
   };
   const postCardController = useNoodlePostCardController({
     postManagement: true,
@@ -501,16 +550,24 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
     voteInPoll,
     submitReply,
     reactionPendingFor: () => false,
-    createInteractionPendingFor: (_postId, type) => (type === "reply" || type === "vote") && createInteraction.isPending,
-    updatePostPending: updatePost.isPending,
+    createInteractionPendingFor: (_postId, type) =>
+      (type === "reply" || type === "vote") && createInteraction.isPending,
+    updatePostPending: updatePost.isPending || uploadEditedPostImage.isPending || deleteStagedImage.isPending,
     titleMaxLength: NOODLE_PRIVATE_POST_TITLE_MAX_LENGTH,
     deduplicatePollBody: false,
+    imageFit: "contain",
+    imageEditing: {
+      loadPostImage: async (post) => {
+        if (!post.imageUrl) throw new Error("This post does not have an image.");
+        return loadPostImage.mutateAsync({ imageUrl: post.imageUrl });
+      },
+    },
     openAuthorProfile: (accountId) => onNavigate({ mode: "private", view: "profile", accountId }),
   });
   const postCardCtx = postCardController.ctx;
   const selectedProfile =
     navigation.mode === "private" && navigation.view === "profile"
-      ? accountsQuery.data?.find((profile) => profile.id === navigation.accountId) ?? null
+      ? (accountsQuery.data?.find((profile) => profile.id === navigation.accountId) ?? null)
       : null;
   const postsQuery = useNoodlerPosts(selectedProfile?.id ?? null);
   const selectedViewerCreator =
@@ -660,7 +717,16 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
     }
   };
 
-  const submitManualPost = async ({ profileId, title, body, access, ppvPrice, imageAssetId, poll }: PrivatePostSubmission) => {
+  const submitManualPost = async ({
+    profileId,
+    title,
+    body,
+    access,
+    ppvPrice,
+    imageAssetId,
+    imageCrop,
+    poll,
+  }: PrivatePostSubmission) => {
     await createPost.mutateAsync({
       targetAccountId: profileId,
       title,
@@ -668,12 +734,22 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
       access,
       ...(access === "ppv" ? { ppvPrice } : {}),
       imageAssetId,
+      ...(imageCrop ? { imageCrop } : {}),
       poll,
     });
     toast.success("Private post published.");
   };
 
-  const submitGuidedPost = async ({ profileId, title, body, access, ppvPrice, imageAssetId, poll }: PrivatePostSubmission) => {
+  const submitGuidedPost = async ({
+    profileId,
+    title,
+    body,
+    access,
+    ppvPrice,
+    imageAssetId,
+    imageCrop,
+    poll,
+  }: PrivatePostSubmission) => {
     const guide = serializePrivatePostGuide(title, body);
     const result = await generatePost.mutateAsync({
       mode: "private",
@@ -682,6 +758,7 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
       access,
       ...(access === "ppv" ? { ppvPrice } : {}),
       imageAssetId,
+      ...(imageCrop ? { imageCrop } : {}),
       poll,
     });
     if (result.imagePromptReview) {
@@ -727,24 +804,21 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
   };
 
   const mainAuthorProfile = shellPersonaAccount
-    ? accountsQuery.data?.find((profile) => profile.publicAccountId === shellPersonaAccount.id) ?? null
+    ? (accountsQuery.data?.find((profile) => profile.publicAccountId === shellPersonaAccount.id) ?? null)
     : null;
 
   const shellProps = {
     appMode: "noodler" as const,
     activeView:
-      navigation.mode === "private" && navigation.view === "profile"
-        ? "profile" as const
-        : "noodler" as const,
+      navigation.mode === "private" && navigation.view === "profile" ? ("profile" as const) : ("noodler" as const),
     homeActive: navigation.mode === "private" && navigation.view === "hub",
-    accent: NOODLE_PINK,
+    accent: "var(--marinara-chat-chrome-accent)",
     enableNoodler: enabled,
     personaAccount: shellPersonaAccount,
     sortedPersonaAccounts: viewerAccounts,
     visiblePersonaAccounts,
     linkedPublicAccountIds: new Set((accountsQuery.data ?? []).flatMap((profile) => profile.publicAccountId ?? [])),
-    onLoadMorePersonaAccounts: () =>
-      setPersonaAccountLimit((current) => current + NOODLE_PERSONA_SWITCHER_PAGE_SIZE),
+    onLoadMorePersonaAccounts: () => setPersonaAccountLimit((current) => current + NOODLE_PERSONA_SWITCHER_PAGE_SIZE),
     onSwitchPersona: switchViewerPersona,
     accountSwitcherOpen,
     onAccountSwitcherOpenChange: setAccountSwitcherOpen,
@@ -762,11 +836,7 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
       : undefined,
     onOpenSettings: openSettings,
     overlays: (
-      <BrowserChrome
-        badgeLabel="Private"
-        url="https://noodler.local"
-        mobileUrl="noodle.marinara.local/noodler"
-      />
+      <BrowserChrome badgeLabel="Private" url="https://noodler.local" mobileUrl="noodle.marinara.local/noodler" />
     ),
   } as const;
 
@@ -943,7 +1013,7 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
           draft={privatePostDrafts[selectedProfile.id] ?? EMPTY_PRIVATE_POST_DRAFT}
           onDraftChange={(patch) => updatePrivatePostDraft(selectedProfile.id, patch)}
           onClearDraft={() => clearPrivatePostDraft(selectedProfile.id)}
-          onDiscardDraft={() => clearPrivatePostDraft(selectedProfile.id, true)}
+            onDiscardDraft={() => clearPrivatePostDraft(selectedProfile.id, true)}
           isLoading={postsQuery.isLoading}
           isError={postsQuery.isError}
           onRetry={() => void postsQuery.refetch()}
@@ -954,7 +1024,7 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
             }
             deleteProfile.mutate(selectedProfile.id, {
               onSuccess: () => {
-                clearPrivatePostDraft(selectedProfile.id, true);
+                  clearPrivatePostDraft(selectedProfile.id, true);
                 onNavigate({ mode: "private", view: "profiles" });
                 toast.success("Stage profile deleted.");
               },
@@ -1160,7 +1230,7 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
         authorProfile={accountsQuery.isSuccess ? mainAuthorProfile : null}
         authorDraft={
           mainAuthorProfile
-            ? privatePostDrafts[mainAuthorProfile.id] ?? EMPTY_PRIVATE_POST_DRAFT
+            ? (privatePostDrafts[mainAuthorProfile.id] ?? EMPTY_PRIVATE_POST_DRAFT)
             : EMPTY_PRIVATE_POST_DRAFT
         }
         onAuthorDraftChange={(patch) => {
@@ -1169,7 +1239,9 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
         onClearAuthorDraft={() => {
           if (mainAuthorProfile) clearPrivatePostDraft(mainAuthorProfile.id);
         }}
-        onDiscardAuthorDraft={() => { if (mainAuthorProfile) clearPrivatePostDraft(mainAuthorProfile.id, true); }}
+        onDiscardAuthorDraft={() => {
+          if (mainAuthorProfile) clearPrivatePostDraft(mainAuthorProfile.id, true);
+        }}
         authorLoading={accountsQuery.isLoading || !data}
         authorError={accountsQuery.isError && !accountsQuery.data}
         onRetryAuthor={() => void accountsQuery.refetch()}
@@ -1292,10 +1364,7 @@ function StageProfileForm({
       const menuHeight = relationshipPickerMenuRef.current?.offsetHeight ?? 224;
       const left = Math.min(Math.max(8, anchor.left), window.innerWidth - menuWidth - 8);
       const roomBelow = window.innerHeight - anchor.bottom;
-      const top =
-        roomBelow >= menuHeight + 8
-          ? anchor.bottom + 4
-          : Math.max(8, anchor.top - menuHeight - 4);
+      const top = roomBelow >= menuHeight + 8 ? anchor.bottom + 4 : Math.max(8, anchor.top - menuHeight - 4);
       setRelationshipPickerPosition({ left, top });
     });
     return () => window.cancelAnimationFrame(frame);
@@ -1582,11 +1651,7 @@ function StageProfileForm({
                   className="inline-flex min-h-11 w-40 shrink-0 items-center justify-center gap-2 rounded-md bg-[var(--noodle-blue)] px-4 text-sm font-bold text-zinc-950 [&_svg]:!text-zinc-950 hover:opacity-90 disabled:opacity-50"
                 >
                   {isGenerating ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}{" "}
-                  {isGenerating
-                    ? "Generating draft..."
-                    : previousDraft
-                      ? "Rewrite draft"
-                      : "Generate draft"}
+                  {isGenerating ? "Generating draft..." : previousDraft ? "Rewrite draft" : "Generate draft"}
                 </button>
               </div>
               {previousDraft && !isGenerating && (
@@ -2027,10 +2092,7 @@ function StageProfileView({
                   <p className="truncate text-sm font-bold">{subscriber.displayName}</p>
                   <p className="truncate text-xs text-[var(--muted-foreground)]">@{subscriber.handle}</p>
                 </div>
-                <time
-                  dateTime={subscriber.subscribedAt}
-                  className="shrink-0 text-xs text-[var(--muted-foreground)]"
-                >
+                <time dateTime={subscriber.subscribedAt} className="shrink-0 text-xs text-[var(--muted-foreground)]">
                   {new Date(subscriber.subscribedAt).toLocaleDateString()}
                 </time>
               </div>
@@ -2043,20 +2105,15 @@ function StageProfileView({
           />
         )
       ) : viewerIsLoading || isLoading ? (
-        <div className="flex justify-center py-12"><Loader2 size={22} className="animate-spin text-[var(--noodle-blue)]" /></div>
+        <div className="flex justify-center py-12">
+          <Loader2 size={22} className="animate-spin text-[var(--noodle-blue)]" />
+        </div>
       ) : viewerIsError ? (
-        <EmptyState
-          title="Viewer access could not be loaded."
-          action="Try again"
-          onAction={onRetryViewer}
-        />
+        <EmptyState title="Viewer access could not be loaded." action="Try again" onAction={onRetryViewer} />
       ) : isError ? (
-        <EmptyState
-          title="Private posts could not be loaded."
-          action="Try again"
-          onAction={onRetry}
-        />
-      ) : visiblePosts.length > 0 ? visiblePosts.map((item) =>
+        <EmptyState title="Private posts could not be loaded." action="Try again" onAction={onRetry} />
+      ) : visiblePosts.length > 0 ? (
+        visiblePosts.map((item) =>
           item.kind === "locked" || item.kind === "controller-locked" ? (
             <LockedPrivatePostCard
               key={item.post.id}
@@ -2096,10 +2153,7 @@ function StageProfileView({
                   Hide
                 </button>
               </div>
-              <NoodlePostCard
-                post={item.model}
-                ctx={{ ...postCardCtx, personaAccount: null, postManagement: true }}
-              />
+              <NoodlePostCard post={item.model} ctx={{ ...postCardCtx, personaAccount: null, postManagement: true }} />
             </div>
           ) : (
             <NoodlePostCard
@@ -2112,6 +2166,7 @@ function StageProfileView({
               }}
             />
           ),
+        )
         ) : (
           <EmptyState title={activeTab === "posts" ? "No private posts yet." : `No ${activeTab} posts yet.`} />
         )}
@@ -2123,7 +2178,8 @@ function StageProfileView({
         mobileHeader={null}
         account={profile}
         displayHandle={profile.handle}
-        handleMeta={<>
+        handleMeta={
+          <>
           {profile.disclosureMode === "hinted" && profile.publicIdentity ? (
             <HelpTooltip
               label="Hinted"
@@ -2146,7 +2202,8 @@ function StageProfileView({
               Openly linked to {profile.publicIdentity.displayName} (@{profile.publicIdentity.handle})
             </span>
           )}
-        </>}
+          </>
+        }
         decorativeBanner
         leadingActions={
           viewingOwnCreator ? (
@@ -2574,7 +2631,13 @@ function ViewerHub({
       ) : authorError ? (
         <div className="border-b border-[var(--noodle-divider)] px-4 py-4">
           <p className="text-sm font-semibold">Your linked NoodleR profile could not be loaded.</p>
-          <button type="button" onClick={onRetryAuthor} className="mt-3 min-h-10 rounded-md border border-[var(--noodle-divider)] px-3 text-xs font-bold hover:bg-[var(--accent)]">Try again</button>
+          <button
+            type="button"
+            onClick={onRetryAuthor}
+            className="mt-3 min-h-10 rounded-md border border-[var(--noodle-divider)] px-3 text-xs font-bold hover:bg-[var(--accent)]"
+          >
+            Try again
+          </button>
         </div>
       ) : (
         <div className="border-b border-[var(--noodle-divider)] px-4 py-4">
@@ -2648,7 +2711,11 @@ function ViewerHub({
         </>
       ) : (
         <EmptyState
-          title={authorProfile ? "No other stage profiles are visible to this persona." : "No stage profiles are visible to this persona."}
+          title={
+            authorProfile
+              ? "No other stage profiles are visible to this persona."
+              : "No stage profiles are visible to this persona."
+          }
           detail={authorProfile ? "Your own stage profile and its posts are still available." : undefined}
           action={authorProfile && onOpenAuthorProfile ? `View ${authorProfile.displayName}` : undefined}
           onAction={authorProfile ? onOpenAuthorProfile : undefined}
@@ -2685,7 +2752,9 @@ function LockedPrivatePostCard({
       <div className="min-w-0 flex-1">
         <p className="truncate text-xs font-bold">
           {profile.displayName}{" "}
-          <span className="font-normal text-[var(--muted-foreground)]">@{profile.handle} · {formatTime(post.createdAt)}</span>
+          <span className="font-normal text-[var(--muted-foreground)]">
+            @{profile.handle} · {formatTime(post.createdAt)}
+          </span>
         </p>
         <div className="mt-2 flex flex-wrap items-center gap-3 rounded-md border border-[var(--noodle-divider)] p-3">
           <Lock size={18} className="shrink-0 text-[var(--noodle-blue)]" />
@@ -2770,8 +2839,11 @@ function PrivatePostComposer({
   const [postError, setPostError] = useState<string | null>(null);
   const [guideError, setGuideError] = useState<string | null>(null);
   const [activeTool, setActiveTool] = useState<PrivateComposerTool | null>(null);
+  const [pollEditorValue, setPollEditorValue] = useState<NoodlePollInput | null>(null);
   const [mediaPickerTab, setMediaPickerTab] = useState<ConversationMediaPickerTabId>("emoji");
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
+  const [pendingImageFile, setPendingImageFile] = useState<File | null>(null);
+  const [imageUrlDraft, setImageUrlDraft] = useState("");
   const [localOperation, setLocalOperation] = useState<"submission" | "upload" | "remove" | null>(null);
   const imageFileRef = useRef<HTMLInputElement | null>(null);
   const imageToolRef = useRef<HTMLDivElement | null>(null);
@@ -2780,17 +2852,27 @@ function PrivatePostComposer({
   const coinToolRef = useRef<HTMLDivElement | null>(null);
   const composerBusyRef = useRef(false);
   const draftRevisionRef = useRef(0);
+  const editableImageSourceRef = useRef<{ imageId: string; file: File } | null>(null);
   const { title, body, access, ppvPrice, image, poll } = draft;
   const uploadImage = useUploadNoodlerPostImage();
+  const importImageUrl = useImportNoodlerPostImageUrl();
   const deleteImage = useDeleteNoodlerPostImage();
-  const hasDraft = !isEmptyPrivatePostDraft(draft);
+  const hasDraft = pendingImageFile !== null || !isEmptyPrivatePostDraft(draft);
   const parsedPrice = Number(ppvPrice);
-  const composerBusy = localOperation !== null || manualPending || guidePending || uploadImage.isPending || deleteImage.isPending;
+  const composerBusy =
+    localOperation !== null ||
+    manualPending ||
+    guidePending ||
+    uploadImage.isPending ||
+    importImageUrl.isPending ||
+    deleteImage.isPending;
   composerBusyRef.current = composerBusy;
   const guide = serializePrivatePostGuide(title, body);
 
   useEffect(() => {
-    if (composerBusy) setActiveTool(null);
+    if (composerBusy) {
+      setActiveTool(null);
+    }
   }, [composerBusy]);
 
   const updateDraft = (patch: Partial<PrivatePostDraft>) => {
@@ -2799,7 +2881,7 @@ function PrivatePostComposer({
     return true;
   };
   const finishOperation = (operation: "submission" | "upload" | "remove") => {
-    setLocalOperation((current) => current === operation ? null : current);
+    setLocalOperation((current) => (current === operation ? null : current));
   };
 
   const clearDraft = () => {
@@ -2807,6 +2889,11 @@ function PrivatePostComposer({
     onClearDraft();
     setPostError(null);
     setGuideError(null);
+    setAttachmentError(null);
+    setPendingImageFile(null);
+    setImageUrlDraft("");
+    setPollEditorValue(null);
+    editableImageSourceRef.current = null;
     setActiveTool(null);
     setExpanded(false);
   };
@@ -2817,6 +2904,10 @@ function PrivatePostComposer({
     setPostError(null);
     setGuideError(null);
     setAttachmentError(null);
+    setPendingImageFile(null);
+    setImageUrlDraft("");
+    setPollEditorValue(null);
+    editableImageSourceRef.current = null;
     setActiveTool(null);
     setExpanded(false);
   };
@@ -2826,6 +2917,8 @@ function PrivatePostComposer({
     composerBusyRef.current = true;
     setLocalOperation("remove");
     onDraftChange({ image: null });
+    setPendingImageFile(null);
+    editableImageSourceRef.current = null;
     deleteImage.mutate(
       { accountId: profile.id, imageId: image.id },
       {
@@ -2839,56 +2932,123 @@ function PrivatePostComposer({
     );
   };
   const handleImageFile = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]; event.target.value = "";
+    const file = event.target.files?.[0];
+    event.target.value = "";
     if (!file || composerBusyRef.current) return;
-    if (!file.type.startsWith("image/")) { setAttachmentError("Choose an image file."); return; }
+    if (!file.type.startsWith("image/")) {
+      setAttachmentError("Choose an image file.");
+      return;
+    }
+    setAttachmentError(null);
+    setPendingImageFile(file);
+    setActiveTool(null);
+  };
+  const handleImageUrl = async () => {
+    const imageUrl = imageUrlDraft.trim();
+    if (!imageUrl || composerBusyRef.current) return;
+    setAttachmentError(null);
+    setActiveTool(null);
+    try {
+      const file = await importImageUrl.mutateAsync({ accountId: profile.id, imageUrl });
+      setImageUrlDraft("");
+      setPendingImageFile(file);
+    } catch (error) {
+      setAttachmentError(errorMessage(error, "Could not import this image URL."));
+    }
+  };
+  const applyImageCrop = async (crop: NoodlePostImageCrop) => {
+    if (composerBusyRef.current) return;
+    const sourceFile = pendingImageFile;
+    if (!sourceFile) return;
+    if (
+      image &&
+      editableImageSourceRef.current?.imageId === image.id &&
+      editableImageSourceRef.current.file === sourceFile
+    ) {
+      onDraftChange({ image: { ...image, crop } });
+      setPendingImageFile(null);
+      setActiveTool(null);
+      return;
+    }
     const revision = ++draftRevisionRef.current;
     const replacedImage = image;
     composerBusyRef.current = true;
     setLocalOperation("upload");
     setAttachmentError(null);
-    uploadImage.mutate(
-      { accountId: profile.id, file },
-      {
-        onSuccess: (next) => {
-          if (draftRevisionRef.current !== revision) return;
-          if (replacedImage) deleteImage.mutate({ accountId: profile.id, imageId: replacedImage.id });
-          onDraftChange({ image: next });
-          setActiveTool(null);
-        },
-        onError: (error) => {
-          if (draftRevisionRef.current === revision) {
-            setAttachmentError(errorMessage(error, "Could not upload this image."));
-          }
-        },
-        onSettled: () => finishOperation("upload"),
-      },
-    );
+    try {
+      const next = await uploadImage.mutateAsync({ accountId: profile.id, file: sourceFile });
+      if (draftRevisionRef.current !== revision) return;
+      if (replacedImage) deleteImage.mutate({ accountId: profile.id, imageId: replacedImage.id });
+      editableImageSourceRef.current = { imageId: next.id, file: sourceFile };
+      onDraftChange({ image: { ...next, crop } });
+      setPendingImageFile(null);
+      setActiveTool(null);
+    } catch (error) {
+      if (draftRevisionRef.current === revision) {
+        setAttachmentError(errorMessage(error, "Could not upload this image."));
+      }
+      throw error;
+    } finally {
+      finishOperation("upload");
+    }
   };
 
   const toggleTool = (tool: PrivateComposerTool) => {
     if (composerBusyRef.current) return;
-    setActiveTool((current) => (current === tool ? null : tool));
+    if (activeTool === tool) {
+      setActiveTool(null);
+      if (tool === "poll") setPollEditorValue(null);
+      return;
+    }
+    if (tool === "poll") {
+      setPollEditorValue(
+        poll ? { question: poll.question, options: [...poll.options] } : { question: "", options: ["", ""] },
+      );
+    } else {
+      setPollEditorValue(null);
+    }
+    setActiveTool(tool);
+  };
+
+  const applyPollDraft = () => {
+    const parsed = noodlePollInputSchema.safeParse(pollEditorValue);
+    if (!parsed.success) return;
+    if (
+      updateDraft({
+        poll: parsed.data,
+      })
+    ) {
+      setPollEditorValue(null);
+      setActiveTool(null);
+    }
   };
 
   const submission = (): PrivatePostSubmission => ({
     profileId: profile.id,
     title,
-    body,
+    body: body.trim() || (image && !poll ? "Shared an image." : ""),
     access,
     ppvPrice: access === "ppv" ? parsedPrice : null,
     imageAssetId: image?.id ?? null,
+    imageCrop: image?.crop ?? null,
     poll: poll ? { question: poll.question.trim(), options: poll.options.map((option) => option.trim()) } : null,
   });
 
   const publish = async () => {
     if (composerBusyRef.current) return;
     setPostError(null);
-    if (!body.trim()) {
-      setPostError("A literal post needs a body.");
+    if (pendingImageFile) {
+      setPostError("Apply or cancel the image crop before posting.");
       return;
     }
-    if (poll && (!poll.question.trim() || poll.options.length < 2 || poll.options.some((option) => !option.trim()) || new Set(poll.options.map((option) => option.trim().toLocaleLowerCase())).size !== poll.options.length)) { setPostError("Polls need a question and two unique options."); return; }
+    if (!body.trim() && !image && !poll) {
+      setPostError("Add a body, image, or poll.");
+      return;
+    }
+    if (poll && !noodlePollInputSchema.safeParse(poll).success) {
+      setPostError("Polls need a question and two unique answers.");
+      return;
+    }
     if (access === "ppv" && (!Number.isFinite(parsedPrice) || parsedPrice < 0 || parsedPrice > 999_999)) {
       setPostError("Enter a PPV price from 0 to 999,999 credits.");
       return;
@@ -2910,8 +3070,24 @@ function PrivatePostComposer({
   const guidePost = async () => {
     if (composerBusyRef.current) return;
     setGuideError(null);
-    if (!body.trim()) { setGuideError("A guided post needs a body."); return; }
-    if (poll && (!poll.question.trim() || poll.options.length < 2 || poll.options.some((option) => !option.trim()) || new Set(poll.options.map((option) => option.trim().toLocaleLowerCase())).size !== poll.options.length)) { setGuideError("Polls need a question and two unique options."); return; }
+    if (pendingImageFile) {
+      setGuideError("Apply or cancel the image crop before generating.");
+      return;
+    }
+    if (!body.trim()) {
+      setGuideError("A guided post needs a body.");
+      return;
+    }
+    if (
+      poll &&
+      (!poll.question.trim() ||
+        poll.options.length < 2 ||
+        poll.options.some((option) => !option.trim()) ||
+        new Set(poll.options.map((option) => option.trim().toLocaleLowerCase())).size !== poll.options.length)
+    ) {
+      setGuideError("Polls need a question and two unique options.");
+      return;
+    }
     if (guide.length > NOODLE_PRIVATE_POST_GUIDE_MAX_LENGTH) {
       setGuideError(
         `The combined title and body guide must be ${NOODLE_PRIVATE_POST_GUIDE_MAX_LENGTH.toLocaleString()} characters or fewer.`,
@@ -2961,26 +3137,38 @@ function PrivatePostComposer({
   return (
     <NoodleComposerShell
       dataComponent="NoodlerHome.PrivatePostComposer"
-      header={collapsible ? (
+      header={
+        collapsible ? (
         <button
           type="button"
           onClick={() => {
             setActiveTool(null);
             setExpanded(false);
           }}
-          disabled={composerBusy}
+            disabled={composerBusy}
           aria-expanded="true"
           className="inline-flex min-h-8 items-center gap-1.5 rounded-md px-1 text-xs font-bold text-[var(--noodle-blue)] hover:bg-[var(--accent)] disabled:opacity-50"
         >
           <ChevronDown size={14} />
           Post as {profile.displayName}
         </button>
-      ) : undefined}
+        ) : undefined
+      }
       avatar={<ProfileInitial profile={profile} />}
       tools={
         <NoodleComposerToolRow
-          image={{ ref: imageToolRef, active: activeTool === "image" || Boolean(image), disabled: composerBusy, onClick: () => toggleTool("image") }}
-          poll={{ ref: pollToolRef, active: activeTool === "poll" || Boolean(poll), disabled: composerBusy, onClick: () => toggleTool("poll") }}
+          image={{
+            ref: imageToolRef,
+            active: activeTool === "image" || Boolean(image),
+            disabled: composerBusy,
+            onClick: () => toggleTool("image"),
+          }}
+          poll={{
+            ref: pollToolRef,
+            active: activeTool === "poll" || Boolean(poll),
+            disabled: composerBusy,
+            onClick: () => toggleTool("poll"),
+          }}
           media={{
             ref: mediaToolRef,
             active: activeTool === "media",
@@ -3006,22 +3194,33 @@ function PrivatePostComposer({
           <button
             type="button"
             onClick={() => void guidePost()}
-            disabled={composerBusy}
+            disabled={composerBusy || Boolean(pendingImageFile)}
             className="inline-flex h-8 items-center gap-1.5 rounded-full border border-[var(--noodle-divider)] px-3 text-xs font-bold hover:bg-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-50"
           >
             {guidePending ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
             {guidePending ? "Guiding…" : "Guide"}
           </button>
-          {hasDraft && <button type="button" onClick={discardDraft} disabled={composerBusy} className="inline-flex h-8 items-center rounded-full px-3 text-xs font-bold text-[var(--muted-foreground)] hover:bg-[var(--accent)] disabled:opacity-50">Discard</button>}
+          {hasDraft && (
+            <button
+              type="button"
+              onClick={discardDraft}
+              disabled={composerBusy}
+              className="inline-flex h-8 items-center rounded-full px-3 text-xs font-bold text-[var(--muted-foreground)] hover:bg-[var(--accent)] disabled:opacity-50"
+            >
+              Discard
+            </button>
+          )}
           <button
             type="button"
             onClick={() => void publish()}
-            disabled={composerBusy || !body.trim()}
+            disabled={
+              composerBusy ||
+              Boolean(pendingImageFile) ||
+              (!body.trim() && !image && !noodlePollInputSchema.safeParse(poll).success)
+            }
             className="inline-flex h-8 items-center gap-1.5 rounded-full bg-[var(--noodle-blue)] px-4 text-xs font-bold text-zinc-950 [&_svg]:!text-zinc-950 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {manualPending
-              ? <Loader2 size={13} className="animate-spin" />
-              : <Send size={13} />}
+            {manualPending ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />}
             {manualPending ? "Posting…" : "Post"}
           </button>
         </div>
@@ -3033,7 +3232,9 @@ function PrivatePostComposer({
               <ConversationMediaPickerPanel
                 tabs={[{ id: "emoji", label: "Emoji" }]}
                 activeTab={mediaPickerTab}
-                onActiveTabChange={(tab) => { if (!composerBusyRef.current) setMediaPickerTab(tab); }}
+                onActiveTabChange={(tab) => {
+                  if (!composerBusyRef.current) setMediaPickerTab(tab);
+                }}
                 onClose={() => setActiveTool(null)}
                 onEmojiSelect={(emoji) => updateDraft({ body: body + emoji })}
                 onGifSelect={() => {}}
@@ -3044,20 +3245,33 @@ function PrivatePostComposer({
           )}
           {activeTool === "image" && !composerBusy && (
             <NoodleAnchoredPopover anchorRef={imageToolRef} wide>
-              <div className="marinara-chat-popover space-y-3 rounded-xl border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)] p-3 text-[var(--foreground)] shadow-2xl shadow-black/35">
-                <p className="text-xs font-bold">Attach one image</p>
-                <button type="button" onClick={() => { if (!composerBusyRef.current) imageFileRef.current?.click(); }} disabled={composerBusy} className="h-9 w-full rounded-full bg-[var(--noodle-blue)] px-4 text-xs font-bold text-zinc-950 disabled:opacity-50">{uploadImage.isPending ? "Uploading…" : image ? "Replace image" : "Upload from device"}</button>
-                {image && <button type="button" onClick={removeImage} disabled={composerBusy} className="h-9 w-full rounded-full border border-[var(--noodle-divider)] px-4 text-xs font-bold text-[var(--destructive)] disabled:opacity-50">Remove image</button>}
-              </div>
+              <NoodleImageComposer
+                imageUrl={imageUrlDraft}
+                onImageUrlChange={setImageUrlDraft}
+                onChooseFile={() => {
+                  if (!composerBusyRef.current) imageFileRef.current?.click();
+                }}
+                onUseImageUrl={() => void handleImageUrl()}
+                onClose={() => setActiveTool(null)}
+                disabled={composerBusy}
+                hasImage={Boolean(image)}
+                urlActionLabel="Import URL"
+              />
             </NoodleAnchoredPopover>
           )}
           {activeTool === "poll" && !composerBusy && (
             <NoodleAnchoredPopover anchorRef={pollToolRef} wide>
-              <div className="marinara-chat-popover space-y-3 rounded-xl border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)] p-3 text-[var(--foreground)] shadow-2xl shadow-black/35">
-                <label className="block space-y-1"><span className="text-xs font-bold">Question</span><input value={poll?.question ?? ""} maxLength={240} disabled={composerBusy} onChange={(event) => updateDraft({ poll: { question: event.target.value, options: poll?.options ?? ["", ""] } })} className="mari-chrome-field h-9 w-full rounded-md border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)] px-3 text-sm" /></label>
-                {(poll?.options ?? ["", ""]).map((option, index, options) => <div key={index} className="flex gap-2"><input value={option} maxLength={120} disabled={composerBusy} aria-label={`Poll option ${index + 1}`} onChange={(event) => updateDraft({ poll: { question: poll?.question ?? "", options: options.map((entry, entryIndex) => entryIndex === index ? event.target.value : entry) } })} className="mari-chrome-field h-9 min-w-0 flex-1 rounded-md border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)] px-3 text-sm" />{options.length > 2 && <button type="button" disabled={composerBusy} onClick={() => updateDraft({ poll: { question: poll?.question ?? "", options: options.filter((_, entryIndex) => entryIndex !== index) } })} className="h-9 w-9 text-[var(--muted-foreground)]" aria-label={`Remove option ${index + 1}`}><X size={15} /></button>}</div>)}
-                <div className="flex gap-2"><button type="button" disabled={composerBusy || (poll?.options.length ?? 2) >= 4} onClick={() => updateDraft({ poll: { question: poll?.question ?? "", options: [...(poll?.options ?? ["", ""]), ""] } })} className="h-9 flex-1 rounded-full border border-[var(--noodle-divider)] text-xs font-bold text-[var(--noodle-blue)] disabled:opacity-50">Add option</button><button type="button" disabled={composerBusy} onClick={() => { if (updateDraft({ poll: null })) setActiveTool(null); }} className="h-9 flex-1 rounded-full border border-[var(--noodle-divider)] text-xs font-bold text-[var(--destructive)]">Remove poll</button></div>
-              </div>
+              <NoodlePollComposer
+                value={pollEditorValue}
+                onChange={setPollEditorValue}
+                onClose={() => {
+                  setPollEditorValue(null);
+                  setActiveTool(null);
+                }}
+                onSubmit={applyPollDraft}
+                submitLabel={poll ? "Update poll" : "Add poll"}
+                disabled={composerBusy}
+              />
             </NoodleAnchoredPopover>
           )}
           {activeTool === "coin" && !composerBusy && (
@@ -3106,13 +3320,15 @@ function PrivatePostComposer({
           )}
         </>
       }
-      footer={(postError || guideError || attachmentError) && (
+      footer={
+        (postError || guideError || attachmentError) && (
         <div className="mt-2 space-y-1 pl-14 text-xs text-[var(--destructive)]" role="alert">
           {postError && <p>Post: {postError}</p>}
           {guideError && <p>Guide: {guideError}</p>}
-          {attachmentError && <p>Image: {attachmentError}</p>}
+            {attachmentError && <p>Image: {attachmentError}</p>}
         </div>
-      )}
+        )
+      }
     >
       <input ref={imageFileRef} type="file" accept="image/*" className="hidden" onChange={handleImageFile} />
       <label className="block space-y-1">
@@ -3135,8 +3351,73 @@ function PrivatePostComposer({
         placeholder="What's simmering, privately?"
         className="min-h-20 w-full resize-none border-0 bg-transparent py-2 text-[1rem] leading-6 text-[var(--foreground)] outline-none placeholder:text-[var(--muted-foreground)]"
       />
-      {image && <div className="mb-3 overflow-hidden rounded-xl border border-[var(--noodle-divider)] bg-[var(--noodle-blue)]/10"><img src={image.imageUrl} alt="Attached post image" className="max-h-60 w-full object-cover" /><div className="flex items-center justify-between px-3 py-2 text-xs text-[var(--noodle-blue)]"><span>Attached image</span><button type="button" onClick={removeImage} disabled={composerBusy} className="min-h-8 px-2 font-bold disabled:opacity-50">Remove</button></div></div>}
-      {poll && <div className="mb-3 flex items-start justify-between gap-3 rounded-xl border border-[var(--noodle-divider)] p-3"><div><p className="text-sm font-bold">{poll.question || "Untitled poll"}</p><p className="mt-1 text-xs text-[var(--muted-foreground)]">{poll.options.filter(Boolean).join(" · ") || "Add poll options"}</p></div><button type="button" onClick={() => updateDraft({ poll: null })} disabled={composerBusy} className="min-h-8 px-2 text-xs font-bold text-[var(--destructive)] disabled:opacity-50">Remove</button></div>}
+      {pendingImageFile && (
+        <PostImageCropEditor
+          source={pendingImageFile}
+          crop={image && editableImageSourceRef.current?.imageId === image.id ? image.crop : null}
+          disabled={composerBusy}
+          onCancel={() => setPendingImageFile(null)}
+          onApply={applyImageCrop}
+        />
+      )}
+      {image && !pendingImageFile && (
+        <div className="mb-3 overflow-hidden rounded-xl border border-[var(--noodle-divider)] bg-[var(--noodle-blue)]/10">
+          <PostImageFrame src={image.imageUrl} crop={image.crop} alt="Attached post image" maxHeight={240} />
+          <div className="flex items-center justify-between gap-2 px-3 py-2 text-xs text-[var(--noodle-blue)]">
+            <span>Attached image</span>
+            <div className="flex items-center gap-1">
+              {editableImageSourceRef.current?.imageId === image.id && (
+                <button
+                  type="button"
+                  onClick={() => setPendingImageFile(editableImageSourceRef.current!.file)}
+                  disabled={composerBusy}
+                  className="min-h-8 px-2 font-bold disabled:opacity-50"
+                >
+                  Adjust
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={removeImage}
+                disabled={composerBusy}
+                className="min-h-8 px-2 font-bold disabled:opacity-50"
+              >
+                Remove
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {poll && (
+        <div className="mb-3 flex items-start justify-between gap-3 rounded-xl border border-[var(--noodle-divider)] p-3">
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-bold">{poll.question}</p>
+            <p className="mt-1 truncate text-xs text-[var(--muted-foreground)]">{poll.options.join(" · ")}</p>
+          </div>
+          <div className="flex shrink-0 items-center gap-1">
+            <button
+              type="button"
+              onClick={() => toggleTool("poll")}
+              disabled={composerBusy}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-md text-[var(--noodle-blue)] hover:bg-[var(--noodle-blue)]/10 disabled:opacity-50"
+              aria-label="Edit draft poll"
+              title="Edit poll"
+            >
+              <Pencil size={14} />
+            </button>
+            <button
+              type="button"
+              onClick={() => updateDraft({ poll: null })}
+              disabled={composerBusy}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-md text-[var(--destructive)] hover:bg-[var(--destructive)]/10 disabled:opacity-50"
+              aria-label="Remove draft poll"
+              title="Remove poll"
+            >
+              <Trash2 size={14} />
+            </button>
+          </div>
+        </div>
+      )}
     </NoodleComposerShell>
   );
 }

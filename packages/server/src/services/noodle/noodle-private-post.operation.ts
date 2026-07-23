@@ -135,15 +135,18 @@ export async function createNoodlePrivatePost(
     let post;
     try {
       post = await noodle.createPrivatePost({
-        authorAccountId: input.targetAccountId,
-        title: input.title,
-        content: input.content,
+      authorAccountId: input.targetAccountId,
+      title: input.title,
+      content: input.content,
         imageAssetId: input.imageAssetId,
-        source: "manual",
-        access: input.access,
-        ppvPrice: input.access === "ppv" ? (input.ppvPrice ?? null) : null,
-        metadata: input.poll ? { poll: createNoodlePoll(input.poll) } : {},
-      });
+      source: "manual",
+      access: input.access,
+      ppvPrice: input.access === "ppv" ? (input.ppvPrice ?? null) : null,
+        metadata: {
+          ...(input.poll ? { poll: createNoodlePoll(input.poll) } : {}),
+          ...(input.imageCrop ? { imageCrop: input.imageCrop } : {}),
+        },
+    });
     } catch (error) {
       if (error instanceof NoodlerPrivateMediaClaimError) return { status: "media_unavailable" } as const;
       throw error;

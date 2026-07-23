@@ -122,7 +122,8 @@ export function useNoodlerPosts(accountId: string | null) {
 export function useNoodlerSubscribers(accountId: string | null) {
   return useQuery({
     queryKey: noodleKeys.privateSubscribers(accountId ?? "none"),
-    queryFn: () => api.get<NoodlerSubscriber[]>(`/noodle/noodler/accounts/${encodeURIComponent(accountId!)}/subscribers`),
+    queryFn: () =>
+      api.get<NoodlerSubscriber[]>(`/noodle/noodler/accounts/${encodeURIComponent(accountId!)}/subscribers`),
     enabled: Boolean(accountId),
     staleTime: 10_000,
   });
@@ -243,11 +244,19 @@ export function useCreateNoodlerPost() {
   });
 }
 
-export interface NoodlerStagedImage {
+interface NoodlerStagedImage {
   id: string;
   imageUrl: string;
   contentType: string;
   byteLength: number;
+}
+
+function imageFileExtension(contentType: string): string {
+  if (contentType === "image/png") return "png";
+  if (contentType === "image/webp") return "webp";
+  if (contentType === "image/gif") return "gif";
+  if (contentType === "image/avif") return "avif";
+  return "jpg";
 }
 
 export function useUploadNoodlerPostImage() {
@@ -260,10 +269,49 @@ export function useUploadNoodlerPostImage() {
   });
 }
 
+export function useImportNoodlerPostImageUrl() {
+  return useMutation({
+    mutationFn: async ({ accountId, imageUrl }: { accountId: string; imageUrl: string }) => {
+      const response = await api.raw(`/noodle/noodler/accounts/${encodeURIComponent(accountId)}/media/import-url`, {
+        method: "POST",
+        body: JSON.stringify({ imageUrl }),
+      });
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => null)) as { error?: unknown } | null;
+        throw new Error(typeof payload?.error === "string" ? payload.error : "Could not import this image URL.");
+      }
+      const blob = await response.blob();
+      const extension = imageFileExtension(blob.type);
+      return new File([blob], `noodler-import.${extension}`, {
+        type: blob.type,
+        lastModified: Date.now(),
+      });
+    },
+  });
+}
+
+export function useLoadNoodlerPostImage() {
+  return useMutation({
+    mutationFn: async ({ imageUrl }: { imageUrl: string }) => {
+      const url = new URL(imageUrl, window.location.origin);
+      if (url.origin !== window.location.origin || !url.pathname.startsWith("/api/")) {
+        throw new Error("This post image is not stored by Marinara.");
+      }
+      const response = await api.raw(`${url.pathname.slice(4)}${url.search}`);
+      if (!response.ok) throw new Error("Could not load this post image for editing.");
+      const blob = await response.blob();
+      const extension = imageFileExtension(blob.type);
+      return new File([blob], `noodler-post.${extension}`, { type: blob.type, lastModified: Date.now() });
+    },
+  });
+}
+
 export function useDeleteNoodlerPostImage() {
   return useMutation({
     mutationFn: ({ accountId, imageId }: { accountId: string; imageId: string }) =>
-      api.delete<{ ok: true }>(`/noodle/noodler/accounts/${encodeURIComponent(accountId)}/media/${encodeURIComponent(imageId)}`),
+      api.delete<{ ok: true }>(
+        `/noodle/noodler/accounts/${encodeURIComponent(accountId)}/media/${encodeURIComponent(imageId)}`,
+      ),
   });
 }
 
@@ -339,7 +387,11 @@ export function useRemoveNoodlerInteraction() {
 export function useUpdateNoodlerPost() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, accountId: _accountId, ...input }: { id: string; accountId: string } & NoodlePrivatePostUpdateInput) =>
+    mutationFn: ({
+      id,
+      accountId: _accountId,
+      ...input
+    }: { id: string; accountId: string } & NoodlePrivatePostUpdateInput) =>
       api.patch<NoodlerManagedPost>(`/noodle/noodler/posts/${encodeURIComponent(id)}`, input),
     onSuccess: (_post, input) => {
       return Promise.all([

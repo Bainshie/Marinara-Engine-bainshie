@@ -288,12 +288,27 @@ export const noodlePollSchema = z.object({
     .max(4),
 });
 
+export const noodlePostImageCropSchema = z
+  .object({
+    x: z.number().finite().min(0).max(1),
+    y: z.number().finite().min(0).max(1),
+    width: z.number().finite().gt(0).max(1),
+    height: z.number().finite().gt(0).max(1),
+    sourceWidth: z.number().int().min(1).max(65_535),
+    sourceHeight: z.number().int().min(1).max(65_535),
+  })
+  .strict()
+  .refine((crop) => crop.x + crop.width <= 1.000_001 && crop.y + crop.height <= 1.000_001, {
+    message: "Image crop must stay inside the source image.",
+  });
+
 export const noodleCreatePostSchema = z.object({
   authorKind: noodleAccountKindSchema,
   authorEntityId: z.string().min(1),
   content: z.string().min(1).max(4000),
   imageUrl: z.string().max(2000).nullable().optional(),
   imagePrompt: z.string().max(2000).nullable().optional(),
+  imageCrop: noodlePostImageCropSchema.optional(),
   parentPostId: z.string().min(1).nullable().optional(),
   quotePostId: z.string().min(1).nullable().optional(),
   poll: noodlePollInputSchema.nullable().optional(),
@@ -363,13 +378,10 @@ export const noodlePostUpdateSchema = z.object({
   content: z.string().trim().min(1).max(4000).optional(),
   imageUrl: z.string().max(2000).nullable().optional(),
   imagePrompt: z.string().max(2000).nullable().optional(),
+  imageCrop: noodlePostImageCropSchema.nullable().optional(),
 });
 
-const noodlePrivatePostTitleValueSchema = z
-  .string()
-  .trim()
-  .max(NOODLE_PRIVATE_POST_TITLE_MAX_LENGTH)
-  .nullable();
+const noodlePrivatePostTitleValueSchema = z.string().trim().max(NOODLE_PRIVATE_POST_TITLE_MAX_LENGTH).nullable();
 const noodlePrivatePostTitleSchema = noodlePrivatePostTitleValueSchema
   .optional()
   .transform((value) => value?.trim() || null);
@@ -377,15 +389,23 @@ const noodlePrivatePostTitleUpdateSchema = noodlePrivatePostTitleValueSchema
   .optional()
   .transform((value) => (value === undefined ? undefined : value?.trim() || null));
 
+export const noodlerPrivateMediaUrlImportSchema = z
+  .object({
+    imageUrl: z.string().trim().url().max(2000),
+  })
+  .strict();
+
 const noodlePrivatePostCreateShape = {
   targetAccountId: z.string().min(1),
   title: noodlePrivatePostTitleSchema,
-  content: z.string().trim().min(1).max(NOODLE_PRIVATE_POST_CONTENT_MAX_LENGTH),
+  content: z.string().trim().max(NOODLE_PRIVATE_POST_CONTENT_MAX_LENGTH),
   imageAssetId: z.string().min(1).nullable().optional(),
+  imageCrop: noodlePostImageCropSchema.optional(),
   poll: noodlePollInputSchema.nullable().optional(),
 };
 
-export const noodlePrivatePostCreateSchema = z.union([
+export const noodlePrivatePostCreateSchema = z
+  .union([
   z.object({ ...noodlePrivatePostCreateShape, access: z.literal("public").default("public") }).strict(),
   z.object({ ...noodlePrivatePostCreateShape, access: z.literal("subscriber") }).strict(),
   z
@@ -395,17 +415,35 @@ export const noodlePrivatePostCreateSchema = z.union([
       ppvPrice: z.number().finite().min(0).max(999_999).nullable().optional(),
     })
     .strict(),
-]);
+  ])
+  .superRefine((input, ctx) => {
+    if (!input.content && !input.poll) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["content"],
+        message: "Posts need a body or poll.",
+      });
+    }
+  });
 
 export const noodlePrivatePostUpdateSchema = z
   .object({
     title: noodlePrivatePostTitleUpdateSchema,
     content: z.string().trim().min(1).max(NOODLE_PRIVATE_POST_CONTENT_MAX_LENGTH).optional(),
+    imageAssetId: z.string().min(1).nullable().optional(),
+    imageCrop: noodlePostImageCropSchema.nullable().optional(),
   })
   .strict()
-  .refine((input) => input.title !== undefined || input.content !== undefined, {
-    message: "Provide a title or body update.",
-  });
+  .refine(
+    (input) =>
+      input.title !== undefined ||
+      input.content !== undefined ||
+      input.imageAssetId !== undefined ||
+      input.imageCrop !== undefined,
+    {
+      message: "Provide a title, body, or image update.",
+    },
+  );
 
 export const noodleCreateInteractionSchema = z
   .object({
@@ -506,6 +544,7 @@ const noodlePrivateGenerationRequestShape = {
   // scheduler never sets this (no human in the loop).
   reviewImagePromptsBeforeSend: z.boolean().optional(),
   imageAssetId: z.string().min(1).nullable().optional(),
+  imageCrop: noodlePostImageCropSchema.optional(),
   poll: noodlePollInputSchema.nullable().optional(),
 };
 

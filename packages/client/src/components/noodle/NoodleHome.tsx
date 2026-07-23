@@ -7,6 +7,7 @@ import {
   Bell,
   ChevronLeft,
   ChevronRight,
+  Crop,
   Dices,
   FileText,
   FolderOpen,
@@ -41,6 +42,7 @@ import {
 import { toast } from "sonner";
 import {
   noodleTextMentionsHandle as textMentionsHandle,
+  noodlePollInputSchema,
   PROFESSOR_MARI_ID,
   type NoodleTextMention,
   type APIConnection,
@@ -49,6 +51,7 @@ import {
   type NoodleInteraction,
   type NoodleInteractionType,
   type NoodlePost,
+  type NoodlePostImageCrop,
   type NoodlePollInput,
   type NoodleRefreshSchedulerStatus,
   type NoodleSettingsUpdateInput,
@@ -111,12 +114,11 @@ import {
   NOODLE_ICON_SCOPE_CLASS,
   NOODLE_PERSONA_SWITCHER_PAGE_SIZE,
 } from "./NoodleShell";
-import type {
-  NoodleNavigationState,
-  NoodleProfileConnection,
-} from "./noodle-navigation.types";
+import type { NoodleNavigationState, NoodleProfileConnection } from "./noodle-navigation.types";
 import { NoodleProfileSurface } from "./NoodleProfileSurface";
 import { BrowserChrome, formatTime } from "./NoodleBrowserChrome";
+import { NoodleImageComposer } from "./NoodleImageComposer";
+import { NoodlePollComposer } from "./NoodlePollComposer";
 import {
   insertAtSelection,
   NoodleAnchoredPopover,
@@ -126,14 +128,18 @@ import {
   NoodleMentionSuggestions,
   NoodlePostCard,
   type NoodlePostCardModel,
+  type NoodlePostImageUpdate,
   noodleIconButtonClass,
   NoodleToolButton,
-  NoodleToolPopover,
+  useNoodlePostImageEditor,
 } from "./NoodlePostCard";
+import { PostImageCropEditor, PostImageFrame } from "./PostImageCropEditor";
 
 type RawCharacter = { id?: unknown; data?: unknown; avatarPath?: unknown };
 type RawCharacterGroup = { id?: unknown; name?: unknown; description?: unknown; characterIds?: unknown };
 type RawPersona = { id?: unknown; createdAt?: unknown; updatedAt?: unknown };
+type NoodleComposerImage = { url: string; crop: NoodlePostImageCrop | null };
+type NoodlePendingComposerImage = { source: File | string; crop: NoodlePostImageCrop | null };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
@@ -451,12 +457,7 @@ function ToggleSetting({
         compact ? "gap-2 px-1.5" : "gap-3 px-3",
       )}
     >
-      <span
-        className={cn(
-          "inline-flex min-w-0 items-center gap-1 font-semibold",
-          compact && "flex-1",
-        )}
-      >
+      <span className={cn("inline-flex min-w-0 items-center gap-1 font-semibold", compact && "flex-1")}>
         <span className={cn(compact && "min-w-0 truncate text-[10px] leading-none")}>{label}</span>
         {help && <HelpTooltip text={help} side="top" wide />}
       </span>
@@ -614,15 +615,20 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
   const [personaAccountLimit, setPersonaAccountLimit] = useState(NOODLE_PERSONA_SWITCHER_PAGE_SIZE);
   const [activeComposerTool, setActiveComposerTool] = useState<ComposerTool | null>(null);
   const [mediaPickerTab, setMediaPickerTab] = useState<ConversationMediaPickerTabId>("emoji");
-  const [attachedImageUrl, setAttachedImageUrl] = useState("");
+  const [attachedImage, setAttachedImage] = useState<NoodleComposerImage | null>(null);
+  const [pendingImage, setPendingImage] = useState<NoodlePendingComposerImage | null>(null);
   const [imageUrlDraft, setImageUrlDraft] = useState("");
   const [imageGenerationPromptDraft, setImageGenerationPromptDraft] = useState("");
-  const [pollQuestion, setPollQuestion] = useState("");
-  const [pollOptions, setPollOptions] = useState(["", ""]);
+  const [pollEditorValue, setPollEditorValue] = useState<NoodlePollInput | null>(null);
   const [draftPoll, setDraftPoll] = useState<NoodlePollInput | null>(null);
+  const postImageEditor = useNoodlePostImageEditor(async (post) => {
+    if (!post.imageUrl) throw new Error("This post does not have an image.");
+    return post.imageUrl;
+  });
 
   const activeNoodleView = navigation.mode === "public" ? navigation.view : navigation.mode;
-  const viewedProfileAccountId = navigation.mode === "public" && navigation.view === "profile" ? navigation.accountId : null;
+  const viewedProfileAccountId =
+    navigation.mode === "public" && navigation.view === "profile" ? navigation.accountId : null;
   const profileConnectionTab =
     navigation.mode === "public" && navigation.view === "profile" ? navigation.connection : null;
 
@@ -969,15 +975,9 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
             onError: (error: Error) => toast.error(error.message || "Could not update Noodle profile image."),
           };
           if (target === "avatar") {
-            updateAccountProfile.mutate(
-              { id: viewedProfileAccount.id, avatarUrl: image.url, profile: {} },
-              callbacks,
-            );
+            updateAccountProfile.mutate({ id: viewedProfileAccount.id, avatarUrl: image.url, profile: {} }, callbacks);
           } else {
-            updateAccountProfile.mutate(
-              { id: viewedProfileAccount.id, profile: { bannerUrl: image.url } },
-              callbacks,
-            );
+            updateAccountProfile.mutate({ id: viewedProfileAccount.id, profile: { bannerUrl: image.url } }, callbacks);
           }
         },
         onError: (error) => toast.error(error instanceof Error ? error.message : "Could not upload profile image."),
@@ -1016,30 +1016,41 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
       toast.error("Paste an image URL first.");
       return;
     }
-    setAttachedImageUrl(url);
     setImageUrlDraft("");
     setActiveComposerTool(null);
+    setPendingImage({ source: url, crop: null });
   };
 
   const handleImageFile = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     event.target.value = "";
     if (!file) return;
-    uploadGlobalImages.mutate(
-      { files: [file] },
-      {
-        onSuccess: (images) => {
-          const image = images[0];
-          if (!image?.url) {
-            toast.error("Image uploaded, but no URL was returned.");
+    if (!file.type.startsWith("image/")) {
+      toast.error("Choose an image file.");
             return;
           }
-          setAttachedImageUrl(image.url);
           setActiveComposerTool(null);
-        },
-        onError: (error) => toast.error(error instanceof Error ? error.message : "Could not attach image."),
-      },
-    );
+    setPendingImage({ source: file, crop: null });
+  };
+
+  const applyComposerImageCrop = async (crop: NoodlePostImageCrop) => {
+    if (!pendingImage) return;
+    let imageUrl: string;
+    if (pendingImage.source instanceof File) {
+      const images = await uploadGlobalImages.mutateAsync({ files: [pendingImage.source] });
+      const uploaded = images[0];
+      if (!uploaded?.url) throw new Error("Image uploaded, but no URL was returned.");
+      imageUrl = uploaded.url;
+    } else {
+      imageUrl = pendingImage.source;
+    }
+    setAttachedImage({ url: imageUrl, crop });
+    setPendingImage(null);
+  };
+
+  const removeComposerImage = () => {
+    setPendingImage(null);
+    setAttachedImage(null);
   };
 
   const appendToReply = (text: string) => {
@@ -1121,11 +1132,11 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
     setComposerHasText(false);
     setActiveMention(null);
     setActiveMentionIndex(0);
-    setAttachedImageUrl("");
+    setAttachedImage(null);
+    setPendingImage(null);
     setImageUrlDraft("");
     setDraftPoll(null);
-    setPollQuestion("");
-    setPollOptions(["", ""]);
+    setPollEditorValue(null);
     setActiveComposerTool(null);
     setComposeOpen(false);
     clearReplyComposer();
@@ -1160,29 +1171,23 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
   };
 
   const applyPoll = () => {
-    const question = pollQuestion.trim();
-    const options = pollOptions.map((option) => option.trim()).filter(Boolean);
-    if (!question || options.length < 2) {
-      toast.error("Polls need a question and at least two options.");
+    const parsed = noodlePollInputSchema.safeParse(pollEditorValue);
+    if (!parsed.success) {
+      toast.error("Polls need a question and two unique answers.");
       return;
     }
-    if (new Set(options.map((option) => option.toLocaleLowerCase())).size !== options.length) {
-      toast.error("Poll options need to be different from each other.");
-      return;
-    }
-    setDraftPoll({ question, options });
-    setPollQuestion("");
-    setPollOptions(["", ""]);
+    setDraftPoll(parsed.data);
+    setPollEditorValue(null);
     setActiveComposerTool(null);
   };
 
   const togglePollComposer = () => {
     if (activeComposerTool === "poll") {
+      setPollEditorValue(null);
       setActiveComposerTool(null);
       return;
     }
-    setPollQuestion(draftPoll?.question ?? "");
-    setPollOptions(draftPoll?.options ?? ["", ""]);
+    setPollEditorValue(draftPoll ?? { question: "", options: ["", ""] });
     setActiveComposerTool("poll");
   };
 
@@ -1227,7 +1232,52 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
       </section>
     ) : null;
 
-  const canSubmitPost = Boolean(personaAccount && (composerHasText || attachedImageUrl.trim() || draftPoll));
+  const renderDraftImage = (maxHeight: number) =>
+    pendingImage ? (
+      <PostImageCropEditor
+        source={pendingImage.source}
+        crop={pendingImage.crop}
+        disabled={uploadGlobalImages.isPending}
+        onCancel={() => setPendingImage(null)}
+        onApply={applyComposerImageCrop}
+      />
+    ) : attachedImage ? (
+      <section className="relative mb-3 overflow-hidden rounded-xl border border-[var(--noodle-divider)] bg-[var(--noodle-blue)]/5 p-2">
+        <PostImageFrame
+          src={attachedImage.url}
+          crop={attachedImage.crop}
+          alt="Attached post image"
+          maxHeight={maxHeight}
+        />
+        <div className="absolute right-4 top-4 flex items-center gap-0.5 rounded-full bg-[var(--background)] p-1 shadow-lg ring-1 ring-[var(--noodle-divider)]">
+          <button
+            type="button"
+            onClick={() => setPendingImage({ source: attachedImage.url, crop: attachedImage.crop })}
+            title="Adjust crop"
+            aria-label="Adjust image crop"
+            className="inline-flex h-8 w-8 items-center justify-center rounded-full text-[var(--noodle-blue)] hover:bg-[var(--noodle-blue)]/10"
+          >
+            <Crop size={15} />
+          </button>
+          <button
+            type="button"
+            onClick={removeComposerImage}
+            title="Remove image"
+            aria-label="Remove attached image"
+            className="inline-flex h-8 w-8 items-center justify-center rounded-full text-[var(--destructive)] hover:bg-[var(--destructive)]/10"
+          >
+            <Trash2 size={15} />
+          </button>
+        </div>
+      </section>
+    ) : null;
+
+  const canSubmitPost = Boolean(
+    personaAccount &&
+    !pendingImage &&
+    !uploadGlobalImages.isPending &&
+    (composerHasText || attachedImage || draftPoll),
+  );
   const confirmActionPending =
     confirmAction?.kind === "delete-post"
       ? deletePost.isPending
@@ -1755,7 +1805,8 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
     if (!activeReplyMention) return;
     const insertedMention = `@${account.handle} `;
     const source = replyValueRef.current;
-    const nextReply = source.slice(0, activeReplyMention.start) + insertedMention + source.slice(activeReplyMention.end);
+    const nextReply =
+      source.slice(0, activeReplyMention.start) + insertedMention + source.slice(activeReplyMention.end);
     const nextCaret = activeReplyMention.start + insertedMention.length;
     replyValueRef.current = nextReply;
     replyHasTextRef.current = Boolean(nextReply.trim());
@@ -1816,7 +1867,8 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
         authorKind: "persona",
         authorEntityId: personaAccount.entityId,
         content,
-        imageUrl: attachedImageUrl.trim() || null,
+        imageUrl: attachedImage?.url ?? null,
+        ...(attachedImage?.crop ? { imageCrop: attachedImage.crop } : {}),
         poll: draftPoll,
       },
       {
@@ -1828,10 +1880,10 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
           setComposer("");
           setComposerHasText(false);
           setActiveMention(null);
-          setAttachedImageUrl("");
+          setAttachedImage(null);
+          setPendingImage(null);
           setDraftPoll(null);
-          setPollQuestion("");
-          setPollOptions(["", ""]);
+          setPollEditorValue(null);
           setActiveComposerTool(null);
           setComposeOpen(false);
         },
@@ -1954,29 +2006,52 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
   };
 
   const startEditingPost = (post: NoodlePostCardModel) => {
+    postImageEditor.reset();
     setEditingPostId(post.id);
     setEditingPostContent(post.content);
     setPostMenuId(null);
   };
 
   const cancelEditingPost = () => {
+    postImageEditor.reset();
     setEditingPostId(null);
     setEditingPostContent("");
   };
 
-  const saveEditedPost = (post: NoodlePostCardModel) => {
+  const saveEditedPost = async (post: NoodlePostCardModel) => {
     const content = editingPostContent.trim();
     if (!content) {
       toast.error("Posts cannot be empty.");
       return;
     }
-    updatePost.mutate(
-      { id: post.id, content },
-      {
-        onSuccess: () => cancelEditingPost(),
-        onError: (error) => toast.error(error instanceof Error ? error.message : "Could not edit Noodle post."),
-      },
-    );
+    try {
+      let replacementUrl: string | null = null;
+      const imageUpdate: NoodlePostImageUpdate | null = postImageEditor.update;
+      if (imageUpdate?.kind === "replace") {
+        const images = await uploadGlobalImages.mutateAsync({ files: [imageUpdate.file] });
+        const uploaded = images[0];
+        if (!uploaded?.url) throw new Error("Image uploaded, but no URL was returned.");
+        replacementUrl = uploaded.url;
+      }
+      await updatePost.mutateAsync({
+        id: post.id,
+        content,
+        ...(imageUpdate?.kind === "replace" && {
+          imageUrl: replacementUrl,
+          imagePrompt: null,
+          imageCrop: imageUpdate.crop,
+        }),
+        ...(imageUpdate?.kind === "crop" && { imageCrop: imageUpdate.crop }),
+        ...(imageUpdate?.kind === "remove" && {
+          imageUrl: null,
+          imagePrompt: null,
+          imageCrop: null,
+        }),
+      });
+      cancelEditingPost();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not edit Noodle post.");
+    }
   };
 
   const startEditingReply = (reply: NoodleInteraction) => {
@@ -2212,7 +2287,12 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
 
   const openNoodlerVerification = () => {
     const hasUnsavedDraft =
-      composerHasText || Boolean(attachedImageUrl.trim()) || Boolean(draftPoll) || replyHasText || Boolean(replyImageUrl);
+      composerHasText ||
+      Boolean(attachedImage) ||
+      Boolean(pendingImage) ||
+      Boolean(draftPoll) ||
+      replyHasText ||
+      Boolean(replyImageUrl);
     if (hasUnsavedDraft && !window.confirm("Leave Noodle and discard your unsent post or reply?")) return;
     onNavigate({ mode: "verification" });
   };
@@ -2274,7 +2354,8 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
     setConfirmAction({
       kind: "uninvite-everybody",
       title: "Uninvite Everybody",
-      message: "This removes all direct Noodle character invites, clears selected invite folders, and turns off random users.",
+      message:
+        "This removes all direct Noodle character invites, clears selected invite folders, and turns off random users.",
       confirmLabel: "Uninvite everybody",
     });
   };
@@ -3135,7 +3216,8 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
         appendToReply,
         reactionPendingFor,
         createInteractionPendingFor,
-        updatePostPending: updatePost.isPending,
+        updatePostPending: updatePost.isPending || uploadGlobalImages.isPending,
+        imageEditing: postImageEditor.cap,
         media: {
           setImageLightbox,
           replyImageUrl,
@@ -3331,97 +3413,30 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
   }) => (
     <>
       {activeComposerTool === "image" && (
-        <NoodleToolPopover
-          title="Attach image"
-          anchorRef={imageRef}
+        <NoodleAnchoredPopover anchorRef={imageRef} modalOwned={composeOpen} wide>
+          <NoodleImageComposer
+            imageUrl={imageUrlDraft}
+            onImageUrlChange={setImageUrlDraft}
+            onChooseFile={() => imageFileRef.current?.click()}
+            onUseImageUrl={applyImageUrl}
           onClose={() => setActiveComposerTool(null)}
-          modalOwned={composeOpen}
-          wide
-        >
-          <div className="space-y-3">
-            <button
-              type="button"
-              onClick={() => imageFileRef.current?.click()}
               disabled={uploadGlobalImages.isPending}
-              className="h-9 w-full rounded-full bg-[var(--noodle-blue)] px-4 text-xs font-bold text-zinc-950 transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {uploadGlobalImages.isPending ? "Uploading..." : "Upload From Device"}
-            </button>
-            <div className="flex items-center gap-2 text-[0.625rem] font-semibold uppercase tracking-normal text-[var(--marinara-chat-chrome-panel-muted)]">
-              <span className="h-px flex-1 bg-[var(--noodle-divider)]" />
-              or
-              <span className="h-px flex-1 bg-[var(--noodle-divider)]" />
-            </div>
-            <label className="block space-y-1.5">
-              <span className={labelClass}>Image URL</span>
-              <input
-                value={imageUrlDraft}
-                onChange={(event) => setImageUrlDraft(event.target.value)}
-                placeholder="https://..."
-                className={fieldClass}
+            hasImage={Boolean(attachedImage || pendingImage)}
+            fileActionLabel={uploadGlobalImages.isPending ? "Uploading…" : "Upload from device"}
               />
-            </label>
-            <button
-              type="button"
-              onClick={applyImageUrl}
-              className="h-9 w-full rounded-full border border-[var(--noodle-divider)] px-4 text-xs font-bold text-[var(--noodle-blue)] transition-colors hover:bg-[var(--noodle-blue)]/10"
-            >
-              Attach URL
-            </button>
-          </div>
-        </NoodleToolPopover>
+        </NoodleAnchoredPopover>
       )}
       {activeComposerTool === "poll" && (
-        <NoodleToolPopover
-          title={draftPoll ? "Edit poll" : "Create poll"}
-          anchorRef={pollRef}
+        <NoodleAnchoredPopover anchorRef={pollRef} modalOwned={composeOpen} wide>
+          <NoodlePollComposer
+            value={pollEditorValue}
+            onChange={setPollEditorValue}
           onClose={() => setActiveComposerTool(null)}
+            onSubmit={applyPoll}
+            submitLabel={draftPoll ? "Update poll" : "Add poll"}
           modalOwned={composeOpen}
-          wide
-        >
-          <div className="space-y-3">
-            <label className="block space-y-1.5">
-              <span className={labelClass}>Question</span>
-              <input
-                value={pollQuestion}
-                onChange={(event) => setPollQuestion(event.target.value)}
-                className={fieldClass}
-                placeholder="Ask a question"
-              />
-            </label>
-            <div className="space-y-2">
-              {pollOptions.map((option, index) => (
-                <input
-                  key={index}
-                  value={option}
-                  onChange={(event) =>
-                    setPollOptions((current) =>
-                      current.map((entry, optionIndex) => (optionIndex === index ? event.target.value : entry)),
-                    )
-                  }
-                  className={fieldClass}
-                  placeholder={`Option ${index + 1}`}
                 />
-              ))}
-            </div>
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={() => setPollOptions((current) => (current.length >= 4 ? current : [...current, ""]))}
-                className="h-8 flex-1 rounded-full border border-[var(--noodle-divider)] px-3 text-xs font-semibold text-[var(--noodle-blue)] hover:bg-[var(--noodle-blue)]/10"
-              >
-                Add Option
-              </button>
-              <button
-                type="button"
-                onClick={applyPoll}
-                className="h-8 flex-1 rounded-full bg-[var(--noodle-blue)] px-3 text-xs font-bold text-zinc-950 transition-opacity hover:opacity-90"
-              >
-                {draftPoll ? "Update Poll" : "Add Poll"}
-              </button>
-            </div>
-          </div>
-        </NoodleToolPopover>
+        </NoodleAnchoredPopover>
       )}
       {activeComposerTool === "media" && (
         <NoodleAnchoredPopover anchorRef={mediaRef} modalOwned={composeOpen} wide>
@@ -3432,7 +3447,8 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
             onClose={() => setActiveComposerTool(null)}
             onEmojiSelect={appendToComposer}
             onGifSelect={(gifUrl) => {
-              setAttachedImageUrl(gifUrl);
+              setPendingImage(null);
+              setAttachedImage({ url: gifUrl, crop: null });
               setActiveComposerTool(null);
             }}
             onStickerSelect={(name) => {
@@ -3622,9 +3638,7 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
       sortedPersonaAccounts={sortedPersonaAccounts}
       visiblePersonaAccounts={visiblePersonaAccounts}
       linkedPublicAccountIds={linkedPublicAccountIds}
-      onLoadMorePersonaAccounts={() =>
-        setPersonaAccountLimit((current) => current + NOODLE_PERSONA_SWITCHER_PAGE_SIZE)
-      }
+      onLoadMorePersonaAccounts={() => setPersonaAccountLimit((current) => current + NOODLE_PERSONA_SWITCHER_PAGE_SIZE)}
       onSwitchPersona={switchPersona}
       accountSwitcherOpen={accountSwitcherOpen}
       onAccountSwitcherOpenChange={setAccountSwitcherOpen}
@@ -3791,32 +3805,14 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
                     aria-expanded={Boolean(activeMention && !composeOpen)}
                     aria-activedescendant={
                       activeMention && !composeOpen && mentionSuggestions.length > 0
-                        ? `noodle-inline-mention-list-option-${Math.min(
-                            activeMentionIndex,
-                            mentionSuggestions.length - 1,
-                          )}`
+                    ? `noodle-inline-mention-list-option-${Math.min(activeMentionIndex, mentionSuggestions.length - 1)}`
                         : undefined
                     }
                     className="min-h-20 w-full resize-none border-0 bg-transparent py-2 text-[1rem] leading-6 text-[var(--foreground)] outline-none placeholder:text-[var(--muted-foreground)] disabled:opacity-60"
                   />
                   {!composeOpen && renderComposerMentionSuggestions("noodle-inline-mention-list")}
                   {renderDraftPoll()}
-                  {attachedImageUrl && (
-                    <div className="mb-3 overflow-hidden rounded-xl border border-[var(--noodle-divider)] bg-[var(--noodle-blue)]/10">
-                      <img src={attachedImageUrl} alt="" className="max-h-52 w-full object-cover" />
-                      <div className="flex items-center justify-between gap-2 px-3 py-2 text-xs text-[var(--noodle-blue)]">
-                        <span className="min-w-0 truncate">Attached image</span>
-                        <button
-                          type="button"
-                          onClick={() => setAttachedImageUrl("")}
-                          className="flex h-7 w-7 items-center justify-center rounded-full hover:bg-[var(--noodle-blue)]/15"
-                          title="Remove image"
-                        >
-                          <X size={14} />
-                        </button>
-                      </div>
-                    </div>
-                  )}
+              {renderDraftImage(208)}
                 </NoodleComposerShell>
               )}
 
@@ -3969,9 +3965,7 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
                   </div>
                   {profileConnectionAccounts.length > 0 ? (
                     <div>
-                      {profileConnectionAccounts.map((account) =>
-                        renderAccountRow(account, { showFollowButton: true }),
-                      )}
+                  {profileConnectionAccounts.map((account) => renderAccountRow(account, { showFollowButton: true }))}
                     </div>
                   ) : (
                     <div className="px-8 py-14 text-center">
@@ -3991,7 +3985,9 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
                       <MobileTimelineBackButton onClick={openMobileHomeTimeline} />
                       <div className="min-w-0">
                         <h2 className="truncate text-base font-bold">Profile</h2>
-                        <p className="truncate text-xs text-[var(--muted-foreground)]">@{profileDisplayHandle || "noodle"}</p>
+                    <p className="truncate text-xs text-[var(--muted-foreground)]">
+                      @{profileDisplayHandle || "noodle"}
+                    </p>
                       </div>
                     </div>
                   }
@@ -4080,9 +4076,7 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
                       profileVisiblePosts.map(renderPostArticle)
                     ) : (
                       <div className="px-8 py-14 text-center">
-                        <p className="text-sm font-semibold text-[var(--muted-foreground)]">
-                          Nothing boiling here yet.
-                        </p>
+                    <p className="text-sm font-semibold text-[var(--muted-foreground)]">Nothing boiling here yet.</p>
                       </div>
                     )
                   }
@@ -4102,9 +4096,7 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
                 </div>
               ) : isAccountSearch ? (
                 accountSearchResults.length > 0 ? (
-                  <div>
-                    {accountSearchResults.map((account) => renderAccountRow(account, { showFollowButton: true }))}
-                  </div>
+              <div>{accountSearchResults.map((account) => renderAccountRow(account, { showFollowButton: true }))}</div>
                 ) : (
                   <div className="px-8 py-14 text-center">
                     <AtSign size={38} className="mx-auto mb-4 text-[var(--noodle-blue)]" />
@@ -4151,7 +4143,12 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
         restoreFocusRef={composerRestoreFocusRef}
         focusScopePortalSelector="[data-noodle-compose-focus-portal='true']"
         panelClassName={cn("marinara-chat-popover", NOODLE_ICON_SCOPE_CLASS)}
-        panelStyle={{ "--noodle-blue": NOODLE_BLUE, "--noodle-divider": "var(--marinara-chat-chrome-panel-divider)" } as CSSProperties}
+        panelStyle={
+          {
+            "--noodle-blue": NOODLE_BLUE,
+            "--noodle-divider": "var(--marinara-chat-chrome-panel-divider)",
+          } as CSSProperties
+        }
       >
         <div data-component="NoodleView.ModalComposer">
               <div className="grid grid-cols-[2.75rem_minmax(0,1fr)] gap-3">
@@ -4174,32 +4171,14 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
                     aria-expanded={Boolean(activeMention)}
                     aria-activedescendant={
                       activeMention && mentionSuggestions.length > 0
-                        ? `noodle-modal-mention-list-option-${Math.min(
-                            activeMentionIndex,
-                            mentionSuggestions.length - 1,
-                          )}`
+                    ? `noodle-modal-mention-list-option-${Math.min(activeMentionIndex, mentionSuggestions.length - 1)}`
                         : undefined
                     }
                     className="min-h-36 w-full resize-none border-0 bg-transparent py-2 text-[1rem] leading-6 text-[var(--foreground)] outline-none placeholder:text-[var(--muted-foreground)] disabled:opacity-60"
                   />
                   {renderComposerMentionSuggestions("noodle-modal-mention-list")}
                   {renderDraftPoll()}
-                  {attachedImageUrl && (
-                    <div className="overflow-hidden rounded-xl border border-[var(--noodle-divider)] bg-[var(--noodle-blue)]/10">
-                      <img src={attachedImageUrl} alt="" className="max-h-60 w-full object-cover" />
-                      <div className="flex items-center justify-between gap-2 px-3 py-2 text-xs text-[var(--noodle-blue)]">
-                        <span className="min-w-0 truncate">Attached image</span>
-                        <button
-                          type="button"
-                          onClick={() => setAttachedImageUrl("")}
-                          className="flex h-7 w-7 items-center justify-center rounded-full hover:bg-[var(--noodle-blue)]/15"
-                          title="Remove image"
-                        >
-                          <X size={14} />
-                        </button>
-                      </div>
-                    </div>
-                  )}
+              {renderDraftImage(240)}
                 </div>
               </div>
               <div className="mt-4 flex items-center justify-between gap-3 border-t border-[var(--noodle-divider)] pt-3 pl-14">

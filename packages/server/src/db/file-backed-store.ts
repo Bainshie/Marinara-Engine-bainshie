@@ -1350,13 +1350,13 @@ class FileTableStore {
         // in-memory entry prevents recovery cleanup from trusting the empty
         // fallback during the current process.
         this.recordQuarantinedTable(table, files);
-        logger.error(
-          { table, files },
+          logger.error(
+            { table, files },
           "[file-storage] Table %s was unrecoverable from primary and backup; started the table empty and disabled dependent cleanup. Quarantine artifacts require manual recovery or removal.",
-          table,
-        );
+            table,
+          );
+        }
       }
-    }
     logger.info({ tables: counts }, `[file-storage] Loaded file-native data from ${this.rootDir}`);
   }
 

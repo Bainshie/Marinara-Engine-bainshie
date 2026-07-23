@@ -1,20 +1,26 @@
 import {
   AtSign,
   Check,
+  Crop,
   Heart,
   Image as ImageIcon,
+  ImagePlus,
   ListChecks,
+  Loader2,
   MessageCircle,
   MoreHorizontal,
   Pencil,
   Repeat2,
+  RotateCcw,
   Smile,
   Trash2,
   X,
 } from "lucide-react";
 import {
   Fragment,
+  useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
   type ChangeEvent,
@@ -25,6 +31,7 @@ import { createPortal } from "react-dom";
 import {
   canManageNoodleReply,
   findNoodleTextMentions,
+  readNoodlePostImageCrop,
   readNoodlePollFromMetadata,
   type NoodleAccount,
   type NoodleAuthorSnapshot,
@@ -32,6 +39,7 @@ import {
   type NoodleInteractionType,
   type NoodlePoll,
   type NoodlePost,
+  type NoodlePostImageCrop,
   type NoodleTextMention,
 } from "@marinara-engine/shared";
 import { cn } from "../../lib/utils";
@@ -44,9 +52,9 @@ import {
 import type { ChatImage } from "../../hooks/use-gallery";
 import { Avatar, NOODLE_ICON_SCOPE_CLASS, useNoodleAccent } from "./NoodleShell";
 import { formatTime } from "./NoodleBrowserChrome";
+import { NoodleImageComposer } from "./NoodleImageComposer";
+import { PostImageCropEditor, PostImageFrame } from "./PostImageCropEditor";
 
-const fieldClass =
-  "mari-chrome-field h-9 w-full min-w-0 rounded-md border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)] px-3 text-xs text-[var(--foreground)] outline-none transition-colors focus:border-[var(--noodle-blue)]";
 const textareaClass =
   "mari-chrome-field min-h-24 w-full min-w-0 resize-y rounded-md border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)] p-3 text-xs leading-relaxed text-[var(--foreground)] outline-none transition-colors focus:border-[var(--noodle-blue)]";
 const labelClass =
@@ -460,43 +468,6 @@ export function NoodleAnchoredPopover({
   );
 }
 
-export function NoodleToolPopover({
-  title,
-  onClose,
-  children,
-  wide,
-  anchorRef,
-  modalOwned,
-}: {
-  title: string;
-  onClose: () => void;
-  children: React.ReactNode;
-  wide?: boolean;
-  anchorRef: React.RefObject<HTMLElement | null>;
-  modalOwned?: boolean;
-}) {
-  return (
-    <NoodleAnchoredPopover anchorRef={anchorRef} wide={wide} modalOwned={modalOwned}>
-      <div className="marinara-chat-popover flex h-[22rem] max-h-[60vh] flex-col overflow-hidden rounded-xl border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)] text-[var(--foreground)] shadow-2xl shadow-black/35">
-        <div className="flex shrink-0 items-center gap-1 border-b border-foreground/10 px-2 py-1.5">
-          <span className="flex-1 rounded-md bg-foreground/10 px-2 py-1 text-center text-xs font-medium text-foreground/80 ring-1 ring-foreground/15">
-            {title}
-          </span>
-          <button
-            type="button"
-            onClick={onClose}
-            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-[var(--noodle-blue)] transition-colors hover:bg-foreground/10"
-            title="Close"
-          >
-            <X size={14} />
-          </button>
-        </div>
-        <div className="min-h-0 flex-1 overflow-y-auto p-3">{children}</div>
-      </div>
-    </NoodleAnchoredPopover>
-  );
-}
-
 /**
  * Reply image attach/upload/lightbox. Hosts that persist reply images pass this; hosts that
  * don't (NoodleR) omit it — the card then hides the attach-image tool, upload, GIF tab, and
@@ -556,6 +527,174 @@ interface NoodlePostCardTitleEditingCap {
   maxLength: number;
 }
 
+export type NoodlePostImageUpdate =
+  | { kind: "replace"; file: File; crop: NoodlePostImageCrop }
+  | { kind: "crop"; crop: NoodlePostImageCrop }
+  | { kind: "remove" };
+
+type NoodlePostImageCropSource =
+  | { source: File | string; crop: NoodlePostImageCrop | null; mode: "existing" }
+  | { source: File; crop: NoodlePostImageCrop | null; mode: "replace" };
+
+interface NoodlePostCardImageEditingCap {
+  update: NoodlePostImageUpdate | null;
+  cropSource: NoodlePostImageCropSource | null;
+  loading: boolean;
+  error: string | null;
+  fileInputRef: RefObject<HTMLInputElement | null>;
+  beginCrop: (post: NoodlePostCardModel) => void;
+  selectReplacement: (event: ChangeEvent<HTMLInputElement>) => void;
+  applyCrop: (crop: NoodlePostImageCrop) => Promise<void>;
+  cancelCrop: () => void;
+  remove: () => void;
+  restore: () => void;
+}
+
+function PostImageEditControls({
+  post,
+  editing,
+  disabled,
+  footer,
+}: {
+  post: NoodlePostCardModel;
+  editing: NoodlePostCardImageEditingCap;
+  disabled: boolean;
+  footer: React.ReactNode;
+}) {
+  const replacement = editing.update?.kind === "replace" ? editing.update : null;
+  const removed = editing.update?.kind === "remove";
+  const hasImage = Boolean(replacement || (!removed && post.imageUrl));
+
+  if (editing.cropSource) {
+    return (
+      <PostImageCropEditor
+        source={editing.cropSource.source}
+        crop={editing.cropSource.crop}
+        disabled={disabled}
+        onCancel={editing.cancelCrop}
+        onApply={editing.applyCrop}
+      />
+    );
+  }
+
+  const imageActions = hasImage && !removed ? (
+    <div className="absolute right-2 top-2 z-10 flex items-center gap-0.5 rounded-full bg-[var(--background)] p-1 shadow-lg ring-1 ring-[var(--noodle-divider)]">
+      <button
+        type="button"
+        onClick={() => editing.beginCrop(post)}
+        disabled={disabled || editing.loading}
+        title={editing.loading ? "Loading image" : "Adjust crop"}
+        aria-label={editing.loading ? "Loading image" : "Adjust crop"}
+        aria-busy={editing.loading}
+        className="inline-flex h-8 w-8 items-center justify-center rounded-full text-[var(--noodle-blue)] transition-colors hover:bg-[var(--noodle-blue)]/10 disabled:opacity-50"
+      >
+        {editing.loading ? <Loader2 size={15} className="animate-spin" /> : <Crop size={15} />}
+      </button>
+      <button
+        type="button"
+        onClick={editing.remove}
+        disabled={disabled || editing.loading}
+        title="Remove image"
+        aria-label="Remove image"
+        className="inline-flex h-8 w-8 items-center justify-center rounded-full text-[var(--destructive)] transition-colors hover:bg-[var(--destructive)]/10 disabled:opacity-50"
+      >
+        <Trash2 size={15} />
+      </button>
+    </div>
+  ) : null;
+
+  return (
+    <section className="space-y-2 rounded-xl border border-[var(--noodle-divider)] bg-[var(--noodle-blue)]/5 p-3">
+      <input
+        ref={editing.fileInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={editing.selectReplacement}
+      />
+      <div className="flex items-center justify-between gap-3">
+        <span className={labelClass}>Post image</span>
+        <div className="flex items-center gap-1">
+          {removed ? (
+            <>
+              <span className="mr-1 text-xs font-semibold text-[var(--muted-foreground)]">Removed when saved</span>
+              <button
+                type="button"
+                onClick={() => editing.fileInputRef.current?.click()}
+                disabled={disabled || editing.loading}
+                title="Add image"
+                aria-label="Add image"
+                className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[var(--noodle-divider)] text-[var(--noodle-blue)] transition-colors hover:bg-[var(--noodle-blue)]/10 disabled:opacity-50"
+              >
+                <ImagePlus size={15} />
+              </button>
+              <button
+                type="button"
+                onClick={editing.restore}
+                disabled={disabled}
+                title="Undo image removal"
+                aria-label="Undo image removal"
+                className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[var(--noodle-divider)] text-[var(--noodle-blue)] transition-colors hover:bg-[var(--noodle-blue)]/10 disabled:opacity-50"
+              >
+                <RotateCcw size={15} />
+              </button>
+            </>
+          ) : (
+            <>
+              {!hasImage && (
+                <button
+                  type="button"
+                  onClick={() => editing.fileInputRef.current?.click()}
+                  disabled={disabled || editing.loading}
+                  title="Add image"
+                  aria-label="Add image"
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[var(--noodle-divider)] text-[var(--noodle-blue)] transition-colors hover:bg-[var(--noodle-blue)]/10 disabled:opacity-50"
+                >
+                  <ImagePlus size={15} />
+                </button>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+      {replacement ? (
+        <div className="relative overflow-hidden rounded-lg">
+          <FileImagePreview file={replacement.file} crop={replacement.crop} />
+          {imageActions}
+        </div>
+      ) : !removed && post.imageUrl ? (
+        <div className="relative overflow-hidden rounded-lg">
+          <PostImageFrame
+            src={post.imageUrl}
+            crop={editing.update?.kind === "crop" ? editing.update.crop : readNoodlePostImageCrop(post.metadata)}
+            alt="Current post"
+            maxHeight={240}
+          />
+          {imageActions}
+        </div>
+      ) : (
+        <div className="grid min-h-24 place-items-center rounded-lg border border-dashed border-[var(--noodle-divider)] text-xs text-[var(--muted-foreground)]">
+          No image attached
+        </div>
+      )}
+      {editing.error && (
+        <p role="alert" className="text-xs text-[var(--destructive)]">
+          {editing.error}
+        </p>
+      )}
+      <div className="-mx-3 -mb-3 flex flex-wrap justify-end gap-2 px-3 pb-3 pt-1">
+        {footer}
+      </div>
+    </section>
+  );
+}
+
+function FileImagePreview({ file, crop }: { file: File; crop: NoodlePostImageCrop }) {
+  const url = useMemo(() => URL.createObjectURL(file), [file]);
+  useEffect(() => () => URL.revokeObjectURL(url), [url]);
+  return <PostImageFrame src={url} crop={crop} alt="Replacement post preview" maxHeight={240} />;
+}
+
 interface NoodlePostCardCtx {
   accountById?: Map<string, NoodleAccount>;
   accountByHandle?: Map<string, NoodleAccount>;
@@ -606,6 +745,10 @@ interface NoodlePostCardCtx {
   voteInPoll?: (post: NoodlePostCardModel, optionId: string, selectedOptionId: string | null) => void;
   /** Preserve the public timeline's legacy body/poll duplicate suppression. */
   deduplicatePollBody?: boolean;
+  /** Keep a deliberately framed upload fully visible instead of applying the public feed's center crop. */
+  imageFit?: "cover" | "contain";
+  /** Post image crop, replacement, and removal capability. */
+  imageEditing?: NoodlePostCardImageEditingCap;
   /** Reply image/upload capability. Absent → the card hides all reply-image affordances. */
   media?: NoodlePostCardMediaCap;
   /** Reply edit/delete capability. Absent → reply management UI stays hidden. */
@@ -617,7 +760,10 @@ interface NoodlePostCardCtx {
 interface NoodlePostCardControllerOptions {
   postManagement: boolean;
   personaAccount: NoodleAccount | null;
-  savePost: (post: NoodlePostCardModel, input: { title: string | null; content: string }) => Promise<void>;
+  savePost: (
+    post: NoodlePostCardModel,
+    input: { title: string | null; content: string; image: NoodlePostImageUpdate | null },
+  ) => Promise<void>;
   deletePost: (post: NoodlePostCardModel) => void;
   reactToPost: (post: NoodlePostCardModel, type: "like" | "repost", active?: boolean) => void;
   reactToReply: (post: NoodlePostCardModel, target: NoodleInteraction, active: boolean) => void;
@@ -636,6 +782,104 @@ interface NoodlePostCardControllerOptions {
   openAuthorProfile?: (accountId: string) => void;
   voteInPoll?: (post: NoodlePostCardModel, optionId: string, selectedOptionId: string | null) => void;
   deduplicatePollBody?: boolean;
+  imageFit?: "cover" | "contain";
+  imageEditing?: {
+    loadPostImage: (post: NoodlePostCardModel) => Promise<File | string>;
+  };
+}
+
+export function useNoodlePostImageEditor(loadPostImage?: (post: NoodlePostCardModel) => Promise<File | string>) {
+  const [update, setUpdate] = useState<NoodlePostImageUpdate | null>(null);
+  const [cropSource, setCropSource] = useState<NoodlePostImageCropSource | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const revisionRef = useRef(0);
+
+  const reset = () => {
+    revisionRef.current += 1;
+    setUpdate(null);
+    setCropSource(null);
+    setLoading(false);
+    setError(null);
+  };
+  const beginCrop = (post: NoodlePostCardModel) => {
+    if (!loadPostImage || loading) return;
+    if (update?.kind === "replace") {
+      setCropSource({ source: update.file, crop: update.crop, mode: "replace" });
+      setError(null);
+      return;
+    }
+    if (!post.imageUrl) return;
+    const revision = ++revisionRef.current;
+    setLoading(true);
+    setError(null);
+    void loadPostImage(post)
+      .then((source) => {
+        if (revisionRef.current === revision) {
+          setCropSource({
+            source,
+            crop: update?.kind === "crop" ? update.crop : readNoodlePostImageCrop(post.metadata),
+            mode: "existing",
+          });
+        }
+      })
+      .catch((caught) => {
+        if (revisionRef.current === revision) {
+          setError(caught instanceof Error ? caught.message : "Could not load this image.");
+        }
+      })
+      .finally(() => {
+        if (revisionRef.current === revision) setLoading(false);
+      });
+  };
+  const selectReplacement = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      setError("Choose an image file.");
+      return;
+    }
+    setCropSource({ source: file, crop: null, mode: "replace" });
+    setError(null);
+  };
+  const applyCrop = async (crop: NoodlePostImageCrop) => {
+    if (!cropSource) return;
+    setUpdate(
+      cropSource.mode === "replace" ? { kind: "replace", file: cropSource.source, crop } : { kind: "crop", crop },
+    );
+    setCropSource(null);
+    setError(null);
+  };
+
+  return {
+    update,
+    reset,
+    cap: loadPostImage
+      ? {
+          update,
+          cropSource,
+          loading,
+          error,
+          fileInputRef,
+          beginCrop,
+          selectReplacement,
+          applyCrop,
+          cancelCrop: () => setCropSource(null),
+          remove: () => {
+            setUpdate({ kind: "remove" });
+            setCropSource(null);
+            setError(null);
+          },
+          restore: () => {
+            setUpdate(null);
+            setCropSource(null);
+            setError(null);
+          },
+        }
+      : undefined,
+  };
 }
 
 export function useNoodlePostCardController(options: NoodlePostCardControllerOptions) {
@@ -652,6 +896,7 @@ export function useNoodlePostCardController(options: NoodlePostCardControllerOpt
   const replyComposerRef = useRef<HTMLTextAreaElement | null>(null);
   const replyValueRef = useRef("");
   const replyMediaToolRef = useRef<HTMLDivElement | null>(null);
+  const imageEditor = useNoodlePostImageEditor(options.imageEditing?.loadPostImage);
 
   const clearReplyComposer = () => {
     setReplyPostId(null);
@@ -666,6 +911,7 @@ export function useNoodlePostCardController(options: NoodlePostCardControllerOpt
     setEditingPostId(null);
     setEditingPostContent("");
     setEditingPostTitle("");
+    imageEditor.reset();
   };
   const reset = () => {
     clearReplyComposer();
@@ -693,12 +939,17 @@ export function useNoodlePostCardController(options: NoodlePostCardControllerOpt
     setEditingPostId(post.id);
     setEditingPostTitle(post.title ?? "");
     setEditingPostContent(post.content);
+    imageEditor.reset();
   };
   const saveEditedPost = (post: NoodlePostCardModel) => {
     const content = editingPostContent.trim();
     if (!content) return;
     void options
-      .savePost(post, { title: editingPostTitle.trim() || null, content })
+      .savePost(post, {
+        title: editingPostTitle.trim() || null,
+        content,
+        image: imageEditor.update,
+      })
       .then(cancelEditingPost)
       .catch(() => {});
   };
@@ -753,6 +1004,8 @@ export function useNoodlePostCardController(options: NoodlePostCardControllerOpt
     openAuthorProfile: options.openAuthorProfile,
     voteInPoll: options.voteInPoll,
     deduplicatePollBody: options.deduplicatePollBody ?? true,
+    imageFit: options.imageFit ?? "cover",
+    imageEditing: imageEditor.cap,
     titleEditing: options.titleMaxLength
       ? {
           editingPostTitle,
@@ -806,6 +1059,7 @@ export function NoodlePostCard({
     createInteractionPendingFor,
     updatePostPending,
     titleEditing,
+    imageEditing,
     media,
     replyManagement,
     mentions,
@@ -814,6 +1068,8 @@ export function NoodlePostCard({
   const accountByHandle = ctx.accountByHandle ?? new Map<string, NoodleAccount>();
   const authorAccount = accountById.get(post.authorAccountId) ?? null;
   const author = authorAccount ?? post.authorSnapshot;
+  const containImage = ctx.imageFit === "contain";
+  const imageCrop = readNoodlePostImageCrop(post.metadata);
 
   // Card-owned defaults for absent capability groups. Hosts pass only the capabilities they
   // support; the card fills the
@@ -1009,47 +1265,18 @@ export function NoodlePostCard({
           </div>
         </div>
         {!disableReplyImage && activeReplyComposerTool === "image" && (
-          <NoodleToolPopover
-            title="Attach image"
-            anchorRef={replyImageToolRef}
+          <NoodleAnchoredPopover anchorRef={replyImageToolRef} wide>
+            <NoodleImageComposer
+              imageUrl={replyImageUrlDraft}
+              onImageUrlChange={setReplyImageUrlDraft}
+              onChooseFile={() => replyImageFileRef.current?.click()}
+              onUseImageUrl={applyReplyImageUrl}
             onClose={() => setActiveReplyComposerTool(null)}
-            wide
-          >
-            <div className="space-y-3">
-              <button
-                type="button"
-                onClick={() => replyImageFileRef.current?.click()}
                 disabled={uploadGlobalImages.isPending}
-                className="h-9 w-full rounded-full bg-[var(--noodle-blue)] px-4 text-xs font-bold text-zinc-950 transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {uploadGlobalImages.isPending ? "Uploading..." : "Upload From Device"}
-              </button>
-              <div
-                data-component="NoodleView.ReplyImageDivider"
-                className="flex items-center gap-2 text-[0.625rem] font-semibold uppercase tracking-normal text-[var(--noodle-blue)]"
-              >
-                <span className="h-px flex-1 bg-[var(--noodle-divider)]" />
-                or
-                <span className="h-px flex-1 bg-[var(--noodle-divider)]" />
-              </div>
-              <label className="block space-y-1.5">
-                <span className={labelClass}>Image URL</span>
-                <input
-                  value={replyImageUrlDraft}
-                  onChange={(event) => setReplyImageUrlDraft(event.target.value)}
-                  placeholder="https://..."
-                  className={fieldClass}
+              hasImage={Boolean(replyImageUrl)}
+              fileActionLabel={uploadGlobalImages.isPending ? "Uploading…" : "Upload from device"}
                 />
-              </label>
-              <button
-                type="button"
-                onClick={applyReplyImageUrl}
-                className="h-9 w-full rounded-full border border-[var(--noodle-divider)] px-4 text-xs font-bold text-[var(--noodle-blue)] transition-colors hover:bg-[var(--noodle-blue)]/10"
-              >
-                Attach URL
-              </button>
-            </div>
-          </NoodleToolPopover>
+          </NoodleAnchoredPopover>
         )}
         {activeReplyComposerTool === "media" && (
           <NoodleAnchoredPopover anchorRef={replyMediaToolRef} wide>
@@ -1072,6 +1299,30 @@ export function NoodlePostCard({
           </NoodleAnchoredPopover>
         )}
       </div>
+    );
+    const postEditActions = (
+      <>
+        <button
+          type="button"
+          onClick={cancelEditingPost}
+          className="h-8 rounded-full border border-[var(--noodle-divider)] px-4 text-xs font-semibold text-[var(--foreground)] transition-colors hover:bg-[var(--accent)]"
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          onClick={() => saveEditedPost(post)}
+          disabled={
+            !editingPostContent.trim() ||
+            updatePostPending ||
+            imageEditing?.loading ||
+            Boolean(imageEditing?.cropSource)
+          }
+          className="h-8 rounded-full bg-[var(--noodle-blue)] px-4 text-xs font-bold text-zinc-950 transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {updatePostPending ? "Saving" : "Save"}
+        </button>
+      </>
     );
     return (
       <article
@@ -1143,52 +1394,45 @@ export function NoodlePostCard({
             {ctx.postManagement && editingPostId === post.id ? (
               <div className="mt-2 space-y-2">
                 {titleEditing && (
-                  <label className="block space-y-1">
-                    <span className={labelClass}>Title (optional)</span>
+                  <label className="block">
+                    <span className="sr-only">Title (optional)</span>
                     <input
                       value={titleEditing.editingPostTitle}
                       onChange={(event) => titleEditing.setEditingPostTitle(event.target.value)}
                       maxLength={titleEditing.maxLength}
-                      className={fieldClass}
-                      placeholder="Post title"
+                  className="h-9 w-full rounded-lg border-0 bg-[var(--noodle-blue)]/5 px-3 text-base font-bold text-[var(--foreground)] outline-none placeholder:text-[var(--muted-foreground)] focus:bg-[var(--noodle-blue)]/10"
+                      placeholder="Title (optional)"
                     />
                   </label>
                 )}
                 <textarea
                   value={editingPostContent}
                   onChange={(event) => setEditingPostContent(event.target.value)}
-                  className={cn(textareaClass, "min-h-28")}
-                  placeholder="Edit post"
+                className="min-h-20 w-full resize-none rounded-lg border-0 bg-[var(--noodle-blue)]/5 px-3 py-2 text-[1rem] leading-6 text-[var(--foreground)] outline-none placeholder:text-[var(--muted-foreground)] focus:bg-[var(--noodle-blue)]/10"
+                  placeholder="What's simmering, privately?"
                 />
-                <div className="flex flex-wrap justify-end gap-2">
-                  <button
-                    type="button"
-                    onClick={cancelEditingPost}
-                    className="h-8 rounded-full border border-[var(--noodle-divider)] px-4 text-xs font-semibold text-[var(--foreground)] transition-colors hover:bg-[var(--accent)]"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => saveEditedPost(post)}
-                    disabled={!editingPostContent.trim() || updatePostPending}
-                    className="h-8 rounded-full bg-[var(--noodle-blue)] px-4 text-xs font-bold text-zinc-950 transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    {updatePostPending ? "Saving" : "Save"}
-                  </button>
-                </div>
+                {imageEditing && (
+                  <PostImageEditControls
+                    post={post}
+                    editing={imageEditing}
+                    disabled={updatePostPending}
+                    footer={postEditActions}
+                  />
+                )}
+                {!imageEditing && <div className="flex flex-wrap justify-end gap-2">{postEditActions}</div>}
               </div>
             ) : (
               <>
                 {post.title && <h3 className="mt-2 break-words text-base font-bold leading-6">{post.title}</h3>}
-                {!poll || ctx.deduplicatePollBody === false || post.content.trim() !== poll.question ? (
+                {post.content.trim() &&
+                  (!poll || ctx.deduplicatePollBody === false || post.content.trim() !== poll.question) && (
                   <NoodleTextContent
                     content={post.content}
                     accountByHandle={accountByHandle}
                     onOpenProfile={openProfile}
                     className={cn("leading-6", post.title ? "mt-1" : "mt-2")}
                   />
-                ) : null}
+                  )}
               </>
             )}
             {poll && (
@@ -1203,30 +1447,46 @@ export function NoodlePostCard({
                 onOpenProfile={openProfile}
               />
             )}
-            {post.imageUrl ? (
+            {ctx.postManagement && editingPostId === post.id && imageEditing ? null : post.imageUrl ? (
               media ? (
-                <button
-                  type="button"
-                  onClick={() =>
-                    setImageLightbox(createNoodleLightboxImage(post.id, post.imageUrl!, post.imagePrompt ?? ""))
-                  }
-                  className="mt-3 block w-full overflow-hidden rounded-xl text-left ring-offset-[var(--background)] transition-opacity hover:opacity-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-blue)] focus-visible:ring-offset-2"
-                  title="Open image"
-                  aria-label="Open post image"
-                >
-                  <img
-                    src={post.imageUrl}
-                    alt={`Image posted by ${author?.displayName ?? "Noodle user"}`}
-                    className="max-h-96 w-full object-cover"
-                  />
-                </button>
+              <button
+                type="button"
+                onClick={() =>
+                  setImageLightbox(createNoodleLightboxImage(post.id, post.imageUrl!, post.imagePrompt ?? ""))
+                }
+                className="mt-3 block w-full overflow-hidden rounded-xl text-left ring-offset-[var(--background)] transition-opacity hover:opacity-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-blue)] focus-visible:ring-offset-2"
+                title="Open image"
+                aria-label="Open post image"
+              >
+                  {containImage || imageCrop ? (
+                    <PostImageFrame
+                      src={post.imageUrl}
+                      crop={imageCrop}
+                      alt={`Image posted by ${author?.displayName ?? "Noodle user"}`}
+                    />
+                  ) : (
+                <img
+                  src={post.imageUrl}
+                  alt={`Image posted by ${author?.displayName ?? "Noodle user"}`}
+                  className="max-h-96 w-full object-cover"
+                />
+                  )}
+              </button>
               ) : (
                 <div className="mt-3 overflow-hidden rounded-xl">
-                  <img
-                    src={post.imageUrl}
-                    alt={`Image posted by ${author?.displayName ?? "Noodle user"}`}
-                    className="max-h-96 w-full object-cover"
-                  />
+                  {containImage || imageCrop ? (
+                    <PostImageFrame
+                      src={post.imageUrl}
+                      crop={imageCrop}
+                      alt={`Image posted by ${author?.displayName ?? "Noodle user"}`}
+                    />
+                  ) : (
+                    <img
+                      src={post.imageUrl}
+                      alt={`Image posted by ${author?.displayName ?? "Noodle user"}`}
+                      className="max-h-96 w-full object-cover"
+                    />
+                  )}
                 </div>
               )
             ) : post.imagePrompt ? (

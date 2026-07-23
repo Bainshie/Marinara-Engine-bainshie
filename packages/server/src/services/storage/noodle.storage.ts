@@ -127,9 +127,9 @@ type PrivatePostPersistenceInput = {
   imageAssetId?: string | null;
 };
 
-export type NoodlerPrivateMediaAsset = PrivateMediaRow;
+type NoodlerPrivateMediaAsset = PrivateMediaRow;
 
-export type NoodlerPrivateMediaRecoveryResult = {
+type NoodlerPrivateMediaRecoveryResult = {
   trusted: boolean;
   complete: boolean;
   repairedClaims: number;
@@ -1074,7 +1074,7 @@ export function createNoodleStorage(db: DB) {
             .where(and(eq(noodleAccounts.id, id), eq(noodleAccounts.visibility, "private")));
           await tx._fileStore.flush();
         });
-        return existing;
+      return existing;
       });
     },
 
@@ -1774,6 +1774,9 @@ export function createNoodleStorage(db: DB) {
     async updatePost(id: string, input: NoodlePostUpdateInput): Promise<NoodlePost | null> {
       const existing = await this.getPostById(id);
       if (!existing) return null;
+      const nextMetadata = { ...existing.metadata };
+      if (input.imageCrop === null) delete nextMetadata.imageCrop;
+      else if (input.imageCrop !== undefined) nextMetadata.imageCrop = input.imageCrop;
       await db
         .update(noodlePosts)
         .set({
@@ -1784,6 +1787,7 @@ export function createNoodleStorage(db: DB) {
             imageClaimToken: null,
             imageClaimLeaseUntil: null,
           }),
+          ...(input.imageCrop !== undefined && { metadata: JSON.stringify(nextMetadata) }),
           updatedAt: now(),
         })
         .where(eq(noodlePosts.id, id));
@@ -1822,15 +1826,82 @@ export function createNoodleStorage(db: DB) {
     async updatePrivatePost(id: string, input: NoodlePrivatePostUpdateInput): Promise<NoodlerManagedPost | null> {
       const existing = await this.getPrivatePostById(id);
       if (!existing) return null;
+      const currentMediaId = privateMediaIdFromPostImage(existing.imageUrl);
+      const imageChangeRequested =
+        input.imageAssetId !== undefined &&
+        (input.imageAssetId !== currentMediaId || (input.imageAssetId === null && existing.imageUrl !== null));
+      const imageCropUpdate =
+        input.imageCrop !== undefined ? input.imageCrop : input.imageAssetId !== undefined ? null : undefined;
+      const nextMetadata = { ...existing.metadata };
+      if (imageCropUpdate === null) delete nextMetadata.imageCrop;
+      else if (imageCropUpdate !== undefined) nextMetadata.imageCrop = imageCropUpdate;
+      if (!imageChangeRequested) {
       await db
         .update(noodlePosts)
         .set({
           ...(input.title !== undefined && { title: input.title }),
           ...(input.content !== undefined && { content: input.content.trim().slice(0, 4000) }),
+            ...(imageCropUpdate !== undefined && { metadata: JSON.stringify(nextMetadata) }),
           updatedAt: now(),
         })
         .where(eq(noodlePosts.id, id));
       return this.getPrivatePostById(id);
+      }
+
+      const previousMedia = await db
+        .select()
+        .from(noodlerPrivateMedia)
+        .where(eq(noodlerPrivateMedia.attachedPostId, id));
+      return deleteRowsWithStagedMedia(previousMedia, async () => {
+        const timestamp = now();
+        return db.transaction(async (tx) => {
+          const nextMediaId = input.imageAssetId ?? null;
+          if (nextMediaId) {
+            const mediaRows = await tx
+              .select()
+              .from(noodlerPrivateMedia)
+              .where(
+                and(
+                  eq(noodlerPrivateMedia.id, nextMediaId),
+                  eq(noodlerPrivateMedia.ownerAccountId, existing.authorAccountId),
+                  isNull(noodlerPrivateMedia.attachedPostId),
+                ),
+              );
+            if (!mediaRows[0]) throw new NoodlerPrivateMediaClaimError();
+          }
+          if (previousMedia.length > 0) {
+            await tx
+              .delete(noodlerPrivateMedia)
+              .where(inArray(noodlerPrivateMedia.id, previousMedia.map((asset) => asset.id)));
+          }
+          await tx
+            .update(noodlePosts)
+            .set({
+              ...(input.title !== undefined && { title: input.title }),
+              ...(input.content !== undefined && { content: input.content.trim().slice(0, 4000) }),
+              imageUrl: nextMediaId ? `/api/noodle/noodler/media/${nextMediaId}` : null,
+              imagePrompt: null,
+              metadata: JSON.stringify(nextMetadata),
+              updatedAt: timestamp,
+            })
+            .where(eq(noodlePosts.id, id));
+          if (nextMediaId) {
+            await tx
+              .update(noodlerPrivateMedia)
+              .set({ attachedPostId: id, updatedAt: timestamp })
+              .where(
+                and(
+                  eq(noodlerPrivateMedia.id, nextMediaId),
+                  eq(noodlerPrivateMedia.ownerAccountId, existing.authorAccountId),
+                  isNull(noodlerPrivateMedia.attachedPostId),
+                ),
+              );
+          }
+          await tx._fileStore.flush();
+          const rows = await tx.select().from(noodlePosts).where(eq(noodlePosts.id, id));
+          return rows[0] ? mapManagedPost(rows[0]) : null;
+        });
+      });
     },
 
     async deletePrivatePost(id: string): Promise<NoodlerManagedPost | null> {
@@ -1842,17 +1913,17 @@ export function createNoodleStorage(db: DB) {
       ]);
       const interactionIds = interactionRows.map((interaction) => interaction.id);
       return deleteRowsWithStagedMedia(mediaRows, async () => {
-        await db.transaction(async (tx) => {
-          await tx.delete(noodleActivityDigests).where(eq(noodleActivityDigests.sourcePostId, id));
+      await db.transaction(async (tx) => {
+        await tx.delete(noodleActivityDigests).where(eq(noodleActivityDigests.sourcePostId, id));
           if (interactionIds.length > 0) {
             await tx
               .delete(noodleActivityDigests)
               .where(inArray(noodleActivityDigests.sourceInteractionId, interactionIds));
           }
-          await tx.delete(noodlePosts).where(eq(noodlePosts.id, id));
+        await tx.delete(noodlePosts).where(eq(noodlePosts.id, id));
           await tx._fileStore.flush();
-        });
-        return existing;
+      });
+      return existing;
       });
     },
 
