@@ -48,6 +48,7 @@ import {
   useDeleteNoodlerPost,
   useDeleteNoodlerStageProfile,
   useGeneratePrivateNoodlePost,
+  useConfirmNoodlerImagePrompts,
   useGenerateNoodlerStageProfileDraft,
   useNoodle,
   useNoodlerAccounts,
@@ -70,6 +71,11 @@ import { useConnections } from "../../hooks/use-connections";
 import { ApiError } from "../../lib/api-client";
 import { cn } from "../../lib/utils";
 import { useUIStore } from "../../stores/ui.store";
+import {
+  ImagePromptReviewModal,
+  type ImagePromptOverride,
+  type ImagePromptReviewItem,
+} from "../ui/ImagePromptReviewModal";
 import { BrowserChrome, formatTime } from "./NoodleBrowserChrome";
 import {
   NoodleAnchoredPopover,
@@ -348,12 +354,17 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
   const deleteProfile = useDeleteNoodlerStageProfile();
   const updateProfile = useUpdateNoodlerStageProfile();
   const generatePost = useGeneratePrivateNoodlePost();
+  const confirmImagePrompts = useConfirmNoodlerImagePrompts();
   const createPost = useCreateNoodlerPost();
   const generateProfileDraft = useGenerateNoodlerStageProfileDraft();
   const connectionsQuery = useConnections();
   const connections = (connectionsQuery.data ?? []) as Array<{ id: string; name: string; model?: string }>;
   const [profileDraft, setProfileDraft] = useState<NoodleStageProfileInput | null>(null);
   const [draftPublicAccountId, setDraftPublicAccountId] = useState<string | null>(null);
+  const [imagePromptReview, setImagePromptReview] = useState<{
+    accountId: string;
+    items: ImagePromptReviewItem[];
+  } | null>(null);
   const [creationStep, setCreationStep] = useState<"source" | "disclosure" | "draft" | null>(null);
   const [creationDisclosure, setCreationDisclosure] = useState<NoodleIdentityDisclosure>("hinted");
   const [draftGuidance, setDraftGuidance] = useState("");
@@ -638,14 +649,33 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
 
   const submitGuidedPost = async ({ profileId, title, body, access, ppvPrice }: PrivatePostSubmission) => {
     const guide = serializePrivatePostGuide(title, body);
-    await generatePost.mutateAsync({
+    const result = await generatePost.mutateAsync({
       mode: "private",
       targetAccountId: profileId,
       ...(guide ? { privatePostGuide: guide } : {}),
       access,
       ...(access === "ppv" ? { ppvPrice } : {}),
     });
+    if (result.imagePromptReview) {
+      setImagePromptReview({ accountId: profileId, items: [result.imagePromptReview] });
+      toast.success("Private post generated. Review the image prompt to render it.");
+      return;
+    }
     toast.success("Private post generated.");
+  };
+
+  const confirmReviewedImagePrompts = (overrides: ImagePromptOverride[]) => {
+    if (!imagePromptReview) return;
+    confirmImagePrompts.mutate(
+      { targetAccountId: imagePromptReview.accountId, prompts: overrides },
+      {
+        onSuccess: () => {
+          setImagePromptReview(null);
+          toast.success("NoodleR image generated.");
+        },
+        onError: (error) => toast.error(errorMessage(error, "Could not generate the reviewed image.")),
+      },
+    );
   };
 
   const toggleCreatorSubscription = (creatorAccountId: string, subscribed: boolean) => {
@@ -1079,6 +1109,13 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
         guidePending={generatePost.isPending}
         onToggleSubscription={toggleCreatorSubscription}
         togglePending={toggleSubscription.isPending}
+      />
+      <ImagePromptReviewModal
+        open={Boolean(imagePromptReview)}
+        items={imagePromptReview?.items ?? []}
+        isSubmitting={confirmImagePrompts.isPending}
+        onCancel={() => setImagePromptReview(null)}
+        onConfirm={confirmReviewedImagePrompts}
       />
     </NoodleShell>
   );
@@ -2215,6 +2252,40 @@ function StageProfileView({
             <p className="mt-1 text-[0.68rem] text-[var(--muted-foreground)]">
               At most {autoPosting.intensity} automatic post{autoPosting.intensity === 1 ? "" : "s"} per day.
             </p>
+          </fieldset>
+          <fieldset disabled={updateAutoPosting.isPending} className="space-y-2 disabled:opacity-50">
+            <label className="flex min-h-11 items-center justify-between gap-4 rounded-md border border-[var(--noodle-divider)] px-3 py-2">
+              <span className="text-xs font-bold">Generate an image with posts</span>
+              <input
+                type="checkbox"
+                checked={autoPosting.imagesEnabled}
+                onChange={(event) =>
+                  updateAutoPosting.mutate({ accountId: profile.id, imagesEnabled: event.target.checked })
+                }
+                className="h-5 w-5 accent-[var(--noodle-blue)]"
+              />
+            </label>
+            {autoPosting.imagesEnabled && (
+              <label className="flex min-h-11 items-center justify-between gap-4 rounded-md border border-[var(--noodle-divider)] px-3 py-2">
+                <span className="text-xs font-bold">Max images per post</span>
+                <select
+                  value={autoPosting.maxImagesPerRun}
+                  onChange={(event) =>
+                    updateAutoPosting.mutate({
+                      accountId: profile.id,
+                      maxImagesPerRun: Number(event.target.value),
+                    })
+                  }
+                  className="min-h-9 rounded-md border border-[var(--noodle-divider)] bg-transparent px-2 text-xs"
+                >
+                  {[0, 1, 2, 3, 4].map((value) => (
+                    <option key={value} value={value}>
+                      {value}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
           </fieldset>
           {autoPosting.enabled && (
             <div className="space-y-2 rounded-md border border-[var(--noodle-divider)] px-3 py-2">

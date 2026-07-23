@@ -37,6 +37,8 @@ assert.ok(Date.parse(second) > Date.parse(first));
 assert.deepEqual(noodleAutoPostingSettingsSchema.parse({}), {
   enabled: false,
   intensity: 1,
+  imagesEnabled: false,
+  maxImagesPerRun: 1,
   nextRunAt: null,
 });
 // Client patch cannot carry the server-owned nextRunAt.

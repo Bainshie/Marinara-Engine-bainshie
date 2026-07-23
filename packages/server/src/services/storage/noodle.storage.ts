@@ -137,7 +137,7 @@ function emptyNoodleAccountSettings(): NoodleAccountSettings {
 }
 
 function defaultAutoPostingSettings(): NonNullable<NoodleAccountSchedulerSettings["autoPosting"]> {
-  return { enabled: false, intensity: 1, nextRunAt: null };
+  return { enabled: false, intensity: 1, imagesEnabled: false, maxImagesPerRun: 1, nextRunAt: null };
 }
 
 function normalizeScheduler(value: unknown): NoodleAccountSchedulerSettings {
@@ -991,6 +991,9 @@ export function createNoodleStorage(db: DB) {
             ? {
                 enabled: patchAuto.enabled ?? currentAuto.enabled,
                 intensity: patchAuto.intensity ?? currentAuto.intensity,
+                // Image enablement/quota do not affect cadence, so they never reset nextRunAt.
+                imagesEnabled: patchAuto.imagesEnabled ?? currentAuto.imagesEnabled,
+                maxImagesPerRun: patchAuto.maxImagesPerRun ?? currentAuto.maxImagesPerRun,
                 nextRunAt:
                   (patchAuto.enabled !== undefined && patchAuto.enabled !== currentAuto.enabled) ||
                   (patchAuto.intensity !== undefined && patchAuto.intensity !== currentAuto.intensity)

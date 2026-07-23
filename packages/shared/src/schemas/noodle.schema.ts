@@ -146,6 +146,8 @@ export const noodleAutoPostingSettingsSchema = z
   .object({
     enabled: z.boolean().default(false),
     intensity: noodleAutoPostingIntensitySchema.default(1),
+    imagesEnabled: z.boolean().default(false),
+    maxImagesPerRun: z.number().int().min(0).max(4).default(1),
     nextRunAt: z.string().datetime().nullable().default(null),
   })
   .strict();
@@ -164,7 +166,7 @@ export const noodleAutoPostRescheduleSchema = z.object({ nextRunAt: z.string().d
 export const noodleAccountSchedulerPatchSchema = z
   .object({
     autoPosting: noodleAutoPostingSettingsSchema
-      .pick({ enabled: true, intensity: true })
+      .pick({ enabled: true, intensity: true, imagesEnabled: true, maxImagesPerRun: true })
       .partial()
       .optional(),
   })
@@ -487,6 +489,9 @@ const noodlePrivateGenerationRequestShape = {
   targetAccountId: z.string().min(1),
   privatePostGuide: noodlePrivatePostGuideSchema.optional(),
   privateProjectWork: noodlePrivateProjectWorkSchema.optional(),
+  // Manual Guide path may ask to review the image prompt before rendering; the autonomous
+  // scheduler never sets this (no human in the loop).
+  reviewImagePromptsBeforeSend: z.boolean().optional(),
 };
 
 export const noodlePrivateGenerationRequestSchema = z.union([
@@ -528,7 +533,7 @@ export const noodleGeneratedPrivatePostSchema = z
     poll: noodlePollInputSchema.nullable().optional(),
   })
   .strict()
-  .transform(({ title, content }) => ({ title, content }));
+  .transform(({ title, content, imagePrompt }) => ({ title, content, imagePrompt: imagePrompt ?? null }));
 
 export const noodleGeneratedInteractionSchema = z
   .object({

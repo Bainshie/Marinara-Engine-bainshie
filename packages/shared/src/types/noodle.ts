@@ -40,6 +40,10 @@ export interface NoodleAutoPostingSettings {
   enabled: boolean;
   /** Low/Medium/High = at most 1/3/6 automatic posts per day. */
   intensity: NoodleAutoPostingIntensity;
+  /** NoodleR-owned image enablement; independent of public Noodle's enableImagePrompts. */
+  imagesEnabled: boolean;
+  /** NoodleR-owned bounded per-run image quota. */
+  maxImagesPerRun: number;
   /** Server-owned; excluded from client-editable patches. */
   nextRunAt: string | null;
 }

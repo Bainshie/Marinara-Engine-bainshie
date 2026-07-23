@@ -3,6 +3,7 @@ import type {
   NoodlePrivatePostCreateInput,
   NoodlerManagedPost,
 } from "@marinara-engine/shared";
+import type { NoodleImagePromptReviewItem } from "./noodle-public-images.service.js";
 import type { DB } from "../../db/connection.js";
 import { createConnectionsStorage } from "../storage/connections.storage.js";
 import { createNoodleStorage } from "../storage/noodle.storage.js";
@@ -10,7 +11,7 @@ import { generatePrivatePost } from "./noodle-private-generation.service.js";
 import { tryNoodlePrivateAccountOperation } from "./noodle-private-account-operation-lock.js";
 
 export type GenerateNoodlePrivatePostResult =
-  | { status: "generated"; post: NoodlerManagedPost }
+  | { status: "generated"; post: NoodlerManagedPost; imagePromptReview: NoodleImagePromptReviewItem | null }
   | { status: "disabled" }
   | { status: "busy" }
   | { status: "connection_required" }
@@ -44,8 +45,8 @@ export async function generateNoodlePrivatePost(
     if (!connectionId) return { status: "connection_required" } as const;
     const connection = await createConnectionsStorage(db).getWithKey(connectionId);
     if (!connection) return { status: "connection_not_found" } as const;
-    const post = await generatePrivatePost(db, { account, request, connection });
-    return { status: "generated", post } as const;
+    const generated = await generatePrivatePost(db, { account, request, connection });
+    return { status: "generated", post: generated.post, imagePromptReview: generated.imagePromptReview } as const;
   });
   return locked.acquired ? locked.value : { status: "busy" };
 }

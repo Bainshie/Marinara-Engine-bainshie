@@ -11,7 +11,7 @@ import {
 } from "@marinara-engine/shared";
 import { isDebugAgentsEnabled } from "../../config/runtime-config.js";
 import type { DB } from "../../db/connection.js";
-import { logDebugOverride } from "../../lib/logger.js";
+import { logger, logDebugOverride } from "../../lib/logger.js";
 import { resolveBaseUrl } from "../generation/connection-base-url.js";
 import { resolveStoredChatOptions, resolveStoredMaxTokens } from "../generation/generation-parameters.js";
 import { clampGenerationMaxOutputTokens } from "../generation/output-token-limits.js";
@@ -19,10 +19,21 @@ import { parseGameJsonish } from "../game/jsonish.js";
 import { withConnectionFallbackProvider } from "../llm/connection-fallback-provider.js";
 import type { ChatMessage } from "../llm/base-provider.js";
 import { createLLMProvider } from "../llm/provider-registry.js";
+import { createCharactersStorage } from "../storage/characters.storage.js";
 import { createConnectionsStorage } from "../storage/connections.storage.js";
 import { createNoodleStorage } from "../storage/noodle.storage.js";
+import { createPromptOverridesStorage } from "../storage/prompt-overrides.storage.js";
 import { formatNoodleMessagesForLog } from "./noodle-generation-log.js";
+import { generatePrivatePostImage } from "./noodle-private-images.service.js";
+import { privatePostMediaUrl } from "./noodle-private-media.js";
+import type { NoodleImagePromptReviewItem } from "./noodle-public-images.service.js";
+import { getErrorMessage } from "./noodle-public-support.js";
 import { noodleResponseFormat } from "./noodle-response-format.js";
+
+export type GeneratedPrivatePostResult = {
+  post: NoodlerManagedPost;
+  imagePromptReview: NoodleImagePromptReviewItem | null;
+};
 
 type GenerationConnection = NonNullable<Awaited<ReturnType<ReturnType<typeof createConnectionsStorage>["getWithKey"]>>>;
 
@@ -119,6 +130,7 @@ export function buildPrivatePostMessages(input: {
   publicIdentity: PublicIdentity | null;
   recentPosts: NoodlerManagedPost[];
   request: Pick<NoodlePrivateGenerationRequest, "privatePostGuide" | "privateProjectWork">;
+  allowImagePrompt: boolean;
 }): ChatMessage[] {
   const protect = (value: string) =>
     protectPrivateGeneratedIdentity(value, input.disclosureMode, input.publicIdentity) ?? "";
@@ -128,7 +140,9 @@ export function buildPrivatePostMessages(input: {
     "Use the private stage profile as supplied.",
     identityInstruction(input.disclosureMode, input.publicIdentity),
     "Write a concise title and a body for the post.",
-    "Return one JSON object with title and content only. Do not create a poll or image prompt.",
+    input.allowImagePrompt
+      ? "Return one JSON object with title, content, and an optional imagePrompt (a short description of a single image to accompany the post, or null). Do not create a poll."
+      : "Return one JSON object with title and content only. Do not create a poll or image prompt.",
     "Return JSON only. No prose outside the JSON object.",
   ].join("\n");
   const user = [
@@ -158,9 +172,12 @@ function parsePrivatePost(content: string) {
 export async function generatePrivatePost(
   db: DB,
   input: PrivatePostGenerationInput,
-): Promise<NoodlerManagedPost> {
+): Promise<GeneratedPrivatePostResult> {
   const noodle = createNoodleStorage(db);
   const { account } = input;
+  const settings = await noodle.getSettings();
+  const autoPosting = account.settings.scheduler.autoPosting;
+  const imagesEnabled = autoPosting?.imagesEnabled === true && (autoPosting.maxImagesPerRun ?? 0) > 0;
 
   const connections = createConnectionsStorage(db);
   const fallbackConnection = await connections.getFallbackForMain();
@@ -194,6 +211,7 @@ export async function generatePrivatePost(
     publicIdentity,
     recentPosts,
     request: input.request,
+    allowImagePrompt: imagesEnabled,
   });
   const debugMode = input.request.debugMode === true || isDebugAgentsEnabled();
   logDebugOverride(debugMode, "[debug/noodler] Prompt sent to model:\n%s", formatNoodleMessagesForLog(messages));
@@ -259,14 +277,98 @@ export async function generatePrivatePost(
     ),
   };
   if (!protectedGenerated.content) throw new Error("Private generation returned no usable post content.");
-  const post = await noodle.createPrivatePost({
+
+  // Identity protection applies to the image prompt too, not only post text.
+  const draftImagePrompt = imagesEnabled
+    ? protectPrivateGeneratedIdentity(generated.imagePrompt, disclosureMode, publicIdentity)
+    : null;
+
+  const baseInput = {
     authorAccountId: account.id,
     title: protectedGenerated.title,
     content: protectedGenerated.content,
-    source: "generated",
+    source: "generated" as const,
     access: input.request.access,
     ppvPrice: input.request.access === "ppv" ? (input.request.ppvPrice ?? null) : null,
-  });
-  if (!post) throw new Error("Failed to persist the generated private NoodleR post.");
-  return post;
+  };
+
+  const persist = async (
+    extra: { imagePrompt?: string | null; imageUrl?: string | null; metadata?: Record<string, unknown> } = {},
+  ): Promise<NoodlerManagedPost> => {
+    const post = await noodle.createPrivatePost({ ...baseInput, ...extra });
+    if (!post) throw new Error("Failed to persist the generated private NoodleR post.");
+    return post;
+  };
+
+  if (!draftImagePrompt) return { post: await persist(), imagePromptReview: null };
+
+  const imageConnection = settings.imageGenerationConnectionId
+    ? await connections.getWithKey(settings.imageGenerationConnectionId)
+    : await connections.getDefaultForImageGeneration();
+  if (!imageConnection) {
+    const post = await persist({
+      metadata: {
+        imageGenerationFailed: true,
+        imageGenerationError: "No image generation connection is configured.",
+      },
+    });
+    return { post, imagePromptReview: null };
+  }
+
+  const imageInput = {
+    account,
+    linkedPublicAccount,
+    disclosureMode,
+    postContent: protectedGenerated.content,
+    draftPrompt: draftImagePrompt,
+    settings,
+    characters: createCharactersStorage(db),
+    promptOverrides: createPromptOverridesStorage(db),
+    imageConnection,
+    db,
+    debugMode,
+  };
+
+  // Manual Guide review path: persist a pending prompt and hand back a preview for the
+  // reviewed-image confirmation route to claim and finalize later.
+  if (input.request.reviewImagePromptsBeforeSend === true) {
+    try {
+      const preview = await generatePrivatePostImage({ ...imageInput, previewOnly: true });
+      const post = await persist({ imagePrompt: draftImagePrompt, metadata: { imagePendingReview: true } });
+      return {
+        post,
+        imagePromptReview: preview.preview ? { id: post.id, ...preview.preview } : null,
+      };
+    } catch (err) {
+      logger.warn(err, "[noodler] Failed to prepare image prompt review for %s", account.displayName);
+      return {
+        post: await persist({
+          metadata: { imageGenerationFailed: true, imageGenerationError: getErrorMessage(err).slice(0, 500) },
+        }),
+        imagePromptReview: null,
+      };
+    }
+  }
+
+  // Immediate generation: image-provider failure must leave a valid text post, not fail the run.
+  try {
+    const image = await generatePrivatePostImage({ ...imageInput, previewOnly: false });
+    image.stagedMedia?.promote();
+    try {
+      const post = await persist({ imagePrompt: draftImagePrompt, metadata: image.metadata });
+      const withUrl = await noodle.updatePrivatePost(post.id, { imageUrl: privatePostMediaUrl(post.id) });
+      return { post: withUrl ?? post, imagePromptReview: null };
+    } catch (err) {
+      image.stagedMedia?.compensate();
+      throw err;
+    }
+  } catch (err) {
+    logger.warn(err, "[noodler] Failed to generate private image for %s", account.displayName);
+    return {
+      post: await persist({
+        metadata: { imageGenerationFailed: true, imageGenerationError: getErrorMessage(err).slice(0, 500) },
+      }),
+      imagePromptReview: null,
+    };
+  }
 }

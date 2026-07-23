@@ -186,15 +186,36 @@ export function useGenerateNoodlerStageProfileDraft() {
   });
 }
 
+export type GeneratedPrivateNoodlePost = NoodlerManagedPost & {
+  imagePromptReview?: ImagePromptReviewItem;
+};
+
 export function useGeneratePrivateNoodlePost() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (input: NoodlePrivateGenerationRequest) =>
-      api.post<NoodlerManagedPost>("/noodle/refresh", {
+      api.post<GeneratedPrivateNoodlePost>("/noodle/refresh", {
         ...input,
         debugMode: useUIStore.getState().debugMode,
+        reviewImagePromptsBeforeSend: useUIStore.getState().reviewImagePromptsBeforeSend,
       } satisfies NoodlePrivateGenerationRequest),
     onSuccess: (_post, input) =>
+      Promise.all([
+        qc.invalidateQueries({ queryKey: noodleKeys.privatePosts(input.targetAccountId) }),
+        qc.invalidateQueries({ queryKey: noodleKeys.privateViewers() }),
+      ]),
+  });
+}
+
+export function useConfirmNoodlerImagePrompts() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { targetAccountId: string; prompts: ImagePromptOverride[] }) =>
+      api.post<{ finalized: number }>("/noodle/noodler/refresh/images", {
+        prompts: input.prompts,
+        debugMode: useUIStore.getState().debugMode,
+      }),
+    onSuccess: (_result, input) =>
       Promise.all([
         qc.invalidateQueries({ queryKey: noodleKeys.privatePosts(input.targetAccountId) }),
         qc.invalidateQueries({ queryKey: noodleKeys.privateViewers() }),
@@ -342,6 +363,8 @@ export function useUpdateNoodlerAutoPosting() {
       accountId: string;
       enabled?: boolean;
       intensity?: NoodleAutoPostingIntensity;
+      imagesEnabled?: boolean;
+      maxImagesPerRun?: number;
     }) =>
       api.patch<NoodleAccount>(`/noodle/accounts/${encodeURIComponent(accountId)}/settings`, {
         subtree: "scheduler",
