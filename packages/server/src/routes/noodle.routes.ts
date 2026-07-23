@@ -118,7 +118,12 @@ function privateMediaViewerUrl(assetId: string, personaId: string): string {
 
 function privateMediaAssetId(imageUrl: string): string | null {
   const match = /^\/api\/noodle\/noodler\/media\/([^?]+)/.exec(imageUrl);
-  return match?.[1] ? decodeURIComponent(match[1]) : null;
+  if (!match?.[1]) return null;
+  try {
+    return decodeURIComponent(match[1]);
+  } catch {
+    return null;
+  }
 }
 
 export async function noodleRoutes(app: FastifyInstance) {
@@ -126,9 +131,25 @@ export async function noodleRoutes(app: FastifyInstance) {
   const characters = createCharactersStorage(app.db);
   const connections = createConnectionsStorage(app.db);
   const publicGeneration = createPublicNoodleGenerationService(app.db);
+  let privateMediaRecoveryTrusted = false;
   try {
-    await reconcileNoodlerPrivateMediaFiles((storageKey) => noodle.privateMediaAssetExists(storageKey), 100, 0);
+    const recovery = await noodle.reconcilePrivateMediaRelationships(100);
+    privateMediaRecoveryTrusted = recovery.trusted && recovery.complete;
+    if (!recovery.trusted) {
+      logger.error(
+        { quarantinedTables: recovery.quarantinedTables },
+        "[noodler] Private-media recovery skipped because authoritative storage is quarantined",
+      );
+    } else if (!recovery.complete) {
+      logger.warn(
+        { repairedClaims: recovery.repairedClaims, removedClaims: recovery.removedClaims },
+        "[noodler] Private-media relationship recovery reached its bounded limit; file cleanup is deferred",
+      );
+    } else {
+      await reconcileNoodlerPrivateMediaFiles((storageKey) => noodle.privateMediaAssetExists(storageKey), 100, 0);
+    }
   } catch (error) {
+    privateMediaRecoveryTrusted = false;
     logger.warn(error, "[noodler] Startup private-media reconciliation did not complete");
   }
   const publicImages = createPublicNoodleImagesService(app.db);
@@ -301,17 +322,16 @@ export async function noodleRoutes(app: FastifyInstance) {
     const { id } = req.params as { id: string };
     const gated = await resolveGatedPrivatePost(parsed.data.personaId, id);
     if (!gated) return reply.code(404).send({ error: "NoodleR post not found" });
-    let content = parsed.data.content ?? null;
     if (parsed.data.type === "vote") {
       const poll = readNoodlePollFromMetadata(gated.post.metadata);
-      const option = poll?.options[parsed.data.pollOptionIndex!];
-      if (!option) return reply.code(400).send({ error: "Choose a valid poll option." });
-      content = option.id;
+      if (!poll?.options.some((option) => option.id === parsed.data.content)) {
+        return reply.code(400).send({ error: "Choose a valid poll option." });
+      }
     }
     const interaction = await noodle.createPrivateInteraction(id, {
       actorAccountId: gated.viewer.id,
       type: parsed.data.type,
-      content,
+      content: parsed.data.content ?? null,
       parentInteractionId: parsed.data.parentInteractionId ?? null,
     });
     if (!interaction) return reply.code(400).send({ error: "Could not add that NoodleR interaction." });
@@ -393,13 +413,15 @@ export async function noodleRoutes(app: FastifyInstance) {
     if (!detected || (extension === ".jpeg" ? "jpg" : extension.slice(1)) !== detected.ext) {
       return reply.code(400).send({ error: "Unsupported or invalid image file." });
     }
-    const cleanupResults = await Promise.allSettled([
-      reconcileNoodlerPrivateMediaFiles((storageKey) => noodle.privateMediaAssetExists(storageKey), 20),
-      noodle.cleanupStalePrivateMediaAssets(
-        new Date(Date.now() - NOODLER_PRIVATE_MEDIA_STALE_MS).toISOString(),
-        20,
-      ),
-    ]);
+    const cleanupResults = privateMediaRecoveryTrusted
+      ? await Promise.allSettled([
+          reconcileNoodlerPrivateMediaFiles((storageKey) => noodle.privateMediaAssetExists(storageKey), 20),
+          noodle.cleanupStalePrivateMediaAssets(
+            new Date(Date.now() - NOODLER_PRIVATE_MEDIA_STALE_MS).toISOString(),
+            20,
+          ),
+        ])
+      : [];
     for (const result of cleanupResults) {
       if (result.status === "rejected") {
         logger.warn(result.reason, "[noodler] Bounded private-media cleanup did not complete");

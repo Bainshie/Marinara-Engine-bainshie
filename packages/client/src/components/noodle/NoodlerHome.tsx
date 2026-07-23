@@ -27,7 +27,6 @@ import {
   NOODLE_PRIVATE_POST_CONTENT_MAX_LENGTH,
   NOODLE_PRIVATE_POST_GUIDE_MAX_LENGTH,
   NOODLE_PRIVATE_POST_TITLE_MAX_LENGTH,
-  readNoodlePollFromMetadata,
 } from "@marinara-engine/shared";
 import type {
   NoodleIdentityDisclosure,
@@ -37,6 +36,7 @@ import type {
   NoodlePostAccess,
   NoodlerPostView,
   NoodleStageProfileInput,
+  NoodlePollInput,
   NoodlerManagedStageProfile,
   NoodlerManagedPost,
   NoodlerStageProfile,
@@ -116,15 +116,13 @@ interface PrivatePostSubmission {
   poll: { question: string; options: string[] } | null;
 }
 
-interface PrivatePostPollDraft { question: string; options: string[]; }
-
 interface PrivatePostDraft {
   title: string;
   body: string;
   access: NoodlePostAccess;
   ppvPrice: string;
   image: { id: string; imageUrl: string } | null;
-  poll: PrivatePostPollDraft | null;
+  poll: NoodlePollInput | null;
 }
 
 const EMPTY_PRIVATE_POST_DRAFT: PrivatePostDraft = {
@@ -459,10 +457,7 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
   };
   const voteInPoll = (post: NoodlePostCardModel, optionId: string, selectedOptionId: string | null) => {
     if (!viewerPersonaId || optionId === selectedOptionId) return;
-    const poll = readNoodlePollFromMetadata(post.metadata);
-    const pollOptionIndex = poll?.options.findIndex((option) => option.id === optionId) ?? -1;
-    if (pollOptionIndex < 0) return;
-    createInteraction.mutate({ postId: post.id, personaId: viewerPersonaId, type: "vote", pollOptionIndex }, { onError: (error) => toast.error(errorMessage(error, "Could not vote in this poll.")) });
+    createInteraction.mutate({ postId: post.id, personaId: viewerPersonaId, type: "vote", content: optionId }, { onError: (error) => toast.error(errorMessage(error, "Could not vote in this poll.")) });
   };
   const submitReply = async (
     post: NoodlePostCardModel,
@@ -509,6 +504,7 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
     createInteractionPendingFor: (_postId, type) => (type === "reply" || type === "vote") && createInteraction.isPending,
     updatePostPending: updatePost.isPending,
     titleMaxLength: NOODLE_PRIVATE_POST_TITLE_MAX_LENGTH,
+    deduplicatePollBody: false,
     openAuthorProfile: (accountId) => onNavigate({ mode: "private", view: "profile", accountId }),
   });
   const postCardCtx = postCardController.ctx;
@@ -2776,42 +2772,104 @@ function PrivatePostComposer({
   const [activeTool, setActiveTool] = useState<PrivateComposerTool | null>(null);
   const [mediaPickerTab, setMediaPickerTab] = useState<ConversationMediaPickerTabId>("emoji");
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
+  const [localOperation, setLocalOperation] = useState<"submission" | "upload" | "remove" | null>(null);
   const imageFileRef = useRef<HTMLInputElement | null>(null);
   const imageToolRef = useRef<HTMLDivElement | null>(null);
   const pollToolRef = useRef<HTMLDivElement | null>(null);
   const mediaToolRef = useRef<HTMLDivElement | null>(null);
   const coinToolRef = useRef<HTMLDivElement | null>(null);
+  const composerBusyRef = useRef(false);
+  const draftRevisionRef = useRef(0);
   const { title, body, access, ppvPrice, image, poll } = draft;
   const uploadImage = useUploadNoodlerPostImage();
   const deleteImage = useDeleteNoodlerPostImage();
   const hasDraft = !isEmptyPrivatePostDraft(draft);
   const parsedPrice = Number(ppvPrice);
-  const pending = manualPending || guidePending;
+  const composerBusy = localOperation !== null || manualPending || guidePending || uploadImage.isPending || deleteImage.isPending;
+  composerBusyRef.current = composerBusy;
   const guide = serializePrivatePostGuide(title, body);
 
+  useEffect(() => {
+    if (composerBusy) setActiveTool(null);
+  }, [composerBusy]);
+
+  const updateDraft = (patch: Partial<PrivatePostDraft>) => {
+    if (composerBusyRef.current) return false;
+    onDraftChange(patch);
+    return true;
+  };
+  const finishOperation = (operation: "submission" | "upload" | "remove") => {
+    setLocalOperation((current) => current === operation ? null : current);
+  };
+
   const clearDraft = () => {
+    draftRevisionRef.current += 1;
     onClearDraft();
     setPostError(null);
     setGuideError(null);
     setActiveTool(null);
     setExpanded(false);
   };
-  const discardDraft = () => { onDiscardDraft(); setPostError(null); setGuideError(null); setAttachmentError(null); setActiveTool(null); setExpanded(false); };
+  const discardDraft = () => {
+    if (composerBusyRef.current) return;
+    draftRevisionRef.current += 1;
+    onDiscardDraft();
+    setPostError(null);
+    setGuideError(null);
+    setAttachmentError(null);
+    setActiveTool(null);
+    setExpanded(false);
+  };
   const removeImage = () => {
-    if (!image) return;
+    if (!image || composerBusyRef.current) return;
+    const revision = ++draftRevisionRef.current;
+    composerBusyRef.current = true;
+    setLocalOperation("remove");
     onDraftChange({ image: null });
-    deleteImage.mutate({ accountId: profile.id, imageId: image.id }, { onError: () => setAttachmentError("The image was removed from this draft, but cleanup will be retried by the server.") });
+    deleteImage.mutate(
+      { accountId: profile.id, imageId: image.id },
+      {
+        onError: () => {
+          if (draftRevisionRef.current === revision) {
+            setAttachmentError("The image was removed from this draft, but cleanup will be retried by the server.");
+          }
+        },
+        onSettled: () => finishOperation("remove"),
+      },
+    );
   };
   const handleImageFile = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]; event.target.value = "";
-    if (!file) return;
+    if (!file || composerBusyRef.current) return;
     if (!file.type.startsWith("image/")) { setAttachmentError("Choose an image file."); return; }
+    const revision = ++draftRevisionRef.current;
+    const replacedImage = image;
+    composerBusyRef.current = true;
+    setLocalOperation("upload");
     setAttachmentError(null);
-    uploadImage.mutate({ accountId: profile.id, file }, { onSuccess: (next) => { if (image) deleteImage.mutate({ accountId: profile.id, imageId: image.id }); onDraftChange({ image: next }); setActiveTool(null); }, onError: (error) => setAttachmentError(errorMessage(error, "Could not upload this image.")) });
+    uploadImage.mutate(
+      { accountId: profile.id, file },
+      {
+        onSuccess: (next) => {
+          if (draftRevisionRef.current !== revision) return;
+          if (replacedImage) deleteImage.mutate({ accountId: profile.id, imageId: replacedImage.id });
+          onDraftChange({ image: next });
+          setActiveTool(null);
+        },
+        onError: (error) => {
+          if (draftRevisionRef.current === revision) {
+            setAttachmentError(errorMessage(error, "Could not upload this image."));
+          }
+        },
+        onSettled: () => finishOperation("upload"),
+      },
+    );
   };
 
-  const toggleTool = (tool: PrivateComposerTool) =>
+  const toggleTool = (tool: PrivateComposerTool) => {
+    if (composerBusyRef.current) return;
     setActiveTool((current) => (current === tool ? null : tool));
+  };
 
   const submission = (): PrivatePostSubmission => ({
     profileId: profile.id,
@@ -2824,6 +2882,7 @@ function PrivatePostComposer({
   });
 
   const publish = async () => {
+    if (composerBusyRef.current) return;
     setPostError(null);
     if (!body.trim()) {
       setPostError("A literal post needs a body.");
@@ -2835,14 +2894,21 @@ function PrivatePostComposer({
       return;
     }
     try {
+      draftRevisionRef.current += 1;
+      composerBusyRef.current = true;
+      setLocalOperation("submission");
+      setActiveTool(null);
       await onManualPost(submission());
       clearDraft();
     } catch (error) {
       setPostError(errorMessage(error, "Could not publish this post."));
+    } finally {
+      finishOperation("submission");
     }
   };
 
   const guidePost = async () => {
+    if (composerBusyRef.current) return;
     setGuideError(null);
     if (!body.trim()) { setGuideError("A guided post needs a body."); return; }
     if (poll && (!poll.question.trim() || poll.options.length < 2 || poll.options.some((option) => !option.trim()) || new Set(poll.options.map((option) => option.trim().toLocaleLowerCase())).size !== poll.options.length)) { setGuideError("Polls need a question and two unique options."); return; }
@@ -2857,10 +2923,16 @@ function PrivatePostComposer({
       return;
     }
     try {
+      draftRevisionRef.current += 1;
+      composerBusyRef.current = true;
+      setLocalOperation("submission");
+      setActiveTool(null);
       await onGuidedPost(submission());
       clearDraft();
     } catch (error) {
       setGuideError(errorMessage(error, "Could not generate this post."));
+    } finally {
+      finishOperation("submission");
     }
   };
 
@@ -2870,6 +2942,7 @@ function PrivatePostComposer({
         <button
           type="button"
           onClick={() => setExpanded(true)}
+          disabled={composerBusy}
           className="flex min-h-12 w-full items-center gap-3 rounded-xl border border-[var(--noodle-divider)] px-3 text-left transition-colors hover:bg-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-blue)]"
           aria-expanded="false"
         >
@@ -2895,7 +2968,7 @@ function PrivatePostComposer({
             setActiveTool(null);
             setExpanded(false);
           }}
-          disabled={pending}
+          disabled={composerBusy}
           aria-expanded="true"
           className="inline-flex min-h-8 items-center gap-1.5 rounded-md px-1 text-xs font-bold text-[var(--noodle-blue)] hover:bg-[var(--accent)] disabled:opacity-50"
         >
@@ -2906,12 +2979,12 @@ function PrivatePostComposer({
       avatar={<ProfileInitial profile={profile} />}
       tools={
         <NoodleComposerToolRow
-          image={{ ref: imageToolRef, active: activeTool === "image" || Boolean(image), disabled: pending || uploadImage.isPending, onClick: () => toggleTool("image") }}
-          poll={{ ref: pollToolRef, active: activeTool === "poll" || Boolean(poll), disabled: pending, onClick: () => toggleTool("poll") }}
+          image={{ ref: imageToolRef, active: activeTool === "image" || Boolean(image), disabled: composerBusy, onClick: () => toggleTool("image") }}
+          poll={{ ref: pollToolRef, active: activeTool === "poll" || Boolean(poll), disabled: composerBusy, onClick: () => toggleTool("poll") }}
           media={{
             ref: mediaToolRef,
             active: activeTool === "media",
-            disabled: pending,
+            disabled: composerBusy,
             onClick: () => toggleTool("media"),
           }}
           trailing={
@@ -2919,7 +2992,7 @@ function PrivatePostComposer({
               <NoodleToolButton
                 title="Post visibility and price"
                 active={activeTool === "coin" || access !== "public"}
-                disabled={pending}
+                disabled={composerBusy}
                 onClick={() => toggleTool("coin")}
               >
                 <Coins size={18} />
@@ -2933,17 +3006,17 @@ function PrivatePostComposer({
           <button
             type="button"
             onClick={() => void guidePost()}
-            disabled={pending}
+            disabled={composerBusy}
             className="inline-flex h-8 items-center gap-1.5 rounded-full border border-[var(--noodle-divider)] px-3 text-xs font-bold hover:bg-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-50"
           >
             {guidePending ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
             {guidePending ? "Guiding…" : "Guide"}
           </button>
-          {hasDraft && <button type="button" onClick={discardDraft} disabled={pending || uploadImage.isPending} className="inline-flex h-8 items-center rounded-full px-3 text-xs font-bold text-[var(--muted-foreground)] hover:bg-[var(--accent)] disabled:opacity-50">Discard</button>}
+          {hasDraft && <button type="button" onClick={discardDraft} disabled={composerBusy} className="inline-flex h-8 items-center rounded-full px-3 text-xs font-bold text-[var(--muted-foreground)] hover:bg-[var(--accent)] disabled:opacity-50">Discard</button>}
           <button
             type="button"
             onClick={() => void publish()}
-            disabled={pending || !body.trim()}
+            disabled={composerBusy || !body.trim()}
             className="inline-flex h-8 items-center gap-1.5 rounded-full bg-[var(--noodle-blue)] px-4 text-xs font-bold text-zinc-950 [&_svg]:!text-zinc-950 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {manualPending
@@ -2955,39 +3028,39 @@ function PrivatePostComposer({
       }
       popovers={
         <>
-          {activeTool === "media" && (
+          {activeTool === "media" && !composerBusy && (
             <NoodleAnchoredPopover anchorRef={mediaToolRef} wide>
               <ConversationMediaPickerPanel
                 tabs={[{ id: "emoji", label: "Emoji" }]}
                 activeTab={mediaPickerTab}
-                onActiveTabChange={setMediaPickerTab}
+                onActiveTabChange={(tab) => { if (!composerBusyRef.current) setMediaPickerTab(tab); }}
                 onClose={() => setActiveTool(null)}
-                onEmojiSelect={(emoji) => onDraftChange({ body: body + emoji })}
+                onEmojiSelect={(emoji) => updateDraft({ body: body + emoji })}
                 onGifSelect={() => {}}
-                onStickerSelect={(name) => onDraftChange({ body: `${body}sticker:${name}:` })}
+                onStickerSelect={(name) => updateDraft({ body: `${body}sticker:${name}:` })}
                 className="w-full !border-[var(--marinara-chat-chrome-panel-border)] !bg-[var(--background)] !text-[var(--foreground)] shadow-2xl shadow-black/35"
               />
             </NoodleAnchoredPopover>
           )}
-          {activeTool === "image" && (
+          {activeTool === "image" && !composerBusy && (
             <NoodleAnchoredPopover anchorRef={imageToolRef} wide>
               <div className="marinara-chat-popover space-y-3 rounded-xl border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)] p-3 text-[var(--foreground)] shadow-2xl shadow-black/35">
                 <p className="text-xs font-bold">Attach one image</p>
-                <button type="button" onClick={() => imageFileRef.current?.click()} disabled={pending || uploadImage.isPending} className="h-9 w-full rounded-full bg-[var(--noodle-blue)] px-4 text-xs font-bold text-zinc-950 disabled:opacity-50">{uploadImage.isPending ? "Uploading…" : image ? "Replace image" : "Upload from device"}</button>
-                {image && <button type="button" onClick={removeImage} disabled={deleteImage.isPending} className="h-9 w-full rounded-full border border-[var(--noodle-divider)] px-4 text-xs font-bold text-[var(--destructive)] disabled:opacity-50">Remove image</button>}
+                <button type="button" onClick={() => { if (!composerBusyRef.current) imageFileRef.current?.click(); }} disabled={composerBusy} className="h-9 w-full rounded-full bg-[var(--noodle-blue)] px-4 text-xs font-bold text-zinc-950 disabled:opacity-50">{uploadImage.isPending ? "Uploading…" : image ? "Replace image" : "Upload from device"}</button>
+                {image && <button type="button" onClick={removeImage} disabled={composerBusy} className="h-9 w-full rounded-full border border-[var(--noodle-divider)] px-4 text-xs font-bold text-[var(--destructive)] disabled:opacity-50">Remove image</button>}
               </div>
             </NoodleAnchoredPopover>
           )}
-          {activeTool === "poll" && (
+          {activeTool === "poll" && !composerBusy && (
             <NoodleAnchoredPopover anchorRef={pollToolRef} wide>
               <div className="marinara-chat-popover space-y-3 rounded-xl border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)] p-3 text-[var(--foreground)] shadow-2xl shadow-black/35">
-                <label className="block space-y-1"><span className="text-xs font-bold">Question</span><input value={poll?.question ?? ""} maxLength={240} onChange={(event) => onDraftChange({ poll: { question: event.target.value, options: poll?.options ?? ["", ""] } })} className="mari-chrome-field h-9 w-full rounded-md border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)] px-3 text-sm" /></label>
-                {(poll?.options ?? ["", ""]).map((option, index, options) => <div key={index} className="flex gap-2"><input value={option} maxLength={120} aria-label={`Poll option ${index + 1}`} onChange={(event) => onDraftChange({ poll: { question: poll?.question ?? "", options: options.map((entry, entryIndex) => entryIndex === index ? event.target.value : entry) } })} className="mari-chrome-field h-9 min-w-0 flex-1 rounded-md border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)] px-3 text-sm" />{options.length > 2 && <button type="button" onClick={() => onDraftChange({ poll: { question: poll?.question ?? "", options: options.filter((_, entryIndex) => entryIndex !== index) } })} className="h-9 w-9 text-[var(--muted-foreground)]" aria-label={`Remove option ${index + 1}`}><X size={15} /></button>}</div>)}
-                <div className="flex gap-2"><button type="button" disabled={(poll?.options.length ?? 2) >= 4} onClick={() => onDraftChange({ poll: { question: poll?.question ?? "", options: [...(poll?.options ?? ["", ""]), ""] } })} className="h-9 flex-1 rounded-full border border-[var(--noodle-divider)] text-xs font-bold text-[var(--noodle-blue)] disabled:opacity-50">Add option</button><button type="button" onClick={() => { onDraftChange({ poll: null }); setActiveTool(null); }} className="h-9 flex-1 rounded-full border border-[var(--noodle-divider)] text-xs font-bold text-[var(--destructive)]">Remove poll</button></div>
+                <label className="block space-y-1"><span className="text-xs font-bold">Question</span><input value={poll?.question ?? ""} maxLength={240} disabled={composerBusy} onChange={(event) => updateDraft({ poll: { question: event.target.value, options: poll?.options ?? ["", ""] } })} className="mari-chrome-field h-9 w-full rounded-md border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)] px-3 text-sm" /></label>
+                {(poll?.options ?? ["", ""]).map((option, index, options) => <div key={index} className="flex gap-2"><input value={option} maxLength={120} disabled={composerBusy} aria-label={`Poll option ${index + 1}`} onChange={(event) => updateDraft({ poll: { question: poll?.question ?? "", options: options.map((entry, entryIndex) => entryIndex === index ? event.target.value : entry) } })} className="mari-chrome-field h-9 min-w-0 flex-1 rounded-md border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)] px-3 text-sm" />{options.length > 2 && <button type="button" disabled={composerBusy} onClick={() => updateDraft({ poll: { question: poll?.question ?? "", options: options.filter((_, entryIndex) => entryIndex !== index) } })} className="h-9 w-9 text-[var(--muted-foreground)]" aria-label={`Remove option ${index + 1}`}><X size={15} /></button>}</div>)}
+                <div className="flex gap-2"><button type="button" disabled={composerBusy || (poll?.options.length ?? 2) >= 4} onClick={() => updateDraft({ poll: { question: poll?.question ?? "", options: [...(poll?.options ?? ["", ""]), ""] } })} className="h-9 flex-1 rounded-full border border-[var(--noodle-divider)] text-xs font-bold text-[var(--noodle-blue)] disabled:opacity-50">Add option</button><button type="button" disabled={composerBusy} onClick={() => { if (updateDraft({ poll: null })) setActiveTool(null); }} className="h-9 flex-1 rounded-full border border-[var(--noodle-divider)] text-xs font-bold text-[var(--destructive)]">Remove poll</button></div>
               </div>
             </NoodleAnchoredPopover>
           )}
-          {activeTool === "coin" && (
+          {activeTool === "coin" && !composerBusy && (
             <NoodleAnchoredPopover anchorRef={coinToolRef}>
               <div className="marinara-chat-popover space-y-3 rounded-xl border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)] p-3 text-[var(--foreground)] shadow-2xl shadow-black/35">
                 <p className="text-xs font-bold">Who can see this post</p>
@@ -2997,7 +3070,8 @@ function PrivatePostComposer({
                       key={option}
                       type="button"
                       aria-pressed={access === option}
-                      onClick={() => onDraftChange({ access: option })}
+                      disabled={composerBusy}
+                      onClick={() => updateDraft({ access: option })}
                       className={cn(
                         "min-h-8 rounded px-2 text-xs font-bold capitalize",
                         access === option
@@ -3020,7 +3094,8 @@ function PrivatePostComposer({
                       max="999999"
                       step="0.01"
                       value={ppvPrice}
-                      onChange={(event) => onDraftChange({ ppvPrice: event.target.value })}
+                      disabled={composerBusy}
+                      onChange={(event) => updateDraft({ ppvPrice: event.target.value })}
                       aria-label="PPV price"
                       className="mari-chrome-field h-9 w-full rounded-md border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)] px-3 text-sm text-[var(--foreground)] outline-none focus:border-[var(--noodle-blue)]"
                     />
@@ -3044,24 +3119,24 @@ function PrivatePostComposer({
         <span className="sr-only">Post title (optional)</span>
         <input
           value={title}
-          onChange={(event) => onDraftChange({ title: event.target.value })}
+          onChange={(event) => updateDraft({ title: event.target.value })}
           maxLength={NOODLE_PRIVATE_POST_TITLE_MAX_LENGTH}
-          disabled={pending}
+          disabled={composerBusy}
           placeholder="Title (optional)"
           className="h-9 w-full border-0 bg-transparent text-base font-bold text-[var(--foreground)] outline-none placeholder:text-[var(--muted-foreground)]"
         />
       </label>
       <textarea
         value={body}
-        onChange={(event) => onDraftChange({ body: event.target.value })}
+        onChange={(event) => updateDraft({ body: event.target.value })}
         maxLength={NOODLE_PRIVATE_POST_CONTENT_MAX_LENGTH}
-        disabled={pending}
+        disabled={composerBusy}
         aria-label="Post body"
         placeholder="What's simmering, privately?"
         className="min-h-20 w-full resize-none border-0 bg-transparent py-2 text-[1rem] leading-6 text-[var(--foreground)] outline-none placeholder:text-[var(--muted-foreground)]"
       />
-      {image && <div className="mb-3 overflow-hidden rounded-xl border border-[var(--noodle-divider)] bg-[var(--noodle-blue)]/10"><img src={image.imageUrl} alt="Attached post image" className="max-h-60 w-full object-cover" /><div className="flex items-center justify-between px-3 py-2 text-xs text-[var(--noodle-blue)]"><span>Attached image</span><button type="button" onClick={removeImage} disabled={pending || deleteImage.isPending} className="min-h-8 px-2 font-bold disabled:opacity-50">Remove</button></div></div>}
-      {poll && <div className="mb-3 flex items-start justify-between gap-3 rounded-xl border border-[var(--noodle-divider)] p-3"><div><p className="text-sm font-bold">{poll.question || "Untitled poll"}</p><p className="mt-1 text-xs text-[var(--muted-foreground)]">{poll.options.filter(Boolean).join(" · ") || "Add poll options"}</p></div><button type="button" onClick={() => onDraftChange({ poll: null })} disabled={pending} className="min-h-8 px-2 text-xs font-bold text-[var(--destructive)] disabled:opacity-50">Remove</button></div>}
+      {image && <div className="mb-3 overflow-hidden rounded-xl border border-[var(--noodle-divider)] bg-[var(--noodle-blue)]/10"><img src={image.imageUrl} alt="Attached post image" className="max-h-60 w-full object-cover" /><div className="flex items-center justify-between px-3 py-2 text-xs text-[var(--noodle-blue)]"><span>Attached image</span><button type="button" onClick={removeImage} disabled={composerBusy} className="min-h-8 px-2 font-bold disabled:opacity-50">Remove</button></div></div>}
+      {poll && <div className="mb-3 flex items-start justify-between gap-3 rounded-xl border border-[var(--noodle-divider)] p-3"><div><p className="text-sm font-bold">{poll.question || "Untitled poll"}</p><p className="mt-1 text-xs text-[var(--muted-foreground)]">{poll.options.filter(Boolean).join(" · ") || "Add poll options"}</p></div><button type="button" onClick={() => updateDraft({ poll: null })} disabled={composerBusy} className="min-h-8 px-2 text-xs font-bold text-[var(--destructive)] disabled:opacity-50">Remove</button></div>}
     </NoodleComposerShell>
   );
 }

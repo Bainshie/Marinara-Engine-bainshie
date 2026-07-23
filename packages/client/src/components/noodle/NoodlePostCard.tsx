@@ -342,8 +342,7 @@ export function NoodleToolButton({
 type NoodleComposerTool = { ref?: RefObject<HTMLDivElement | null>; active?: boolean; disabled?: boolean; onClick?: () => void };
 
 // Shared composer icon row (image / poll / emoji) so every Noodle surface renders
-// the identical toolbar. NoodleR disables image/poll (no attach path) and passes
-// a trailing coin control for monetization settings.
+// the identical toolbar. NoodleR passes a trailing coin control for monetization settings.
 export function NoodleComposerToolRow({
   image,
   poll,
@@ -603,8 +602,10 @@ interface NoodlePostCardCtx {
   openProfile?: (account: NoodleAccount | null) => void;
   /** Navigate by private author ID when no public account object exists. */
   openAuthorProfile?: (accountId: string) => void;
-  /** Vote in a post's poll. Omit on hosts without polls (NoodleR); pollless posts never call it. */
+  /** Vote in a post's poll. Pollless posts never call it. */
   voteInPoll?: (post: NoodlePostCardModel, optionId: string, selectedOptionId: string | null) => void;
+  /** Preserve the public timeline's legacy body/poll duplicate suppression. */
+  deduplicatePollBody?: boolean;
   /** Reply image/upload capability. Absent → the card hides all reply-image affordances. */
   media?: NoodlePostCardMediaCap;
   /** Reply edit/delete capability. Absent → reply management UI stays hidden. */
@@ -634,6 +635,7 @@ interface NoodlePostCardControllerOptions {
   titleMaxLength?: number;
   openAuthorProfile?: (accountId: string) => void;
   voteInPoll?: (post: NoodlePostCardModel, optionId: string, selectedOptionId: string | null) => void;
+  deduplicatePollBody?: boolean;
 }
 
 export function useNoodlePostCardController(options: NoodlePostCardControllerOptions) {
@@ -750,6 +752,7 @@ export function useNoodlePostCardController(options: NoodlePostCardControllerOpt
     updatePostPending: options.updatePostPending,
     openAuthorProfile: options.openAuthorProfile,
     voteInPoll: options.voteInPoll,
+    deduplicatePollBody: options.deduplicatePollBody ?? true,
     titleEditing: options.titleMaxLength
       ? {
           editingPostTitle,
@@ -813,7 +816,7 @@ export function NoodlePostCard({
   const author = authorAccount ?? post.authorSnapshot;
 
   // Card-owned defaults for absent capability groups. Hosts pass only the capabilities they
-  // support (NoodleR omits media/replyManagement/mentions/poll/profile); the card fills the
+  // support; the card fills the
   // rest with no-ops and empty state, and gates the corresponding UI on group presence — so
   // no host has to hand over discarded setters, dangling refs, or fake mutations. Annotations
   // keep the () => {} fallbacks callable with their real signatures.
@@ -1178,7 +1181,7 @@ export function NoodlePostCard({
             ) : (
               <>
                 {post.title && <h3 className="mt-2 break-words text-base font-bold leading-6">{post.title}</h3>}
-                {!poll || post.content.trim() !== poll.question ? (
+                {!poll || ctx.deduplicatePollBody === false || post.content.trim() !== poll.question ? (
                   <NoodleTextContent
                     content={post.content}
                     accountByHandle={accountByHandle}

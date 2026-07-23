@@ -309,7 +309,6 @@ export const noodlerCreateInteractionSchema = noodlerPersonaIdSchema
     type: z.enum(["like", "repost", "reply", "vote"]),
     content: z.string().max(2000).nullable().optional(),
     parentInteractionId: z.string().min(1).nullable().optional(),
-    pollOptionIndex: z.number().int().min(0).max(3).optional(),
   })
   .superRefine((input, ctx) => {
     if (input.type === "reply" && !input.content?.trim()) {
@@ -322,18 +321,25 @@ export const noodlerCreateInteractionSchema = noodlerPersonaIdSchema
         message: "Reposts cannot target a reply.",
       });
     }
-    if (input.type === "vote" && (input.pollOptionIndex === undefined || input.parentInteractionId)) {
+    if (input.type === "vote" && (!input.content?.trim() || input.content.length > 40)) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        path: ["pollOptionIndex"],
-        message: "Poll votes require an option and cannot target a reply.",
+        path: ["content"],
+        message: "Poll votes require a valid option ID.",
       });
     }
-    if (input.type !== "vote" && input.pollOptionIndex !== undefined) {
+    if (input.type === "vote" && input.parentInteractionId !== undefined) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        path: ["pollOptionIndex"],
-        message: "Only poll votes can include an option index.",
+        path: ["parentInteractionId"],
+        message: "Poll votes cannot target a reply.",
+      });
+    }
+    if ((input.type === "like" || input.type === "repost") && input.content?.trim()) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["content"],
+        message: "Likes and reposts cannot include content.",
       });
     }
   });

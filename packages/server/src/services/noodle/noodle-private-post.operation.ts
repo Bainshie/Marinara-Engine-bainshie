@@ -138,8 +138,6 @@ export async function createNoodlePrivatePost(
         authorAccountId: input.targetAccountId,
         title: input.title,
         content: input.content,
-        imageUrl: null,
-        imagePrompt: null,
         imageAssetId: input.imageAssetId,
         source: "manual",
         access: input.access,

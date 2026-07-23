@@ -55,6 +55,7 @@ const BACKUP_DIRS = [
   "custom-emojis",
   "custom-stickers",
   "notification-sounds",
+  "noodler/media",
   "lorebooks/images",
   "agents/images",
   "connections/images",

@@ -87,6 +87,9 @@ type RefreshRunRow = typeof noodleRefreshRuns.$inferSelect;
 type SubscriptionRow = typeof noodleAccountSubscriptions.$inferSelect;
 type PostUnlockRow = typeof noodlePostUnlocks.$inferSelect;
 type PrivateMediaRow = typeof noodlerPrivateMedia.$inferSelect;
+type PrivateMediaRecoveryAction =
+  | { kind: "attach"; assetId: string; postId: string }
+  | { kind: "remove"; assetId: string };
 type PublicCreateInteractionCommand = Omit<NoodleCreateInteractionInput, "actorKind" | "actorEntityId"> & {
   actorAccountId: string;
 };
@@ -117,8 +120,6 @@ type PrivatePostPersistenceInput = {
   authorAccountId: string;
   title?: string | null;
   content: string;
-  imageUrl?: string | null;
-  imagePrompt?: string | null;
   source?: NoodlePostSource;
   access?: NoodlePostAccess;
   ppvPrice?: number | null;
@@ -127,6 +128,14 @@ type PrivatePostPersistenceInput = {
 };
 
 export type NoodlerPrivateMediaAsset = PrivateMediaRow;
+
+export type NoodlerPrivateMediaRecoveryResult = {
+  trusted: boolean;
+  complete: boolean;
+  repairedClaims: number;
+  removedClaims: number;
+  quarantinedTables: string[];
+};
 
 export class NoodlerPrivateMediaClaimError extends Error {
   constructor() {
@@ -522,6 +531,16 @@ function mapManagedPost(row: PostRow): NoodlerManagedPost {
   };
 }
 
+function privateMediaIdFromPostImage(imageUrl: string | null): string | null {
+  const match = /^\/api\/noodle\/noodler\/media\/([^?]+)/.exec(imageUrl ?? "");
+  if (!match?.[1]) return null;
+  try {
+    return decodeURIComponent(match[1]);
+  } catch {
+    return null;
+  }
+}
+
 function mapSubscription(row: SubscriptionRow): NoodleAccountSubscription {
   return {
     id: row.id,
@@ -850,6 +869,100 @@ export function createNoodleStorage(db: DB) {
       return Boolean(rows[0]);
     },
 
+    async reconcilePrivateMediaRelationships(limit = 100): Promise<NoodlerPrivateMediaRecoveryResult> {
+      const authoritativeTables = new Set(["noodle_accounts", "noodle_posts", "noodler_private_media"]);
+      const quarantinedTables = db._fileStore
+        .getQuarantinedTables()
+        .map(({ table }) => table)
+        .filter((table) => authoritativeTables.has(table));
+      if (quarantinedTables.length > 0) {
+        return {
+          trusted: false,
+          complete: false,
+          repairedClaims: 0,
+          removedClaims: 0,
+          quarantinedTables,
+        };
+      }
+
+      const [accountRows, postRows, mediaRows] = await Promise.all([
+        db.select().from(noodleAccounts),
+        db.select().from(noodlePosts),
+        db.select().from(noodlerPrivateMedia),
+      ]);
+      const privateAccountIds = new Set(
+        accountRows.filter((account) => account.visibility === "private").map((account) => account.id),
+      );
+      const postsById = new Map(postRows.map((post) => [post.id, post]));
+      const postsByMediaId = new Map<string, PostRow[]>();
+      for (const post of postRows) {
+        if (!privateAccountIds.has(post.authorAccountId)) continue;
+        const mediaId = privateMediaIdFromPostImage(post.imageUrl);
+        if (!mediaId) continue;
+        const references = postsByMediaId.get(mediaId);
+        if (references) references.push(post);
+        else postsByMediaId.set(mediaId, [post]);
+      }
+
+      const actions: PrivateMediaRecoveryAction[] = [];
+      for (const media of mediaRows) {
+        const ownerExists = privateAccountIds.has(media.ownerAccountId);
+        if (media.attachedPostId) {
+          const attachedPost = postsById.get(media.attachedPostId);
+          const isConsistent =
+            ownerExists &&
+            attachedPost?.authorAccountId === media.ownerAccountId &&
+            privateMediaIdFromPostImage(attachedPost.imageUrl) === media.id;
+          if (!isConsistent) actions.push({ kind: "remove", assetId: media.id });
+          continue;
+        }
+
+        if (!ownerExists) {
+          actions.push({ kind: "remove", assetId: media.id });
+          continue;
+        }
+        const matchingPosts = (postsByMediaId.get(media.id) ?? []).filter(
+          (post) => post.authorAccountId === media.ownerAccountId,
+        );
+        if (matchingPosts.length === 1) {
+          actions.push({ kind: "attach", assetId: media.id, postId: matchingPosts[0]!.id });
+        }
+      }
+
+      const boundedLimit = Math.max(0, Math.min(1_000, Math.floor(limit)));
+      const selectedActions = actions.slice(0, boundedLimit);
+      const repairedClaims = selectedActions.filter((action) => action.kind === "attach").length;
+      const removedClaims = selectedActions.length - repairedClaims;
+      if (selectedActions.length > 0) {
+        const timestamp = now();
+        await db.transaction(async (tx) => {
+          for (const action of selectedActions) {
+            if (action.kind === "attach") {
+              await tx
+                .update(noodlerPrivateMedia)
+                .set({ attachedPostId: action.postId, updatedAt: timestamp })
+                .where(and(eq(noodlerPrivateMedia.id, action.assetId), isNull(noodlerPrivateMedia.attachedPostId)));
+            }
+          }
+          const removedAssetIds = selectedActions
+            .filter((action): action is Extract<PrivateMediaRecoveryAction, { kind: "remove" }> => action.kind === "remove")
+            .map((action) => action.assetId);
+          if (removedAssetIds.length > 0) {
+            await tx.delete(noodlerPrivateMedia).where(inArray(noodlerPrivateMedia.id, removedAssetIds));
+          }
+          await tx._fileStore.flush();
+        });
+      }
+
+      return {
+        trusted: true,
+        complete: actions.length <= boundedLimit,
+        repairedClaims,
+        removedClaims,
+        quarantinedTables: [],
+      };
+    },
+
     async deleteUnattachedPrivateMediaAsset(
       ownerAccountId: string,
       id: string,
@@ -948,21 +1061,14 @@ export function createNoodleStorage(db: DB) {
       const interactionIds = interactionRows.map((interaction) => interaction.id);
       return deleteRowsWithStagedMedia(mediaRows, async () => {
         await db.transaction(async (tx) => {
-          await tx
-            .delete(noodleAccountSubscriptions)
-            .where(eq(noodleAccountSubscriptions.creatorAccountId, id));
           if (postIds.length > 0) {
-            await tx.delete(noodlePostUnlocks).where(inArray(noodlePostUnlocks.postId, postIds));
-            await tx.delete(noodleInteractions).where(inArray(noodleInteractions.postId, postIds));
             await tx.delete(noodleActivityDigests).where(inArray(noodleActivityDigests.sourcePostId, postIds));
-            await tx.delete(noodlePosts).where(inArray(noodlePosts.id, postIds));
           }
           if (interactionIds.length > 0) {
             await tx
               .delete(noodleActivityDigests)
               .where(inArray(noodleActivityDigests.sourceInteractionId, interactionIds));
           }
-          await tx.delete(noodlerPrivateMedia).where(eq(noodlerPrivateMedia.ownerAccountId, id));
           await tx
             .delete(noodleAccounts)
             .where(and(eq(noodleAccounts.id, id), eq(noodleAccounts.visibility, "private")));
@@ -1489,8 +1595,8 @@ export function createNoodleStorage(db: DB) {
           authorAccountId: input.authorAccountId,
           title: input.title?.trim() || null,
           content: input.content,
-          imageUrl: imageAssetId ? `/api/noodle/noodler/media/${imageAssetId}` : (input.imageUrl ?? null),
-          imagePrompt: input.imagePrompt ?? null,
+          imageUrl: imageAssetId ? `/api/noodle/noodler/media/${imageAssetId}` : null,
+          imagePrompt: null,
           parentPostId: null,
           quotePostId: null,
           source: input.source ?? "manual",
@@ -1737,15 +1843,12 @@ export function createNoodleStorage(db: DB) {
       const interactionIds = interactionRows.map((interaction) => interaction.id);
       return deleteRowsWithStagedMedia(mediaRows, async () => {
         await db.transaction(async (tx) => {
-          await tx.delete(noodlePostUnlocks).where(eq(noodlePostUnlocks.postId, id));
-          await tx.delete(noodleInteractions).where(eq(noodleInteractions.postId, id));
           await tx.delete(noodleActivityDigests).where(eq(noodleActivityDigests.sourcePostId, id));
           if (interactionIds.length > 0) {
             await tx
               .delete(noodleActivityDigests)
               .where(inArray(noodleActivityDigests.sourceInteractionId, interactionIds));
           }
-          await tx.delete(noodlerPrivateMedia).where(eq(noodlerPrivateMedia.attachedPostId, id));
           await tx.delete(noodlePosts).where(eq(noodlePosts.id, id));
           await tx._fileStore.flush();
         });
@@ -2002,6 +2105,22 @@ export function createNoodleStorage(db: DB) {
         const optionId = input.content?.trim() ?? "";
         if (!poll || !poll.options.some((option) => option.id === optionId)) return null;
         return db.transaction(async (tx) => {
+          const [postRows, actorRows] = await Promise.all([
+            tx.select().from(noodlePosts).where(eq(noodlePosts.id, postId)),
+            tx
+              .select()
+              .from(noodleAccounts)
+              .where(and(eq(noodleAccounts.id, input.actorAccountId), eq(noodleAccounts.visibility, "public"))),
+          ]);
+          const currentPost = postRows[0];
+          if (!currentPost || !actorRows[0]) return null;
+          const authorRows = await tx
+            .select()
+            .from(noodleAccounts)
+            .where(and(eq(noodleAccounts.id, currentPost.authorAccountId), eq(noodleAccounts.visibility, "private")));
+          const currentPoll = readNoodlePollFromMetadata(parseRecord(currentPost.metadata));
+          if (!authorRows[0] || !currentPoll?.options.some((option) => option.id === optionId)) return null;
+          const currentActor = mapAccount(actorRows[0]);
           const existingVotes = await tx
             .select()
             .from(noodleInteractions)
@@ -2025,7 +2144,7 @@ export function createNoodleStorage(db: DB) {
               .update(noodleInteractions)
               .set({
                 content: optionId,
-                actorSnapshot: JSON.stringify(snapshotForAccount(actor)),
+                actorSnapshot: JSON.stringify(snapshotForAccount(currentActor)),
               })
               .where(eq(noodleInteractions.id, voteId));
           } else {
@@ -2033,11 +2152,11 @@ export function createNoodleStorage(db: DB) {
               id: voteId,
               postId,
               parentInteractionId: null,
-              actorAccountId: actor.id,
+              actorAccountId: currentActor.id,
               type: "vote",
               content: optionId,
               imageUrl: null,
-              actorSnapshot: JSON.stringify(snapshotForAccount(actor)),
+              actorSnapshot: JSON.stringify(snapshotForAccount(currentActor)),
               createdAt: now(),
             });
           }
