@@ -2,7 +2,6 @@
 // Panel: Settings (polished)
 // ──────────────────────────────────────────────
 import {
-  APP_LANGUAGE_OPTIONS,
   TRACKER_DATA_PANEL_SECTIONS,
   TRACKER_PANEL_DEFAULT_BACKGROUND_COLOR,
   useUIStore,
@@ -20,6 +19,8 @@ import {
   type TrackerThoughtBubbleDisplay,
   type VisualTheme,
 } from "../../stores/ui.store";
+import { APP_LANGUAGE_OPTIONS } from "../../localization/locale-loader";
+import { useLocalizedUiText } from "../../localization/use-localized-ui-text";
 import { cn, copyToClipboard } from "../../lib/utils";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { ADMIN_SECRET_STORAGE_KEY, ApiError, api, getPrivilegedActionErrorMessage } from "../../lib/api-client";
@@ -27,6 +28,7 @@ import { chatBackgroundUrlToMetadata } from "../../lib/backgrounds";
 import { normalizeThemeCss, sanitizeAppCss } from "../../lib/theme-css";
 import { forceRefreshSpa } from "@/lib/browser-runtime";
 import React, { useRef, useState, useCallback, useEffect, useMemo } from "react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import {
   APP_VERSION,
@@ -469,6 +471,14 @@ const SETTINGS_SEARCHABLE_CONTROLS: readonly SettingsSearchableControlMeta[] = [
     label: "Confirm before deleting",
     description: "Ask before permanently deleting chats, characters, or other items.",
     aliases: ["delete", "confirmation", "safety"],
+    kind: "Toggle",
+  },
+  {
+    id: "android-status-bar",
+    sectionId: "application",
+    label: "Android status bar",
+    description: "Show the time, battery level, and notification icons in the Android app.",
+    aliases: ["android", "battery", "clock", "time", "notifications", "fullscreen"],
     kind: "Toggle",
   },
   {
@@ -1107,6 +1117,8 @@ const SETTINGS_COMPACT_PRIMARY_BUTTON_CLASS =
   "mari-chrome-control mari-chrome-control--compact mari-chrome-control--selected text-[0.625rem]";
 type MarinaraAndroidBridge = {
   openConsole?: () => void;
+  isStatusBarVisible?: () => boolean;
+  setStatusBarVisible?: (visible: boolean) => void;
 };
 
 function getMarinaraAndroidBridge(): MarinaraAndroidBridge | null {
@@ -1117,6 +1129,60 @@ function getMarinaraAndroidBridge(): MarinaraAndroidBridge | null {
 
 function isMarinaraAndroidShell(): boolean {
   return typeof navigator !== "undefined" && /\bMarinaraEngine\/Android\b/u.test(navigator.userAgent);
+}
+
+function readAndroidStatusBarVisibility(): boolean | null {
+  const bridge = getMarinaraAndroidBridge();
+  if (typeof bridge?.isStatusBarVisible !== "function") return null;
+  try {
+    return bridge.isStatusBarVisible();
+  } catch {
+    return null;
+  }
+}
+
+function updateAndroidStatusBarVisibility(visible: boolean): boolean {
+  const bridge = getMarinaraAndroidBridge();
+  if (typeof bridge?.setStatusBarVisible !== "function") return false;
+  try {
+    bridge.setStatusBarVisible(visible);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function AndroidStatusBarSetting() {
+  const { t } = useTranslation();
+  const initialVisibility = readAndroidStatusBarVisibility();
+  const [visible, setVisible] = useState(initialVisibility ?? false);
+  const supported = initialVisibility !== null;
+
+  const handleChange = useCallback((nextVisible: boolean) => {
+    if (!updateAndroidStatusBarVisibility(nextVisible)) {
+      toast.error(t("settings.application.androidStatusBar.error"));
+      return;
+    }
+    setVisible(nextVisible);
+  }, [t]);
+
+  let help = t("settings.application.androidStatusBar.unavailable");
+  if (supported) {
+    help = t("settings.application.androidStatusBar.help");
+  } else if (isMarinaraAndroidShell()) {
+    help = t("settings.application.androidStatusBar.updateRequired");
+  }
+
+  return (
+    <ToggleSetting
+      anchorId={getSettingsControlAnchorId("android-status-bar")}
+      label={t("settings.application.androidStatusBar.label")}
+      checked={visible}
+      onChange={handleChange}
+      help={help}
+      disabled={!supported}
+    />
+  );
 }
 
 function isStandaloneIosInstall(): boolean {
@@ -1181,7 +1247,7 @@ function SearchableSettingTarget({
   );
 }
 
-function searchSettings(query: string): SettingsSearchResult[] {
+function searchSettings(query: string, localize: (englishText: string) => string): SettingsSearchResult[] {
   const normalized = query.trim().toLowerCase();
   if (!normalized) return [];
   const parts = normalized.split(/\s+/u).filter(Boolean);
@@ -1191,10 +1257,15 @@ function searchSettings(query: string): SettingsSearchResult[] {
     if (!section) return [];
     const haystack = [
       control.label,
+      localize(control.label),
       control.description,
+      localize(control.description),
       control.kind,
+      localize(control.kind),
       section.label,
+      localize(section.label),
       section.description,
+      localize(section.description),
       ...control.aliases,
     ]
       .join(" ")
@@ -1203,7 +1274,15 @@ function searchSettings(query: string): SettingsSearchResult[] {
   });
 
   const sectionResults = SETTINGS_SECTIONS.filter((section) => {
-    const haystack = [section.label, section.description, ...section.aliases].join(" ").toLowerCase();
+    const haystack = [
+      section.label,
+      localize(section.label),
+      section.description,
+      localize(section.description),
+      ...section.aliases,
+    ]
+      .join(" ")
+      .toLowerCase();
     return parts.every((part) => haystack.includes(part));
   }).map((section) => ({ type: "section" as const, section }));
 
@@ -2161,6 +2240,7 @@ function TrackerPanelAppearanceDrawer({
 }
 
 export function SettingsPanel() {
+  const localize = useLocalizedUiText();
   const rawSettingsTab = useUIStore((s) => s.settingsTab);
   const setSettingsTab = useUIStore((s) => s.setSettingsTab);
   const settingsTab = normalizeSettingsTab(rawSettingsTab);
@@ -2177,7 +2257,7 @@ export function SettingsPanel() {
   mountedSettingsTabs.add(settingsTab);
 
   const activeSections = SETTINGS_SECTIONS.filter((section) => section.tab === settingsTab);
-  const searchResults = searchSettings(settingsSearch);
+  const searchResults = searchSettings(settingsSearch, localize);
 
   const jumpToSection = useCallback(
     (section: SettingsSectionMeta) => {
@@ -2231,14 +2311,14 @@ export function SettingsPanel() {
             <input
               value={settingsSearch}
               onChange={(event) => setSettingsSearch(event.target.value)}
-              placeholder="Search settings"
+              placeholder={localize("Search settings")}
               className="mari-chrome-field h-9 w-full rounded-lg pl-8 pr-8 text-xs"
             />
             {settingsSearch && (
               <button
                 type="button"
                 onClick={() => setSettingsSearch("")}
-                aria-label="Clear settings search"
+                aria-label={localize("Clear settings search")}
                 className="absolute right-2 top-1/2 flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded-md text-[var(--muted-foreground)] hover:bg-[var(--secondary)] hover:text-[var(--foreground)]"
               >
                 <X size="0.75rem" />
@@ -2253,8 +2333,10 @@ export function SettingsPanel() {
                 {searchResults.map((result) => {
                   const section = result.section;
                   const tab = TABS.find((entry) => entry.id === section.tab);
-                  const label = result.type === "control" ? result.control.label : section.label;
-                  const description = result.type === "control" ? result.control.description : section.description;
+                  const label = localize(result.type === "control" ? result.control.label : section.label);
+                  const description = localize(
+                    result.type === "control" ? result.control.description : section.description,
+                  );
                   return (
                     <button
                       key={`${result.type}-${result.type === "control" ? result.control.id : section.id}`}
@@ -2265,18 +2347,20 @@ export function SettingsPanel() {
                       <span className="flex min-w-0 items-center gap-1.5">
                         <span className="truncate text-xs font-semibold text-[var(--foreground)]">{label}</span>
                         <span className="shrink-0 rounded-full border border-[var(--border)]/70 px-1.5 py-px text-[0.5625rem] font-medium text-[var(--muted-foreground)]">
-                          {result.type === "control" ? result.control.kind : "Section"}
+                          {localize(result.type === "control" ? result.control.kind : "Section")}
                         </span>
                       </span>
                       <span className="truncate text-[0.625rem] text-[var(--muted-foreground)]">
-                        {tab?.label ?? "Settings"} / {section.label} / {description}
+                        {localize(tab?.label ?? "Settings")} / {localize(section.label)} / {description}
                       </span>
                     </button>
                   );
                 })}
               </div>
             ) : (
-              <div className="px-2 py-2 text-[0.625rem] text-[var(--muted-foreground)]">No matching settings.</div>
+              <div className="px-2 py-2 text-[0.625rem] text-[var(--muted-foreground)]">
+                {localize("No matching settings.")}
+              </div>
             )}
           </div>
         )}
@@ -2285,7 +2369,7 @@ export function SettingsPanel() {
       <div className="flex shrink-0 flex-col gap-1.5 border-b border-[var(--border)]/70 px-2.5 py-1.5">
         <div
           role="tablist"
-          aria-label="Settings categories"
+          aria-label={localize("Settings categories")}
           className="grid grid-cols-3 gap-x-1.5 gap-y-1 rounded-xl border border-[var(--border)]/70 bg-[var(--background)]/32 p-1 shadow-[inset_0_1px_0_color-mix(in_srgb,var(--foreground)_7%,transparent)]"
         >
           {TABS.map((tab) => {
@@ -2307,7 +2391,7 @@ export function SettingsPanel() {
                     ? "border-[var(--primary)]/35 bg-[var(--primary)]/10 text-[var(--foreground)] shadow-[inset_0_1px_0_color-mix(in_srgb,var(--foreground)_11%,transparent)]"
                     : "border-transparent text-[var(--muted-foreground)] hover:border-[var(--border)]/80 hover:bg-[var(--secondary)]/60 hover:text-[var(--foreground)]",
                 )}
-                title={tab.description}
+                title={localize(tab.description)}
               >
                 {active && (
                   <>
@@ -2325,7 +2409,7 @@ export function SettingsPanel() {
                 >
                   <Icon size="0.6875rem" />
                 </span>
-                <span className="w-full min-w-0 break-words px-0.5">{tab.label}</span>
+                <span className="w-full min-w-0 break-words px-0.5">{localize(tab.label)}</span>
               </button>
             );
           })}
@@ -2344,10 +2428,12 @@ export function SettingsPanel() {
                     ? "border-[var(--primary)]/30 bg-[var(--primary)]/10 text-[var(--foreground)]"
                     : "border-transparent text-[var(--muted-foreground)] hover:bg-[var(--secondary)]/60 hover:text-[var(--foreground)]",
                 )}
-                title={quickAccessOpen ? "Collapse Quick Access" : "Expand Quick Access"}
+                title={localize(quickAccessOpen ? "Collapse Quick Access" : "Expand Quick Access")}
               >
                 <Tag size="0.6875rem" className="shrink-0" />
-                <span className="max-w-full truncate">Quick Access ({activeSections.length})</span>
+                <span className="max-w-full truncate">
+                  {localize("Quick Access")} ({activeSections.length})
+                </span>
                 <ChevronDown
                   size="0.625rem"
                   className={cn("shrink-0 transition-transform", quickAccessOpen ? "rotate-180" : "")}
@@ -2360,9 +2446,9 @@ export function SettingsPanel() {
                     type="button"
                     onClick={() => jumpToSection(section)}
                     className="flex min-h-6 max-w-full min-w-0 items-center rounded-lg border border-[var(--border)]/65 bg-[var(--secondary)]/38 px-1.5 py-0.5 text-[0.625rem] font-semibold leading-tight text-[var(--muted-foreground)] shadow-[inset_0_1px_0_color-mix(in_srgb,var(--foreground)_7%,transparent)] transition-all hover:border-[var(--primary)]/35 hover:bg-[var(--primary)]/11 hover:text-[var(--foreground)]"
-                    title={`${section.label}: ${section.description}`}
+                    title={`${localize(section.label)}: ${localize(section.description)}`}
                   >
-                    <span className="block max-w-full break-words">{section.label}</span>
+                    <span className="block max-w-full break-words">{localize(section.label)}</span>
                   </button>
                 ))}
             </div>
@@ -2396,6 +2482,7 @@ export function SettingsPanel() {
 }
 
 function QuickRepliesSetting() {
+  const localize = useLocalizedUiText();
   const showQuickRepliesMenu = useUIStore((s) => s.showQuickRepliesMenu);
   const setShowQuickRepliesMenu = useUIStore((s) => s.setShowQuickRepliesMenu);
   const showQuickReplyPostOnly = useUIStore((s) => s.showQuickReplyPostOnly);
@@ -2430,10 +2517,14 @@ function QuickRepliesSetting() {
               onChange={(event) => handleEnabledChange(event.target.checked)}
               className="h-3.5 w-3.5 shrink-0 rounded border-[var(--border)] accent-[var(--primary)]"
             />
-            <span className="min-w-0 text-xs">Quick replies</span>
+            <span className="min-w-0 text-xs">{localize("Quick replies")}</span>
           </label>
           <span className="shrink-0" onClick={(event) => event.preventDefault()}>
-            <HelpTooltip text="Adds alternate draft actions beside Send. One action appears directly; multiple actions open from the ellipsis." />
+            <HelpTooltip
+              text={localize(
+                "Adds alternate draft actions beside Send. One action appears directly; multiple actions open from the ellipsis.",
+              )}
+            />
           </span>
         </div>
         <button
@@ -2447,20 +2538,20 @@ function QuickRepliesSetting() {
           aria-disabled={!showQuickRepliesMenu}
           aria-controls="quick-replies-actions-drawer"
           aria-expanded={showQuickRepliesMenu && drawerOpen}
-          aria-label={
+          aria-label={localize(
             !showQuickRepliesMenu
               ? "Quick replies options disabled"
               : drawerOpen
                 ? "Collapse Quick replies options"
-                : "Expand Quick replies options"
-          }
-          title={
+                : "Expand Quick replies options",
+          )}
+          title={localize(
             !showQuickRepliesMenu
               ? "Enable Quick replies to configure options"
               : drawerOpen
                 ? "Collapse options"
-                : "Expand options"
-          }
+                : "Expand options",
+          )}
           className={cn(
             "flex min-w-10 flex-1 items-center justify-end py-2 pl-2 pr-2 text-[var(--muted-foreground)] transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)]",
             showQuickRepliesMenu && drawerOpen ? "rounded-tr-xl" : "rounded-r-xl",
@@ -2484,7 +2575,7 @@ function QuickRepliesSetting() {
           id="quick-replies-actions-drawer"
           className="grid gap-1 border-t border-[var(--border)]/60 bg-[var(--background)]/25 p-1"
           role="group"
-          aria-label="Quick replies actions to include"
+          aria-label={localize("Quick replies actions to include")}
         >
           {[
             {
@@ -2534,9 +2625,9 @@ function QuickRepliesSetting() {
                   <Icon size="0.8125rem" aria-hidden="true" />
                 </span>
                 <span className="min-w-0 flex-1">
-                  <span className="block text-xs font-semibold">{option.label}</span>
+                  <span className="block text-xs font-semibold">{localize(option.label)}</span>
                   <span className="block text-[0.65rem] leading-tight text-[var(--muted-foreground)]">
-                    {option.description}
+                    {localize(option.description)}
                   </span>
                 </span>
                 <span
@@ -2560,6 +2651,8 @@ function QuickRepliesSetting() {
 }
 
 function GeneralSettings() {
+  const { t, i18n: localization } = useTranslation();
+  const localize = useLocalizedUiText();
   const language = useUIStore((s) => s.language);
   const setLanguage = useUIStore((s) => s.setLanguage);
   const enableStreaming = useUIStore((s) => s.enableStreaming);
@@ -2613,23 +2706,23 @@ function GeneralSettings() {
 
   return (
     <div className="flex flex-col gap-3">
-      <SettingsIntro>Core app behavior, ordered from daily controls to mode-specific tuning.</SettingsIntro>
+      <SettingsIntro>{t("settings.application.intro")}</SettingsIntro>
 
       <SettingsSection
-        title="App Behavior"
-        description="Language, safety confirmations, achievements, music, and playful extras."
+        title={t("settings.application.title")}
+        description={t("settings.application.description")}
         icon={<Power size="0.875rem" />}
         {...getSettingsSectionAnchorProps("application")}
       >
         <div className="flex flex-col gap-2.5">
           <label id={getSettingsControlAnchorId("language")} className="flex scroll-mt-3 flex-col gap-1">
             <span className="inline-flex items-center gap-1 text-xs font-medium">
-              Language
-              <HelpTooltip text="Choose the app language. Only English is available right now, but this setting is persisted so future translation PRs can extend it cleanly." />
+              {t("settings.application.language.label")}
+              <HelpTooltip text={t("settings.application.language.help")} />
             </span>
             <select
               value={language}
-              onChange={(e) => setLanguage(e.target.value as (typeof APP_LANGUAGE_OPTIONS)[number]["id"])}
+              onChange={(e) => setLanguage(e.target.value)}
               className="rounded-lg bg-[var(--secondary)] px-3 py-2 text-xs outline-none ring-1 ring-transparent transition-shadow focus:ring-[var(--primary)]"
             >
               {APP_LANGUAGE_OPTIONS.map((option) => (
@@ -2639,8 +2732,7 @@ function GeneralSettings() {
               ))}
             </select>
             <p className="text-[0.625rem] text-[var(--muted-foreground)]">
-              English is the only bundled language for now. Future translations can add more options here without
-              changing the settings shape.
+              {t("settings.application.language.fallback")}
             </p>
           </label>
 
@@ -2651,6 +2743,7 @@ function GeneralSettings() {
             onChange={setConfirmBeforeDelete}
             help="Shows a confirmation dialog before permanently deleting chats, characters, or other items. Recommended to keep on."
           />
+          <AndroidStatusBarSetting />
           <ToggleSetting
             anchorId={getSettingsControlAnchorId("achievements")}
             label="Achievements"
@@ -2714,9 +2807,13 @@ function GeneralSettings() {
             )}
           >
             <div className="flex items-center gap-2">
-              <span className="text-xs">Streaming speed</span>
+              <span className="text-xs">{localize("Streaming speed")}</span>
               <span className="text-xs tabular-nums text-[var(--muted-foreground)]">{streamingSpeed}</span>
-              <HelpTooltip text="How fast streaming tokens appear on screen. Lower values give a slower typewriter effect so you can read along. Higher values show text almost instantly." />
+              <HelpTooltip
+                text={localize(
+                  "How fast streaming tokens appear on screen. Lower values give a slower typewriter effect so you can read along. Higher values show text almost instantly.",
+                )}
+              />
             </div>
             <input
               type="range"
@@ -2728,8 +2825,8 @@ function GeneralSettings() {
               className="w-full accent-[var(--primary)]"
             />
             <div className="flex justify-between text-[0.625rem] text-[var(--muted-foreground)]">
-              <span>Slow</span>
-              <span>Fast</span>
+              <span>{localize("Slow")}</span>
+              <span>{localize("Fast")}</span>
             </div>
           </label>
 
@@ -2745,8 +2842,12 @@ function GeneralSettings() {
             id={getSettingsControlAnchorId("messages-per-page")}
             className="flex scroll-mt-3 flex-wrap items-center gap-2.5 rounded-lg p-1 transition-colors hover:bg-[var(--secondary)]/50"
           >
-            <span className="text-xs">Messages per page</span>
-            <HelpTooltip text="How many messages to load at a time. Click 'Load More' in the chat to see older messages. Set to 0 to load all messages at once." />
+            <span className="text-xs">{localize("Messages per page")}</span>
+            <HelpTooltip
+              text={localize(
+                "How many messages to load at a time. Click 'Load More' in the chat to see older messages. Set to 0 to load all messages at once.",
+              )}
+            />
             <DraftNumberInput
               value={messagesPerPage}
               min={0}
@@ -2768,8 +2869,12 @@ function GeneralSettings() {
         <div className="flex flex-col gap-2.5">
           <div className="flex flex-col gap-1.5 rounded-lg p-1 transition-colors hover:bg-[var(--secondary)]/50">
             <div className="flex items-center gap-2">
-              <span className="text-xs">Send on Enter</span>
-              <HelpTooltip text="Choose which chat modes send on Enter. When off, Enter creates a new line and you have to press the send button manually." />
+              <span className="text-xs">{localize("Send on Enter")}</span>
+              <HelpTooltip
+                text={localize(
+                  "Choose which chat modes send on Enter. When off, Enter creates a new line and you have to press the send button manually.",
+                )}
+              />
             </div>
             <div className="flex flex-wrap items-center gap-1.5">
               <button
@@ -2781,7 +2886,7 @@ function GeneralSettings() {
                     : "bg-[var(--secondary)] text-[var(--muted-foreground)] ring-1 ring-[var(--border)] hover:bg-[var(--accent)]",
                 )}
               >
-                Roleplay
+                {localize("Roleplay")}
               </button>
               <button
                 onClick={() => setEnterToSendConvo(!enterToSendConvo)}
@@ -2792,7 +2897,7 @@ function GeneralSettings() {
                     : "bg-[var(--secondary)] text-[var(--muted-foreground)] ring-1 ring-[var(--border)] hover:bg-[var(--accent)]",
                 )}
               >
-                Conversations
+                {localize("Conversations")}
               </button>
               <button
                 onClick={() => setEnterToSendGame(!enterToSendGame)}
@@ -2803,7 +2908,7 @@ function GeneralSettings() {
                     : "bg-[var(--secondary)] text-[var(--muted-foreground)] ring-1 ring-[var(--border)] hover:bg-[var(--accent)]",
                 )}
               >
-                Game
+                {localize("Game")}
               </button>
             </div>
           </div>
@@ -2878,8 +2983,12 @@ function GeneralSettings() {
             className="flex scroll-mt-3 flex-col gap-1.5 rounded-lg p-1 transition-colors hover:bg-[var(--secondary)]/50"
           >
             <div className="flex items-center gap-2">
-              <span className="text-xs">Quote style</span>
-              <HelpTooltip text="Choose how straight and smart quotation marks are unified in chat inputs and displayed AI output." />
+              <span className="text-xs">{localize("Quote style")}</span>
+              <HelpTooltip
+                text={localize(
+                  "Choose how straight and smart quotation marks are unified in chat inputs and displayed AI output.",
+                )}
+              />
             </div>
             <div className="grid grid-cols-2 gap-1.5">
               {QUOTE_FORMAT_OPTIONS.map((option) => {
@@ -2897,7 +3006,7 @@ function GeneralSettings() {
                         : "bg-[var(--secondary)] text-[var(--muted-foreground)] ring-[var(--border)] hover:bg-[var(--accent)] hover:text-[var(--foreground)]",
                     )}
                   >
-                    <span className="font-medium">{option.label}</span>
+                    <span className="font-medium">{localize(option.label)}</span>
                     <span className="max-w-full truncate text-[0.625rem] opacity-80">{option.sample}</span>
                   </button>
                 );
@@ -2935,9 +3044,13 @@ function GeneralSettings() {
               className="flex scroll-mt-3 flex-col gap-1.5 rounded-lg p-1 transition-colors hover:bg-[var(--secondary)]/50"
             >
               <div className="flex items-center gap-2">
-                <span className="text-xs">Game narration speed</span>
+                <span className="text-xs">{localize("Game narration speed")}</span>
                 <span className="text-xs tabular-nums text-[var(--muted-foreground)]">{gameTextSpeed}</span>
-                <HelpTooltip text="How fast the typewriter effect displays narration text in Game mode. Lower values give a slower cinematic reveal. Higher values show text almost instantly." />
+                <HelpTooltip
+                  text={localize(
+                    "How fast the typewriter effect displays narration text in Game mode. Lower values give a slower cinematic reveal. Higher values show text almost instantly.",
+                  )}
+                />
               </div>
               <input
                 type="range"
@@ -2949,8 +3062,8 @@ function GeneralSettings() {
                 className="w-full accent-[var(--primary)]"
               />
               <div className="flex justify-between text-[0.625rem] text-[var(--muted-foreground)]">
-                <span>Slow</span>
-                <span>Fast</span>
+                <span>{localize("Slow")}</span>
+                <span>{localize("Fast")}</span>
               </div>
             </label>
           )}
@@ -2960,11 +3073,20 @@ function GeneralSettings() {
             className="flex scroll-mt-3 flex-col gap-1.5 rounded-lg p-1 transition-colors hover:bg-[var(--secondary)]/50"
           >
             <div className="flex items-center gap-2">
-              <span className="text-xs">Game auto-play segment delay</span>
+              <span className="text-xs">{localize("Game auto-play segment delay")}</span>
               <span className="text-xs tabular-nums text-[var(--muted-foreground)]">
-                {(gameAutoPlayDelay / 1000).toFixed(1)}s
+                {t("settings.units.secondsShort", {
+                  value: new Intl.NumberFormat(localization.resolvedLanguage ?? localization.language, {
+                    minimumFractionDigits: 1,
+                    maximumFractionDigits: 1,
+                  }).format(gameAutoPlayDelay / 1000),
+                })}
               </span>
-              <HelpTooltip text="Pause between each narration segment when auto-play is enabled in Game mode. Enable auto-play via the ▶ button next to Next." />
+              <HelpTooltip
+                text={localize(
+                  "Pause between each narration segment when auto-play is enabled in Game mode. Enable auto-play via the ▶ button next to Next.",
+                )}
+              />
             </div>
             <input
               type="range"
@@ -2976,8 +3098,8 @@ function GeneralSettings() {
               className="w-full accent-[var(--primary)]"
             />
             <div className="flex justify-between text-[0.625rem] text-[var(--muted-foreground)]">
-              <span>Short</span>
-              <span>Long</span>
+              <span>{t("settings.common.short")}</span>
+              <span>{t("settings.common.long")}</span>
             </div>
           </label>
         </div>

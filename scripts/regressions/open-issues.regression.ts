@@ -59,7 +59,12 @@ import {
   withoutNpcAvatarRevision,
 } from "../../packages/client/src/lib/game-npc-avatar.js";
 import { characterMatchesSearch, parseCharacterDisplayData } from "../../packages/client/src/lib/character-display.js";
-import { DEFAULT_GENERATION_PARAMS } from "../../packages/shared/src/constants/defaults.js";
+import {
+  DEFAULT_GENERATION_PARAMS,
+  DEFAULT_TRANSLATION_SYSTEM_PROMPT,
+  resolveTranslationSystemPrompt,
+} from "../../packages/shared/src/constants/defaults.js";
+import { normalizeIllustratorImagesPerGeneration } from "../../packages/shared/src/utils/illustrator-generation-count.js";
 import { getChatModeCapabilities } from "../../packages/shared/src/constants/chat-mode-capabilities.js";
 import { mergeNoodleCustomEmojiMap } from "../../packages/client/src/hooks/use-noodle-custom-emojis.js";
 import {
@@ -104,6 +109,7 @@ import {
 } from "../../packages/client/src/lib/emoji-shortcodes.js";
 import { persistGeneratedImageToEntityGalleries } from "../../packages/server/src/services/image/generated-image-entity-gallery.js";
 import { resolveIllustratorImageSize } from "../../packages/server/src/services/image/image-generation-settings.js";
+import { generateIllustratorImageVariants } from "../../packages/server/src/services/image/illustrator-image-variants.js";
 import { fetchBotBrowserJson } from "../../packages/server/src/services/bot-browser/fetch-json.js";
 import { isAllowedResponseContentType, validateOutboundUrl } from "../../packages/server/src/utils/security.js";
 import { seedDefaultBackgrounds } from "../../packages/server/src/db/seed-backgrounds.js";
@@ -171,6 +177,18 @@ import {
   normalizeVeniceImageModels,
   parseVeniceImageResponse,
 } from "../../packages/server/src/services/image/venice-image.js";
+import {
+  buildAtlasCloudImageRequest,
+  buildAtlasCloudUrl,
+  buildAtlasCloudVideoRequest,
+  parseAtlasCloudPrediction,
+} from "../../packages/server/src/services/media/atlas-cloud.js";
+import {
+  ATLAS_CLOUD_IMAGE_MODELS,
+  ATLAS_CLOUD_VIDEO_MODELS,
+  inferImageSource,
+  inferVideoSource,
+} from "../../packages/shared/src/constants/model-lists.js";
 import { resolveSceneVideoPrompt } from "../../packages/server/src/services/video/scene-video-prompt-review.js";
 import {
   buildLorebookEntryCreateRow,
@@ -675,6 +693,24 @@ assert.equal(resolveInitialGameGmConnectionId("explicit-connection", "chat-conne
 assert.equal(resolveInitialGameGmConnectionId(undefined, null), null);
 assert.equal(GAME_SETUP_GENERATION_TIMEOUT_MS, 500_000);
 assert.equal(DEFAULT_GENERATION_PARAMS.reasoningEffort, "maximum");
+assert.match(DEFAULT_TRANSLATION_SYSTEM_PROMPT, /\{\{targetLanguage\}\}/u);
+assert.match(resolveTranslationSystemPrompt(DEFAULT_TRANSLATION_SYSTEM_PROMPT, "Japanese"), /into Japanese/u);
+assert.equal(normalizeIllustratorImagesPerGeneration(undefined), 1);
+assert.equal(normalizeIllustratorImagesPerGeneration("3"), 3);
+assert.equal(normalizeIllustratorImagesPerGeneration(99), 4);
+const attemptedImageVariants: number[] = [];
+assert.deepEqual(
+  await generateIllustratorImageVariants({
+    count: 3,
+    generate: async (index) => {
+      attemptedImageVariants.push(index);
+      if (index === 1) throw new Error("one variant failed");
+      return `image-${index}`;
+    },
+  }),
+  ["image-0", "image-2"],
+);
+assert.deepEqual(attemptedImageVariants, [0, 1, 2]);
 
 assert.equal(
   buildVeniceApiUrl("https://api.venice.ai/api/v1", "models"),
@@ -685,6 +721,7 @@ assert.deepEqual(buildVeniceImageRequest({ model: "venice-sd35", prompt: "canal"
   prompt: "canal",
   format: "webp",
   return_binary: false,
+  safe_mode: false,
   variants: 1,
   width: 1280,
   height: 720,
@@ -694,6 +731,7 @@ assert.deepEqual(buildVeniceImageRequest({ model: "gpt-image-2", prompt: "canal"
   prompt: "canal",
   format: "webp",
   return_binary: false,
+  safe_mode: false,
   variants: 1,
   aspect_ratio: "3:2",
   resolution: "2K",
@@ -710,6 +748,79 @@ assert.deepEqual(
   }),
   [{ id: "chroma", name: "Chroma" }],
 );
+assert.equal(
+  buildAtlasCloudUrl("https://api.atlascloud.ai/v1/", "generateImage"),
+  "https://api.atlascloud.ai/api/v1/model/generateImage",
+);
+assert.equal(
+  buildAtlasCloudUrl("https://api.atlascloud.ai/api/v1/model", "prediction/prediction-123"),
+  "https://api.atlascloud.ai/api/v1/model/prediction/prediction-123",
+);
+assert.deepEqual(
+  buildAtlasCloudImageRequest({
+    model: "google/nano-banana/text-to-image",
+    prompt: "marinara laboratory",
+    width: 1600,
+    height: 900,
+  }),
+  {
+    model: "google/nano-banana/text-to-image",
+    prompt: "marinara laboratory",
+    aspect_ratio: "16:9",
+  },
+);
+assert.deepEqual(
+  buildAtlasCloudImageRequest({
+    model: "black-forest-labs/flux-kontext-pro/image-to-image",
+    prompt: "add blue light",
+    width: 1024,
+    height: 768,
+    referenceImageDataUrl: "data:image/png;base64,atlas-reference",
+  }),
+  {
+    model: "black-forest-labs/flux-kontext-pro/image-to-image",
+    prompt: "add blue light",
+    size: "1024*768",
+    image: "data:image/png;base64,atlas-reference",
+  },
+);
+assert.deepEqual(
+  buildAtlasCloudVideoRequest({
+    model: "google/veo3.1/image-to-video",
+    prompt: "slow camera push",
+    durationSeconds: 8,
+    aspectRatio: "16:9",
+    resolution: "720p",
+    referenceImageDataUrl: "data:image/png;base64,atlas-reference",
+  }),
+  {
+    model: "google/veo3.1/image-to-video",
+    prompt: "slow camera push",
+    duration: 8,
+    aspect_ratio: "16:9",
+    resolution: "720p",
+    image: "data:image/png;base64,atlas-reference",
+  },
+);
+assert.deepEqual(parseAtlasCloudPrediction({ data: { id: "prediction-123", status: "processing" } }), {
+  id: "prediction-123",
+  status: "processing",
+  output: null,
+  error: null,
+});
+assert.deepEqual(
+  parseAtlasCloudPrediction({ data: { status: "completed", outputs: ["https://cdn.example/out.mp4"] } }),
+  {
+    id: null,
+    status: "completed",
+    output: "https://cdn.example/out.mp4",
+    error: null,
+  },
+);
+assert.equal(inferImageSource("", "https://api.atlascloud.ai/api/v1"), "atlas");
+assert.equal(inferVideoSource("", "https://api.atlascloud.ai/api/v1"), "atlas");
+assert.ok(ATLAS_CLOUD_IMAGE_MODELS.some((model) => model.id === "google/nano-banana/text-to-image"));
+assert.ok(ATLAS_CLOUD_VIDEO_MODELS.some((model) => model.id === "google/veo3.1/text-to-video"));
 
 const profileImportAssetRoot = mkdtempSync(join(tmpdir(), "marinara-profile-import-atomic-"));
 try {
@@ -1199,6 +1310,18 @@ const gameSurfaceSource = readFileSync(
   new URL("../../packages/client/src/components/game/GameSurface.tsx", import.meta.url),
   "utf8",
 );
+const gameSetupWizardSource = readFileSync(
+  new URL("../../packages/client/src/components/game/GameSetupWizard.tsx", import.meta.url),
+  "utf8",
+);
+const gameAssetBrowserSource = readFileSync(
+  new URL("../../packages/client/src/components/game-assets/GameAssetsBrowserView.tsx", import.meta.url),
+  "utf8",
+);
+const gameAssetActionDropdownSource = readFileSync(
+  new URL("../../packages/client/src/components/game-assets/ActionDropdown.tsx", import.meta.url),
+  "utf8",
+);
 const gameAssetHooksSource = readFileSync(
   new URL("../../packages/client/src/hooks/use-game-assets.ts", import.meta.url),
   "utf8",
@@ -1293,6 +1416,15 @@ assert.equal(
 );
 assert.match(gameJournalSource, /data-game-journal-scroll/u);
 assert.match(gameSurfaceSource, /h-\[min\(42rem,calc\(100dvh-6rem\)\)\]/u);
+assert.match(gameSetupWizardSource, /Adjust Game Assets for this Game/u);
+assert.match(gameSetupWizardSource, /selectFoldersByDefault/u);
+assert.match(gameAssetBrowserSource, /createPortal/u);
+assert.match(gameAssetActionDropdownSource, /createPortal/u);
+assert.match(gameAssetActionDropdownSource, /window\.innerWidth - rect\.width/u);
+assert.equal(
+  existsSync(join(REPOSITORY_ROOT, "packages/server/src/assets/default-game-assets/sprites/generic-fantasy")),
+  false,
+);
 assert.match(gameAssetHooksSource, /export function useGameAssetManifest/u);
 assert.match(gameAssetHooksSource, /invalidateQueries\(\{ queryKey: gameAssetKeys\.all \}\)/u);
 assert.doesNotMatch(gameAssetStoreSource, /api\.|fetchManifest|rescanAssets|\/game-assets\/manifest/u);

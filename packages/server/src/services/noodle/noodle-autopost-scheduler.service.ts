@@ -7,7 +7,6 @@
 import type { FastifyInstance } from "fastify";
 import { logger } from "../../lib/logger.js";
 import { createNoodleStorage } from "../storage/noodle.storage.js";
-import { nextAutoPostRunAt } from "./noodle-autopost-cadence.js";
 import { generateNoodlePrivatePost } from "./noodle-private-post.operation.js";
 
 const AUTOPOST_INITIAL_DELAY_MS = 20_000;
@@ -20,12 +19,15 @@ export function startNoodleAutoPostScheduler(app: FastifyInstance) {
   let stopped = false;
   let polling = false;
   let pollTimer: ReturnType<typeof setTimeout> | null = null;
+  // Tracks the currently-running poll so shutdown can await a poll that has already claimed
+  // work (and registered it in inFlight) before draining, instead of racing storage close.
+  let activePoll: Promise<void> = Promise.resolve();
 
   const scheduleNext = (delayMs = AUTOPOST_POLL_MS) => {
     if (stopped) return;
     if (pollTimer) clearTimeout(pollTimer);
     pollTimer = setTimeout(() => {
-      void poll();
+      activePoll = poll();
     }, delayMs);
     pollTimer.unref?.();
   };
@@ -45,7 +47,7 @@ export function startNoodleAutoPostScheduler(app: FastifyInstance) {
         logger.warn("[noodle-autopost] Skipped creator %s automatic post: %s", accountId, result.status);
       }
     } catch (err) {
-      logger.warn(err, "[noodle-autopost] Automatic post failed for creator %s", accountId);
+      logger.error(err, "[noodle-autopost] Automatic post failed for creator %s", accountId);
     }
   };
 
@@ -63,8 +65,8 @@ export function startNoodleAutoPostScheduler(app: FastifyInstance) {
         if (!auto?.enabled) continue;
         // Cheap due-check before any write.
         if (auto.nextRunAt !== null && Date.parse(auto.nextRunAt) > Date.parse(nowIso)) continue;
-        const next = nextAutoPostRunAt(auto.intensity, new Date(nowIso));
-        const outcome = await noodle.advanceAutoPostRun(account.id, nowIso, next);
+        // The next slot is derived inside the claim transaction from the current intensity.
+        const outcome = await noodle.advanceAutoPostRun(account.id, nowIso);
         // "seeded" gives a freshly enabled creator its first future slot without posting;
         // only "claimed" means a due run was consumed and should generate now.
         if (outcome !== "claimed") continue;
@@ -74,7 +76,7 @@ export function startNoodleAutoPostScheduler(app: FastifyInstance) {
         inFlight.add(task);
       }
     } catch (err) {
-      logger.warn(err, "[noodle-autopost] Poll failed");
+      logger.error(err, "[noodle-autopost] Poll failed");
     } finally {
       polling = false;
       scheduleNext();
@@ -89,9 +91,11 @@ export function startNoodleAutoPostScheduler(app: FastifyInstance) {
 
   scheduleNext(AUTOPOST_INITIAL_DELAY_MS);
   app.addHook("onClose", async () => {
-    // Stop the timer, then drain active generations before storage closes. Fastify runs
-    // onClose hooks LIFO, so this (registered after the closeDB hook) completes first.
+    // Stop the timer, await any in-progress poll so a run it just claimed is registered in
+    // inFlight, then drain active generations before storage closes. Fastify runs onClose
+    // hooks LIFO, so this (registered after the closeDB hook) completes first.
     stop();
+    await activePoll.catch(() => {});
     await Promise.allSettled([...inFlight]);
   });
 
