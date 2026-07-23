@@ -148,10 +148,16 @@ export function normalizeScheduler(value: unknown): NoodleAccountSchedulerSettin
   const raw = parseRecord(parseRecord(value).autoPosting);
   const intensity = noodleAutoPostingIntensitySchema.safeParse(raw.intensity);
   const nextRunAtValid = typeof raw.nextRunAt === "string" && !Number.isNaN(Date.parse(raw.nextRunAt));
+  const maxImagesPerRun = Number(raw.maxImagesPerRun);
   return {
     autoPosting: {
       enabled: typeof raw.enabled === "boolean" ? raw.enabled : defaults.enabled,
       intensity: intensity.success ? intensity.data : defaults.intensity,
+      imagesEnabled: typeof raw.imagesEnabled === "boolean" ? raw.imagesEnabled : defaults.imagesEnabled,
+      maxImagesPerRun:
+        Number.isInteger(maxImagesPerRun) && maxImagesPerRun >= 0 && maxImagesPerRun <= 4
+          ? maxImagesPerRun
+          : defaults.maxImagesPerRun,
       nextRunAt: raw.nextRunAt === null ? null : nextRunAtValid ? (raw.nextRunAt as string) : defaults.nextRunAt,
     },
   };
