@@ -633,6 +633,7 @@ interface NoodlePostCardControllerOptions {
   updatePostPending: boolean;
   titleMaxLength?: number;
   openAuthorProfile?: (accountId: string) => void;
+  voteInPoll?: (post: NoodlePostCardModel, optionId: string, selectedOptionId: string | null) => void;
 }
 
 export function useNoodlePostCardController(options: NoodlePostCardControllerOptions) {
@@ -748,6 +749,7 @@ export function useNoodlePostCardController(options: NoodlePostCardControllerOpt
     createInteractionPendingFor: options.createInteractionPendingFor,
     updatePostPending: options.updatePostPending,
     openAuthorProfile: options.openAuthorProfile,
+    voteInPoll: options.voteInPoll,
     titleEditing: options.titleMaxLength
       ? {
           editingPostTitle,
@@ -1199,21 +1201,31 @@ export function NoodlePostCard({
               />
             )}
             {post.imageUrl ? (
-              <button
-                type="button"
-                onClick={() =>
-                  setImageLightbox(createNoodleLightboxImage(post.id, post.imageUrl!, post.imagePrompt ?? ""))
-                }
-                className="mt-3 block w-full overflow-hidden rounded-xl text-left ring-offset-[var(--background)] transition-opacity hover:opacity-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-blue)] focus-visible:ring-offset-2"
-                title="Open image"
-                aria-label="Open post image"
-              >
-                <img
-                  src={post.imageUrl}
-                  alt={`Image posted by ${author?.displayName ?? "Noodle user"}`}
-                  className="max-h-96 w-full object-cover"
-                />
-              </button>
+              media ? (
+                <button
+                  type="button"
+                  onClick={() =>
+                    setImageLightbox(createNoodleLightboxImage(post.id, post.imageUrl!, post.imagePrompt ?? ""))
+                  }
+                  className="mt-3 block w-full overflow-hidden rounded-xl text-left ring-offset-[var(--background)] transition-opacity hover:opacity-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-blue)] focus-visible:ring-offset-2"
+                  title="Open image"
+                  aria-label="Open post image"
+                >
+                  <img
+                    src={post.imageUrl}
+                    alt={`Image posted by ${author?.displayName ?? "Noodle user"}`}
+                    className="max-h-96 w-full object-cover"
+                  />
+                </button>
+              ) : (
+                <div className="mt-3 overflow-hidden rounded-xl">
+                  <img
+                    src={post.imageUrl}
+                    alt={`Image posted by ${author?.displayName ?? "Noodle user"}`}
+                    className="max-h-96 w-full object-cover"
+                  />
+                </div>
+              )
             ) : post.imagePrompt ? (
               <div className="mt-3 rounded-xl border border-[var(--noodle-blue)]/35 bg-[var(--noodle-blue)]/10 p-3 text-xs leading-5">
                 <span className="mb-1 flex items-center gap-1.5 font-semibold text-[var(--noodle-blue)]">

@@ -243,6 +243,30 @@ export function useCreateNoodlerPost() {
   });
 }
 
+export interface NoodlerStagedImage {
+  id: string;
+  imageUrl: string;
+  contentType: string;
+  byteLength: number;
+}
+
+export function useUploadNoodlerPostImage() {
+  return useMutation({
+    mutationFn: ({ accountId, file }: { accountId: string; file: File }) => {
+      const form = new FormData();
+      form.append("file", file);
+      return api.upload<NoodlerStagedImage>(`/noodle/noodler/accounts/${encodeURIComponent(accountId)}/media`, form);
+    },
+  });
+}
+
+export function useDeleteNoodlerPostImage() {
+  return useMutation({
+    mutationFn: ({ accountId, imageId }: { accountId: string; imageId: string }) =>
+      api.delete<{ ok: true }>(`/noodle/noodler/accounts/${encodeURIComponent(accountId)}/media/${encodeURIComponent(imageId)}`),
+  });
+}
+
 export function useNoodlerViewer(personaId: string | null, enabled = true) {
   return useQuery({
     queryKey: noodleKeys.viewer(personaId ?? "none"),

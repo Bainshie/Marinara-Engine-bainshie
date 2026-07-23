@@ -27,6 +27,7 @@ import {
   NOODLE_PRIVATE_POST_CONTENT_MAX_LENGTH,
   NOODLE_PRIVATE_POST_GUIDE_MAX_LENGTH,
   NOODLE_PRIVATE_POST_TITLE_MAX_LENGTH,
+  readNoodlePollFromMetadata,
 } from "@marinara-engine/shared";
 import type {
   NoodleIdentityDisclosure,
@@ -46,6 +47,7 @@ import {
   useCreateNoodlerInteraction,
   useCreateNoodlerStageProfile,
   useDeleteNoodlerPost,
+  useDeleteNoodlerPostImage,
   useDeleteNoodlerStageProfile,
   useGeneratePrivateNoodlePost,
   useConfirmNoodlerImagePrompts,
@@ -67,6 +69,7 @@ import {
   useRescheduleNoodlerAutoPost,
   useUpdateNoodleSettings,
   useUpdateNoodlerStageProfile,
+  useUploadNoodlerPostImage,
 } from "../../hooks/use-noodle";
 import { useActivePersona, usePersonas } from "../../hooks/use-characters";
 import { useConnections } from "../../hooks/use-connections";
@@ -109,13 +112,19 @@ interface PrivatePostSubmission {
   body: string;
   access: NoodlePostAccess;
   ppvPrice: number | null;
+  imageAssetId: string | null;
+  poll: { question: string; options: string[] } | null;
 }
+
+interface PrivatePostPollDraft { question: string; options: string[]; }
 
 interface PrivatePostDraft {
   title: string;
   body: string;
   access: NoodlePostAccess;
   ppvPrice: string;
+  image: { id: string; imageUrl: string } | null;
+  poll: PrivatePostPollDraft | null;
 }
 
 const EMPTY_PRIVATE_POST_DRAFT: PrivatePostDraft = {
@@ -123,6 +132,8 @@ const EMPTY_PRIVATE_POST_DRAFT: PrivatePostDraft = {
   body: "",
   access: "public",
   ppvPrice: "5",
+  image: null,
+  poll: null,
 };
 
 function isEmptyPrivatePostDraft(draft: PrivatePostDraft): boolean {
@@ -130,7 +141,7 @@ function isEmptyPrivatePostDraft(draft: PrivatePostDraft): boolean {
     draft.title === EMPTY_PRIVATE_POST_DRAFT.title &&
     draft.body === EMPTY_PRIVATE_POST_DRAFT.body &&
     draft.access === EMPTY_PRIVATE_POST_DRAFT.access &&
-    draft.ppvPrice === EMPTY_PRIVATE_POST_DRAFT.ppvPrice
+    draft.ppvPrice === EMPTY_PRIVATE_POST_DRAFT.ppvPrice && !draft.image && !draft.poll
   );
 }
 
@@ -293,6 +304,7 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
       window.removeEventListener("pointerdown", onPointerDown, true);
     };
   }, [accountSwitcherOpen]);
+  const deleteStagedImage = useDeleteNoodlerPostImage();
   const [privatePostDrafts, setPrivatePostDrafts] = useState<Record<string, PrivatePostDraft>>({});
   const updatePrivatePostDraft = (profileId: string, patch: Partial<PrivatePostDraft>) => {
     setPrivatePostDrafts((current) => {
@@ -310,7 +322,9 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
       return next;
     });
   };
-  const clearPrivatePostDraft = (profileId: string) => {
+  const clearPrivatePostDraft = (profileId: string, discardImage = false) => {
+    const stagedImage = privatePostDrafts[profileId]?.image;
+    if (discardImage && stagedImage) deleteStagedImage.mutate({ accountId: profileId, imageId: stagedImage.id });
     setPrivatePostDrafts((current) => {
       if (!current[profileId]) return current;
       const next = { ...current };
@@ -323,11 +337,13 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
     window.confirm("Discard unpublished NoodleR post drafts?");
   const exitToPublic = () => {
     if (!confirmDiscardPrivatePostDrafts()) return;
+    for (const [profileId, draft] of Object.entries(privatePostDrafts)) if (draft.image) deleteStagedImage.mutate({ accountId: profileId, imageId: draft.image.id });
     setPrivatePostDrafts({});
     onNavigate({ mode: "public", view: "home" });
   };
   const openSettings = () => {
     if (!confirmDiscardPrivatePostDrafts()) return;
+    for (const [profileId, draft] of Object.entries(privatePostDrafts)) if (draft.image) deleteStagedImage.mutate({ accountId: profileId, imageId: draft.image.id });
     setPrivatePostDrafts({});
     onNavigate({ mode: "settings" });
   };
@@ -441,6 +457,13 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
     if (active) removeInteraction.mutate(payload, { onError });
     else createInteraction.mutate(payload, { onError });
   };
+  const voteInPoll = (post: NoodlePostCardModel, optionId: string, selectedOptionId: string | null) => {
+    if (!viewerPersonaId || optionId === selectedOptionId) return;
+    const poll = readNoodlePollFromMetadata(post.metadata);
+    const pollOptionIndex = poll?.options.findIndex((option) => option.id === optionId) ?? -1;
+    if (pollOptionIndex < 0) return;
+    createInteraction.mutate({ postId: post.id, personaId: viewerPersonaId, type: "vote", pollOptionIndex }, { onError: (error) => toast.error(errorMessage(error, "Could not vote in this poll.")) });
+  };
   const submitReply = async (
     post: NoodlePostCardModel,
     input: { content: string; parentInteractionId: string | null },
@@ -480,9 +503,10 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
     deletePost: deleteNoodlePost,
     reactToPost,
     reactToReply,
+    voteInPoll,
     submitReply,
     reactionPendingFor: () => false,
-    createInteractionPendingFor: (_postId, type) => type === "reply" && createInteraction.isPending,
+    createInteractionPendingFor: (_postId, type) => (type === "reply" || type === "vote") && createInteraction.isPending,
     updatePostPending: updatePost.isPending,
     titleMaxLength: NOODLE_PRIVATE_POST_TITLE_MAX_LENGTH,
     openAuthorProfile: (accountId) => onNavigate({ mode: "private", view: "profile", accountId }),
@@ -640,18 +664,20 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
     }
   };
 
-  const submitManualPost = async ({ profileId, title, body, access, ppvPrice }: PrivatePostSubmission) => {
+  const submitManualPost = async ({ profileId, title, body, access, ppvPrice, imageAssetId, poll }: PrivatePostSubmission) => {
     await createPost.mutateAsync({
       targetAccountId: profileId,
       title,
       content: body,
       access,
       ...(access === "ppv" ? { ppvPrice } : {}),
+      imageAssetId,
+      poll,
     });
     toast.success("Private post published.");
   };
 
-  const submitGuidedPost = async ({ profileId, title, body, access, ppvPrice }: PrivatePostSubmission) => {
+  const submitGuidedPost = async ({ profileId, title, body, access, ppvPrice, imageAssetId, poll }: PrivatePostSubmission) => {
     const guide = serializePrivatePostGuide(title, body);
     const result = await generatePost.mutateAsync({
       mode: "private",
@@ -659,6 +685,8 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
       ...(guide ? { privatePostGuide: guide } : {}),
       access,
       ...(access === "ppv" ? { ppvPrice } : {}),
+      imageAssetId,
+      poll,
     });
     if (result.imagePromptReview) {
       setImagePromptReview({ accountId: profileId, items: [result.imagePromptReview] });
@@ -919,6 +947,7 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
           draft={privatePostDrafts[selectedProfile.id] ?? EMPTY_PRIVATE_POST_DRAFT}
           onDraftChange={(patch) => updatePrivatePostDraft(selectedProfile.id, patch)}
           onClearDraft={() => clearPrivatePostDraft(selectedProfile.id)}
+          onDiscardDraft={() => clearPrivatePostDraft(selectedProfile.id, true)}
           isLoading={postsQuery.isLoading}
           isError={postsQuery.isError}
           onRetry={() => void postsQuery.refetch()}
@@ -929,7 +958,7 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
             }
             deleteProfile.mutate(selectedProfile.id, {
               onSuccess: () => {
-                clearPrivatePostDraft(selectedProfile.id);
+                clearPrivatePostDraft(selectedProfile.id, true);
                 onNavigate({ mode: "private", view: "profiles" });
                 toast.success("Stage profile deleted.");
               },
@@ -1144,6 +1173,7 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
         onClearAuthorDraft={() => {
           if (mainAuthorProfile) clearPrivatePostDraft(mainAuthorProfile.id);
         }}
+        onDiscardAuthorDraft={() => { if (mainAuthorProfile) clearPrivatePostDraft(mainAuthorProfile.id, true); }}
         authorLoading={accountsQuery.isLoading || !data}
         authorError={accountsQuery.isError && !accountsQuery.data}
         onRetryAuthor={() => void accountsQuery.refetch()}
@@ -1888,6 +1918,7 @@ function StageProfileView({
   draft,
   onDraftChange,
   onClearDraft,
+  onDiscardDraft,
   isLoading,
   isError,
   onRetry,
@@ -1919,6 +1950,7 @@ function StageProfileView({
   draft: PrivatePostDraft;
   onDraftChange: (patch: Partial<PrivatePostDraft>) => void;
   onClearDraft: () => void;
+  onDiscardDraft: () => void;
   isLoading: boolean;
   isError: boolean;
   onRetry: () => void;
@@ -2194,6 +2226,7 @@ function StageProfileView({
             draft={draft}
             onDraftChange={onDraftChange}
             onClearDraft={onClearDraft}
+            onDiscardDraft={onDiscardDraft}
             onManualPost={onManualPost}
             onGuidedPost={onGuidedPost}
             manualPending={manualPending}
@@ -2427,6 +2460,7 @@ function ViewerHub({
   authorDraft,
   onAuthorDraftChange,
   onClearAuthorDraft,
+  onDiscardAuthorDraft,
   authorLoading,
   authorError,
   onRetryAuthor,
@@ -2456,6 +2490,7 @@ function ViewerHub({
   authorDraft: PrivatePostDraft;
   onAuthorDraftChange: (patch: Partial<PrivatePostDraft>) => void;
   onClearAuthorDraft: () => void;
+  onDiscardAuthorDraft: () => void;
   authorLoading: boolean;
   authorError: boolean;
   onRetryAuthor: () => void;
@@ -2530,6 +2565,7 @@ function ViewerHub({
           draft={authorDraft}
           onDraftChange={onAuthorDraftChange}
           onClearDraft={onClearAuthorDraft}
+          onDiscardDraft={onDiscardAuthorDraft}
           onManualPost={onManualPost}
           onGuidedPost={onGuidedPost}
           manualPending={manualPending}
@@ -2709,7 +2745,7 @@ function LockedPrivatePostCard({
   );
 }
 
-type PrivateComposerTool = "media" | "coin";
+type PrivateComposerTool = "image" | "poll" | "media" | "coin";
 
 function PrivatePostComposer({
   profile,
@@ -2717,6 +2753,7 @@ function PrivatePostComposer({
   draft,
   onDraftChange,
   onClearDraft,
+  onDiscardDraft,
   onManualPost,
   onGuidedPost,
   manualPending,
@@ -2727,6 +2764,7 @@ function PrivatePostComposer({
   draft: PrivatePostDraft;
   onDraftChange: (patch: Partial<PrivatePostDraft>) => void;
   onClearDraft: () => void;
+  onDiscardDraft: () => void;
   onManualPost: (input: PrivatePostSubmission) => Promise<void>;
   onGuidedPost: (input: PrivatePostSubmission) => Promise<void>;
   manualPending: boolean;
@@ -2737,9 +2775,15 @@ function PrivatePostComposer({
   const [guideError, setGuideError] = useState<string | null>(null);
   const [activeTool, setActiveTool] = useState<PrivateComposerTool | null>(null);
   const [mediaPickerTab, setMediaPickerTab] = useState<ConversationMediaPickerTabId>("emoji");
+  const [attachmentError, setAttachmentError] = useState<string | null>(null);
+  const imageFileRef = useRef<HTMLInputElement | null>(null);
+  const imageToolRef = useRef<HTMLDivElement | null>(null);
+  const pollToolRef = useRef<HTMLDivElement | null>(null);
   const mediaToolRef = useRef<HTMLDivElement | null>(null);
   const coinToolRef = useRef<HTMLDivElement | null>(null);
-  const { title, body, access, ppvPrice } = draft;
+  const { title, body, access, ppvPrice, image, poll } = draft;
+  const uploadImage = useUploadNoodlerPostImage();
+  const deleteImage = useDeleteNoodlerPostImage();
   const hasDraft = !isEmptyPrivatePostDraft(draft);
   const parsedPrice = Number(ppvPrice);
   const pending = manualPending || guidePending;
@@ -2752,6 +2796,19 @@ function PrivatePostComposer({
     setActiveTool(null);
     setExpanded(false);
   };
+  const discardDraft = () => { onDiscardDraft(); setPostError(null); setGuideError(null); setAttachmentError(null); setActiveTool(null); setExpanded(false); };
+  const removeImage = () => {
+    if (!image) return;
+    onDraftChange({ image: null });
+    deleteImage.mutate({ accountId: profile.id, imageId: image.id }, { onError: () => setAttachmentError("The image was removed from this draft, but cleanup will be retried by the server.") });
+  };
+  const handleImageFile = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]; event.target.value = "";
+    if (!file) return;
+    if (!file.type.startsWith("image/")) { setAttachmentError("Choose an image file."); return; }
+    setAttachmentError(null);
+    uploadImage.mutate({ accountId: profile.id, file }, { onSuccess: (next) => { if (image) deleteImage.mutate({ accountId: profile.id, imageId: image.id }); onDraftChange({ image: next }); setActiveTool(null); }, onError: (error) => setAttachmentError(errorMessage(error, "Could not upload this image.")) });
+  };
 
   const toggleTool = (tool: PrivateComposerTool) =>
     setActiveTool((current) => (current === tool ? null : tool));
@@ -2762,6 +2819,8 @@ function PrivatePostComposer({
     body,
     access,
     ppvPrice: access === "ppv" ? parsedPrice : null,
+    imageAssetId: image?.id ?? null,
+    poll: poll ? { question: poll.question.trim(), options: poll.options.map((option) => option.trim()) } : null,
   });
 
   const publish = async () => {
@@ -2770,6 +2829,7 @@ function PrivatePostComposer({
       setPostError("A literal post needs a body.");
       return;
     }
+    if (poll && (!poll.question.trim() || poll.options.length < 2 || poll.options.some((option) => !option.trim()) || new Set(poll.options.map((option) => option.trim().toLocaleLowerCase())).size !== poll.options.length)) { setPostError("Polls need a question and two unique options."); return; }
     if (access === "ppv" && (!Number.isFinite(parsedPrice) || parsedPrice < 0 || parsedPrice > 999_999)) {
       setPostError("Enter a PPV price from 0 to 999,999 credits.");
       return;
@@ -2784,6 +2844,8 @@ function PrivatePostComposer({
 
   const guidePost = async () => {
     setGuideError(null);
+    if (!body.trim()) { setGuideError("A guided post needs a body."); return; }
+    if (poll && (!poll.question.trim() || poll.options.length < 2 || poll.options.some((option) => !option.trim()) || new Set(poll.options.map((option) => option.trim().toLocaleLowerCase())).size !== poll.options.length)) { setGuideError("Polls need a question and two unique options."); return; }
     if (guide.length > NOODLE_PRIVATE_POST_GUIDE_MAX_LENGTH) {
       setGuideError(
         `The combined title and body guide must be ${NOODLE_PRIVATE_POST_GUIDE_MAX_LENGTH.toLocaleString()} characters or fewer.`,
@@ -2844,8 +2906,8 @@ function PrivatePostComposer({
       avatar={<ProfileInitial profile={profile} />}
       tools={
         <NoodleComposerToolRow
-          image={{ disabled: true }}
-          poll={{ disabled: true }}
+          image={{ ref: imageToolRef, active: activeTool === "image" || Boolean(image), disabled: pending || uploadImage.isPending, onClick: () => toggleTool("image") }}
+          poll={{ ref: pollToolRef, active: activeTool === "poll" || Boolean(poll), disabled: pending, onClick: () => toggleTool("poll") }}
           media={{
             ref: mediaToolRef,
             active: activeTool === "media",
@@ -2877,6 +2939,7 @@ function PrivatePostComposer({
             {guidePending ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
             {guidePending ? "Guiding…" : "Guide"}
           </button>
+          {hasDraft && <button type="button" onClick={discardDraft} disabled={pending || uploadImage.isPending} className="inline-flex h-8 items-center rounded-full px-3 text-xs font-bold text-[var(--muted-foreground)] hover:bg-[var(--accent)] disabled:opacity-50">Discard</button>}
           <button
             type="button"
             onClick={() => void publish()}
@@ -2904,6 +2967,24 @@ function PrivatePostComposer({
                 onStickerSelect={(name) => onDraftChange({ body: `${body}sticker:${name}:` })}
                 className="w-full !border-[var(--marinara-chat-chrome-panel-border)] !bg-[var(--background)] !text-[var(--foreground)] shadow-2xl shadow-black/35"
               />
+            </NoodleAnchoredPopover>
+          )}
+          {activeTool === "image" && (
+            <NoodleAnchoredPopover anchorRef={imageToolRef} wide>
+              <div className="marinara-chat-popover space-y-3 rounded-xl border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)] p-3 text-[var(--foreground)] shadow-2xl shadow-black/35">
+                <p className="text-xs font-bold">Attach one image</p>
+                <button type="button" onClick={() => imageFileRef.current?.click()} disabled={pending || uploadImage.isPending} className="h-9 w-full rounded-full bg-[var(--noodle-blue)] px-4 text-xs font-bold text-zinc-950 disabled:opacity-50">{uploadImage.isPending ? "Uploading…" : image ? "Replace image" : "Upload from device"}</button>
+                {image && <button type="button" onClick={removeImage} disabled={deleteImage.isPending} className="h-9 w-full rounded-full border border-[var(--noodle-divider)] px-4 text-xs font-bold text-[var(--destructive)] disabled:opacity-50">Remove image</button>}
+              </div>
+            </NoodleAnchoredPopover>
+          )}
+          {activeTool === "poll" && (
+            <NoodleAnchoredPopover anchorRef={pollToolRef} wide>
+              <div className="marinara-chat-popover space-y-3 rounded-xl border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)] p-3 text-[var(--foreground)] shadow-2xl shadow-black/35">
+                <label className="block space-y-1"><span className="text-xs font-bold">Question</span><input value={poll?.question ?? ""} maxLength={240} onChange={(event) => onDraftChange({ poll: { question: event.target.value, options: poll?.options ?? ["", ""] } })} className="mari-chrome-field h-9 w-full rounded-md border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)] px-3 text-sm" /></label>
+                {(poll?.options ?? ["", ""]).map((option, index, options) => <div key={index} className="flex gap-2"><input value={option} maxLength={120} aria-label={`Poll option ${index + 1}`} onChange={(event) => onDraftChange({ poll: { question: poll?.question ?? "", options: options.map((entry, entryIndex) => entryIndex === index ? event.target.value : entry) } })} className="mari-chrome-field h-9 min-w-0 flex-1 rounded-md border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)] px-3 text-sm" />{options.length > 2 && <button type="button" onClick={() => onDraftChange({ poll: { question: poll?.question ?? "", options: options.filter((_, entryIndex) => entryIndex !== index) } })} className="h-9 w-9 text-[var(--muted-foreground)]" aria-label={`Remove option ${index + 1}`}><X size={15} /></button>}</div>)}
+                <div className="flex gap-2"><button type="button" disabled={(poll?.options.length ?? 2) >= 4} onClick={() => onDraftChange({ poll: { question: poll?.question ?? "", options: [...(poll?.options ?? ["", ""]), ""] } })} className="h-9 flex-1 rounded-full border border-[var(--noodle-divider)] text-xs font-bold text-[var(--noodle-blue)] disabled:opacity-50">Add option</button><button type="button" onClick={() => { onDraftChange({ poll: null }); setActiveTool(null); }} className="h-9 flex-1 rounded-full border border-[var(--noodle-divider)] text-xs font-bold text-[var(--destructive)]">Remove poll</button></div>
+              </div>
             </NoodleAnchoredPopover>
           )}
           {activeTool === "coin" && (
@@ -2950,13 +3031,15 @@ function PrivatePostComposer({
           )}
         </>
       }
-      footer={(postError || guideError) && (
+      footer={(postError || guideError || attachmentError) && (
         <div className="mt-2 space-y-1 pl-14 text-xs text-[var(--destructive)]" role="alert">
           {postError && <p>Post: {postError}</p>}
           {guideError && <p>Guide: {guideError}</p>}
+          {attachmentError && <p>Image: {attachmentError}</p>}
         </div>
       )}
     >
+      <input ref={imageFileRef} type="file" accept="image/*" className="hidden" onChange={handleImageFile} />
       <label className="block space-y-1">
         <span className="sr-only">Post title (optional)</span>
         <input
@@ -2977,6 +3060,8 @@ function PrivatePostComposer({
         placeholder="What's simmering, privately?"
         className="min-h-20 w-full resize-none border-0 bg-transparent py-2 text-[1rem] leading-6 text-[var(--foreground)] outline-none placeholder:text-[var(--muted-foreground)]"
       />
+      {image && <div className="mb-3 overflow-hidden rounded-xl border border-[var(--noodle-divider)] bg-[var(--noodle-blue)]/10"><img src={image.imageUrl} alt="Attached post image" className="max-h-60 w-full object-cover" /><div className="flex items-center justify-between px-3 py-2 text-xs text-[var(--noodle-blue)]"><span>Attached image</span><button type="button" onClick={removeImage} disabled={pending || deleteImage.isPending} className="min-h-8 px-2 font-bold disabled:opacity-50">Remove</button></div></div>}
+      {poll && <div className="mb-3 flex items-start justify-between gap-3 rounded-xl border border-[var(--noodle-divider)] p-3"><div><p className="text-sm font-bold">{poll.question || "Untitled poll"}</p><p className="mt-1 text-xs text-[var(--muted-foreground)]">{poll.options.filter(Boolean).join(" · ") || "Add poll options"}</p></div><button type="button" onClick={() => onDraftChange({ poll: null })} disabled={pending} className="min-h-8 px-2 text-xs font-bold text-[var(--destructive)] disabled:opacity-50">Remove</button></div>}
     </NoodleComposerShell>
   );
 }
