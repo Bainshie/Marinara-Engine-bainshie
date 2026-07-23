@@ -49,6 +49,7 @@ import {
   useDeleteNoodlerStageProfile,
   useGeneratePrivateNoodlePost,
   useConfirmNoodlerImagePrompts,
+  useRunNoodlerAutoPostNow,
   useGenerateNoodlerStageProfileDraft,
   useNoodle,
   useNoodlerAccounts,
@@ -355,6 +356,7 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
   const updateProfile = useUpdateNoodlerStageProfile();
   const generatePost = useGeneratePrivateNoodlePost();
   const confirmImagePrompts = useConfirmNoodlerImagePrompts();
+  const runAutoPostNow = useRunNoodlerAutoPostNow();
   const createPost = useCreateNoodlerPost();
   const generateProfileDraft = useGenerateNoodlerStageProfileDraft();
   const connectionsQuery = useConnections();
@@ -664,6 +666,20 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
     toast.success("Private post generated.");
   };
 
+  const submitRunNow = (accountId: string) => {
+    runAutoPostNow.mutate(accountId, {
+      onSuccess: (result) => {
+        if (result.imagePromptReview) {
+          setImagePromptReview({ accountId, items: [result.imagePromptReview] });
+          toast.success("Automatic post generated. Review the image prompt to render it.");
+          return;
+        }
+        toast.success("Automatic post generated.");
+      },
+      onError: (error) => toast.error(errorMessage(error, "Could not run an automatic post now.")),
+    });
+  };
+
   const confirmReviewedImagePrompts = (overrides: ImagePromptOverride[]) => {
     if (!imagePromptReview) return;
     confirmImagePrompts.mutate(
@@ -912,6 +928,8 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
           onGuidedPost={submitGuidedPost}
           manualPending={createPost.isPending}
           guidePending={generatePost.isPending}
+          onRunNow={submitRunNow}
+          runNowPending={runAutoPostNow.isPending}
           onUnlock={(postId) => {
             if (!viewerPersonaId) return;
             unlockPost.mutate(
@@ -1844,6 +1862,8 @@ function StageProfileView({
   onGuidedPost,
   manualPending,
   guidePending,
+  onRunNow,
+  runNowPending,
   onUnlock,
   unlockPending,
   onToggleSubscription,
@@ -1873,6 +1893,8 @@ function StageProfileView({
   onGuidedPost: (input: PrivatePostSubmission) => Promise<void>;
   manualPending: boolean;
   guidePending: boolean;
+  onRunNow: (accountId: string) => void;
+  runNowPending: boolean;
   onUnlock: (postId: string) => void;
   unlockPending: boolean;
   onToggleSubscription: (creatorAccountId: string, subscribed: boolean) => void;
@@ -2295,6 +2317,20 @@ function StageProfileView({
               </label>
             )}
           </fieldset>
+          <div className="space-y-1">
+            <button
+              type="button"
+              disabled={runNowPending}
+              onClick={() => onRunNow(profile.id)}
+              className="h-9 w-full rounded-full border border-[var(--noodle-divider)] px-3 text-xs font-bold hover:bg-[var(--accent)] disabled:opacity-50"
+            >
+              {runNowPending ? "Running…" : "Run now"}
+            </button>
+            <p className="text-[0.68rem] text-[var(--muted-foreground)]">
+              Generates one automatic-style post immediately (subscriber access), the same way a
+              scheduled run would. Useful for testing without waiting for the next slot.
+            </p>
+          </div>
           {autoPosting.enabled && (
             <div className="space-y-2 rounded-md border border-[var(--noodle-divider)] px-3 py-2">
               <p className="text-xs font-bold">Next automatic post</p>

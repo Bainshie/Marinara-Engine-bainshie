@@ -645,6 +645,40 @@ export async function noodleRoutes(app: FastifyInstance) {
     return updated;
   });
 
+  // Manual test trigger: runs one automatic-style post immediately, the same way the
+  // scheduler does (subscriber access, no guide), without waiting for the next cadence
+  // slot or requiring auto-posting to be enabled. Does not touch nextRunAt.
+  app.post("/noodler/accounts/:id/auto-post/run-now", async (req, reply) => {
+    const settings = await noodle.getSettings();
+    if (!settings.enableNoodler) return reply.code(404).send({ error: "Not Found" });
+    const { id } = req.params as { id: string };
+    try {
+      const result = await generateNoodlePrivatePost(app.db, {
+        mode: "private",
+        targetAccountId: id,
+        access: "subscriber",
+      });
+      if (result.status === "generated") {
+        return result.imagePromptReview
+          ? { ...result.post, imagePromptReview: result.imagePromptReview }
+          : result.post;
+      }
+      if (result.status === "busy") {
+        return reply.code(409).send({ error: "A generation for this NoodleR account is already running." });
+      }
+      if (result.status === "connection_required") {
+        return reply.code(400).send({ error: "Select a Noodle generation connection first." });
+      }
+      if (result.status === "connection_not_found") {
+        return reply.code(404).send({ error: "Noodle generation connection not found" });
+      }
+      return reply.code(404).send({ error: "NoodleR account not found." });
+    } catch (error) {
+      logger.error(error, "[noodler] Manual run-now failed");
+      return reply.code(500).send({ error: getErrorMessage(error) });
+    }
+  });
+
   app.patch("/accounts/:id/follows/:targetAccountId", async (req, reply) => {
     const { id, targetAccountId } = req.params as { id: string; targetAccountId: string };
     if (id === targetAccountId) return reply.code(400).send({ error: "A Noodle account cannot follow itself" });
