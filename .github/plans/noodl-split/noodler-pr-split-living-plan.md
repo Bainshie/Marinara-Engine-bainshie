@@ -56,7 +56,7 @@ The product experience therefore needs both agency and life:
 | 6 | Slice 9d — opt-in real-character named fans | Planned later | 9c |
 | 7 | Slice 9b — support points and visible economic events | Optional low-priority fun addition | 9a; defer if scope grows |
 | 8 | Slice 9e — named-fan profiles and access-filtered history | Ambient identity follow-up | 9c; extended by 9d |
-| 9 | Slice 10 — composer media parity | In progress through #3980; independent of Slices 8/8b when it owns the shared private-media foundation | 6b, 7 authoring UI |
+| 9 | Slice 10 — composer media parity | Implemented in draft PR #3981; automated gate passed, manual UI proof pending | 6b, 7 authoring UI |
 | 10 | Slice 11 — cross-mode integration | Blocked on product contract | manual/automatic posting paths |
 | 11 | Slice 12 — creator projects/milestones | Last | Explicit prerequisites to be defined |
 
@@ -702,6 +702,11 @@ Access-changing actions must commit before later interactions in the same genera
 batch and all targets must be revalidated transactionally.
 
 ## Slice 10 — Composer media parity
+
+Implementation status: draft PR #3981 contains the complete code and documentation
+path. `pnpm check`, the Noodle regression suite, the installer-artifact guard, and a
+focused upload/access/persistence/deletion proof pass. Final browser and usability
+verification remains manual.
 
 Add one user-uploaded image and one optional two-to-four-option poll through real
 schema, private storage, mutation, projection, voting, and cleanup plumbing. Enable
