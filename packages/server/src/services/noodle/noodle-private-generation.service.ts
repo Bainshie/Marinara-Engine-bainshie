@@ -1,6 +1,7 @@
 import {
   NOODLE_PRIVATE_POST_CONTENT_MAX_LENGTH,
   NOODLE_PRIVATE_POST_TITLE_MAX_LENGTH,
+  createNoodlePoll,
   noodleGeneratedPrivatePostSchema,
   type APIProvider,
   type NoodleAccount,
@@ -291,6 +292,8 @@ export async function generatePrivatePost(
     source: "generated" as const,
     access: input.request.access,
     ppvPrice: input.request.access === "ppv" ? (input.request.ppvPrice ?? null) : null,
+    imageAssetId: input.request.imageAssetId,
+    metadata: input.request.poll ? { poll: createNoodlePoll(input.request.poll) } : {},
   };
 
   const persist = async (

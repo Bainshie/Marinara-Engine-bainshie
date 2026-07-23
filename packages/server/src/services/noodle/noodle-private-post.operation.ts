@@ -1,15 +1,19 @@
-import type {
-  NoodleAccount,
-  NoodlePrivateGenerationRequest,
-  NoodlePrivatePostCreateInput,
-  NoodlerManagedPost,
-  NoodlerRefreshNowOutcome,
+import {
+  createNoodlePoll,
+  type NoodleAccount,
+  type NoodlePrivateGenerationRequest,
+  type NoodlePrivatePostCreateInput,
+  type NoodlerManagedPost,
+  type NoodlerRefreshNowOutcome,
 } from "@marinara-engine/shared";
 import type { NoodleImagePromptReviewItem } from "./noodle-public-images.service.js";
 import type { DB } from "../../db/connection.js";
 import { logger } from "../../lib/logger.js";
 import { createConnectionsStorage } from "../storage/connections.storage.js";
-import { createNoodleStorage } from "../storage/noodle.storage.js";
+import {
+  createNoodleStorage,
+  NoodlerPrivateMediaClaimError,
+} from "../storage/noodle.storage.js";
 import { generatePrivatePost } from "./noodle-private-generation.service.js";
 import { tryNoodlePrivateAccountOperation } from "./noodle-private-account-operation-lock.js";
 import { settleAgentJobsWithConcurrencyLimit } from "../agents/agent-concurrency.js";
@@ -20,13 +24,15 @@ export type GenerateNoodlePrivatePostResult =
   | { status: "busy" }
   | { status: "connection_required" }
   | { status: "connection_not_found" }
-  | { status: "private_account_not_found" };
+  | { status: "private_account_not_found" }
+  | { status: "media_unavailable" };
 
 export type CreateNoodlePrivatePostResult =
   | { status: "created"; post: NoodlerManagedPost }
   | { status: "disabled" }
   | { status: "busy" }
-  | { status: "private_account_not_found" };
+  | { status: "private_account_not_found" }
+  | { status: "media_unavailable" };
 
 /**
  * Reusable generated-post application seam for HTTP now and Slice 8 scheduling later.
@@ -49,8 +55,17 @@ export async function generateNoodlePrivatePost(
     if (!connectionId) return { status: "connection_required" } as const;
     const connection = await createConnectionsStorage(db).getWithKey(connectionId);
     if (!connection) return { status: "connection_not_found" } as const;
-    const generated = await generatePrivatePost(db, { account, request, connection });
-    return { status: "generated", post: generated.post, imagePromptReview: generated.imagePromptReview } as const;
+    try {
+      const generated = await generatePrivatePost(db, { account, request, connection });
+      return {
+        status: "generated",
+        post: generated.post,
+        imagePromptReview: generated.imagePromptReview,
+      } as const;
+    } catch (error) {
+      if (error instanceof NoodlerPrivateMediaClaimError) return { status: "media_unavailable" } as const;
+      throw error;
+    }
   });
   return locked.acquired ? locked.value : { status: "busy" };
 }
@@ -117,17 +132,24 @@ export async function createNoodlePrivatePost(
   if (!settings.enableNoodler) return { status: "disabled" };
 
   const locked = await tryNoodlePrivateAccountOperation(input.targetAccountId, async () => {
-    const post = await noodle.createPrivatePost({
-      authorAccountId: input.targetAccountId,
-      title: input.title,
-      content: input.content,
-      imageUrl: null,
-      imagePrompt: null,
-      source: "manual",
-      access: input.access,
-      ppvPrice: input.access === "ppv" ? (input.ppvPrice ?? null) : null,
-      metadata: {},
-    });
+    let post;
+    try {
+      post = await noodle.createPrivatePost({
+        authorAccountId: input.targetAccountId,
+        title: input.title,
+        content: input.content,
+        imageUrl: null,
+        imagePrompt: null,
+        imageAssetId: input.imageAssetId,
+        source: "manual",
+        access: input.access,
+        ppvPrice: input.access === "ppv" ? (input.ppvPrice ?? null) : null,
+        metadata: input.poll ? { poll: createNoodlePoll(input.poll) } : {},
+      });
+    } catch (error) {
+      if (error instanceof NoodlerPrivateMediaClaimError) return { status: "media_unavailable" } as const;
+      throw error;
+    }
     if (!post) return { status: "private_account_not_found" } as const;
     return { status: "created", post } as const;
   });

@@ -306,9 +306,10 @@ export const noodlerUnlockSchema = noodlerPersonaIdSchema;
 
 export const noodlerCreateInteractionSchema = noodlerPersonaIdSchema
   .extend({
-    type: z.enum(["like", "repost", "reply"]),
+    type: z.enum(["like", "repost", "reply", "vote"]),
     content: z.string().max(2000).nullable().optional(),
     parentInteractionId: z.string().min(1).nullable().optional(),
+    pollOptionIndex: z.number().int().min(0).max(3).optional(),
   })
   .superRefine((input, ctx) => {
     if (input.type === "reply" && !input.content?.trim()) {
@@ -319,6 +320,20 @@ export const noodlerCreateInteractionSchema = noodlerPersonaIdSchema
         code: z.ZodIssueCode.custom,
         path: ["parentInteractionId"],
         message: "Reposts cannot target a reply.",
+      });
+    }
+    if (input.type === "vote" && (input.pollOptionIndex === undefined || input.parentInteractionId)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["pollOptionIndex"],
+        message: "Poll votes require an option and cannot target a reply.",
+      });
+    }
+    if (input.type !== "vote" && input.pollOptionIndex !== undefined) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["pollOptionIndex"],
+        message: "Only poll votes can include an option index.",
       });
     }
   });
@@ -360,6 +375,8 @@ const noodlePrivatePostCreateShape = {
   targetAccountId: z.string().min(1),
   title: noodlePrivatePostTitleSchema,
   content: z.string().trim().min(1).max(NOODLE_PRIVATE_POST_CONTENT_MAX_LENGTH),
+  imageAssetId: z.string().min(1).nullable().optional(),
+  poll: noodlePollInputSchema.nullable().optional(),
 };
 
 export const noodlePrivatePostCreateSchema = z.union([
@@ -378,20 +395,11 @@ export const noodlePrivatePostUpdateSchema = z
   .object({
     title: noodlePrivatePostTitleUpdateSchema,
     content: z.string().trim().min(1).max(NOODLE_PRIVATE_POST_CONTENT_MAX_LENGTH).optional(),
-    imageUrl: z.string().max(2000).nullable().optional(),
-    imagePrompt: z.string().max(2000).nullable().optional(),
   })
   .strict()
-  .refine(
-    (input) =>
-      input.title !== undefined ||
-      input.content !== undefined ||
-      input.imageUrl !== undefined ||
-      input.imagePrompt !== undefined,
-    {
-      message: "Provide a title, body, or media update.",
-    },
-  );
+  .refine((input) => input.title !== undefined || input.content !== undefined, {
+    message: "Provide a title or body update.",
+  });
 
 export const noodleCreateInteractionSchema = z
   .object({
@@ -491,6 +499,8 @@ const noodlePrivateGenerationRequestShape = {
   // Manual Guide path may ask to review the image prompt before rendering; the autonomous
   // scheduler never sets this (no human in the loop).
   reviewImagePromptsBeforeSend: z.boolean().optional(),
+  imageAssetId: z.string().min(1).nullable().optional(),
+  poll: noodlePollInputSchema.nullable().optional(),
 };
 
 export const noodlePrivateGenerationRequestSchema = z.union([
