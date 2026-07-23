@@ -50,6 +50,7 @@ import {
   useGeneratePrivateNoodlePost,
   useConfirmNoodlerImagePrompts,
   useRunNoodlerAutoPostNow,
+  useRefreshAllNoodlerCreatorsNow,
   useGenerateNoodlerStageProfileDraft,
   useNoodle,
   useNoodlerAccounts,
@@ -357,6 +358,7 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
   const generatePost = useGeneratePrivateNoodlePost();
   const confirmImagePrompts = useConfirmNoodlerImagePrompts();
   const runAutoPostNow = useRunNoodlerAutoPostNow();
+  const refreshAllNow = useRefreshAllNoodlerCreatorsNow();
   const createPost = useCreateNoodlerPost();
   const generateProfileDraft = useGenerateNoodlerStageProfileDraft();
   const connectionsQuery = useConnections();
@@ -1003,6 +1005,20 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
               <p className="text-sm font-bold">Stage profiles</p>
               <p className="text-xs text-[var(--muted-foreground)]">Private identities and guided posts</p>
             </div>
+            <button
+              type="button"
+              onClick={() =>
+                refreshAllNow.mutate(undefined, {
+                  onError: (error) => toast.error(errorMessage(error, "Could not refresh NoodleR creators.")),
+                })
+              }
+              disabled={refreshAllNow.isPending}
+              title="Runs an automatic-style post now for every creator with automatic posting enabled."
+              className="inline-flex min-h-11 items-center gap-2 rounded-md border border-[var(--noodle-divider)] px-3 text-xs font-bold hover:bg-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {refreshAllNow.isPending ? <Loader2 size={15} className="animate-spin" /> : <RefreshCw size={15} />}
+              Refresh NoodleR now
+            </button>
             <button
               type="button"
               onClick={beginCreate}
@@ -2237,9 +2253,19 @@ function StageProfileView({
       >
         <div className="space-y-4">
           <p className="text-xs leading-5 text-[var(--muted-foreground)]">
-            When on, this creator posts on its own while Marinara runs, guided by its stage
-            identity and personality. Automatic posts are subscriber-only.
+            When on, this creator posts on its own while Marinara runs, guided by its Bio and
+            Stage voice below. Automatic posts are subscriber-only.
           </p>
+          <button
+            type="button"
+            onClick={() => {
+              setAutomationOpen(false);
+              onEdit();
+            }}
+            className="h-9 w-full rounded-full border border-[var(--noodle-divider)] px-3 text-xs font-bold hover:bg-[var(--accent)]"
+          >
+            Edit Bio &amp; Stage voice
+          </button>
           <label className="flex min-h-11 items-center justify-between gap-4 rounded-md border border-[var(--noodle-divider)] px-3 py-2">
             <span className="text-xs font-bold">Automatic posting enabled</span>
             <input
@@ -2295,27 +2321,6 @@ function StageProfileView({
                 className="h-5 w-5 accent-[var(--noodle-blue)]"
               />
             </label>
-            {autoPosting.imagesEnabled && (
-              <label className="flex min-h-11 items-center justify-between gap-4 rounded-md border border-[var(--noodle-divider)] px-3 py-2">
-                <span className="text-xs font-bold">Max images per post</span>
-                <select
-                  value={autoPosting.maxImagesPerRun}
-                  onChange={(event) =>
-                    updateAutoPosting.mutate({
-                      accountId: profile.id,
-                      maxImagesPerRun: Number(event.target.value),
-                    })
-                  }
-                  className="min-h-9 rounded-md border border-[var(--noodle-divider)] bg-transparent px-2 text-xs"
-                >
-                  {[0, 1, 2, 3, 4].map((value) => (
-                    <option key={value} value={value}>
-                      {value}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            )}
           </fieldset>
           <div className="space-y-1">
             <button

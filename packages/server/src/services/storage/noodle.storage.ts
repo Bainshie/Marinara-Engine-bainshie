@@ -1076,6 +1076,32 @@ export function createNoodleStorage(db: DB) {
       });
     },
 
+    /**
+     * Unconditional claim used by the global manual "Refresh NoodleR now" action: unlike
+     * `advanceAutoPostRun`, it does not require the slot to be due yet, since a manual
+     * refresh intentionally consumes a creator's near-future slot early. Still derives the
+     * next slot from the current cadence so the schedule's intent is preserved.
+     */
+    async claimAutoPostRunNow(id: string, nowIso: string): Promise<"claimed" | "skipped"> {
+      return db.transaction(async (tx) => {
+        const row = (await tx.select().from(noodleAccounts).where(eq(noodleAccounts.id, id)))[0];
+        if (!row || row.visibility !== "private") return "skipped";
+        const current = normalizeNoodleAccountSettings(row.settings);
+        const auto = current.scheduler.autoPosting;
+        if (!auto?.enabled) return "skipped";
+        const next = nextAutoPostRunAt(auto.intensity, new Date(nowIso));
+        const nextSettings: NoodleAccountSettings = {
+          ...current,
+          scheduler: { autoPosting: { ...auto, nextRunAt: next } },
+        };
+        await tx
+          .update(noodleAccounts)
+          .set({ settings: JSON.stringify(nextSettings), updatedAt: now() })
+          .where(eq(noodleAccounts.id, id));
+        return "claimed";
+      });
+    },
+
     /** Server-owned reschedule of a creator's next automatic run (validated future by the caller). */
     async rescheduleAutoPostRun(id: string, nextRunAt: string): Promise<NoodleAccount | null> {
       return db.transaction(async (tx) => {

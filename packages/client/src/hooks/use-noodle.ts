@@ -407,6 +407,20 @@ export function useRunNoodlerAutoPostNow() {
   });
 }
 
+export function useRefreshAllNoodlerCreatorsNow() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      api.post<{ outcomes: { accountId: string; status: string }[] }>("/noodle/noodler/auto-post/refresh-now"),
+    onSuccess: () =>
+      Promise.all([
+        qc.invalidateQueries({ queryKey: noodleKeys.privateAccounts() }),
+        qc.invalidateQueries({ queryKey: [...noodleKeys.privateRoot(), "posts"] }),
+        qc.invalidateQueries({ queryKey: noodleKeys.privateViewers() }),
+      ]),
+  });
+}
+
 export function useUpdateNoodleSettings() {
   const qc = useQueryClient();
   return useMutation({

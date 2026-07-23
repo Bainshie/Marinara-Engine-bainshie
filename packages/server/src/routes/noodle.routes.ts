@@ -60,6 +60,7 @@ import {
 import {
   createNoodlePrivatePost,
   generateNoodlePrivatePost,
+  refreshAllNoodlerCreatorsNow,
 } from "../services/noodle/noodle-private-post.operation.js";
 import { tryNoodlePrivateAccountOperation } from "../services/noodle/noodle-private-account-operation-lock.js";
 import { generateNoodlerStageProfileDraft } from "../services/noodle/noodle-stage-profile-draft.service.js";
@@ -677,6 +678,15 @@ export async function noodleRoutes(app: FastifyInstance) {
       logger.error(error, "[noodler] Manual run-now failed");
       return reply.code(500).send({ error: getErrorMessage(error) });
     }
+  });
+
+  // Global manual trigger: runs every automation-enabled creator (prioritizing those
+  // scheduled soonest), consuming each selected creator's near-future slot the same way
+  // an automatic run would. One creator's failure does not affect the others.
+  app.post("/noodler/auto-post/refresh-now", async (_req, reply) => {
+    const result = await refreshAllNoodlerCreatorsNow(app.db);
+    if (result.status === "disabled") return reply.code(404).send({ error: "Not Found" });
+    return { outcomes: result.outcomes };
   });
 
   app.patch("/accounts/:id/follows/:targetAccountId", async (req, reply) => {
