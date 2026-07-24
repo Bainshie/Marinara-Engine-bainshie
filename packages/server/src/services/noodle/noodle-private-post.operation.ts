@@ -1,16 +1,21 @@
 import type {
+  NoodleAccount,
   NoodlePrivateGenerationRequest,
   NoodlePrivatePostCreateInput,
   NoodlerManagedPost,
+  NoodlerRefreshNowOutcome,
 } from "@marinara-engine/shared";
+import type { NoodleImagePromptReviewItem } from "./noodle-public-images.service.js";
 import type { DB } from "../../db/connection.js";
+import { logger } from "../../lib/logger.js";
 import { createConnectionsStorage } from "../storage/connections.storage.js";
 import { createNoodleStorage } from "../storage/noodle.storage.js";
 import { generatePrivatePost } from "./noodle-private-generation.service.js";
 import { tryNoodlePrivateAccountOperation } from "./noodle-private-account-operation-lock.js";
+import { settleAgentJobsWithConcurrencyLimit } from "../agents/agent-concurrency.js";
 
 export type GenerateNoodlePrivatePostResult =
-  | { status: "generated"; post: NoodlerManagedPost }
+  | { status: "generated"; post: NoodlerManagedPost; imagePromptReview: NoodleImagePromptReviewItem | null }
   | { status: "disabled" }
   | { status: "busy" }
   | { status: "connection_required" }
@@ -44,10 +49,63 @@ export async function generateNoodlePrivatePost(
     if (!connectionId) return { status: "connection_required" } as const;
     const connection = await createConnectionsStorage(db).getWithKey(connectionId);
     if (!connection) return { status: "connection_not_found" } as const;
-    const post = await generatePrivatePost(db, { account, request, connection });
-    return { status: "generated", post } as const;
+    const generated = await generatePrivatePost(db, { account, request, connection });
+    return { status: "generated", post: generated.post, imagePromptReview: generated.imagePromptReview } as const;
   });
   return locked.acquired ? locked.value : { status: "busy" };
+}
+
+const MAX_CONCURRENT_MANUAL_REFRESH = 3;
+
+export type NoodlerRefreshNowResult =
+  | { status: "disabled" }
+  | { status: "ok"; outcomes: NoodlerRefreshNowOutcome[] };
+
+/**
+ * Global "Refresh NoodleR now": runs every automation-enabled creator, prioritizing those
+ * scheduled soonest, with bounded concurrency and per-creator typed outcomes so one
+ * creator's failure never rolls back another's successful post. Each selected creator's
+ * slot is consumed the same way an automatic run would consume it (advances `nextRunAt`
+ * under its own cadence) rather than resetting to an unrelated default.
+ */
+export async function refreshAllNoodlerCreatorsNow(db: DB): Promise<NoodlerRefreshNowResult> {
+  const noodle = createNoodleStorage(db);
+  const settings = await noodle.getSettings();
+  if (!settings.enableNoodler) return { status: "disabled" };
+
+  const accounts = await noodle.listAutoPostEnabledAccounts();
+  const nextRunAtMs = (account: NoodleAccount) => {
+    const nextRunAt = account.settings.scheduler.autoPosting?.nextRunAt;
+    return nextRunAt === null || nextRunAt === undefined ? Number.POSITIVE_INFINITY : Date.parse(nextRunAt);
+  };
+  const prioritized = [...accounts].sort((a, b) => nextRunAtMs(a) - nextRunAtMs(b));
+
+  const nowIso = new Date().toISOString();
+  const settled = await settleAgentJobsWithConcurrencyLimit(
+    prioritized,
+    MAX_CONCURRENT_MANUAL_REFRESH,
+    async (account): Promise<NoodlerRefreshNowOutcome> => {
+      const result = await generateNoodlePrivatePost(db, {
+        mode: "private",
+        targetAccountId: account.id,
+        access: "subscriber",
+      });
+      // Consume the slot only on a real post; busy/failed/skipped runs leave any explicit
+      // schedule edit intact instead of burning the creator's next automatic slot.
+      if (result.status === "generated") await noodle.claimAutoPostRunNow(account.id, nowIso);
+      // "disabled"/"busy" are no-op refreshes, not failures; surface them as skipped so the
+      // client doesn't lump a busy creator in with a real generation/connection failure.
+      const status = result.status === "disabled" || result.status === "busy" ? "skipped" : result.status;
+      return { accountId: account.id, status };
+    },
+  );
+
+  const outcomes = settled.map((entry, index): NoodlerRefreshNowOutcome => {
+    if (entry.status === "fulfilled") return entry.value;
+    logger.error(entry.reason, "[noodler] Global refresh failed for creator %s", prioritized[index]!.id);
+    return { accountId: prioritized[index]!.id, status: "error" };
+  });
+  return { status: "ok", outcomes };
 }
 
 export async function createNoodlePrivatePost(

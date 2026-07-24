@@ -88,7 +88,7 @@ const makeAccount = (id: string): NoodleAccount => ({
   settings: {
     profile: {},
     social: {},
-    scheduler: { autoPosting: { enabled: false, intensity: 1, nextRunAt: null } },
+    scheduler: { autoPosting: { enabled: false, intensity: 1, imagesEnabled: false, nextRunAt: null } },
     privacy: { access: { hiddenFromAccountIds: [], subscriptionIncludesPpv: false } },
   },
   visibility: "public",
@@ -389,13 +389,14 @@ assert.equal(
   }).success,
   false,
 );
+// Slice 8b: the manual Guide path may request image-prompt review on private generation.
 assert.equal(
   noodleGenerationRequestSchema.safeParse({
     mode: "private",
     targetAccountId: "private-1",
     reviewImagePromptsBeforeSend: true,
   }).success,
-  false,
+  true,
 );
 const privatePostMessages = buildPrivatePostMessages({
   account: { displayName: "Private Name", handle: "private_handle", bio: "Private bio" },
@@ -407,9 +408,25 @@ const privatePostMessages = buildPrivatePostMessages({
     privatePostGuide: "Write about tonight.",
     privateProjectWork: "Advance the current beat.",
   },
+  allowImagePrompt: false,
 });
 assert.match(privatePostMessages[0]?.content ?? "", /exactly one post for one private NoodleR creator page/u);
 assert.match(privatePostMessages[0]?.content ?? "", /Disclosure is secret/u);
+// With images disabled the model is told not to emit an image prompt.
+assert.match(privatePostMessages[0]?.content ?? "", /Do not create a poll or image prompt/u);
+// With images enabled it may return an optional imagePrompt.
+assert.match(
+  buildPrivatePostMessages({
+    account: { displayName: "Private Name", handle: "private_handle", bio: "Private bio" },
+    stagePersonality: "",
+    disclosureMode: "secret",
+    publicIdentity: null,
+    recentPosts: [],
+    request: {},
+    allowImagePrompt: true,
+  })[0]?.content ?? "",
+  /optional imagePrompt/u,
+);
 assert.match(privatePostMessages[1]?.content ?? "", /Private Name/u);
 assert.match(privatePostMessages[1]?.content ?? "", /Reserved and direct/u);
 assert.match(privatePostMessages[1]?.content ?? "", /Write about tonight\./u);

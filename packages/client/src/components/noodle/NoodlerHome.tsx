@@ -48,6 +48,9 @@ import {
   useDeleteNoodlerPost,
   useDeleteNoodlerStageProfile,
   useGeneratePrivateNoodlePost,
+  useConfirmNoodlerImagePrompts,
+  useRunNoodlerAutoPostNow,
+  useRefreshAllNoodlerCreatorsNow,
   useGenerateNoodlerStageProfileDraft,
   useNoodle,
   useNoodlerAccounts,
@@ -70,6 +73,11 @@ import { useConnections } from "../../hooks/use-connections";
 import { ApiError } from "../../lib/api-client";
 import { cn } from "../../lib/utils";
 import { useUIStore } from "../../stores/ui.store";
+import {
+  ImagePromptReviewModal,
+  type ImagePromptOverride,
+  type ImagePromptReviewItem,
+} from "../ui/ImagePromptReviewModal";
 import { BrowserChrome, formatTime } from "./NoodleBrowserChrome";
 import {
   NoodleAnchoredPopover,
@@ -348,12 +356,19 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
   const deleteProfile = useDeleteNoodlerStageProfile();
   const updateProfile = useUpdateNoodlerStageProfile();
   const generatePost = useGeneratePrivateNoodlePost();
+  const confirmImagePrompts = useConfirmNoodlerImagePrompts();
+  const runAutoPostNow = useRunNoodlerAutoPostNow();
+  const refreshAllNow = useRefreshAllNoodlerCreatorsNow();
   const createPost = useCreateNoodlerPost();
   const generateProfileDraft = useGenerateNoodlerStageProfileDraft();
   const connectionsQuery = useConnections();
   const connections = (connectionsQuery.data ?? []) as Array<{ id: string; name: string; model?: string }>;
   const [profileDraft, setProfileDraft] = useState<NoodleStageProfileInput | null>(null);
   const [draftPublicAccountId, setDraftPublicAccountId] = useState<string | null>(null);
+  const [imagePromptReview, setImagePromptReview] = useState<{
+    accountId: string;
+    items: ImagePromptReviewItem[];
+  } | null>(null);
   const [creationStep, setCreationStep] = useState<"source" | "disclosure" | "draft" | null>(null);
   const [creationDisclosure, setCreationDisclosure] = useState<NoodleIdentityDisclosure>("hinted");
   const [draftGuidance, setDraftGuidance] = useState("");
@@ -638,14 +653,45 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
 
   const submitGuidedPost = async ({ profileId, title, body, access, ppvPrice }: PrivatePostSubmission) => {
     const guide = serializePrivatePostGuide(title, body);
-    await generatePost.mutateAsync({
+    const result = await generatePost.mutateAsync({
       mode: "private",
       targetAccountId: profileId,
       ...(guide ? { privatePostGuide: guide } : {}),
       access,
       ...(access === "ppv" ? { ppvPrice } : {}),
     });
+    if (result.imagePromptReview) {
+      setImagePromptReview({ accountId: profileId, items: [result.imagePromptReview] });
+      toast.success("Private post generated. Review the image prompt to render it.");
+      return;
+    }
     toast.success("Private post generated.");
+  };
+
+  const submitRunNow = (accountId: string) => {
+    runAutoPostNow.mutate(accountId, {
+      // Run-now never requests prompt review, so it only ever yields a plain generated post.
+      onSuccess: () => toast.success("Automatic post generated."),
+      onError: (error) => toast.error(errorMessage(error, "Could not run an automatic post now.")),
+    });
+  };
+
+  const confirmReviewedImagePrompts = (overrides: ImagePromptOverride[]) => {
+    if (!imagePromptReview) return;
+    confirmImagePrompts.mutate(
+      { targetAccountId: imagePromptReview.accountId, prompts: overrides },
+      {
+        onSuccess: ({ finalized }) => {
+          setImagePromptReview(null);
+          if (finalized === 0) {
+            toast.error("No image was generated for that prompt.");
+            return;
+          }
+          toast.success("NoodleR image generated.");
+        },
+        onError: (error) => toast.error(errorMessage(error, "Could not generate the reviewed image.")),
+      },
+    );
   };
 
   const toggleCreatorSubscription = (creatorAccountId: string, subscribed: boolean) => {
@@ -703,6 +749,18 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
   // Reserve the same rail width as the feed view (see NoodleHome's "settings" rail) so
   // non-feed screens don't stretch the shell wider and look like a different layout.
   const emptyRightRail = <aside className="hidden w-[22rem] shrink-0 px-4 py-3 xl:block" aria-hidden="true" />;
+
+  // Shared review layer: Guide generation can be triggered from both the selected stage-profile
+  // view and the hub, so the confirmation modal must render on every branch that owns that action.
+  const reviewModal = (
+    <ImagePromptReviewModal
+      open={Boolean(imagePromptReview)}
+      items={imagePromptReview?.items ?? []}
+      isSubmitting={confirmImagePrompts.isPending}
+      onCancel={() => setImagePromptReview(null)}
+      onConfirm={confirmReviewedImagePrompts}
+    />
+  );
 
   if (!data && !isError) {
     return (
@@ -882,6 +940,8 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
           onGuidedPost={submitGuidedPost}
           manualPending={createPost.isPending}
           guidePending={generatePost.isPending}
+          onRunNow={submitRunNow}
+          runNowPending={runAutoPostNow.isPending}
           onUnlock={(postId) => {
             if (!viewerPersonaId) return;
             unlockPost.mutate(
@@ -905,6 +965,7 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
           }
         />
       </main>
+      {reviewModal}
       </NoodleShell>
     );
   }
@@ -955,6 +1016,34 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
               <p className="text-sm font-bold">Stage profiles</p>
               <p className="text-xs text-[var(--muted-foreground)]">Private identities and guided posts</p>
             </div>
+            <button
+              type="button"
+              onClick={() =>
+                refreshAllNow.mutate(undefined, {
+                  onSuccess: ({ outcomes }) => {
+                    const generated = outcomes.filter((o) => o.status === "generated").length;
+                    const skipped = outcomes.filter((o) => o.status === "skipped").length;
+                    const failed = outcomes.length - generated - skipped;
+                    if (outcomes.length === 0) {
+                      toast.success("No creators have automatic posting enabled.");
+                    } else if (failed === 0) {
+                      toast.success(`Generated ${generated} post${generated === 1 ? "" : "s"}.`);
+                    } else if (generated === 0) {
+                      toast.error(`All ${failed} creator${failed === 1 ? "" : "s"} failed to post (connection or provider error).`);
+                    } else {
+                      toast.error(`Generated ${generated}, ${failed} failed${skipped ? `, ${skipped} skipped` : ""}.`);
+                    }
+                  },
+                  onError: (error) => toast.error(errorMessage(error, "Could not refresh NoodleR creators.")),
+                })
+              }
+              disabled={refreshAllNow.isPending}
+              title="Runs an automatic-style post now for every creator with automatic posting enabled."
+              className="inline-flex min-h-11 items-center gap-2 rounded-md border border-[var(--noodle-divider)] px-3 text-xs font-bold hover:bg-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {refreshAllNow.isPending ? <Loader2 size={15} className="animate-spin" /> : <RefreshCw size={15} />}
+              Refresh NoodleR now
+            </button>
             <button
               type="button"
               onClick={beginCreate}
@@ -1080,6 +1169,7 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
         onToggleSubscription={toggleCreatorSubscription}
         togglePending={toggleSubscription.isPending}
       />
+      {reviewModal}
     </NoodleShell>
   );
 }
@@ -1807,6 +1897,8 @@ function StageProfileView({
   onGuidedPost,
   manualPending,
   guidePending,
+  onRunNow,
+  runNowPending,
   onUnlock,
   unlockPending,
   onToggleSubscription,
@@ -1836,6 +1928,8 @@ function StageProfileView({
   onGuidedPost: (input: PrivatePostSubmission) => Promise<void>;
   manualPending: boolean;
   guidePending: boolean;
+  onRunNow: (accountId: string) => void;
+  runNowPending: boolean;
   onUnlock: (postId: string) => void;
   unlockPending: boolean;
   onToggleSubscription: (creatorAccountId: string, subscribed: boolean) => void;
@@ -2178,9 +2272,19 @@ function StageProfileView({
       >
         <div className="space-y-4">
           <p className="text-xs leading-5 text-[var(--muted-foreground)]">
-            When on, this creator posts on its own while Marinara runs, guided by its stage
-            identity and personality. Automatic posts are subscriber-only.
+            When on, this creator posts on its own while Marinara runs, guided by its Bio and
+            Stage voice below. Automatic posts are subscriber-only.
           </p>
+          <button
+            type="button"
+            onClick={() => {
+              setAutomationOpen(false);
+              onEdit();
+            }}
+            className="h-9 w-full rounded-full border border-[var(--noodle-divider)] px-3 text-xs font-bold hover:bg-[var(--accent)]"
+          >
+            Edit Bio &amp; Stage voice
+          </button>
           <label className="flex min-h-11 items-center justify-between gap-4 rounded-md border border-[var(--noodle-divider)] px-3 py-2">
             <span className="text-xs font-bold">Automatic posting enabled</span>
             <input
@@ -2224,6 +2328,36 @@ function StageProfileView({
               About {autoPosting.intensity} automatic post{autoPosting.intensity === 1 ? "" : "s"} per day.
             </p>
           </fieldset>
+          <fieldset disabled={updateAutoPosting.isPending} className="space-y-2 disabled:opacity-50">
+            <label className="flex min-h-11 items-center justify-between gap-4 rounded-md border border-[var(--noodle-divider)] px-3 py-2">
+              <span className="text-xs font-bold">Generate an image with posts</span>
+              <input
+                type="checkbox"
+                checked={autoPosting.imagesEnabled}
+                onChange={(event) =>
+                  updateAutoPosting.mutate(
+                    { accountId: profile.id, imagesEnabled: event.target.checked },
+                    { onError: (error) => toast.error(errorMessage(error, "Could not update image generation.")) },
+                  )
+                }
+                className="h-5 w-5 accent-[var(--noodle-blue)]"
+              />
+            </label>
+          </fieldset>
+          <div className="space-y-1">
+            <button
+              type="button"
+              disabled={runNowPending}
+              onClick={() => onRunNow(profile.id)}
+              className="h-9 w-full rounded-full border border-[var(--noodle-divider)] px-3 text-xs font-bold hover:bg-[var(--accent)] disabled:opacity-50"
+            >
+              {runNowPending ? "Running…" : "Run now"}
+            </button>
+            <p className="text-[0.68rem] text-[var(--muted-foreground)]">
+              Generates one automatic-style post immediately (subscriber access), the same way a
+              scheduled run would. Useful for testing without waiting for the next slot.
+            </p>
+          </div>
           {autoPosting.enabled && (
             <div className="space-y-2 rounded-md border border-[var(--noodle-divider)] px-3 py-2">
               <p className="text-xs font-bold">Next automatic post</p>

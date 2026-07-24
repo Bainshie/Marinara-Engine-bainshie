@@ -104,6 +104,8 @@ type InsertInteractionCommand = {
   parentInteractionId: string | null;
 };
 type PrivatePostPersistenceInput = {
+  /** Optional caller-supplied id so a serving URL can be derived before the row is inserted. */
+  id?: string;
   authorAccountId: string;
   title?: string | null;
   content: string;
@@ -138,7 +140,7 @@ function emptyNoodleAccountSettings(): NoodleAccountSettings {
 }
 
 function defaultAutoPostingSettings(): NonNullable<NoodleAccountSchedulerSettings["autoPosting"]> {
-  return { enabled: false, intensity: 1, nextRunAt: null };
+  return { enabled: false, intensity: 1, imagesEnabled: false, nextRunAt: null };
 }
 
 export function normalizeScheduler(value: unknown): NoodleAccountSchedulerSettings {
@@ -152,6 +154,7 @@ export function normalizeScheduler(value: unknown): NoodleAccountSchedulerSettin
     autoPosting: {
       enabled: typeof raw.enabled === "boolean" ? raw.enabled : defaults.enabled,
       intensity: intensity.success ? intensity.data : defaults.intensity,
+      imagesEnabled: typeof raw.imagesEnabled === "boolean" ? raw.imagesEnabled : defaults.imagesEnabled,
       nextRunAt: raw.nextRunAt === null ? null : nextRunAtValid ? (raw.nextRunAt as string) : defaults.nextRunAt,
     },
   };
@@ -1002,6 +1005,8 @@ export function createNoodleStorage(db: DB) {
             ? {
                 enabled: patchAuto.enabled ?? currentAuto.enabled,
                 intensity: patchAuto.intensity ?? currentAuto.intensity,
+                // Image enablement/quota do not affect cadence, so they never reset nextRunAt.
+                imagesEnabled: patchAuto.imagesEnabled ?? currentAuto.imagesEnabled,
                 nextRunAt:
                   (patchAuto.enabled !== undefined && patchAuto.enabled !== currentAuto.enabled) ||
                   (patchAuto.intensity !== undefined && patchAuto.intensity !== currentAuto.intensity)
@@ -1064,6 +1069,32 @@ export function createNoodleStorage(db: DB) {
           .set({ settings: JSON.stringify(nextSettings), updatedAt: now() })
           .where(eq(noodleAccounts.id, id));
         return outcome;
+      });
+    },
+
+    /**
+     * Unconditional claim used by the global manual "Refresh NoodleR now" action: unlike
+     * `advanceAutoPostRun`, it does not require the slot to be due yet, since a manual
+     * refresh intentionally consumes a creator's near-future slot early. Still derives the
+     * next slot from the current cadence so the schedule's intent is preserved.
+     */
+    async claimAutoPostRunNow(id: string, nowIso: string): Promise<"claimed" | "skipped"> {
+      return db.transaction(async (tx) => {
+        const row = (await tx.select().from(noodleAccounts).where(eq(noodleAccounts.id, id)))[0];
+        if (!row || row.visibility !== "private") return "skipped";
+        const current = normalizeNoodleAccountSettings(row.settings);
+        const auto = current.scheduler.autoPosting;
+        if (!auto?.enabled) return "skipped";
+        const next = nextAutoPostRunAt(auto.intensity, new Date(nowIso));
+        const nextSettings: NoodleAccountSettings = {
+          ...current,
+          scheduler: { autoPosting: { ...auto, nextRunAt: next } },
+        };
+        await tx
+          .update(noodleAccounts)
+          .set({ settings: JSON.stringify(nextSettings), updatedAt: now() })
+          .where(eq(noodleAccounts.id, id));
+        return "claimed";
       });
     },
 
@@ -1226,7 +1257,7 @@ export function createNoodleStorage(db: DB) {
       const account = await this.getPrivateAccountById(input.authorAccountId);
       if (!account) return null;
       const timestamp = now();
-      const id = newId();
+      const id = input.id ?? newId();
       return db.transaction(async (tx) => {
         await tx.insert(noodlePosts).values({
           id,
@@ -1378,12 +1409,16 @@ export function createNoodleStorage(db: DB) {
         ) {
           return false;
         }
+        // Finalization owns the terminal transition: drop the pending-review marker so a
+        // finalized (success or failed) row never keeps contradictory pending lifecycle state.
+        const mergedMetadata = { ...parseRecord(row.metadata), ...input.metadata };
+        delete mergedMetadata.imagePendingReview;
         await tx
           .update(noodlePosts)
           .set({
             imageUrl: input.imageUrl,
             ...(input.imagePrompt !== undefined && { imagePrompt: input.imagePrompt }),
-            metadata: JSON.stringify({ ...parseRecord(row.metadata), ...input.metadata }),
+            metadata: JSON.stringify(mergedMetadata),
             imageClaimToken: null,
             imageClaimLeaseUntil: null,
             updatedAt: now(),
