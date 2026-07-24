@@ -158,6 +158,7 @@ import {
   illustratorBackgroundGenerationEnabled,
   illustratorRequestedBackground,
   illustratorTrackerLocationChanged,
+  resolveIllustratorImageConnectionId,
 } from "../../services/generation/illustrator-background-generation.js";
 import {
   isExclusiveIllustratorRetryTarget,
@@ -3045,17 +3046,11 @@ async function applyRetryResultEffects(args: {
           const rawSavedNegativePrompt = illustratorAgent?.resolved.settings?.imageNegativePrompt;
           const imagePositivePrompt = typeof rawImagePositivePrompt === "string" ? rawImagePositivePrompt.trim() : "";
           const savedNegativePrompt = typeof rawSavedNegativePrompt === "string" ? rawSavedNegativePrompt.trim() : "";
-          const chatGameImageConnectionId =
-            typeof chatMeta.gameImageConnectionId === "string" ? chatMeta.gameImageConnectionId.trim() : "";
-          const chatIllustratorImageConnectionId =
-            typeof chatMeta.illustratorImageConnectionId === "string"
-              ? chatMeta.illustratorImageConnectionId.trim()
-              : "";
-          const configuredImgConnId = illustratorAgent?.resolved.settings?.imageConnectionId;
-          const agentImageConnectionId = typeof configuredImgConnId === "string" ? configuredImgConnId.trim() : "";
-          const imageConnectionOverride =
-            (chat.mode === "game" ? chatGameImageConnectionId : chatIllustratorImageConnectionId) ||
-            agentImageConnectionId;
+          const imageConnectionOverride = resolveIllustratorImageConnectionId(
+            chat.mode,
+            chatMeta,
+            illustratorAgent?.resolved.settings?.imageConnectionId,
+          );
           let imgConnFull = imageConnectionOverride ? await conns.getWithKey(imageConnectionOverride) : null;
           if (imageConnectionOverride && !imgConnFull) {
             logger.warn(

@@ -90,6 +90,7 @@ import {
   resolveIllustratorPromptRuntime,
   type IllustratorPromptConnection,
 } from "../../packages/server/src/services/generation/illustrator-prompt-runtime.js";
+import { resolveIllustratorImageConnectionId } from "../../packages/server/src/services/generation/illustrator-background-generation.js";
 import { annotateContentWithReactions } from "../../packages/server/src/routes/generate/conversation-custom-assets.js";
 import {
   buildGameSessionReplayTurns,
@@ -728,6 +729,23 @@ assert.deepEqual(completeProfessorMariPersona.convoBehavior, {
 assert.equal(resolveInitialGameGmConnectionId(undefined, "chat-connection"), "chat-connection");
 assert.equal(resolveInitialGameGmConnectionId("explicit-connection", "chat-connection"), "explicit-connection");
 assert.equal(resolveInitialGameGmConnectionId(undefined, null), null);
+assert.equal(
+  resolveIllustratorImageConnectionId(
+    "game",
+    { gameImageConnectionId: " game-images ", illustratorImageConnectionId: "roleplay-images" },
+    "agent-images",
+  ),
+  "game-images",
+);
+assert.equal(
+  resolveIllustratorImageConnectionId(
+    "roleplay",
+    { gameImageConnectionId: "game-images", illustratorImageConnectionId: " roleplay-images " },
+    "agent-images",
+  ),
+  "roleplay-images",
+);
+assert.equal(resolveIllustratorImageConnectionId("game", {}, " agent-images "), "agent-images");
 assert.equal(GAME_SETUP_GENERATION_TIMEOUT_MS, 500_000);
 const previousGameDynamicImagePromptTimeout = process.env.GAME_DYNAMIC_IMAGE_PROMPT_TIMEOUT_MS;
 try {

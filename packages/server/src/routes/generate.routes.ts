@@ -134,6 +134,7 @@ import {
   illustratorBackgroundGenerationEnabled,
   illustratorRequestedBackground,
   illustratorTrackerLocationChanged,
+  resolveIllustratorImageConnectionId,
 } from "../services/generation/illustrator-background-generation.js";
 import { npcAvatarSlug, sanitizeGameNpcAvatarUrls } from "../services/game/npc-avatar-utils.js";
 import {
@@ -8077,16 +8078,11 @@ export async function generateRoutes(app: FastifyInstance) {
                 // Resolve connections: text LLM = connectionId, image gen = settings.imageConnectionId
                 const imagePositivePrompt = ((illustratorAgent?.settings?.imagePositivePrompt as string) ?? "").trim();
                 const savedNegativePrompt = ((illustratorAgent?.settings?.imageNegativePrompt as string) ?? "").trim();
-                const chatGameImageConnectionId =
-                  typeof chatMeta.gameImageConnectionId === "string" ? chatMeta.gameImageConnectionId.trim() : "";
-                const chatIllustratorImageConnectionId =
-                  typeof chatMeta.illustratorImageConnectionId === "string"
-                    ? chatMeta.illustratorImageConnectionId.trim()
-                    : "";
-                const agentImageConnectionId = ((illustratorAgent?.settings?.imageConnectionId as string) ?? "").trim();
-                const imageConnectionOverride =
-                  (requestChatMode === "game" ? chatGameImageConnectionId : chatIllustratorImageConnectionId) ||
-                  agentImageConnectionId;
+                const imageConnectionOverride = resolveIllustratorImageConnectionId(
+                  requestChatMode,
+                  chatMeta,
+                  illustratorAgent?.settings?.imageConnectionId,
+                );
                 let imgConnFull = imageConnectionOverride
                   ? await connections.getWithKey(imageConnectionOverride)
                   : null;
