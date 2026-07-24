@@ -2723,7 +2723,8 @@ function LockedPrivatePostCard({
   onToggleSubscription,
   onManage,
 }: {
-  post: Pick<NoodlerPostView, "id" | "access" | "ppvPrice" | "createdAt" | "title" | "imageUrl" | "interactions">;
+  post: Pick<NoodlerPostView, "id" | "access" | "ppvPrice" | "createdAt" | "title" | "imageUrl"> &
+    Partial<Pick<NoodlerPostView, "interactions">>;
   profile: NoodlerStageProfile;
   controllerOnly?: boolean;
   subscribed: boolean;
@@ -2734,87 +2735,89 @@ function LockedPrivatePostCard({
   onManage?: () => void;
 }) {
   const { t: localizeUi } = useUiTranslation();
-  const likeCount = post.interactions.filter((i) => i.type === "like").length;
-  const replyCount = post.interactions.filter((i) => i.type === "reply").length;
+  const interactions = post.interactions ?? [];
+  const likeCount = interactions.filter((i) => i.type === "like").length;
+  const replyCount = interactions.filter((i) => i.type === "reply").length;
   return (
-    <article className="border-b border-[var(--noodle-divider)]">
-      {/* Blurred thumbnail */}
-      <div className="relative h-48 w-full overflow-hidden bg-[var(--muted)]">
-        {post.imageUrl && (
-          <img
-            src={post.imageUrl}
-            alt=""
-            className="h-full w-full object-cover blur-md scale-110"
-          />
-        )}
-        <div className="absolute inset-0 bg-black/30" />
-        <span className="absolute bottom-3 left-3 flex items-center gap-1.5 rounded-full bg-black/60 px-3 py-1 text-xs font-semibold text-white">
-          <Lock size={11} /> {localizeUi("ui.noodle.lockedprivatepostcard.locked")}
-        </span>
-      </div>
-
-      {/* Card body */}
-      <div className="px-4 py-3">
-        {/* Author line */}
-        <p className="mb-2 truncate text-xs text-[var(--muted-foreground)]">
-          <span className="font-bold text-[var(--foreground)]">{profile.displayName}</span>
-          {" "}@{profile.handle} · {formatTime(post.createdAt)}
-        </p>
-
-        {/* Title */}
-        {post.title && (
-          <h3 className="mb-2 text-base font-bold leading-snug">{post.title}</h3>
-        )}
-
-        {/* Blurred content placeholder */}
-        {!controllerOnly && (
-          <div className="mb-3 space-y-2">
-            <div className="h-3 w-full rounded bg-[var(--muted)] opacity-60" />
-            <div className="h-3 w-4/5 rounded bg-[var(--muted)] opacity-60" />
+    <article className="border-b border-[var(--noodle-divider)] px-4 py-4 transition-colors hover:bg-[var(--accent)]/35">
+      <div className="flex gap-3">
+        <ProfileInitial profile={profile} />
+        <div className="min-w-0 flex-1">
+          {/* Author row */}
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <span className="font-semibold">{profile.displayName}</span>
+            <span className="text-xs text-[var(--muted-foreground)]">@{profile.handle}</span>
+            <span className="text-xs text-[var(--muted-foreground)]">{formatTime(post.createdAt)}</span>
+            <span className="rounded-full border border-[var(--noodle-divider)] px-2 py-0.5 text-[0.68rem] font-bold text-[var(--muted-foreground)]">
+              {post.access === "ppv"
+                ? localizeUi("ui.noodle.noodlepostcard.payToUnlock")
+                : localizeUi("ui.noodle.privatepostcomposer.subscribers")}
+            </span>
           </div>
-        )}
 
-        {/* CTA */}
-        {controllerOnly ? (
-          <p className="mb-3 text-xs text-[var(--muted-foreground)]">
-            {localizeUi("ui.noodle.lockedprivatepostcard.openTheControllerToolsToManageThisPost")}
-          </p>
-        ) : post.access === "ppv" ? (
-          <button
-            type="button"
-            disabled={unlockPending}
-            onClick={() => onUnlock(post.id)}
-            className="mb-3 inline-flex min-h-9 items-center gap-2 rounded-md border border-[var(--noodle-accent)] px-4 text-xs font-semibold text-[var(--noodle-accent)] hover:bg-[var(--noodle-accent)]/10 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            <Coins size={13} /> 0 · <Eye size={13} />
-            {localizeUi("ui.noodle.lockedprivatepostcard.unlock")}
-          </button>
-        ) : (
-          <button
-            type="button"
-            disabled={subscriptionPending}
-            onClick={() => onToggleSubscription(profile.id, subscribed)}
-            className="mb-3 min-h-9 rounded-md border border-[var(--noodle-accent)] px-4 text-xs font-semibold text-[var(--noodle-accent)] hover:bg-[var(--noodle-accent)]/10 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {localizeUi("ui.noodle.lockedprivatepostcard.subscribe")}
-          </button>
-        )}
-
-        {/* Footer */}
-        <div className="flex items-center gap-4 text-xs text-[var(--muted-foreground)]">
-          <span className="flex items-center gap-1"><Heart size={13} /> {likeCount}</span>
-          <span className="flex items-center gap-1"><MessageCircle size={13} /> {replyCount}</span>
-          <div className="ml-auto flex items-center gap-3">
-            {onManage && (
-              <button
-                type="button"
-                onClick={onManage}
-                className="flex items-center gap-1 hover:text-[var(--foreground)]"
-              >
-                <Pencil size={13} />{localizeUi("ui.noodle.lockedprivatepostcard.managePost")}
-              </button>
+          {/* Blurred media with Locked badge */}
+          <div className="relative mt-3 h-72 w-full overflow-hidden rounded-xl bg-[var(--muted)]">
+            {post.imageUrl && (
+              <img src={post.imageUrl} alt="" className="h-full w-full scale-110 object-cover blur-xl" />
             )}
-            <span className="flex items-center gap-1"><Lock size={13} /> {localizeUi("ui.noodle.lockedprivatepostcard.locked")}</span>
+            <div className="absolute inset-0 bg-black/30" />
+            <span className="absolute bottom-3 left-3 flex items-center gap-1.5 rounded-full bg-black/60 px-3 py-1 text-xs font-semibold text-white">
+              <Lock size={12} /> {localizeUi("ui.noodle.lockedprivatepostcard.locked")}
+            </span>
+          </div>
+
+          {/* Title */}
+          {post.title && <h3 className="mt-3 text-lg font-bold leading-snug">{post.title}</h3>}
+
+          {/* Blurred content placeholder */}
+          {!controllerOnly && (
+            <div className="mt-3 space-y-2">
+              <div className="h-3 w-full rounded bg-[var(--muted)]" />
+              <div className="h-3 w-4/5 rounded bg-[var(--muted)]" />
+            </div>
+          )}
+
+          {/* CTA */}
+          {controllerOnly ? (
+            <p className="mt-3 text-xs text-[var(--muted-foreground)]">
+              {localizeUi("ui.noodle.lockedprivatepostcard.openTheControllerToolsToManageThisPost")}
+            </p>
+          ) : post.access === "ppv" ? (
+            <button
+              type="button"
+              disabled={unlockPending}
+              onClick={() => onUnlock(post.id)}
+              className="mt-3 inline-flex min-h-10 items-center gap-2 rounded-md bg-[var(--noodle-accent)] px-4 text-xs font-bold text-zinc-950 disabled:cursor-not-allowed disabled:opacity-50 [&_svg]:!text-zinc-950"
+            >
+              <Coins size={14} /> 0 · <Eye size={14} /> {localizeUi("ui.noodle.lockedprivatepostcard.unlock")}
+            </button>
+          ) : (
+            <button
+              type="button"
+              disabled={subscriptionPending}
+              onClick={() => onToggleSubscription(profile.id, subscribed)}
+              className="mt-3 min-h-10 rounded-md bg-[var(--noodle-accent)] px-4 text-xs font-bold text-zinc-950 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {localizeUi("ui.noodle.lockedprivatepostcard.subscribe")}
+            </button>
+          )}
+
+          {/* Footer */}
+          <div className="mt-3 flex items-center gap-4 text-xs text-[var(--muted-foreground)]">
+            <span className="flex items-center gap-1"><Heart size={14} /> {likeCount}</span>
+            <span className="flex items-center gap-1"><MessageCircle size={14} /> {replyCount}</span>
+            <div className="ml-auto flex items-center gap-3">
+              {onManage && (
+                <button
+                  type="button"
+                  onClick={onManage}
+                  className="flex items-center gap-1 hover:text-[var(--foreground)]"
+                >
+                  <Pencil size={14} /> {localizeUi("ui.noodle.lockedprivatepostcard.managePost")}
+                </button>
+              )}
+              <span className="flex items-center gap-1"><Lock size={14} /> {localizeUi("ui.noodle.lockedprivatepostcard.locked")}</span>
+            </div>
           </div>
         </div>
       </div>
