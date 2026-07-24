@@ -516,7 +516,7 @@ type NoodlePostCardAuthor = Pick<
 >;
 export type NoodlePostCardModel = Pick<
   NoodlePost,
-  "id" | "authorAccountId" | "content" | "imageUrl" | "imagePrompt" | "metadata" | "createdAt"
+  "id" | "authorAccountId" | "content" | "imageUrl" | "imagePrompt" | "metadata" | "createdAt" | "access"
 > & {
   title: string | null;
   authorSnapshot: NoodlePostCardAuthor | null;
@@ -1387,6 +1387,9 @@ export function NoodlePostCard({
                 </button>
                 <span className="text-xs text-[var(--muted-foreground)]">@{author?.handle ?? "noodle"}</span>
                 <span className="text-xs text-[var(--muted-foreground)]">{formatTime(post.createdAt)}</span>
+                <span className="rounded-full border border-[var(--noodle-divider)] px-2 py-0.5 text-[0.68rem] font-bold text-[var(--muted-foreground)]">
+                  {post.access === "ppv" ?localizeUi("ui.noodle.noodlepostcard.payToUnlock") : post.access === "subscriber" ?localizeUi("ui.noodle.privatepostcomposer.subscribers") :localizeUi("ui.noodle.noodlepostcard.public")}
+                </span>
               </div>
               {ctx.postManagement && <div className="relative shrink-0">
                 <button

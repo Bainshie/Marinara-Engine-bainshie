@@ -12,6 +12,7 @@ import { useDialogFocusScope } from "../../hooks/use-dialog-focus-scope";
 import { useTranslation as useUiTranslation } from "react-i18next";
 
 export const NOODLE_BLUE = "#7EA7FF";
+export const NOODLE_PINK = "#FF7EC1";
 
 // The accent hex that drives `--noodle-accent` for every reused Noodle surface.
 // Provided at the shell root so descendants inherit via CSS var, and read here
@@ -165,7 +166,7 @@ export interface NoodleShellProps {
   rightRail?: ReactNode;
   /** Theme-dependent overlays (browser chrome strip, lightboxes, modals) that must render inside the token scope. */
   overlays?: ReactNode;
-  /** Accent color driving `--noodle-accent` for every reused surface. Defaults to Noodle blue. */
+  /** Accent hex driving `--noodle-accent` for every reused surface. NoodleR passes NOODLE_PINK; defaults to Noodle blue. */
   accent?: string;
   children: ReactNode;
 }

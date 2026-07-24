@@ -248,9 +248,9 @@ export function NoodleProfileSurface<TTab extends string = NoodleProfileTab>({
             )}
             {connections && <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-sm text-[var(--muted-foreground)]">
               <button type="button" onClick={connections.onOpenFollowing} className="transition-colors hover:text-[var(--noodle-accent)]">
-                <span className="font-bold text-[var(--foreground)]">{connections.followingCount}</span> {localizeUi("ui.noodle.connections.tabs.following")}</button>
+                <span className="font-bold text-[var(--foreground)]">{connections.followingCount}</span> {localizeUi("ui.noodle.noodleprofilesurface.following")}</button>
               <button type="button" onClick={connections.onOpenFollowers} className="transition-colors hover:text-[var(--noodle-accent)]">
-                <span className="font-bold text-[var(--foreground)]">{connections.followerCount}</span> {localizeUi("ui.noodle.connections.tabs.followers")}</button>
+                <span className="font-bold text-[var(--foreground)]">{connections.followerCount}</span> {localizeUi("ui.noodle.noodleprofilesurface.followers")}</button>
             </div>}
           </div>
         )}

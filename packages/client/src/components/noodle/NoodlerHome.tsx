@@ -96,6 +96,8 @@ import {
   type NoodlePostImageUpdate,
   useNoodlePostCardController,
 } from "./NoodlePostCard";
+import { NOODLE_AUTO_POST_INTENSITIES } from "./noodle-auto-post";
+import { NoodlerBulkCreateButton } from "./NoodlerBulkCreatePanel";
 import {
   Avatar,
   getNoodleAccentStyle,
@@ -182,6 +184,7 @@ function toNoodlePostCardModel(view: NoodlerPostView, profile: NoodlerStageProfi
   return {
     id: view.id,
     authorAccountId: view.authorAccountId,
+    access: view.access,
     title: view.title,
     content: view.content ?? "",
     imageUrl: view.imageUrl,
@@ -203,6 +206,7 @@ function toManagedPostCardModel(post: NoodlerManagedPost, profile: NoodlerStageP
   return {
     id: post.id,
     authorAccountId: post.authorAccountId,
+    access: post.access,
     title: post.title,
     content: post.content,
     imageUrl: post.imageUrl,
@@ -408,6 +412,7 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
   const generatePost = useGeneratePrivateNoodlePost();
   const confirmImagePrompts = useConfirmNoodlerImagePrompts();
   const runAutoPostNow = useRunNoodlerAutoPostNow();
+  const setupAutoPosting = useUpdateNoodlerAutoPosting();
   const refreshAllNow = useRefreshAllNoodlerCreatorsNow();
   const createPost = useCreateNoodlerPost();
   const generateProfileDraft = useGenerateNoodlerStageProfileDraft();
@@ -419,7 +424,9 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
     accountId: string;
     items: ImagePromptReviewItem[];
   } | null>(null);
-  const [creationStep, setCreationStep] = useState<"source" | "disclosure" | "draft" | null>(null);
+  const [creationStep, setCreationStep] = useState<"source" | "disclosure" | "draft" | "automatic" | null>(null);
+  const [autoPostSetupId, setAutoPostSetupId] = useState<string | null>(null);
+  const [autoPostSetupIntensity, setAutoPostSetupIntensity] = useState<NoodleAutoPostingIntensity>(3);
   const [creationDisclosure, setCreationDisclosure] = useState<NoodleIdentityDisclosure>("hinted");
   const [draftGuidance, setDraftGuidance] = useState("");
   const [draftConnectionId, setDraftConnectionId] = useState("");
@@ -729,8 +736,9 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
       setProfileDraft(null);
       setEditingProfileId(null);
       setDraftPublicAccountId(null);
-      setCreationStep(null);
       setPreviousDraft(null);
+      setCreationStep(null);
+      setAutoPostSetupId(null);
       onNavigate({ mode: "private", view: "profile", accountId: profile.id });
       toast.success(editingProfileId ?localizeUi("ui.noodle.noodlerhome.stageProfileUpdated") :localizeUi("ui.noodle.noodlerhome.stageProfileCreated"));
     };
@@ -983,6 +991,72 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
     );
   }
 
+  if (creationStep === "automatic" && autoPostSetupId) {
+    const accountId = autoPostSetupId;
+    const finishSetup = () => {
+      setAutoPostSetupId(null);
+      setCreationStep(null);
+      onNavigate({ mode: "private", view: "profile", accountId });
+    };
+    return (
+      <NoodleShell {...shellProps} rightRail={emptyRightRail}>
+        <NoodlerFrame onBack={finishSetup} title={localizeUi("ui.noodle.stageprofileview.automaticPosting")} hideBack>
+          <div className="mx-auto max-w-md space-y-5 p-4">
+            <div className="space-y-1">
+              <p className="text-sm font-bold">{localizeUi("ui.noodle.noodlerhome.shouldThisCreatorPostAutomatically")}</p>
+              <p className="text-xs text-[var(--muted-foreground)]">{localizeUi("ui.noodle.noodlerhome.automaticPostsPublishAsSubscriberAccessOnASchedule")}</p>
+            </div>
+            <fieldset className="space-y-2">
+              <legend className="text-xs font-bold">{localizeUi("ui.noodle.stageprofileview.cadence")}</legend>
+              <div className="flex gap-2">
+                {NOODLE_AUTO_POST_INTENSITIES.map(({ label, value }) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => setAutoPostSetupIntensity(value)}
+                    className={cn(
+                      "h-9 flex-1 rounded-full border px-3 text-xs font-bold",
+                      autoPostSetupIntensity === value
+                        ? "border-transparent bg-[var(--noodle-accent)] text-zinc-950"
+                        : "border-[var(--noodle-divider)] hover:bg-[var(--accent)]",
+                    )}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <p className="text-[0.68rem] text-[var(--muted-foreground)]">{localizeUi("ui.noodle.stageprofileview.about")} {autoPostSetupIntensity} {localizeUi("ui.noodle.stageprofileview.automaticPost")}{autoPostSetupIntensity === 1 ? "" :localizeUi("ui.noodle.stageprofileview.s")} {localizeUi("ui.noodle.stageprofileview.perDay")}</p>
+            </fieldset>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={finishSetup}
+                className="h-10 flex-1 rounded-full border border-[var(--noodle-divider)] px-3 text-xs font-bold hover:bg-[var(--accent)]"
+              >{localizeUi("ui.chat.dependencyworkspaceapprovalcard.notNow")}</button>
+              <button
+                type="button"
+                disabled={setupAutoPosting.isPending}
+                onClick={() =>
+                  setupAutoPosting.mutate(
+                    { accountId, enabled: true, intensity: autoPostSetupIntensity },
+                    {
+                      onSuccess: finishSetup,
+                      onError: (error) =>
+                        toast.error(errorMessage(error,localizeUi("ui.noodle.noodlerhome.couldNotEnableAutomaticPosting"))),
+                    },
+                  )
+                }
+                className="h-10 flex-1 rounded-full border border-transparent bg-[var(--noodle-accent)] px-3 text-xs font-bold text-zinc-950 disabled:opacity-50"
+              >
+                {setupAutoPosting.isPending ?localizeUi("ui.noodle.noodlerhome.enabling_5c258f0") :localizeUi("ui.noodle.noodlerhome.turnOn")}
+              </button>
+            </div>
+          </div>
+        </NoodlerFrame>
+      </NoodleShell>
+    );
+  }
+
   if (profileDraft || creationStep === "draft") {
     return (
       <NoodleShell {...shellProps} rightRail={emptyRightRail}>
@@ -1132,6 +1206,8 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
           onToggleSubscription={toggleCreatorSubscription}
           togglePending={toggleSubscription.isPending}
         />
+
+        <NoodlerBulkCreateButton />
       </div>
     </aside>
   );

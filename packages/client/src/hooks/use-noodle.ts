@@ -2,6 +2,8 @@
 // React Query: Noodle hooks
 // ──────────────────────────────────────────────
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
+import { useTranslation as useUiTranslation } from "react-i18next";
 import { api } from "../lib/api-client";
 import { useUIStore } from "../stores/ui.store";
 import type {
@@ -13,6 +15,7 @@ import type {
   NoodleAutoPostingIntensity,
   NoodleAutoPostRescheduleInput,
   NoodleBootstrap,
+  NoodleBulkPrivateAccountCreateInput,
   NoodleCreateInteractionInput,
   NoodleCreatePostInput,
   NoodleInteraction,
@@ -149,6 +152,28 @@ export function useCreateNoodlerStageProfile() {
         qc.invalidateQueries({ queryKey: noodleKeys.privateEligibleAccountsRoot() }),
         qc.invalidateQueries({ queryKey: noodleKeys.privateViewers() }),
       ]),
+  });
+}
+
+export function useBulkCreateNoodlerStageProfiles() {
+  const qc = useQueryClient();
+  const { t: localizeUi } = useUiTranslation();
+  return useMutation({
+    mutationFn: (input: NoodleBulkPrivateAccountCreateInput) =>
+      api.post<{ created: NoodlerManagedStageProfile[]; skipped: string[] }>("/noodle/noodler/accounts/bulk", input),
+    onSuccess: (result) => {
+      toast.success(
+        localizeUi("ui.noodle.noodlerbulkcreatepanel.createdValue1SkippedValue2", {
+          value1: result.created.length,
+          value2: result.skipped.length,
+        }),
+      );
+      return Promise.all([
+        qc.invalidateQueries({ queryKey: noodleKeys.privateAccounts() }),
+        qc.invalidateQueries({ queryKey: noodleKeys.privateEligibleAccountsRoot() }),
+        qc.invalidateQueries({ queryKey: noodleKeys.privateViewers() }),
+      ]);
+    },
   });
 }
 

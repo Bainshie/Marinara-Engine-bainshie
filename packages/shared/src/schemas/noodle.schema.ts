@@ -11,6 +11,7 @@ export const noodleCarryoverModeSchema = z.enum(["off", "conversation", "rolepla
 export const noodleCarryoverTargetSchema = z.enum(["conversation", "roleplay", "game"]);
 export const noodleThemeSchema = z.enum(["system", "light", "dark"]);
 export const noodleIdentityDisclosureSchema = z.enum(["open", "hinted", "secret"]);
+export const noodleAutoPostingIntensitySchema = z.union([z.literal(1), z.literal(3), z.literal(6)]);
 export const NOODLE_PRIVATE_POST_TITLE_MAX_LENGTH = 200;
 export const NOODLE_PRIVATE_POST_CONTENT_MAX_LENGTH = 4000;
 // Exact `Title:\n` + `\n\n` + `Body:\n` framing overhead from serializePrivatePostGuide.
@@ -49,6 +50,10 @@ export const DEFAULT_NOODLE_SETTINGS = {
   theme: "system",
   generationConnectionId: null,
   enableNoodler: false,
+  privateGenerationGuidance:
+    "All NoodleR creators and viewers are adults (18+). NSFW and explicit content are allowed when appropriate to the creator's personality and current context. Do not force it: stay true to each creator's voice rather than making every post sexual.",
+  autoPostingScheduleEnabled: true,
+  autoPostingDefaultIntensity: 1,
 } as const;
 
 export const noodleSettingsSchema = z.object({
@@ -99,6 +104,11 @@ export const noodleSettingsSchema = z.object({
   theme: noodleThemeSchema.default(DEFAULT_NOODLE_SETTINGS.theme),
   generationConnectionId: z.string().min(1).nullable().default(DEFAULT_NOODLE_SETTINGS.generationConnectionId),
   enableNoodler: z.boolean().default(DEFAULT_NOODLE_SETTINGS.enableNoodler),
+  privateGenerationGuidance: z.string().max(4000).default(DEFAULT_NOODLE_SETTINGS.privateGenerationGuidance),
+  autoPostingScheduleEnabled: z.boolean().default(DEFAULT_NOODLE_SETTINGS.autoPostingScheduleEnabled),
+  autoPostingDefaultIntensity: noodleAutoPostingIntensitySchema.default(
+    DEFAULT_NOODLE_SETTINGS.autoPostingDefaultIntensity,
+  ),
 });
 
 export const noodleSettingsUpdateSchema = noodleSettingsSchema.partial();
@@ -139,8 +149,6 @@ export const noodleAccountSocialSettingsSchema = z
     notificationsReadAt: z.string().datetime().optional(),
   })
   .strict();
-
-export const noodleAutoPostingIntensitySchema = z.union([z.literal(1), z.literal(3), z.literal(6)]);
 
 export const noodleAutoPostingSettingsSchema = z
   .object({
@@ -233,6 +241,18 @@ const noodleStageProfileShape = {
 
 export const noodleStageProfileSchema = z.object(noodleStageProfileShape).strict();
 export const noodlePrivateAccountCreateSchema = z.object({ stageProfile: noodleStageProfileSchema }).strict();
+export const noodleBulkPrivateAccountCreateSchema = z
+  .object({
+    // Cap and dedupe so one accepted request can't fan out into unbounded or
+    // duplicated sequential create work, and each public account has exactly one outcome.
+    publicAccountIds: z
+      .array(z.string().min(1).max(64))
+      .min(1)
+      .max(100)
+      .refine((ids) => new Set(ids).size === ids.length, { message: "Duplicate account IDs are not allowed." }),
+    disclosureMode: noodleIdentityDisclosureSchema,
+  })
+  .strict();
 export const noodleStageProfileUpdateSchema = z.object(noodleStageProfileShape).strict();
 
 export const noodleStageProfileDraftRequestSchema = z
@@ -680,6 +700,7 @@ export type NoodleAccountProfileUpdateInput = z.infer<typeof noodleAccountProfil
 export type NoodleAccountSettingsPatchInput = z.infer<typeof noodleAccountSettingsPatchSchema>;
 export type NoodleAccountFollowUpdateInput = z.infer<typeof noodleAccountFollowUpdateSchema>;
 export type NoodlePrivateAccountCreateInput = z.infer<typeof noodlePrivateAccountCreateSchema>;
+export type NoodleBulkPrivateAccountCreateInput = z.infer<typeof noodleBulkPrivateAccountCreateSchema>;
 export type NoodleStageProfileInput = z.infer<typeof noodleStageProfileSchema>;
 export type NoodleStageProfileDraftRequest = z.infer<typeof noodleStageProfileDraftRequestSchema>;
 export type NoodleInviteInput = z.infer<typeof noodleInviteSchema>;

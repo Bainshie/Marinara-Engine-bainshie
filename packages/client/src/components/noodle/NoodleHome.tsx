@@ -7,6 +7,7 @@ import {
   Bell,
   ChevronLeft,
   ChevronRight,
+  CalendarClock,
   Crop,
   Dices,
   FileText,
@@ -36,6 +37,7 @@ import {
   useRef,
   useState,
   type ChangeEvent,
+  type CSSProperties,
   type RefObject,
 } from "react";
 import { toast } from "sonner";
@@ -113,11 +115,14 @@ import {
   NoodleLogo,
   NoodleShell,
   NOODLE_BLUE,
+  NOODLE_PINK,
   NOODLE_ICON_SCOPE_CLASS,
   NOODLE_PERSONA_SWITCHER_PAGE_SIZE,
 } from "./NoodleShell";
 import type { NoodleNavigationState, NoodleProfileConnection } from "./noodle-navigation.types";
 import { NoodleProfileSurface } from "./NoodleProfileSurface";
+import { NoodlerBulkCreateButton } from "./NoodlerBulkCreatePanel";
+import { NoodlerScheduleManagerModal } from "./NoodlerScheduleManagerModal";
 import { BrowserChrome, formatTime } from "./NoodleBrowserChrome";
 import { NoodleImageComposer } from "./NoodleImageComposer";
 import { NoodlePollComposer } from "./NoodlePollComposer";
@@ -426,9 +431,23 @@ function FieldLabel({ children, help }: { children: React.ReactNode; help?: Reac
   );
 }
 
-function Section({ title, help, children }: { title: string; help?: React.ReactNode; children: React.ReactNode }) {
+function Section({
+  title,
+  help,
+  children,
+  accent,
+}: {
+  title: string;
+  help?: React.ReactNode;
+  children: React.ReactNode;
+  /** Overrides `--noodle-accent` for this section, e.g. NoodleR's pink brand accent. */
+  accent?: string;
+}) {
   return (
-    <section className="border-b border-[var(--noodle-divider)] p-4 last:border-b-0">
+    <section
+      className="border-b border-[var(--noodle-divider)] p-4 last:border-b-0"
+      style={accent ? ({ "--noodle-accent": accent } as CSSProperties) : undefined}
+    >
       <h3 className="mb-3 flex items-center gap-2 text-xs font-semibold text-[var(--foreground)]">
         <Settings2 size={13} className="text-[var(--noodle-accent)]" />
         {title}
@@ -489,6 +508,13 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
   const setSelectedPersonaId = useUIStore((state) => state.setNoodleSelectedPersonaId);
   const { data, isLoading, isError } = useNoodle();
   const noodlerAccountsQuery = useNoodlerAccounts(data?.settings.enableNoodler === true);
+  const noodlerCreators = noodlerAccountsQuery.data ?? [];
+  const noodlerCreatorCount = noodlerCreators.length;
+  const noodlerAutomatingCount = noodlerCreators.filter((profile) => profile.autoPosting.enabled).length;
+  const noodlerScheduleSummary =
+    noodlerCreatorCount === 0
+      ? "No managed creators yet. Create a stage profile to schedule automatic posts."
+      : `${noodlerCreatorCount} creator${noodlerCreatorCount === 1 ? "" : "s"} · ${noodlerAutomatingCount} automating`;
   const { data: activePersona } = useActivePersona();
   const { data: personasRaw } = usePersonas();
   const { data: charactersRaw } = useCharacters();
@@ -626,6 +652,8 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
   const [imageUrlDraft, setImageUrlDraft] = useState("");
   const [imageGenerationPromptDraft, setImageGenerationPromptDraft] = useState("");
   const [pollEditorValue, setPollEditorValue] = useState<NoodlePollInput | null>(null);
+  const [privateGenerationGuidanceDraft, setPrivateGenerationGuidanceDraft] = useState("");
+  const [scheduleManagerOpen, setScheduleManagerOpen] = useState(false);
   const [draftPoll, setDraftPoll] = useState<NoodlePollInput | null>(null);
   const postImageEditor = useNoodlePostImageEditor(async (post) => {
     if (!post.imageUrl) throw new Error("This post does not have an image.");
@@ -827,6 +855,10 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
   useEffect(() => {
     setImageGenerationPromptDraft(settings?.imageGenerationPrompt ?? "");
   }, [settings?.imageGenerationPrompt]);
+
+  useEffect(() => {
+    setPrivateGenerationGuidanceDraft(settings?.privateGenerationGuidance ?? "");
+  }, [settings?.privateGenerationGuidance]);
 
   useEffect(() => {
     if (!noodlePromptEditorOpen) setNoodlePromptDraft(noodlePromptText);
@@ -3129,6 +3161,49 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
             </div>
           </Section>
 
+          {settings.enableNoodler && (
+            <Section
+              accent={NOODLE_PINK}
+              title={localizeUi("ui.noodle.noodlehome.noodlerAutomation")}
+              help={localizeUi("ui.noodle.noodlehome.sharedCreativeGuidanceForEveryGeneratedNoodlerPostPlus")}
+            >
+              <div className="space-y-4">
+                <label className="block space-y-1.5">
+                  <FieldLabel help={localizeUi("ui.noodle.noodlehome.prependedToEveryNoodlerPrivatePostGenerationUseIt")}>{localizeUi("ui.noodle.noodlehome.generationGuidance")}</FieldLabel>
+                  <textarea
+                    value={privateGenerationGuidanceDraft}
+                    onChange={(event) => setPrivateGenerationGuidanceDraft(event.target.value)}
+                    onBlur={() => {
+                      if (privateGenerationGuidanceDraft !== settings.privateGenerationGuidance) {
+                        saveSettings({ privateGenerationGuidance: privateGenerationGuidanceDraft });
+                      }
+                    }}
+                    className={textareaClass}
+                  />
+                </label>
+
+                <div className="space-y-1.5">
+                  <FieldLabel help={localizeUi("ui.noodle.noodlehome.seeEveryManagedCreatorSAutomaticPostingStateAt")}>{localizeUi("ui.noodle.noodlehome.creatorSchedules")}</FieldLabel>
+                  <p className="text-xs text-[var(--muted-foreground)]">
+                    {noodlerScheduleSummary}
+                  </p>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <button
+                      type="button"
+                      disabled={noodlerCreatorCount === 0}
+                      onClick={() => setScheduleManagerOpen(true)}
+                      className="flex min-h-10 w-full items-center justify-center gap-2 rounded-md border border-[var(--noodle-accent)]/40 bg-[var(--noodle-accent)]/10 px-3 text-xs font-semibold text-[var(--noodle-accent)] transition-colors hover:bg-[var(--noodle-accent)]/15 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      <CalendarClock size={15} />
+                      {noodlerCreatorCount === 0 ?localizeUi("ui.noodle.noodlehome.noCreatorsToScheduleYet") :localizeUi("ui.noodle.noodlehome.manageSchedules")}
+                    </button>
+                    <NoodlerBulkCreateButton label={localizeUi("ui.noodle.noodlehome.addCreators")} />
+                  </div>
+                </div>
+              </div>
+            </Section>
+          )}
+
           <Section
             title={localizeUi("ui.noodle.noodlehome.resetNoodle")}
             help={localizeUi("ui.noodle.noodlehome.clearsTimelineContentWhileKeepingProfilesFollowsInvitesAnd")}
@@ -3149,6 +3224,8 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
           </Section>
         </>
       )}
+
+      <NoodlerScheduleManagerModal open={scheduleManagerOpen} onClose={() => setScheduleManagerOpen(false)} />
     </>
   );
 
