@@ -2,11 +2,13 @@
 // NoodleR: bulk-create stage profiles from eligible public accounts.
 // Mounted in the NoodleR hub right sidebar and (in a Modal) from settings.
 // ──────────────────────────────────────────────
-import { useState } from "react";
-import { Check, Loader2, Search, Users } from "lucide-react";
+import { useState, type CSSProperties } from "react";
+import { Check, Loader2, Plus, Search, Users } from "lucide-react";
 import type { NoodleIdentityDisclosure } from "@marinara-engine/shared";
 import { cn } from "../../lib/utils";
 import { useBulkCreateNoodlerStageProfiles, useNoodlerEligibleAccounts } from "../../hooks/use-noodle";
+import { Modal } from "../ui/Modal";
+import { NOODLE_PINK } from "./NoodleShell";
 
 const DISCLOSURE_CHOICES: { value: NoodleIdentityDisclosure; label: string }[] = [
   { value: "open", label: "Open" },
@@ -50,7 +52,7 @@ export function NoodlerBulkCreatePanel() {
   return (
     <div className="rounded-lg ring-1 ring-[var(--border)] bg-[var(--secondary)] p-3">
       <div className="flex items-center gap-2">
-        <Users size={15} className="shrink-0 text-[var(--noodle-blue)]" />
+        <Users size={15} className="shrink-0 text-[var(--noodle-accent)]" />
         <p className={eyebrowClass}>Bulk-create creators</p>
       </div>
       <label className="relative mt-2.5 block">
@@ -59,7 +61,7 @@ export function NoodlerBulkCreatePanel() {
           value={search}
           onChange={(event) => setSearch(event.target.value)}
           placeholder="Search accounts"
-          className="h-8 w-full rounded-md border border-[var(--border)] bg-[var(--background)] pl-8 pr-2 text-xs text-[var(--foreground)] outline-none transition-colors focus:border-[var(--noodle-blue)]"
+          className="h-8 w-full rounded-md border border-[var(--border)] bg-[var(--background)] pl-8 pr-2 text-xs text-[var(--foreground)] outline-none transition-colors focus:border-[var(--noodle-accent)]"
         />
       </label>
       <div className="mt-2 grid grid-cols-3 rounded-md ring-1 ring-[var(--border)] p-0.5" aria-label="Filter by kind">
@@ -72,7 +74,7 @@ export function NoodlerBulkCreatePanel() {
             className={cn(
               "h-7 rounded px-1.5 text-[0.68rem] font-semibold capitalize",
               kind === option
-                ? "bg-[var(--noodle-blue)] text-zinc-950"
+                ? "bg-[var(--noodle-accent)] text-zinc-950"
                 : "text-[var(--muted-foreground)] hover:bg-[var(--accent)]",
             )}
           >
@@ -95,7 +97,7 @@ export function NoodlerBulkCreatePanel() {
             <button
               type="button"
               onClick={toggleAll}
-              className="text-[0.68rem] font-semibold text-[var(--noodle-blue)] hover:underline"
+              className="text-[0.68rem] font-semibold text-[var(--noodle-accent)] hover:underline"
             >
               {selected.size === accounts.length ? "Deselect all" : "Select all"}
             </button>
@@ -115,7 +117,7 @@ export function NoodlerBulkCreatePanel() {
                   <span
                     className={cn(
                       "flex h-4 w-4 shrink-0 items-center justify-center rounded border",
-                      checked ? "border-[var(--noodle-blue)] bg-[var(--noodle-blue)]" : "border-[var(--border)]",
+                      checked ? "border-[var(--noodle-accent)] bg-[var(--noodle-accent)]" : "border-[var(--border)]",
                     )}
                   >
                     {checked && <Check size={11} className="text-zinc-950" />}
@@ -154,7 +156,7 @@ export function NoodlerBulkCreatePanel() {
                   className={cn(
                     "h-7 rounded px-1.5 text-[0.68rem] font-semibold",
                     disclosureMode === option.value
-                      ? "bg-[var(--noodle-blue)] text-zinc-950"
+                      ? "bg-[var(--noodle-accent)] text-zinc-950"
                       : "text-[var(--muted-foreground)] hover:bg-[var(--accent)]",
                   )}
                 >
@@ -168,7 +170,7 @@ export function NoodlerBulkCreatePanel() {
             type="button"
             onClick={create}
             disabled={selected.size === 0 || bulkCreate.isPending}
-            className="mt-3 flex h-9 w-full items-center justify-center gap-2 rounded-md bg-[var(--noodle-blue)] text-xs font-bold text-zinc-950 hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+            className="mt-3 flex h-9 w-full items-center justify-center gap-2 rounded-md bg-[var(--noodle-accent)] text-xs font-bold text-zinc-950 hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {bulkCreate.isPending && <Loader2 size={13} className="animate-spin" />}
             {selected.size === 0
@@ -178,5 +180,30 @@ export function NoodlerBulkCreatePanel() {
         </>
       )}
     </div>
+  );
+}
+
+export function NoodlerBulkCreateButton({ label = "Bulk-create creators" }: { label?: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="flex min-h-9 w-full items-center justify-center gap-2 rounded-md border border-[var(--noodle-accent)]/40 bg-[var(--noodle-accent)]/10 px-3 text-xs font-semibold text-[var(--noodle-accent)] transition-colors hover:bg-[var(--noodle-accent)]/15"
+      >
+        <Plus size={15} />
+        {label}
+      </button>
+      <Modal
+        open={open}
+        onClose={() => setOpen(false)}
+        title="Bulk-create creators"
+        width="max-w-md"
+        panelStyle={{ "--noodle-accent": NOODLE_PINK } as CSSProperties}
+      >
+        <NoodlerBulkCreatePanel />
+      </Modal>
+    </>
   );
 }

@@ -17,7 +17,6 @@ import {
   Loader2,
   MessageCircle,
   Pencil,
-  Plus,
   RefreshCw,
   RotateCcw,
   Save,
@@ -119,7 +118,7 @@ import type {
   NoodleProfileConnection,
 } from "./noodle-navigation.types";
 import { NoodleProfileSurface } from "./NoodleProfileSurface";
-import { NoodlerBulkCreatePanel } from "./NoodlerBulkCreatePanel";
+import { NoodlerBulkCreateButton } from "./NoodlerBulkCreatePanel";
 import { NoodlerScheduleManagerModal } from "./NoodlerScheduleManagerModal";
 import { BrowserChrome, formatTime } from "./NoodleBrowserChrome";
 import {
@@ -161,9 +160,9 @@ function isConnection(value: unknown): value is Partial<APIConnection> {
 }
 
 const fieldClass =
-  "mari-chrome-field h-9 w-full min-w-0 rounded-md border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)] px-3 text-xs text-[var(--foreground)] outline-none transition-colors focus:border-[var(--noodle-blue)]";
+  "mari-chrome-field h-9 w-full min-w-0 rounded-md border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)] px-3 text-xs text-[var(--foreground)] outline-none transition-colors focus:border-[var(--noodle-accent)]";
 const textareaClass =
-  "mari-chrome-field min-h-24 w-full min-w-0 resize-y rounded-md border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)] p-3 text-xs leading-relaxed text-[var(--foreground)] outline-none transition-colors focus:border-[var(--noodle-blue)]";
+  "mari-chrome-field min-h-24 w-full min-w-0 resize-y rounded-md border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)] p-3 text-xs leading-relaxed text-[var(--foreground)] outline-none transition-colors focus:border-[var(--noodle-accent)]";
 const labelClass =
   "text-[0.68rem] font-semibold uppercase tracking-normal text-[var(--marinara-chat-chrome-panel-muted)]";
 const NOODLE_INVITE_PAGE_SIZE = 50;
@@ -403,7 +402,7 @@ function MobileTimelineBackButton({ onClick }: { onClick: () => void }) {
     <button
       type="button"
       onClick={onClick}
-      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[var(--noodle-blue)] transition-colors hover:bg-[var(--noodle-blue)]/10 lg:hidden"
+      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[var(--noodle-accent)] transition-colors hover:bg-[var(--noodle-accent)]/10 lg:hidden"
       title="Back to timeline"
       aria-label="Back to Noodle timeline"
     >
@@ -430,16 +429,16 @@ function Section({
   title: string;
   help?: React.ReactNode;
   children: React.ReactNode;
-  /** Overrides `--noodle-blue` for this section, e.g. NoodleR's pink brand accent. */
+  /** Overrides `--noodle-accent` for this section, e.g. NoodleR's pink brand accent. */
   accent?: string;
 }) {
   return (
     <section
       className="border-b border-[var(--noodle-divider)] p-4 last:border-b-0"
-      style={accent ? ({ "--noodle-blue": accent } as CSSProperties) : undefined}
+      style={accent ? ({ "--noodle-accent": accent } as CSSProperties) : undefined}
     >
       <h3 className="mb-3 flex items-center gap-2 text-xs font-semibold text-[var(--foreground)]">
-        <Settings2 size={13} className="text-[var(--noodle-blue)]" />
+        <Settings2 size={13} className="text-[var(--noodle-accent)]" />
         {title}
         {help && <HelpTooltip text={help} side="bottom" wide />}
       </h3>
@@ -645,7 +644,6 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
   const [imageGenerationPromptDraft, setImageGenerationPromptDraft] = useState("");
   const [privateGenerationGuidanceDraft, setPrivateGenerationGuidanceDraft] = useState("");
   const [scheduleManagerOpen, setScheduleManagerOpen] = useState(false);
-  const [bulkCreateOpen, setBulkCreateOpen] = useState(false);
   const [pollQuestion, setPollQuestion] = useState("");
   const [pollOptions, setPollOptions] = useState(["", ""]);
   const [draftPoll, setDraftPoll] = useState<NoodlePollInput | null>(null);
@@ -1222,12 +1220,12 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
   const renderDraftPoll = () =>
     draftPoll ? (
       <section
-        className="mb-3 rounded-xl border border-[var(--noodle-blue)]/35 bg-[var(--noodle-blue)]/5 p-3"
+        className="mb-3 rounded-xl border border-[var(--noodle-accent)]/35 bg-[var(--noodle-accent)]/5 p-3"
         aria-label={`Draft poll: ${draftPoll.question}`}
         data-component="NoodleView.DraftPoll"
       >
         <div className="flex items-start gap-2">
-          <ListChecks size={16} className="mt-0.5 shrink-0 text-[var(--noodle-blue)]" />
+          <ListChecks size={16} className="mt-0.5 shrink-0 text-[var(--noodle-accent)]" />
           <div className="min-w-0 flex-1">
             <p className="text-xs font-bold leading-5">{draftPoll.question}</p>
             <ul className="mt-1 space-y-0.5 text-xs text-[var(--muted-foreground)]">
@@ -1241,7 +1239,7 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
           <button
             type="button"
             onClick={togglePollComposer}
-            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[var(--noodle-blue)] hover:bg-[var(--noodle-blue)]/10"
+            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[var(--noodle-accent)] hover:bg-[var(--noodle-accent)]/10"
             title="Edit poll"
             aria-label="Edit draft poll"
           >
@@ -1250,7 +1248,7 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
           <button
             type="button"
             onClick={() => setDraftPoll(null)}
-            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[var(--noodle-blue)] hover:bg-[var(--noodle-blue)]/10"
+            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[var(--noodle-accent)] hover:bg-[var(--noodle-accent)]/10"
             title="Remove poll"
             aria-label="Remove draft poll"
           >
@@ -2359,13 +2357,13 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
       >
         <div data-component="NoodleView.PromptSetting" className="space-y-3">
           <div className="flex items-start gap-3">
-            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-[var(--noodle-blue)]/10 text-[var(--noodle-blue)]">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-[var(--noodle-accent)]/10 text-[var(--noodle-accent)]">
               {noodlePromptLoading ? <Loader2 size={16} className="animate-spin" /> : <FileText size={16} />}
             </span>
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
                 <p className="text-xs font-semibold text-[var(--foreground)]">Timeline base prompt</p>
-                <span className="rounded-full border border-[var(--noodle-blue)]/30 bg-[var(--noodle-blue)]/10 px-2 py-0.5 text-[0.625rem] font-semibold text-[var(--noodle-blue)]">
+                <span className="rounded-full border border-[var(--noodle-accent)]/30 bg-[var(--noodle-accent)]/10 px-2 py-0.5 text-[0.625rem] font-semibold text-[var(--noodle-accent)]">
                   {noodlePromptOverride?.enabled === true ? "Custom" : "Default"}
                 </span>
               </div>
@@ -2381,7 +2379,7 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
               type="button"
               onClick={() => void restoreDefaultNoodlePrompt()}
               disabled={!noodlePromptHasOverride || resetNoodlePrompt.isPending}
-              className="inline-flex min-h-9 items-center justify-center gap-1.5 rounded-md border border-[var(--noodle-blue)]/35 px-3 text-xs font-semibold text-[var(--noodle-blue)] transition-colors hover:bg-[var(--noodle-blue)]/10 disabled:cursor-not-allowed disabled:opacity-45"
+              className="inline-flex min-h-9 items-center justify-center gap-1.5 rounded-md border border-[var(--noodle-accent)]/35 px-3 text-xs font-semibold text-[var(--noodle-accent)] transition-colors hover:bg-[var(--noodle-accent)]/10 disabled:cursor-not-allowed disabled:opacity-45"
             >
               {resetNoodlePrompt.isPending ? <Loader2 size={13} className="animate-spin" /> : <RotateCcw size={13} />}
               Restore default
@@ -2392,9 +2390,9 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
               disabled={
                 noodlePromptLoading || noodlePromptDetail.isError || noodlePromptDefault.isError || !noodlePromptText
               }
-              className="inline-flex min-h-9 items-center justify-center gap-2 rounded-md border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)] px-3 py-2 text-xs font-semibold text-[var(--foreground)] transition-colors hover:border-[var(--noodle-blue)]/60 hover:bg-[var(--noodle-blue)]/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-blue)]/70 disabled:cursor-not-allowed disabled:opacity-45"
+              className="inline-flex min-h-9 items-center justify-center gap-2 rounded-md border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)] px-3 py-2 text-xs font-semibold text-[var(--foreground)] transition-colors hover:border-[var(--noodle-accent)]/60 hover:bg-[var(--noodle-accent)]/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]/70 disabled:cursor-not-allowed disabled:opacity-45"
             >
-              <Pencil size={14} aria-hidden="true" className="shrink-0 text-[var(--noodle-blue)]" />
+              <Pencil size={14} aria-hidden="true" className="shrink-0 text-[var(--noodle-accent)]" />
               <span>Edit prompt</span>
             </button>
           </div>
@@ -2431,10 +2429,10 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
               <button
                 type="button"
                 onClick={() => setInviteFoldersOpen((open) => !open)}
-                className="flex w-full items-center gap-2 rounded-md border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)] px-3 py-2 text-left text-xs transition-colors hover:border-[var(--noodle-blue)]/60"
+                className="flex w-full items-center gap-2 rounded-md border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)] px-3 py-2 text-left text-xs transition-colors hover:border-[var(--noodle-accent)]/60"
                 aria-expanded={inviteFoldersOpen}
               >
-                <FolderOpen size={15} className="shrink-0 text-[var(--noodle-blue)]" />
+                <FolderOpen size={15} className="shrink-0 text-[var(--noodle-accent)]" />
                 <span className="min-w-0 flex-1">
                   <span className="block font-semibold">Add from Folder</span>
                   <span className="block truncate text-[0.68rem] text-[var(--muted-foreground)]">
@@ -2493,7 +2491,7 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
                       inviteCharacters.isPending ||
                       uninvitedSelectedFolderCharacterIds.length === 0
                     }
-                    className="flex min-h-10 w-full items-center justify-center gap-2 border-t border-[var(--marinara-chat-chrome-panel-border)] px-3 py-2 text-xs font-semibold text-[var(--noodle-blue)] transition-colors hover:bg-[var(--noodle-blue)]/10 disabled:cursor-not-allowed disabled:opacity-50"
+                    className="flex min-h-10 w-full items-center justify-center gap-2 border-t border-[var(--marinara-chat-chrome-panel-border)] px-3 py-2 text-xs font-semibold text-[var(--noodle-accent)] transition-colors hover:bg-[var(--noodle-accent)]/10 disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     {inviteCharacters.isPending ? (
                       <Loader2 size={14} className="animate-spin" />
@@ -2524,7 +2522,7 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
                   clearInvites.isPending ||
                   !hasActiveInvites
                 }
-                className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border border-[var(--noodle-blue)]/35 px-3 text-[0.68rem] font-semibold text-[var(--noodle-blue)] transition-colors hover:bg-[var(--noodle-blue)]/10 disabled:cursor-not-allowed disabled:opacity-50"
+                className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border border-[var(--noodle-accent)]/35 px-3 text-[0.68rem] font-semibold text-[var(--noodle-accent)] transition-colors hover:bg-[var(--noodle-accent)]/10 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {clearInvites.isPending ? <Loader2 size={13} className="animate-spin" /> : <UserMinus size={13} />}
                 Uninvite everybody
@@ -2537,7 +2535,7 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
                 disabled={!settings || updateSettings.isPending}
                 onClick={() => saveSettings({ allowRandomUsers: !(settings?.allowRandomUsers ?? false) })}
               >
-                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-[var(--noodle-blue)]/10 text-[var(--noodle-blue)]">
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-[var(--noodle-accent)]/10 text-[var(--noodle-accent)]">
                   <Dices size={16} />
                 </span>
                 <span className="min-w-0 flex-1">
@@ -2604,7 +2602,7 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
                 <button
                   type="button"
                   onClick={() => setInviteCharacterLimit((limit) => limit + NOODLE_INVITE_PAGE_SIZE)}
-                  className="w-full px-3 py-2 text-xs font-semibold text-[var(--noodle-blue)] transition-colors hover:bg-[var(--noodle-blue)]/10"
+                  className="w-full px-3 py-2 text-xs font-semibold text-[var(--noodle-accent)] transition-colors hover:bg-[var(--noodle-accent)]/10"
                 >
                   Load more ({visibleInviteCharacters.length} of {filteredCharacters.length})
                 </button>
@@ -2648,7 +2646,7 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
               />
               {scheduler && (
                 <div
-                  className="rounded-md border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--noodle-blue)]/5 px-3 py-2.5 text-xs"
+                  className="rounded-md border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--noodle-accent)]/5 px-3 py-2.5 text-xs"
                   data-component="NoodleView.RefreshSchedule"
                 >
                   <div className="flex items-center justify-between gap-3">
@@ -2709,13 +2707,13 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
                                     value={refreshTimeDraft}
                                     onChange={(event) => setRefreshTimeDraft(event.target.value)}
                                     aria-label={`New time for refresh ${index + 1}`}
-                                    className="mari-chrome-field h-8 w-[6.5rem] rounded-md border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)] px-2 text-xs text-[var(--foreground)] outline-none focus:border-[var(--noodle-blue)]"
+                                    className="mari-chrome-field h-8 w-[6.5rem] rounded-md border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)] px-2 text-xs text-[var(--foreground)] outline-none focus:border-[var(--noodle-accent)]"
                                   />
                                   <button
                                     type="button"
                                     onClick={cancelRefreshTimeEdit}
                                     disabled={rescheduleRefresh.isPending}
-                                    className="flex h-8 w-8 items-center justify-center rounded-full text-[var(--noodle-blue)] transition-colors hover:bg-[var(--noodle-blue)]/10 disabled:opacity-50"
+                                    className="flex h-8 w-8 items-center justify-center rounded-full text-[var(--noodle-accent)] transition-colors hover:bg-[var(--noodle-accent)]/10 disabled:opacity-50"
                                     title="Cancel"
                                     aria-label="Cancel reschedule"
                                   >
@@ -2729,7 +2727,7 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
                                       !refreshTimeDraft ||
                                       refreshTimeDraft === originalClockTime
                                     }
-                                    className="h-8 rounded-full bg-[var(--noodle-blue)] px-3 text-[0.68rem] font-bold text-zinc-950 transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                                    className="h-8 rounded-full bg-[var(--noodle-accent)] px-3 text-[0.68rem] font-bold text-zinc-950 transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
                                   >
                                     {rescheduleRefresh.isPending ? "Saving" : "Save"}
                                   </button>
@@ -2739,7 +2737,7 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
                                   type="button"
                                   onClick={() => beginRefreshTimeEdit(time)}
                                   disabled={rescheduleRefresh.isPending}
-                                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[var(--noodle-blue)] transition-colors hover:bg-[var(--noodle-blue)]/10 disabled:opacity-50"
+                                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[var(--noodle-accent)] transition-colors hover:bg-[var(--noodle-accent)]/10 disabled:opacity-50"
                                   title={`Reschedule ${formatNoodleRefreshTime(time, scheduler.timezone)}`}
                                   aria-label={`Reschedule refresh ${index + 1}`}
                                 >
@@ -2753,7 +2751,7 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
                     </div>
                   )}
                   {scheduler.lastError && (
-                    <p className="mt-1 line-clamp-2 leading-5 text-[var(--noodle-blue)]" title={scheduler.lastError}>
+                    <p className="mt-1 line-clamp-2 leading-5 text-[var(--noodle-accent)]" title={scheduler.lastError}>
                       Waiting: {scheduler.lastError}
                     </p>
                   )}
@@ -3077,7 +3075,7 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
                   else saveSettings({ enableNoodler: false });
                 }}
               />
-              <p className="rounded-lg border border-[var(--noodle-divider)] bg-[var(--noodle-blue)]/10 px-3 py-2 text-xs leading-5 text-[var(--muted-foreground)]">
+              <p className="rounded-lg border border-[var(--noodle-divider)] bg-[var(--noodle-accent)]/10 px-3 py-2 text-xs leading-5 text-[var(--muted-foreground)]">
                 NoodleR is still being implemented and is not usable or finalized yet. Please do not submit bug reports
                 or feature requests for it while it is in development.
               </p>
@@ -3086,14 +3084,14 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
                   <button
                     type="button"
                     onClick={openNoodler}
-                    className="flex min-h-10 w-full items-center justify-center rounded-md border border-[var(--noodle-blue)]/40 bg-[var(--noodle-blue)]/10 px-3 text-xs font-semibold text-[var(--noodle-blue)] transition-colors hover:bg-[var(--noodle-blue)]/15"
+                    className="flex min-h-10 w-full items-center justify-center rounded-md border border-[var(--noodle-accent)]/40 bg-[var(--noodle-accent)]/10 px-3 text-xs font-semibold text-[var(--noodle-accent)] transition-colors hover:bg-[var(--noodle-accent)]/15"
                   >
                     Open NoodleR
                   </button>
                   <button
                     type="button"
                     onClick={() => onNavigate({ mode: "private", view: "profiles" })}
-                    className="flex min-h-10 w-full items-center justify-center gap-2 rounded-md border border-[var(--noodle-blue)]/40 bg-[var(--noodle-blue)]/10 px-3 text-xs font-semibold text-[var(--noodle-blue)] transition-colors hover:bg-[var(--noodle-blue)]/15"
+                    className="flex min-h-10 w-full items-center justify-center gap-2 rounded-md border border-[var(--noodle-accent)]/40 bg-[var(--noodle-accent)]/10 px-3 text-xs font-semibold text-[var(--noodle-accent)] transition-colors hover:bg-[var(--noodle-accent)]/15"
                   >
                     <Settings2 size={15} />
                     Manage stage profiles
@@ -3138,19 +3136,12 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
                       type="button"
                       disabled={noodlerCreatorCount === 0}
                       onClick={() => setScheduleManagerOpen(true)}
-                      className="flex min-h-10 w-full items-center justify-center gap-2 rounded-md border border-[var(--noodle-blue)]/40 bg-[var(--noodle-blue)]/10 px-3 text-xs font-semibold text-[var(--noodle-blue)] transition-colors hover:bg-[var(--noodle-blue)]/15 disabled:cursor-not-allowed disabled:opacity-50"
+                      className="flex min-h-10 w-full items-center justify-center gap-2 rounded-md border border-[var(--noodle-accent)]/40 bg-[var(--noodle-accent)]/10 px-3 text-xs font-semibold text-[var(--noodle-accent)] transition-colors hover:bg-[var(--noodle-accent)]/15 disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       <CalendarClock size={15} />
                       {noodlerCreatorCount === 0 ? "No creators to schedule yet" : "Manage schedules"}
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => setBulkCreateOpen(true)}
-                      className="flex min-h-10 w-full items-center justify-center gap-2 rounded-md border border-[var(--noodle-blue)]/40 bg-[var(--noodle-blue)]/10 px-3 text-xs font-semibold text-[var(--noodle-blue)] transition-colors hover:bg-[var(--noodle-blue)]/15"
-                    >
-                      <Plus size={15} />
-                      Add creators
-                    </button>
+                    <NoodlerBulkCreateButton label="Add creators" />
                   </div>
                 </div>
               </div>
@@ -3165,12 +3156,12 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
               type="button"
               onClick={resetTimeline}
               disabled={resetNoodleTimeline.isPending}
-              className="flex min-h-10 w-full items-center justify-center gap-2 rounded-md border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)] px-3 py-2 text-xs font-semibold text-[var(--foreground)] transition-colors hover:border-[var(--noodle-blue)]/60 hover:bg-[var(--noodle-blue)]/10 disabled:cursor-not-allowed disabled:opacity-50"
+              className="flex min-h-10 w-full items-center justify-center gap-2 rounded-md border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)] px-3 py-2 text-xs font-semibold text-[var(--foreground)] transition-colors hover:border-[var(--noodle-accent)]/60 hover:bg-[var(--noodle-accent)]/10 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {resetNoodleTimeline.isPending ? (
                 <Loader2 size={14} className="animate-spin" />
               ) : (
-                <Trash2 size={14} className="text-[var(--noodle-blue)]" />
+                <Trash2 size={14} className="text-[var(--noodle-accent)]" />
               )}
               {resetNoodleTimeline.isPending ? "Resetting Noodle" : "Reset Noodle Timeline"}
             </button>
@@ -3179,15 +3170,6 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
       )}
 
       <NoodlerScheduleManagerModal open={scheduleManagerOpen} onClose={() => setScheduleManagerOpen(false)} />
-      <Modal
-        open={bulkCreateOpen}
-        onClose={() => setBulkCreateOpen(false)}
-        title="Add creators"
-        width="max-w-md"
-        panelStyle={{ "--noodle-blue": NOODLE_PINK } as CSSProperties}
-      >
-        <NoodlerBulkCreatePanel />
-      </Modal>
     </>
   );
 
@@ -3278,7 +3260,7 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
         <button
           type="button"
           onClick={() => openProfile(account)}
-          className="flex min-w-0 flex-1 items-start gap-3 text-left transition-colors hover:text-[var(--noodle-blue)]"
+          className="flex min-w-0 flex-1 items-start gap-3 text-left transition-colors hover:text-[var(--noodle-accent)]"
         >
           <Avatar account={account} />
           <span className="min-w-0 flex-1">
@@ -3321,7 +3303,7 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
       <button
         type="button"
         onClick={() => openProfile(item.account)}
-        className="min-w-0 flex-1 text-left transition-colors hover:text-[var(--noodle-blue)]"
+        className="min-w-0 flex-1 text-left transition-colors hover:text-[var(--noodle-accent)]"
       >
         <span className="block truncate text-sm font-bold">{item.account.displayName}</span>
         <span className="block truncate text-sm text-[var(--muted-foreground)]">@{item.account.handle}</span>
@@ -3348,7 +3330,7 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
             <Avatar account={actor} />
           </button>
         ) : (
-          <Heart size={28} className="text-[var(--noodle-blue)]" />
+          <Heart size={28} className="text-[var(--noodle-accent)]" />
         )}
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
@@ -3356,7 +3338,7 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
               type="button"
               onClick={() => openProfile(item.actorAccount)}
               disabled={!item.actorAccount}
-              className="font-bold transition-colors enabled:hover:text-[var(--noodle-blue)] disabled:cursor-default"
+              className="font-bold transition-colors enabled:hover:text-[var(--noodle-accent)] disabled:cursor-default"
             >
               {actor?.displayName ?? "Noodle User"}
             </button>
@@ -3387,14 +3369,14 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
             <Avatar account={actor} />
           </button>
         ) : (
-          <MessageCircle size={28} className="text-[var(--noodle-blue)]" />
+          <MessageCircle size={28} className="text-[var(--noodle-accent)]" />
         )}
         <button
           type="button"
           onClick={() => openNotificationTarget(item.post.id, item.interactionId)}
           data-noodle-notification-target={item.interactionId ?? item.post.id}
           data-noodle-notification-kind={item.kind}
-          className="-m-2 min-w-0 flex-1 rounded-lg p-2 text-left outline-none transition-colors hover:bg-[var(--noodle-blue)]/10 focus-visible:ring-2 focus-visible:ring-[var(--noodle-blue)]/70"
+          className="-m-2 min-w-0 flex-1 rounded-lg p-2 text-left outline-none transition-colors hover:bg-[var(--noodle-accent)]/10 focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]/70"
           title={item.kind === "reply" ? "Open reply in timeline" : "Open post in timeline"}
           aria-label={
             item.kind === "reply"
@@ -3442,7 +3424,7 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
               type="button"
               onClick={() => imageFileRef.current?.click()}
               disabled={uploadGlobalImages.isPending}
-              className="h-9 w-full rounded-full bg-[var(--noodle-blue)] px-4 text-xs font-bold text-zinc-950 transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+              className="h-9 w-full rounded-full bg-[var(--noodle-accent)] px-4 text-xs font-bold text-zinc-950 transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {uploadGlobalImages.isPending ? "Uploading..." : "Upload From Device"}
             </button>
@@ -3463,7 +3445,7 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
             <button
               type="button"
               onClick={applyImageUrl}
-              className="h-9 w-full rounded-full border border-[var(--noodle-divider)] px-4 text-xs font-bold text-[var(--noodle-blue)] transition-colors hover:bg-[var(--noodle-blue)]/10"
+              className="h-9 w-full rounded-full border border-[var(--noodle-divider)] px-4 text-xs font-bold text-[var(--noodle-accent)] transition-colors hover:bg-[var(--noodle-accent)]/10"
             >
               Attach URL
             </button>
@@ -3507,14 +3489,14 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
               <button
                 type="button"
                 onClick={() => setPollOptions((current) => (current.length >= 4 ? current : [...current, ""]))}
-                className="h-8 flex-1 rounded-full border border-[var(--noodle-divider)] px-3 text-xs font-semibold text-[var(--noodle-blue)] hover:bg-[var(--noodle-blue)]/10"
+                className="h-8 flex-1 rounded-full border border-[var(--noodle-divider)] px-3 text-xs font-semibold text-[var(--noodle-accent)] hover:bg-[var(--noodle-accent)]/10"
               >
                 Add Option
               </button>
               <button
                 type="button"
                 onClick={applyPoll}
-                className="h-8 flex-1 rounded-full bg-[var(--noodle-blue)] px-3 text-xs font-bold text-zinc-950 transition-opacity hover:opacity-90"
+                className="h-8 flex-1 rounded-full bg-[var(--noodle-accent)] px-3 text-xs font-bold text-zinc-950 transition-opacity hover:opacity-90"
               >
                 {draftPoll ? "Update Poll" : "Add Poll"}
               </button>
@@ -3549,8 +3531,8 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
     <div className="min-h-full" data-component="NoodleView.MobileSearch">
       <div className="sticky top-0 z-20 flex items-center gap-2 border-b border-[var(--noodle-divider)] bg-[var(--background)]/95 px-2 py-3 backdrop-blur">
         <MobileTimelineBackButton onClick={openMobileHomeTimeline} />
-        <label className="flex h-11 min-w-0 flex-1 items-center gap-2 rounded-full bg-[var(--accent)] px-4 text-sm ring-1 ring-inset ring-[var(--noodle-divider)] transition-colors focus-within:ring-[var(--noodle-blue)]">
-          <Search size={18} className="shrink-0 text-[var(--noodle-blue)]" />
+        <label className="flex h-11 min-w-0 flex-1 items-center gap-2 rounded-full bg-[var(--accent)] px-4 text-sm ring-1 ring-inset ring-[var(--noodle-divider)] transition-colors focus-within:ring-[var(--noodle-accent)]">
+          <Search size={18} className="shrink-0 text-[var(--noodle-accent)]" />
           <input
             type="search"
             value={postSearch}
@@ -3563,7 +3545,7 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
             <button
               type="button"
               onClick={() => setPostSearch("")}
-              className="flex h-7 w-7 items-center justify-center rounded-full text-[var(--noodle-blue)] hover:bg-[var(--noodle-blue)]/10"
+              className="flex h-7 w-7 items-center justify-center rounded-full text-[var(--noodle-accent)] hover:bg-[var(--noodle-accent)]/10"
               title="Clear search"
               aria-label="Clear search"
             >
@@ -3607,7 +3589,7 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
                 <button
                   type="button"
                   onClick={() => openProfile(character.account)}
-                  className="flex min-w-0 flex-1 items-center gap-3 rounded-lg text-left transition-colors hover:text-[var(--noodle-blue)]"
+                  className="flex min-w-0 flex-1 items-center gap-3 rounded-lg text-left transition-colors hover:text-[var(--noodle-accent)]"
                 >
                   <Avatar account={character.account} size="sm" />
                   <span className="min-w-0 flex-1">
@@ -3638,8 +3620,8 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
   const rightRailContent = (
     <aside className="hidden w-[22rem] shrink-0 px-4 py-3 xl:block">
       <div className="sticky top-3 space-y-4">
-        <label className="flex h-11 items-center gap-2 rounded-full border border-[var(--noodle-divider)] bg-[var(--background)] px-4 text-sm transition-colors focus-within:border-[var(--noodle-blue)]">
-          <Search size={17} className="shrink-0 text-[var(--noodle-blue)]" />
+        <label className="flex h-11 items-center gap-2 rounded-full border border-[var(--noodle-divider)] bg-[var(--background)] px-4 text-sm transition-colors focus-within:border-[var(--noodle-accent)]">
+          <Search size={17} className="shrink-0 text-[var(--noodle-accent)]" />
           <input
             value={postSearch}
             onChange={(event) => handleSearchChange(event.target.value)}
@@ -3650,7 +3632,7 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
             <button
               type="button"
               onClick={() => setPostSearch("")}
-              className="flex h-6 w-6 items-center justify-center rounded-full text-[var(--noodle-blue)] hover:bg-[var(--noodle-blue)]/10"
+              className="flex h-6 w-6 items-center justify-center rounded-full text-[var(--noodle-accent)] hover:bg-[var(--noodle-accent)]/10"
               title="Clear search"
             >
               <X size={13} />
@@ -3669,7 +3651,7 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
                   <button
                     type="button"
                     onClick={() => openProfile(character.account)}
-                    className="flex min-w-0 flex-1 items-center gap-3 rounded-lg text-left transition-colors hover:text-[var(--noodle-blue)]"
+                    className="flex min-w-0 flex-1 items-center gap-3 rounded-lg text-left transition-colors hover:text-[var(--noodle-accent)]"
                   >
                     <Avatar account={character.account} size="sm" />
                     <span className="min-w-0 flex-1">
@@ -3787,7 +3769,7 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
                     {personaAccount ? (
                       <Avatar account={personaAccount} size="sm" />
                     ) : (
-                      <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--noodle-blue)]/15 ring-1 ring-[var(--noodle-blue)]/25">
+                      <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--noodle-accent)]/15 ring-1 ring-[var(--noodle-accent)]/25">
                         <AtSign size={18} />
                       </span>
                     )}
@@ -3799,7 +3781,7 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
               {activeNoodleView === "home" &&
                 (isAccountSearch ? (
                   <div className="sticky top-14 z-20 flex h-12 items-center gap-3 border-b border-[var(--noodle-divider)] bg-[var(--background)]/95 px-4 backdrop-blur lg:top-0">
-                    <AtSign size={19} className="text-[var(--noodle-blue)]" />
+                    <AtSign size={19} className="text-[var(--noodle-accent)]" />
                     <div className="min-w-0">
                       <h2 className="truncate text-sm font-bold">Accounts</h2>
                       <p className="truncate text-[0.68rem] text-[var(--muted-foreground)]">
@@ -3822,7 +3804,7 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
                       >
                         {tab.label}
                         {timelineTab === tab.id && (
-                          <span className="absolute bottom-0 left-1/2 h-1 w-14 -translate-x-1/2 rounded-full bg-[var(--noodle-blue)]" />
+                          <span className="absolute bottom-0 left-1/2 h-1 w-14 -translate-x-1/2 rounded-full bg-[var(--noodle-accent)]" />
                         )}
                       </button>
                     ))}
@@ -3836,7 +3818,7 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
                     personaAccount ? (
                       <Avatar account={personaAccount} />
                     ) : (
-                      <AtSign size={28} className="text-[var(--noodle-blue)]" />
+                      <AtSign size={28} className="text-[var(--noodle-accent)]" />
                     )
                   }
                   tools={
@@ -3863,7 +3845,7 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
                       type="button"
                       onClick={submitPost}
                       disabled={!canSubmitPost || createPost.isPending}
-                      className="h-8 rounded-full bg-[var(--noodle-blue)] px-5 text-xs font-bold text-zinc-950 transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                      className="h-8 rounded-full bg-[var(--noodle-accent)] px-5 text-xs font-bold text-zinc-950 transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       Post
                     </button>
@@ -3901,14 +3883,14 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
                   {!composeOpen && renderComposerMentionSuggestions("noodle-inline-mention-list")}
                   {renderDraftPoll()}
                   {attachedImageUrl && (
-                    <div className="mb-3 overflow-hidden rounded-xl border border-[var(--noodle-divider)] bg-[var(--noodle-blue)]/10">
+                    <div className="mb-3 overflow-hidden rounded-xl border border-[var(--noodle-divider)] bg-[var(--noodle-accent)]/10">
                       <img src={attachedImageUrl} alt="" className="max-h-52 w-full object-cover" />
-                      <div className="flex items-center justify-between gap-2 px-3 py-2 text-xs text-[var(--noodle-blue)]">
+                      <div className="flex items-center justify-between gap-2 px-3 py-2 text-xs text-[var(--noodle-accent)]">
                         <span className="min-w-0 truncate">Attached image</span>
                         <button
                           type="button"
                           onClick={() => setAttachedImageUrl("")}
-                          className="flex h-7 w-7 items-center justify-center rounded-full hover:bg-[var(--noodle-blue)]/15"
+                          className="flex h-7 w-7 items-center justify-center rounded-full hover:bg-[var(--noodle-accent)]/15"
                           title="Remove image"
                         >
                           <X size={14} />
@@ -3925,14 +3907,14 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
                     type="button"
                     onClick={triggerRefresh}
                     disabled={refreshNoodle.isPending || !settings || imagePromptReviewItems.length > 0}
-                    className="flex h-9 w-full items-center justify-center gap-2 rounded-full text-sm font-bold text-[var(--noodle-blue)] transition-colors hover:bg-[var(--noodle-blue)]/10 disabled:cursor-not-allowed disabled:opacity-50"
+                    className="flex h-9 w-full items-center justify-center gap-2 rounded-full text-sm font-bold text-[var(--noodle-accent)] transition-colors hover:bg-[var(--noodle-accent)]/10 disabled:cursor-not-allowed disabled:opacity-50"
                     title="Refresh timeline"
                     aria-label="Refresh timeline"
                   >
                     {refreshNoodle.isPending ? (
-                      <Loader2 size={17} className="!text-[var(--noodle-blue)] animate-spin" />
+                      <Loader2 size={17} className="!text-[var(--noodle-accent)] animate-spin" />
                     ) : (
-                      <RefreshCw size={17} className="!text-[var(--noodle-blue)]" />
+                      <RefreshCw size={17} className="!text-[var(--noodle-accent)]" />
                     )}
                     {refreshNoodle.isPending ? "Refreshing" : "Refresh timeline"}
                   </button>
@@ -3946,7 +3928,7 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
                   <div className="sticky top-0 z-20 border-b border-[var(--noodle-divider)] bg-[var(--background)]/95 backdrop-blur">
                     <div className="flex min-h-14 items-center gap-3 px-2 py-2 lg:px-4">
                       <MobileTimelineBackButton onClick={openMobileHomeTimeline} />
-                      <Bell size={22} className="hidden text-[var(--noodle-blue)] lg:block" />
+                      <Bell size={22} className="hidden text-[var(--noodle-accent)] lg:block" />
                       <div className="min-w-0">
                         <h2 className="truncate text-lg font-bold">Notifications</h2>
                         <p className="truncate text-xs text-[var(--muted-foreground)]">
@@ -3967,7 +3949,7 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
                         >
                           {tab.label}
                           {notificationTab === tab.id && (
-                            <span className="absolute bottom-0 left-1/2 h-1 w-14 -translate-x-1/2 rounded-full bg-[var(--noodle-blue)]" />
+                            <span className="absolute bottom-0 left-1/2 h-1 w-14 -translate-x-1/2 rounded-full bg-[var(--noodle-accent)]" />
                           )}
                         </button>
                       ))}
@@ -3979,7 +3961,7 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
                       <div>{notificationLikes.map(renderLikeNotification)}</div>
                     ) : (
                       <div className="px-8 py-14 text-center">
-                        <Heart size={38} className="mx-auto mb-4 text-[var(--noodle-blue)]" />
+                        <Heart size={38} className="mx-auto mb-4 text-[var(--noodle-accent)]" />
                         <p className="text-base font-bold">No likes yet.</p>
                         <p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-[var(--muted-foreground)]">
                           Likes on your Noodle posts will show here.
@@ -3991,7 +3973,7 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
                       <div>{notificationFollowAccounts.map(renderFollowNotification)}</div>
                     ) : (
                       <div className="px-8 py-14 text-center">
-                        <Bell size={38} className="mx-auto mb-4 text-[var(--noodle-blue)]" />
+                        <Bell size={38} className="mx-auto mb-4 text-[var(--noodle-accent)]" />
                         <p className="text-base font-bold">No follows yet.</p>
                         <p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-[var(--muted-foreground)]">
                           Accounts following you will show here.
@@ -4002,7 +3984,7 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
                     <div>{notificationReplyItems.map(renderReplyNotification)}</div>
                   ) : (
                     <div className="px-8 py-14 text-center">
-                      <MessageCircle size={38} className="mx-auto mb-4 text-[var(--noodle-blue)]" />
+                      <MessageCircle size={38} className="mx-auto mb-4 text-[var(--noodle-accent)]" />
                       <p className="text-base font-bold">No replies or mentions yet.</p>
                       <p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-[var(--muted-foreground)]">
                         Replies to your posts and @{personaAccount?.handle ?? "mentions"} will show here.
@@ -4015,7 +3997,7 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
                   <div className="border-b border-[var(--noodle-divider)] px-2 py-3 lg:px-4 lg:py-5">
                     <div className="flex items-center gap-3">
                       <MobileTimelineBackButton onClick={openMobileHomeTimeline} />
-                      <Settings2 size={22} className="hidden text-[var(--noodle-blue)] lg:block" />
+                      <Settings2 size={22} className="hidden text-[var(--noodle-accent)] lg:block" />
                       <div className="min-w-0">
                         <h2 className="text-lg font-bold">Noodle settings</h2>
                         <p className="truncate text-xs text-[var(--muted-foreground)]">
@@ -4034,7 +4016,7 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
                       <button
                         type="button"
                         onClick={() => openProfileConnection(null)}
-                        className="hidden h-9 w-9 shrink-0 items-center justify-center rounded-full text-[var(--noodle-blue)] transition-colors hover:bg-[var(--noodle-blue)]/10 lg:flex"
+                        className="hidden h-9 w-9 shrink-0 items-center justify-center rounded-full text-[var(--noodle-accent)] transition-colors hover:bg-[var(--noodle-accent)]/10 lg:flex"
                         title="Back to profile"
                         aria-label="Back to profile"
                       >
@@ -4060,7 +4042,7 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
                         >
                           {tab.label}
                           {profileConnectionTab === tab.id && (
-                            <span className="absolute bottom-0 left-1/2 h-1 w-16 -translate-x-1/2 rounded-full bg-[var(--noodle-blue)]" />
+                            <span className="absolute bottom-0 left-1/2 h-1 w-16 -translate-x-1/2 rounded-full bg-[var(--noodle-accent)]" />
                           )}
                         </button>
                       ))}
@@ -4148,7 +4130,7 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
                             publicAccountId: viewedProfileAccount.id,
                           })
                         }
-                        className="h-9 rounded-full border border-[var(--noodle-divider)] px-4 text-xs font-semibold text-[var(--foreground)] transition-colors hover:bg-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-blue)]"
+                        className="h-9 rounded-full border border-[var(--noodle-divider)] px-4 text-xs font-semibold text-[var(--foreground)] transition-colors hover:bg-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]"
                       >
                         Create stage profile
                       </button>
@@ -4206,7 +4188,7 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
                   </div>
                 ) : (
                   <div className="px-8 py-14 text-center">
-                    <AtSign size={38} className="mx-auto mb-4 text-[var(--noodle-blue)]" />
+                    <AtSign size={38} className="mx-auto mb-4 text-[var(--noodle-accent)]" />
                     <p className="text-base font-bold">No accounts found.</p>
                     <p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-[var(--muted-foreground)]">
                       Try searching by handle, like @mari.
@@ -4222,7 +4204,7 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
                 </div>
               ) : timelineTab === "following" && baseTimelinePosts.length === 0 ? (
                 <div className="px-8 py-14 text-center">
-                  <AtSign size={38} className="mx-auto mb-4 text-[var(--noodle-blue)]" />
+                  <AtSign size={38} className="mx-auto mb-4 text-[var(--noodle-accent)]" />
                   <p className="text-base font-bold">Nothing from followed characters yet.</p>
                   <p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-[var(--muted-foreground)]">
                     Follow characters from the suggestions panel, then refresh Noodle.
@@ -4250,14 +4232,14 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
         restoreFocusRef={composerRestoreFocusRef}
         focusScopePortalSelector="[data-noodle-compose-focus-portal='true']"
         panelClassName={cn("marinara-chat-popover", NOODLE_ICON_SCOPE_CLASS)}
-        panelStyle={{ "--noodle-blue": NOODLE_BLUE, "--noodle-divider": "var(--marinara-chat-chrome-panel-divider)" } as CSSProperties}
+        panelStyle={{ "--noodle-accent": NOODLE_BLUE, "--noodle-divider": "var(--marinara-chat-chrome-panel-divider)" } as CSSProperties}
       >
         <div data-component="NoodleView.ModalComposer">
               <div className="grid grid-cols-[2.75rem_minmax(0,1fr)] gap-3">
                 {personaAccount ? (
                   <Avatar account={personaAccount} />
                 ) : (
-                  <AtSign size={28} className="text-[var(--noodle-blue)]" />
+                  <AtSign size={28} className="text-[var(--noodle-accent)]" />
                 )}
                 <div className="min-w-0">
                   <textarea
@@ -4284,14 +4266,14 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
                   {renderComposerMentionSuggestions("noodle-modal-mention-list")}
                   {renderDraftPoll()}
                   {attachedImageUrl && (
-                    <div className="overflow-hidden rounded-xl border border-[var(--noodle-divider)] bg-[var(--noodle-blue)]/10">
+                    <div className="overflow-hidden rounded-xl border border-[var(--noodle-divider)] bg-[var(--noodle-accent)]/10">
                       <img src={attachedImageUrl} alt="" className="max-h-60 w-full object-cover" />
-                      <div className="flex items-center justify-between gap-2 px-3 py-2 text-xs text-[var(--noodle-blue)]">
+                      <div className="flex items-center justify-between gap-2 px-3 py-2 text-xs text-[var(--noodle-accent)]">
                         <span className="min-w-0 truncate">Attached image</span>
                         <button
                           type="button"
                           onClick={() => setAttachedImageUrl("")}
-                          className="flex h-7 w-7 items-center justify-center rounded-full hover:bg-[var(--noodle-blue)]/15"
+                          className="flex h-7 w-7 items-center justify-center rounded-full hover:bg-[var(--noodle-accent)]/15"
                           title="Remove image"
                         >
                           <X size={14} />
@@ -4335,7 +4317,7 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
                   type="button"
                   onClick={submitPost}
                   disabled={!canSubmitPost || createPost.isPending}
-                  className="h-9 rounded-full bg-[var(--noodle-blue)] px-6 text-xs font-bold text-zinc-950 transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="h-9 rounded-full bg-[var(--noodle-accent)] px-6 text-xs font-bold text-zinc-950 transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {createPost.isPending ? "Posting..." : "Post"}
                 </button>
@@ -4356,7 +4338,7 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
         onChange={setNoodlePromptDraft}
         placeholder="Write the base instructions for Noodle timeline generation…"
         closeLabel="Cancel"
-        overlayStyle={{ "--noodle-blue": NOODLE_BLUE } as CSSProperties}
+        overlayStyle={{ "--noodle-accent": NOODLE_BLUE } as CSSProperties}
         footer={
           <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-between">
             <button
@@ -4366,7 +4348,7 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
                 resetNoodlePrompt.isPending ||
                 (!noodlePromptHasOverride && noodlePromptDraft === noodleDefaultPromptText)
               }
-              className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-md border border-[var(--noodle-blue)]/35 px-3 text-xs font-semibold text-[var(--noodle-blue)] transition-colors hover:bg-[var(--noodle-blue)]/10 disabled:cursor-not-allowed disabled:opacity-45"
+              className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-md border border-[var(--noodle-accent)]/35 px-3 text-xs font-semibold text-[var(--noodle-accent)] transition-colors hover:bg-[var(--noodle-accent)]/10 disabled:cursor-not-allowed disabled:opacity-45"
             >
               {resetNoodlePrompt.isPending ? <Loader2 size={13} className="animate-spin" /> : <RotateCcw size={13} />}
               Restore default
@@ -4389,7 +4371,7 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
                   saveNoodlePrompt.isPending ||
                   resetNoodlePrompt.isPending
                 }
-                className="inline-flex min-h-10 flex-1 items-center justify-center gap-1.5 rounded-md bg-[var(--noodle-blue)] px-4 text-xs font-bold text-zinc-950 [&_svg]:!text-zinc-950 transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-45 sm:flex-none"
+                className="inline-flex min-h-10 flex-1 items-center justify-center gap-1.5 rounded-md bg-[var(--noodle-accent)] px-4 text-xs font-bold text-zinc-950 [&_svg]:!text-zinc-950 transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-45 sm:flex-none"
               >
                 {saveNoodlePrompt.isPending ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />}
                 Save prompt
@@ -4407,7 +4389,7 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
           title={confirmAction.title}
           width="max-w-sm"
           panelClassName={NOODLE_ICON_SCOPE_CLASS}
-          panelStyle={{ "--noodle-blue": NOODLE_BLUE } as CSSProperties}
+          panelStyle={{ "--noodle-accent": NOODLE_BLUE } as CSSProperties}
         >
           <div className="space-y-4">
             <p className="text-sm leading-6 text-[var(--foreground)]">{confirmAction.message}</p>
@@ -4430,7 +4412,7 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
                   confirmAction.kind === "delete-reply" ||
                   confirmAction.kind === "reset-timeline"
                     ? "bg-[var(--destructive)] text-[var(--destructive-foreground)] [&_svg]:!text-[var(--destructive-foreground)] hover:opacity-90"
-                    : "border border-[var(--noodle-blue)]/45 bg-[var(--noodle-blue)] text-zinc-950 [&_svg]:!text-zinc-950 hover:bg-[var(--noodle-blue)]/85",
+                    : "border border-[var(--noodle-accent)]/45 bg-[var(--noodle-accent)] text-zinc-950 [&_svg]:!text-zinc-950 hover:bg-[var(--noodle-accent)]/85",
                 )}
               >
                 {confirmActionPending && <Loader2 size={14} className="animate-spin" />}
