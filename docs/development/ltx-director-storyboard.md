@@ -1,6 +1,6 @@
 # LTX Director Storyboard
 
-Status: Draft for maintainer review. Do not begin implementation until this document is approved.
+Status: Draft for maintainer review. Implementation remains paused until this document is approved.
 
 ## Problem
 
