@@ -14,6 +14,7 @@ import {
   noodleAutoPostRescheduleSchema,
   noodleAccountUpdateSchema,
   noodleBulkInviteSchema,
+  noodleBulkPrivateAccountCreateSchema,
   noodleCreateInteractionSchema,
   noodleCreatePostSchema,
   noodleInviteSchema,
@@ -488,7 +489,11 @@ export async function noodleRoutes(app: FastifyInstance) {
       });
     }
     try {
-      const created = await noodle.createPrivateAccount(id, parsed.data.stageProfile);
+      const created = await noodle.createPrivateAccount(
+        id,
+        parsed.data.stageProfile,
+        settings.autoPostingDefaultIntensity,
+      );
       if (!created) return reply.code(404).send({ error: "Noodle account not found" });
       const profile = (await noodle.listNoodlerStageProfiles()).find((item) => item.id === created.id);
       if (!profile) throw new Error("Failed to load the created NoodleR stage profile.");
@@ -499,6 +504,69 @@ export async function noodleRoutes(app: FastifyInstance) {
       }
       throw error;
     }
+  });
+
+  app.post("/noodler/accounts/bulk", async (req, reply) => {
+    const settings = await noodle.getSettings();
+    if (!settings.enableNoodler) return reply.code(404).send({ error: "Not Found" });
+    const parsed = noodleBulkPrivateAccountCreateSchema.safeParse(req.body ?? {});
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    const { publicAccountIds, disclosureMode } = parsed.data;
+    const created: string[] = [];
+    const skipped: string[] = [];
+    for (const publicAccountId of publicAccountIds) {
+      const publicAccount = await noodle.getAccountById(publicAccountId);
+      if (!publicAccount) {
+        skipped.push(publicAccountId);
+        continue;
+      }
+      const stageProfile =
+        disclosureMode === "open"
+          ? {
+              displayName: publicAccount.displayName,
+              handle: publicAccount.handle,
+              bio: publicAccount.bio,
+              stagePersonality: "",
+              disclosureMode,
+            }
+          : {
+              // Never derive a hinted/secret alias from the public identity: normalization
+              // truncates to 36 chars, so `<handle>_stage` can collapse back to the exact
+              // public handle and leak it. Use a neutral placeholder instead.
+              displayName: "New stage persona",
+              handle: "new_stage_persona",
+              bio: "",
+              stagePersonality: "",
+              disclosureMode,
+            };
+      if (stageProfileContainsPublicIdentity(stageProfile, publicAccount)) {
+        skipped.push(publicAccountId);
+        continue;
+      }
+      try {
+        const account = await noodle.createPrivateAccount(
+          publicAccountId,
+          stageProfile,
+          settings.autoPostingDefaultIntensity,
+        );
+        if (!account) {
+          skipped.push(publicAccountId);
+          continue;
+        }
+        created.push(account.id);
+      } catch (error) {
+        if (isFileUniqueConstraintError(error, "noodle_accounts", ["publicAccountId"])) {
+          skipped.push(publicAccountId);
+          continue;
+        }
+        throw error;
+      }
+    }
+    const profiles = await noodle.listNoodlerStageProfiles();
+    return reply.code(201).send({
+      created: profiles.filter((profile) => created.includes(profile.id)),
+      skipped,
+    });
   });
 
   app.put("/noodler/accounts/:id/stage-profile", async (req, reply) => {
