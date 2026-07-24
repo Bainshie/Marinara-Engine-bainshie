@@ -1121,7 +1121,7 @@ export function NoodlePostCard({
                 <span className="text-xs text-[var(--muted-foreground)]">@{author?.handle ?? "noodle"}</span>
                 <span className="text-xs text-[var(--muted-foreground)]">{formatTime(post.createdAt)}</span>
                 <span className="rounded-full border border-[var(--noodle-divider)] px-2 py-0.5 text-[0.68rem] font-bold text-[var(--muted-foreground)]">
-                  {post.access === "ppv" ? "Pay to unlock" : post.access === "subscriber" ? "Subscribers" : "Public"}
+                  {post.access === "ppv" ?localizeUi("ui.noodle.noodlepostcard.payToUnlock") : post.access === "subscriber" ?localizeUi("ui.noodle.privatepostcomposer.subscribers") :localizeUi("ui.noodle.noodlepostcard.public")}
                 </span>
               </div>
               {ctx.postManagement && <div className="relative shrink-0">

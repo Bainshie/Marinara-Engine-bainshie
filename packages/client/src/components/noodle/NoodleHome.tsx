@@ -3081,14 +3081,12 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
           {settings.enableNoodler && (
             <Section
               accent={NOODLE_PINK}
-              title="NoodleR Automation"
-              help="Shared creative guidance for every generated NoodleR post, plus an at-a-glance schedule for all managed creators."
+              title={localizeUi("ui.noodle.noodlehome.noodlerAutomation")}
+              help={localizeUi("ui.noodle.noodlehome.sharedCreativeGuidanceForEveryGeneratedNoodlerPostPlus")}
             >
               <div className="space-y-4">
                 <label className="block space-y-1.5">
-                  <FieldLabel help="Prepended to every NoodleR private-post generation. Use it to set overall tone and content boundaries. Per-creator bio and stage voice still apply on top of this.">
-                    Generation guidance
-                  </FieldLabel>
+                  <FieldLabel help={localizeUi("ui.noodle.noodlehome.prependedToEveryNoodlerPrivatePostGenerationUseIt")}>{localizeUi("ui.noodle.noodlehome.generationGuidance")}</FieldLabel>
                   <textarea
                     value={privateGenerationGuidanceDraft}
                     onChange={(event) => setPrivateGenerationGuidanceDraft(event.target.value)}
@@ -3102,9 +3100,7 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
                 </label>
 
                 <div className="space-y-1.5">
-                  <FieldLabel help="See every managed creator's automatic-posting state at a glance. Editing here uses the same schedule as each creator's profile page.">
-                    Creator schedules
-                  </FieldLabel>
+                  <FieldLabel help={localizeUi("ui.noodle.noodlehome.seeEveryManagedCreatorSAutomaticPostingStateAt")}>{localizeUi("ui.noodle.noodlehome.creatorSchedules")}</FieldLabel>
                   <p className="text-xs text-[var(--muted-foreground)]">
                     {noodlerScheduleSummary}
                   </p>
@@ -3116,9 +3112,9 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
                       className="flex min-h-10 w-full items-center justify-center gap-2 rounded-md border border-[var(--noodle-accent)]/40 bg-[var(--noodle-accent)]/10 px-3 text-xs font-semibold text-[var(--noodle-accent)] transition-colors hover:bg-[var(--noodle-accent)]/15 disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       <CalendarClock size={15} />
-                      {noodlerCreatorCount === 0 ? "No creators to schedule yet" : "Manage schedules"}
+                      {noodlerCreatorCount === 0 ?localizeUi("ui.noodle.noodlehome.noCreatorsToScheduleYet") :localizeUi("ui.noodle.noodlehome.manageSchedules")}
                     </button>
-                    <NoodlerBulkCreateButton label="Add creators" />
+                    <NoodlerBulkCreateButton label={localizeUi("ui.noodle.noodlehome.addCreators")} />
                   </div>
                 </div>
               </div>

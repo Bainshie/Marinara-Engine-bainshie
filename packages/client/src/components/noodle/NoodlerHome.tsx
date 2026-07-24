@@ -90,7 +90,7 @@ import {
 } from "./NoodlePostCard";
 import { Avatar, NoodleShell, NOODLE_PERSONA_SWITCHER_PAGE_SIZE, NOODLE_PINK, useNoodleAccent } from "./NoodleShell";
 import { NoodleProfileSurface } from "./NoodleProfileSurface";
-import { NOODLE_AUTO_POST_INTENSITIES, summarizeRefreshOutcomes } from "./noodle-auto-post";
+import { NOODLE_AUTO_POST_INTENSITIES } from "./noodle-auto-post";
 import { NoodlerBulkCreateButton } from "./NoodlerBulkCreatePanel";
 import {
   ConversationMediaPickerPanel,
@@ -619,7 +619,6 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
       ...profileDraft,
       handle: profileDraft.handle.replace(/^@+/u, ""),
     };
-    const wasEditing = Boolean(editingProfileId);
     const onSuccess = (profile: NoodlerStageProfile) => {
       setProfileDraft(null);
       setEditingProfileId(null);
@@ -873,17 +872,14 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
     };
     return (
       <NoodleShell {...shellProps} rightRail={emptyRightRail}>
-        <NoodlerFrame onBack={finishSetup} title="Automatic posting" hideBack>
+        <NoodlerFrame onBack={finishSetup} title={localizeUi("ui.noodle.stageprofileview.automaticPosting")} hideBack>
           <div className="mx-auto max-w-md space-y-5 p-4">
             <div className="space-y-1">
-              <p className="text-sm font-bold">Should this creator post automatically?</p>
-              <p className="text-xs text-[var(--muted-foreground)]">
-                Automatic posts publish as subscriber-access on a schedule. You can change or turn
-                this off anytime from the creator&apos;s profile or NoodleR settings.
-              </p>
+              <p className="text-sm font-bold">{localizeUi("ui.noodle.noodlerhome.shouldThisCreatorPostAutomatically")}</p>
+              <p className="text-xs text-[var(--muted-foreground)]">{localizeUi("ui.noodle.noodlerhome.automaticPostsPublishAsSubscriberAccessOnASchedule")}</p>
             </div>
             <fieldset className="space-y-2">
-              <legend className="text-xs font-bold">Cadence</legend>
+              <legend className="text-xs font-bold">{localizeUi("ui.noodle.stageprofileview.cadence")}</legend>
               <div className="flex gap-2">
                 {NOODLE_AUTO_POST_INTENSITIES.map(({ label, value }) => (
                   <button
@@ -901,18 +897,14 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
                   </button>
                 ))}
               </div>
-              <p className="text-[0.68rem] text-[var(--muted-foreground)]">
-                About {autoPostSetupIntensity} automatic post{autoPostSetupIntensity === 1 ? "" : "s"} per day.
-              </p>
+              <p className="text-[0.68rem] text-[var(--muted-foreground)]">{localizeUi("ui.noodle.stageprofileview.about")} {autoPostSetupIntensity} {localizeUi("ui.noodle.stageprofileview.automaticPost")}{autoPostSetupIntensity === 1 ? "" :localizeUi("ui.noodle.stageprofileview.s")} {localizeUi("ui.noodle.stageprofileview.perDay")}</p>
             </fieldset>
             <div className="flex gap-2">
               <button
                 type="button"
                 onClick={finishSetup}
                 className="h-10 flex-1 rounded-full border border-[var(--noodle-divider)] px-3 text-xs font-bold hover:bg-[var(--accent)]"
-              >
-                Not now
-              </button>
+              >{localizeUi("ui.chat.dependencyworkspaceapprovalcard.notNow")}</button>
               <button
                 type="button"
                 disabled={setupAutoPosting.isPending}
@@ -922,13 +914,13 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
                     {
                       onSuccess: finishSetup,
                       onError: (error) =>
-                        toast.error(errorMessage(error, "Could not enable automatic posting.")),
+                        toast.error(errorMessage(error,localizeUi("ui.noodle.noodlerhome.couldNotEnableAutomaticPosting"))),
                     },
                   )
                 }
                 className="h-10 flex-1 rounded-full border border-transparent bg-[var(--noodle-accent)] px-3 text-xs font-bold text-zinc-950 disabled:opacity-50"
               >
-                {setupAutoPosting.isPending ? "Enabling…" : "Turn on"}
+                {setupAutoPosting.isPending ?localizeUi("ui.noodle.noodlerhome.enabling_5c258f0") :localizeUi("ui.noodle.noodlerhome.turnOn")}
               </button>
             </div>
           </div>
@@ -2492,6 +2484,147 @@ function StageProfileView({
   );
 }
 
+const AUTO_POST_INTENSITIES: { labelKey: string; value: NoodleAutoPostingIntensity }[] = [
+  { labelKey: "ui.noodle.automation.intensity.low", value: 1 },
+  { labelKey: "ui.noodle.automation.intensity.medium", value: 3 },
+  { labelKey: "ui.noodle.automation.intensity.high", value: 6 },
+];
+
+function ViewerHub({
+  personas,
+  scope,
+  isLoading,
+  isError,
+  onRetry,
+  onRefresh,
+  isRefreshing,
+  unlockPending,
+  postCardCtx,
+  onUnlock,
+  search,
+  tab,
+  onTabChange,
+  authorProfile,
+  authorDraft,
+  onAuthorDraftChange,
+  onClearAuthorDraft,
+  authorLoading,
+  authorError,
+  onRetryAuthor,
+  onCreateAuthorProfile,
+  onOpenAuthorProfile,
+  onManualPost,
+  onGuidedPost,
+  manualPending,
+  guidePending,
+  onToggleSubscription,
+  togglePending,
+}: {
+  personas: Persona[];
+  scope: ReturnType<typeof useNoodlerViewer>["data"];
+  isLoading: boolean;
+  isError: boolean;
+  onRetry: () => void;
+  onRefresh: () => void;
+  isRefreshing: boolean;
+  unlockPending: boolean;
+  postCardCtx: ReturnType<typeof useNoodlePostCardController>["ctx"];
+  onUnlock: (postId: string) => void;
+  search: string;
+  tab: "all" | "subscribed";
+  onTabChange: (tab: "all" | "subscribed") => void;
+  authorProfile: NoodlerManagedStageProfile | null;
+  authorDraft: PrivatePostDraft;
+  onAuthorDraftChange: (patch: Partial<PrivatePostDraft>) => void;
+  onClearAuthorDraft: () => void;
+  authorLoading: boolean;
+  authorError: boolean;
+  onRetryAuthor: () => void;
+  onCreateAuthorProfile?: () => void;
+  onOpenAuthorProfile?: () => void;
+  onManualPost: (input: PrivatePostSubmission) => Promise<void>;
+  onGuidedPost: (input: PrivatePostSubmission) => Promise<void>;
+  manualPending: boolean;
+  guidePending: boolean;
+  onToggleSubscription: (creatorAccountId: string, subscribed: boolean) => void;
+  togglePending: boolean;
+}) {
+  const { t: localizeUi } = useUiTranslation();
+  if (personas.length === 0) {
+    return (
+      <EmptyState
+        title={localizeUi("ui.noodle.viewerhub.createAPersonaToBrowseNoodler")}
+        detail="Subscriptions and unlocks belong to one viewer persona."
+      />
+    );
+  }
+  const searchTerm = search.trim().toLowerCase();
+  const feed = (scope?.creators ?? [])
+    .filter((creator) => tab === "all" || creator.subscribed)
+    .flatMap((creator) => creator.posts.map((post) => ({ post, creator })))
+    .filter(
+      ({ post, creator }) =>
+        !searchTerm ||
+        (post.title ?? "").toLowerCase().includes(searchTerm) ||
+        (post.content ?? "").toLowerCase().includes(searchTerm) ||
+        creator.profile.handle.toLowerCase().includes(searchTerm) ||
+        creator.profile.displayName.toLowerCase().includes(searchTerm),
+    )
+    .sort((a, b) => new Date(b.post.createdAt).getTime() - new Date(a.post.createdAt).getTime());
+  return (
+    <div className="min-h-0 flex-1 overflow-y-auto">
+      <div className="grid grid-cols-2 border-b border-[var(--noodle-divider)]">
+        {(
+          [
+            { id: "all", label: "All creators" },
+            { id: "subscribed", label: "Subscribed" },
+          ] as const
+        ).map((option) => (
+          <button
+            key={option.id}
+            type="button"
+            onClick={() => onTabChange(option.id)}
+            className={cn(
+              "relative flex h-12 items-center justify-center text-sm font-bold text-[var(--muted-foreground)] transition-colors hover:bg-[var(--accent)] hover:text-[var(--foreground)]",
+              tab === option.id && "text-[var(--foreground)]",
+            )}
+            aria-pressed={tab === option.id}
+          >
+            {localizeUi(`ui.noodle.viewer.tabs.${option.id}`)}
+            {tab === option.id && (
+              <span className="absolute bottom-0 left-1/2 h-1 w-14 -translate-x-1/2 rounded-full bg-[var(--noodle-accent)]" />
+            )}
+          </button>
+        ))}
+      </div>
+      <div className="hidden border-b border-[var(--noodle-divider)] px-4 py-3 lg:block xl:hidden">
+        <SubscriptionSections
+          creators={(scope?.creators ?? []).filter((creator) => creator.profile.id !== authorProfile?.id)}
+          onToggleSubscription={onToggleSubscription}
+          togglePending={togglePending}
+        />
+      </div>
+      {authorProfile ? (
+        <PrivatePostComposer
+          key={authorProfile.id}
+          profile={authorProfile}
+          collapsible={false}
+          draft={authorDraft}
+          onDraftChange={onAuthorDraftChange}
+          onClearDraft={onClearAuthorDraft}
+          onManualPost={onManualPost}
+          onGuidedPost={onGuidedPost}
+          manualPending={manualPending}
+          guidePending={guidePending}
+        />
+      ) : authorLoading ? (
+        <div className="border-b border-[var(--noodle-divider)] px-4 py-4 text-xs text-[var(--muted-foreground)]">{localizeUi("ui.noodle.viewerhub.resolvingYourLinkedNoodlerProfile")}</div>
+      ) : authorError ? (
+        <div className="border-b border-[var(--noodle-divider)] px-4 py-4">
+          <p className="text-sm font-semibold">{localizeUi("ui.noodle.viewerhub.yourLinkedNoodlerProfileCouldNotBeLoaded")}</p>
+          <button type="button" onClick={onRetryAuthor} className="mt-3 min-h-10 rounded-md border border-[var(--noodle-divider)] px-3 text-xs font-bold hover:bg-[var(--accent)]">{localizeUi("capabilities.actions.tryAgain")}</button>
+        </div>
+      ) : (
         <div className="border-b border-[var(--noodle-divider)] px-4 py-4">
           <p className="text-sm font-semibold">{localizeUi("ui.noodle.viewerhub.thisPersonaHasNoLinkedNoodlerProfile")}</p>
           <p className="mt-1 text-xs text-[var(--muted-foreground)]">{localizeUi("ui.noodle.viewerhub.createOneToAuthorFromThisTimeline")}</p>

@@ -10,6 +10,7 @@ import { cn } from "../../lib/utils";
 import { useBulkCreateNoodlerStageProfiles, useNoodlerEligibleAccounts } from "../../hooks/use-noodle";
 import { Modal } from "../ui/Modal";
 import { NOODLE_PINK } from "./NoodleShell";
+import { useTranslation as useUiTranslation } from "react-i18next";
 
 const DISCLOSURE_CHOICES: { value: NoodleIdentityDisclosure; label: string }[] = [
   { value: "open", label: "Open" },
@@ -20,6 +21,7 @@ const DISCLOSURE_CHOICES: { value: NoodleIdentityDisclosure; label: string }[] =
 const eyebrowClass = "text-[0.625rem] font-bold uppercase tracking-[0.18em] text-[var(--muted-foreground)]";
 
 function NoodlerBulkCreatePanel() {
+  const { t: localizeUi } = useUiTranslation();
   const [search, setSearch] = useState("");
   const [kind, setKind] = useState<"all" | "character" | "persona">("all");
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -61,7 +63,7 @@ function NoodlerBulkCreatePanel() {
         // Keep the selection on failure so the user can retry.
         onSuccess: () => setSelected(new Set()),
         onError: (error) =>
-          toast.error(error instanceof Error ? error.message : "Could not create creators."),
+          toast.error(error instanceof Error ? error.message :localizeUi("ui.noodle.noodlerbulkcreatepanel.couldNotCreateCreators")),
       },
     );
   };
@@ -70,18 +72,18 @@ function NoodlerBulkCreatePanel() {
     <div className="rounded-lg ring-1 ring-[var(--border)] bg-[var(--secondary)] p-3">
       <div className="flex items-center gap-2">
         <Users size={15} className="shrink-0 text-[var(--noodle-accent)]" />
-        <p className={eyebrowClass}>Bulk-create creators</p>
+        <p className={eyebrowClass}>{localizeUi("ui.noodle.noodlerbulkcreatepanel.bulkCreateCreators")}</p>
       </div>
       <label className="relative mt-2.5 block">
         <Search size={14} className="absolute left-2.5 top-2.5 text-[var(--muted-foreground)]" />
         <input
           value={search}
           onChange={(event) => setSearch(event.target.value)}
-          placeholder="Search accounts"
+          placeholder={localizeUi("ui.noodle.noodlerbulkcreatepanel.searchAccounts")}
           className="h-8 w-full rounded-md border border-[var(--border)] bg-[var(--background)] pl-8 pr-2 text-xs text-[var(--foreground)] outline-none transition-colors focus:border-[var(--noodle-accent)]"
         />
       </label>
-      <div className="mt-2 grid grid-cols-3 rounded-md ring-1 ring-[var(--border)] p-0.5" aria-label="Filter by kind">
+      <div className="mt-2 grid grid-cols-3 rounded-md ring-1 ring-[var(--border)] p-0.5" aria-label={localizeUi("ui.noodle.noodlerbulkcreatepanel.filterByKind")}>
         {(["all", "character", "persona"] as const).map((option) => (
           <button
             key={option}
@@ -95,30 +97,25 @@ function NoodlerBulkCreatePanel() {
                 : "text-[var(--muted-foreground)] hover:bg-[var(--accent)]",
             )}
           >
-            {option === "all" ? "All" : option}
+            {option === "all" ?localizeUi("ui.noodle.stageprofilesourcepicker.all") : option}
           </button>
         ))}
       </div>
 
       {eligibleQuery.isLoading ? (
         <div className="mt-3 flex items-center justify-center gap-2 py-6 text-xs text-[var(--muted-foreground)]">
-          <Loader2 size={14} className="animate-spin" /> Loading...
-        </div>
+          <Loader2 size={14} className="animate-spin" /> {localizeUi("ui.characters.characterlibraryview.loading")}</div>
       ) : eligibleQuery.isError ? (
         <div className="mt-3 flex flex-col items-center gap-2 py-6 text-center text-xs text-[var(--muted-foreground)]">
-          <span>Could not load eligible accounts.</span>
+          <span>{localizeUi("ui.noodle.noodlerbulkcreatepanel.couldNotLoadEligibleAccounts")}</span>
           <button
             type="button"
             onClick={() => void eligibleQuery.refetch()}
             className="rounded-md px-2 py-1 font-semibold text-[var(--noodle-accent)] hover:underline"
-          >
-            Retry
-          </button>
+          >{localizeUi("game.characterSheet.regenerate.label")}</button>
         </div>
       ) : accounts.length === 0 ? (
-        <p className="mt-3 py-4 text-center text-xs text-[var(--muted-foreground)]">
-          No eligible accounts remain — every account already has a stage profile.
-        </p>
+        <p className="mt-3 py-4 text-center text-xs text-[var(--muted-foreground)]">{localizeUi("ui.noodle.noodlerbulkcreatepanel.noEligibleAccountsRemainEveryAccountAlreadyHasA")}</p>
       ) : (
         <>
           <div className="mt-2.5 flex items-center justify-between">
@@ -127,9 +124,9 @@ function NoodlerBulkCreatePanel() {
               onClick={toggleAll}
               className="text-[0.68rem] font-semibold text-[var(--noodle-accent)] hover:underline"
             >
-              {allVisibleSelected ? "Deselect all" : "Select all"}
+              {allVisibleSelected ?localizeUi("ui.noodle.noodlerbulkcreatepanel.deselectAll") :localizeUi("lorebook.editor.batch.selectAll")}
             </button>
-            <span className="text-[0.68rem] text-[var(--muted-foreground)]">{selected.size} selected</span>
+            <span className="text-[0.68rem] text-[var(--muted-foreground)]">{selected.size} {localizeUi("ui.agents.agenteditor.selected")}</span>
           </div>
           <div className="mt-1.5 max-h-56 divide-y divide-[var(--border)] overflow-y-auto rounded-md ring-1 ring-[var(--border)]">
             {accounts.map((account) => {
@@ -167,13 +164,11 @@ function NoodlerBulkCreatePanel() {
               disabled={eligibleQuery.isFetchingNextPage}
               className="mt-1.5 flex h-7 w-full items-center justify-center gap-1.5 rounded-md ring-1 ring-[var(--border)] text-[0.68rem] font-semibold hover:bg-[var(--accent)] disabled:opacity-50"
             >
-              {eligibleQuery.isFetchingNextPage && <Loader2 size={12} className="animate-spin" />}
-              Load more
-            </button>
+              {eligibleQuery.isFetchingNextPage && <Loader2 size={12} className="animate-spin" />}{localizeUi("ui.gameAssets.assetgrid.loadMore")}</button>
           )}
 
           <fieldset className="mt-3">
-            <legend className={eyebrowClass}>Disclosure</legend>
+            <legend className={eyebrowClass}>{localizeUi("ui.noodle.wizard.disclosure")}</legend>
             <div className="mt-1.5 grid grid-cols-3 rounded-md ring-1 ring-[var(--border)] p-0.5">
               {DISCLOSURE_CHOICES.map((option) => (
                 <button
@@ -202,8 +197,8 @@ function NoodlerBulkCreatePanel() {
           >
             {bulkCreate.isPending && <Loader2 size={13} className="animate-spin" />}
             {selected.size === 0
-              ? "Create creators (paused)"
-              : `Create ${selected.size} creator${selected.size === 1 ? "" : "s"} (paused)`}
+              ?localizeUi("ui.noodle.noodlerbulkcreatepanel.createCreatorsPaused")
+              :localizeUi("ui.noodle.noodlerbulkcreatepanel.createValue1CreatorValue2Paused", { value1: selected.size, value2: selected.size === 1 ? "" :localizeUi("ui.noodle.stageprofileview.s") })}
           </button>
         </>
       )}
@@ -212,6 +207,7 @@ function NoodlerBulkCreatePanel() {
 }
 
 export function NoodlerBulkCreateButton({ label = "Bulk-create creators" }: { label?: string }) {
+  const { t: localizeUi } = useUiTranslation();
   const [open, setOpen] = useState(false);
   return (
     <>
@@ -226,7 +222,7 @@ export function NoodlerBulkCreateButton({ label = "Bulk-create creators" }: { la
       <Modal
         open={open}
         onClose={() => setOpen(false)}
-        title="Bulk-create creators"
+        title={localizeUi("ui.noodle.noodlerbulkcreatepanel.bulkCreateCreators")}
         width="max-w-md"
         panelStyle={{ "--noodle-accent": NOODLE_PINK } as CSSProperties}
       >

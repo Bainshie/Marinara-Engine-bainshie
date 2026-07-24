@@ -20,12 +20,14 @@ import {
 } from "../../hooks/use-noodle";
 import type { NoodleAutoPostingIntensity } from "@marinara-engine/shared";
 import { toast } from "sonner";
+import { useTranslation as useUiTranslation } from "react-i18next";
 
 function errorMessage(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback;
 }
 
 export function NoodlerScheduleManagerModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const { t: localizeUi } = useUiTranslation();
   const { data } = useNoodle();
   const settings = data?.settings;
   const accountsQuery = useNoodlerAccounts(data?.settings.enableNoodler === true);
@@ -60,9 +62,9 @@ export function NoodlerScheduleManagerModal({ open, onClose }: { open: boolean; 
     const failed = results.filter((result) => result.status === "rejected").length;
     if (failed === 0) return;
     if (failed === ids.length) {
-      toast.error("Could not update automatic posting.");
+      toast.error(localizeUi("ui.noodle.stageprofileview.couldNotUpdateAutomaticPosting"));
     } else {
-      toast.error(`Updated ${ids.length - failed} of ${ids.length}; ${failed} failed.`);
+      toast.error(localizeUi("ui.noodle.noodlerschedulemanagermodal.updatedValue1OfValue2Value3Failed", { value1: ids.length - failed, value2: ids.length, value3: failed }));
     }
   };
 
@@ -78,34 +80,33 @@ export function NoodlerScheduleManagerModal({ open, onClose }: { open: boolean; 
   const bulkBusy = updateAutoPosting.isPending;
 
   const saveSettings = (patch: { autoPostingScheduleEnabled?: boolean; autoPostingDefaultIntensity?: NoodleAutoPostingIntensity }) => {
-    updateSettings.mutate(patch, { onError: (error) => toast.error(errorMessage(error, "Could not update settings.")) });
+    updateSettings.mutate(patch, { onError: (error) => toast.error(errorMessage(error,localizeUi("ui.noodle.noodlerschedulemanagermodal.couldNotUpdateSettings"))) });
   };
 
   return (
     <Modal
       open={open}
       onClose={onClose}
-      title="NoodleR schedules"
+      title={localizeUi("ui.noodle.noodlerschedulemanagermodal.noodlerSchedules")}
       width="max-w-2xl"
       panelStyle={{ "--noodle-accent": NOODLE_PINK } as CSSProperties}
     >
       <div className="space-y-3">
         <details className="group rounded-lg bg-[var(--secondary)] ring-1 ring-[var(--border)]" open>
           <summary className="flex cursor-pointer list-none items-center justify-between gap-2 p-3">
-            <span className="text-sm font-semibold">Global settings</span>
+            <span className="text-sm font-semibold">{localizeUi("ui.noodle.noodlerschedulemanagermodal.globalSettings")}</span>
             <span className="flex items-center gap-2 text-[0.625rem] font-medium">
               <span className="rounded-full px-2 py-1 ring-1 ring-[var(--border)] text-[var(--muted-foreground)]">
-                {scheduleEnabled ? "On" : "Off"} · {defaultIntensityLabel} · {automatingCount} automating
-              </span>
+                {scheduleEnabled ?localizeUi("ui.game.gameinput.on") :localizeUi("ui.panels.appearancesettings.off")} · {defaultIntensityLabel} · {automatingCount} {localizeUi("ui.noodle.noodlerschedulemanagermodal.automating")}</span>
               <ChevronDown size={14} className="text-[var(--muted-foreground)] transition-transform group-open:rotate-180" />
             </span>
           </summary>
           <div className="space-y-3 border-t border-[var(--border)] p-3">
             <label className="flex items-center justify-between gap-3">
               <span className="min-w-0">
-                <span className="block text-sm font-semibold">Automatic posting schedule</span>
+                <span className="block text-sm font-semibold">{localizeUi("ui.noodle.noodlerschedulemanagermodal.automaticPostingSchedule")}</span>
                 <span className="block text-xs text-[var(--muted-foreground)]">
-                  {scheduleEnabled ? "Creators post on their schedule." : "Paused globally — no automatic posts."}
+                  {scheduleEnabled ?localizeUi("ui.noodle.noodlerschedulemanagermodal.creatorsPostOnTheirSchedule") :localizeUi("ui.noodle.noodlerschedulemanagermodal.pausedGloballyNoAutomaticPosts")}
                 </span>
               </span>
               <input
@@ -117,7 +118,7 @@ export function NoodlerScheduleManagerModal({ open, onClose }: { open: boolean; 
               />
             </label>
             <div className="flex flex-wrap items-center gap-2">
-              <span className="text-xs font-semibold">Default cadence</span>
+              <span className="text-xs font-semibold">{localizeUi("ui.noodle.noodlerschedulemanagermodal.defaultCadence")}</span>
               {NOODLE_AUTO_POST_INTENSITIES.map(({ label, value }) => (
                 <button
                   key={value}
@@ -143,14 +144,12 @@ export function NoodlerScheduleManagerModal({ open, onClose }: { open: boolean; 
                       const { ok, message } = summarizeRefreshOutcomes(outcomes);
                       (ok ? toast.success : toast.error)(message);
                     },
-                    onError: (error) => toast.error(errorMessage(error, "Could not refresh creators.")),
+                    onError: (error) => toast.error(errorMessage(error,localizeUi("ui.noodle.noodlerschedulemanagermodal.couldNotRefreshCreators"))),
                   })
                 }
                 className="ml-auto inline-flex h-8 items-center gap-1.5 rounded-full bg-[var(--background)] px-3 text-xs font-semibold ring-1 ring-[var(--border)] transition-colors hover:bg-[var(--accent)] disabled:opacity-40"
               >
-                <RefreshCw size={13} className={refreshAllNow.isPending ? "animate-spin" : undefined} />
-                Refresh all now
-              </button>
+                <RefreshCw size={13} className={refreshAllNow.isPending ? "animate-spin" : undefined} />{localizeUi("ui.noodle.noodlerschedulemanagermodal.refreshAllNow")}</button>
             </div>
           </div>
         </details>
@@ -166,7 +165,7 @@ export function NoodlerScheduleManagerModal({ open, onClose }: { open: boolean; 
                 }
                 className="h-4 w-4 accent-[var(--noodle-accent)]"
               />
-              {selectedCount > 0 ? `${selectedCount} selected` : "Select all"}
+              {selectedCount > 0 ?localizeUi("ui.agents.regexscripteditor.value1Selected", { value1: selectedCount }) :localizeUi("lorebook.editor.batch.selectAll")}
             </label>
             <div className="ml-auto flex flex-wrap items-center gap-1.5">
               <button
@@ -175,7 +174,7 @@ export function NoodlerScheduleManagerModal({ open, onClose }: { open: boolean; 
                 onClick={() => void applyBulkAutoPosting({ enabled: true })}
                 className="h-8 rounded-full bg-[var(--background)] px-3 text-xs font-semibold ring-1 ring-[var(--border)] hover:bg-[var(--accent)] disabled:opacity-40"
               >
-                {selectedCount > 0 ? "Enable selected" : "Enable all"}
+                {selectedCount > 0 ?localizeUi("ui.noodle.noodlerschedulemanagermodal.enableSelected") :localizeUi("ui.noodle.noodlerschedulemanagermodal.enableAll")}
               </button>
               <button
                 type="button"
@@ -183,7 +182,7 @@ export function NoodlerScheduleManagerModal({ open, onClose }: { open: boolean; 
                 onClick={() => void applyBulkAutoPosting({ enabled: false })}
                 className="h-8 rounded-full bg-[var(--background)] px-3 text-xs font-semibold ring-1 ring-[var(--border)] hover:bg-[var(--accent)] disabled:opacity-40"
               >
-                {selectedCount > 0 ? "Pause selected" : "Pause all"}
+                {selectedCount > 0 ?localizeUi("ui.noodle.noodlerschedulemanagermodal.pauseSelected") :localizeUi("ui.noodle.noodlerschedulemanagermodal.pauseAll")}
               </button>
               {selectedCount > 0 &&
                 NOODLE_AUTO_POST_INTENSITIES.map(({ label, value }) => (
@@ -193,7 +192,7 @@ export function NoodlerScheduleManagerModal({ open, onClose }: { open: boolean; 
                     disabled={bulkBusy}
                     onClick={() => void applyBulkAutoPosting({ intensity: value })}
                     className="h-8 rounded-full bg-[var(--background)] px-3 text-xs font-semibold ring-1 ring-[var(--border)] hover:bg-[var(--accent)] disabled:opacity-40"
-                    title={`Set cadence to ${label}`}
+                    title={localizeUi("ui.noodle.noodlerschedulemanagermodal.setCadenceToValue1", { value1: label })}
                   >
                     {label}
                   </button>
@@ -203,9 +202,7 @@ export function NoodlerScheduleManagerModal({ open, onClose }: { open: boolean; 
         )}
 
         {creators.length === 0 ? (
-          <p className="text-sm text-[var(--muted-foreground)]">
-            No creators yet — add some from the NoodleR hub.
-          </p>
+          <p className="text-sm text-[var(--muted-foreground)]">{localizeUi("ui.noodle.noodlerschedulemanagermodal.noCreatorsYetAddSomeFromTheNoodlerHub")}</p>
         ) : (
           <div className="space-y-2">
             {creators.map((profile) => {
@@ -219,7 +216,7 @@ export function NoodlerScheduleManagerModal({ open, onClose }: { open: boolean; 
                       type="checkbox"
                       checked={selected}
                       onChange={() => toggleSelection(profile.id)}
-                      aria-label={`Select ${profile.displayName}`}
+                      aria-label={localizeUi("ui.noodle.noodlerschedulemanagermodal.selectValue1", { value1: profile.displayName })}
                       className="h-4 w-4 shrink-0 accent-[var(--noodle-accent)]"
                     />
                     <button
@@ -246,12 +243,12 @@ export function NoodlerScheduleManagerModal({ open, onClose }: { open: boolean; 
                     >
                       {auto.enabled
                         ? auto.nextRunAt
-                          ? `Next ${new Date(auto.nextRunAt).toLocaleString()}`
-                          : "Scheduling…"
-                        : "Paused"}
+                          ?localizeUi("ui.noodle.noodlerschedulemanagermodal.nextValue1", { value1: new Date(auto.nextRunAt).toLocaleString() })
+                          :localizeUi("ui.noodle.noodlerschedulemanagermodal.scheduling")
+                        :localizeUi("ui.noodle.noodlerschedulemanagermodal.paused")}
                     </span>
                     <label className="flex shrink-0 items-center gap-2">
-                      <span className="text-xs font-semibold">{auto.enabled ? "On" : "Off"}</span>
+                      <span className="text-xs font-semibold">{auto.enabled ?localizeUi("ui.game.gameinput.on") :localizeUi("ui.panels.appearancesettings.off")}</span>
                       <input
                         type="checkbox"
                         checked={auto.enabled}
@@ -259,7 +256,7 @@ export function NoodlerScheduleManagerModal({ open, onClose }: { open: boolean; 
                         onChange={(event) =>
                           updateAutoPosting.mutate(
                             { accountId: profile.id, enabled: event.target.checked },
-                            { onError: (error) => toast.error(errorMessage(error, "Could not update automatic posting.")) },
+                            { onError: (error) => toast.error(errorMessage(error,localizeUi("ui.noodle.stageprofileview.couldNotUpdateAutomaticPosting"))) },
                           )
                         }
                         className="h-5 w-5 accent-[var(--noodle-accent)]"
@@ -267,7 +264,7 @@ export function NoodlerScheduleManagerModal({ open, onClose }: { open: boolean; 
                     </label>
                     <button
                       type="button"
-                      aria-label={expanded ? "Collapse schedule" : "Expand schedule"}
+                      aria-label={expanded ?localizeUi("ui.noodle.noodlerschedulemanagermodal.collapseSchedule") :localizeUi("ui.noodle.noodlerschedulemanagermodal.expandSchedule")}
                       aria-expanded={expanded}
                       onClick={() => {
                         setExpandedId(expanded ? null : profile.id);
@@ -291,7 +288,7 @@ export function NoodlerScheduleManagerModal({ open, onClose }: { open: boolean; 
                             onClick={() =>
                               updateAutoPosting.mutate(
                                 { accountId: profile.id, intensity: value },
-                                { onError: (error) => toast.error(errorMessage(error, "Could not update cadence.")) },
+                                { onError: (error) => toast.error(errorMessage(error,localizeUi("ui.noodle.stageprofileview.couldNotUpdateCadence"))) },
                               )
                             }
                             className={cn(
@@ -306,14 +303,14 @@ export function NoodlerScheduleManagerModal({ open, onClose }: { open: boolean; 
                         ))}
                       </div>
                       <label className="flex min-h-9 items-center justify-between gap-3 rounded-md px-2 ring-1 ring-[var(--border)]">
-                        <span className="text-xs font-semibold">Generate an image with posts</span>
+                        <span className="text-xs font-semibold">{localizeUi("ui.noodle.stageprofileview.generateAnImageWithPosts")}</span>
                         <input
                           type="checkbox"
                           checked={auto.imagesEnabled}
                           onChange={(event) =>
                             updateAutoPosting.mutate(
                               { accountId: profile.id, imagesEnabled: event.target.checked },
-                              { onError: (error) => toast.error(errorMessage(error, "Could not update image generation.")) },
+                              { onError: (error) => toast.error(errorMessage(error,localizeUi("ui.noodle.stageprofileview.couldNotUpdateImageGeneration"))) },
                             )
                           }
                           className="h-4 w-4 accent-[var(--noodle-accent)]"
@@ -332,33 +329,31 @@ export function NoodlerScheduleManagerModal({ open, onClose }: { open: boolean; 
                           onClick={() => {
                             const next = new Date(rescheduleDraft);
                             if (Number.isNaN(next.getTime()) || next.getTime() <= Date.now()) {
-                              toast.error("Pick a future date and time to reschedule.");
+                              toast.error(localizeUi("ui.noodle.stageprofileview.pickAFutureDateAndTimeToReschedule"));
                               return;
                             }
                             rescheduleAutoPost.mutate(
                               { accountId: profile.id, nextRunAt: next.toISOString() },
                               {
                                 onSuccess: () => setRescheduleDraft(""),
-                                onError: (error) => toast.error(errorMessage(error, "Could not reschedule the next post.")),
+                                onError: (error) => toast.error(errorMessage(error,localizeUi("ui.noodle.stageprofileview.couldNotRescheduleTheNextPost"))),
                               },
                             );
                           }}
                           className="h-9 shrink-0 rounded-full px-3 text-xs font-semibold ring-1 ring-[var(--border)] hover:bg-[var(--accent)] disabled:opacity-50"
-                        >
-                          Reschedule
-                        </button>
+                        >{localizeUi("ui.noodle.stageprofileview.reschedule")}</button>
                       </div>
                       <button
                         type="button"
                         disabled={runAutoPostNow.isPending}
                         onClick={() =>
                           runAutoPostNow.mutate(profile.id, {
-                            onError: (error) => toast.error(errorMessage(error, "Could not run a post now.")),
+                            onError: (error) => toast.error(errorMessage(error,localizeUi("ui.noodle.noodlerschedulemanagermodal.couldNotRunAPostNow"))),
                           })
                         }
                         className="h-9 w-full rounded-full px-3 text-xs font-semibold ring-1 ring-[var(--border)] hover:bg-[var(--accent)] disabled:opacity-50"
                       >
-                        {runAutoPostNow.isPending ? "Running…" : "Run now"}
+                        {runAutoPostNow.isPending ?localizeUi("ui.noodle.stageprofileview.running") :localizeUi("ui.noodle.stageprofileview.runNow")}
                       </button>
                     </fieldset>
                   )}
