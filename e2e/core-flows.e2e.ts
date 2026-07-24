@@ -64,6 +64,45 @@ async function expectHomeContentFits(page: Page) {
     .toBe(true);
 }
 
+async function updateLiveReasoningState(
+  page: Page,
+  chatId: string,
+  action: "start" | "append-thinking" | "append-content" | "stop",
+  value = "",
+) {
+  await page.evaluate(
+    async ({ activeChatId, nextAction, nextValue }) => {
+      const storePath = "/src/stores/chat.store.ts";
+      const { useChatStore } = (await import(/* @vite-ignore */ storePath)) as {
+        useChatStore: {
+          getState: () => {
+            appendStreamBuffer: (text: string, chatId?: string) => void;
+            appendThinkingBuffer: (text: string, chatId?: string) => void;
+            clearStreamBuffer: (chatId?: string) => void;
+            clearThinkingBuffer: (chatId?: string) => void;
+            setStreaming: (streaming: boolean, chatId?: string) => void;
+          };
+        };
+      };
+      const chat = useChatStore.getState();
+      if (nextAction === "start") {
+        chat.clearStreamBuffer(activeChatId);
+        chat.clearThinkingBuffer(activeChatId);
+        chat.setStreaming(true, activeChatId);
+      } else if (nextAction === "append-thinking") {
+        chat.appendThinkingBuffer(nextValue, activeChatId);
+      } else if (nextAction === "append-content") {
+        chat.appendStreamBuffer(nextValue, activeChatId);
+      } else {
+        chat.setStreaming(false, activeChatId);
+        chat.clearStreamBuffer(activeChatId);
+        chat.clearThinkingBuffer(activeChatId);
+      }
+    },
+    { activeChatId: chatId, nextAction: action, nextValue: value },
+  );
+}
+
 test.beforeEach(async ({ page }) => {
   await prepareFreshClient(page);
 });
@@ -138,6 +177,27 @@ test("turning off the custom mouse pointer persists immediately and after reload
   await expect
     .poll(() => page.evaluate(() => document.documentElement.dataset.marinaraCustomCursor ?? null))
     .toBeNull();
+});
+
+test("gradient Accent Pulse keeps animating while Appearance settings are open", async ({ page }, testInfo) => {
+  test.skip(!testInfo.project.name.includes("desktop"), "Accent Pulse preview is covered on desktop.");
+
+  await page.goto("/");
+  await page.locator('[data-tour="panel-settings"]').click();
+  await page.getByRole("tab", { name: "Appearance" }).click();
+  const accentColorControl = page.locator("#settings-control-app-accent-color");
+  await accentColorControl.getByRole("button", { name: /Default/ }).click();
+  await accentColorControl.getByRole("button", { name: "Gradient", exact: true }).click();
+  await page.getByText("Accent Pulse", { exact: true }).click();
+  await expect(page.getByLabel("Accent Pulse")).toBeChecked();
+  await expect
+    .poll(() => page.evaluate(() => document.documentElement.dataset.marinaraAccentAnimation ?? null))
+    .toBe("gradient");
+
+  const firstAccent = await page.evaluate(() => document.documentElement.style.getPropertyValue("--primary"));
+  await expect
+    .poll(() => page.evaluate(() => document.documentElement.style.getPropertyValue("--primary")))
+    .not.toBe(firstAccent);
 });
 
 test("Android status bar setting reads and updates the native bridge", async ({ page }) => {
@@ -257,9 +317,7 @@ test("default dialogue color fills only cards without their own dialogue color",
     await page.getByRole("tab", { name: "Appearance" }).click();
     const dialogueColorControl = page.locator("#settings-control-default-dialogue-color");
     await dialogueColorControl.scrollIntoViewIfNeeded();
-    const dialogueColorToggle = dialogueColorControl.locator('input[type="checkbox"]');
-    await dialogueColorControl.locator("label[for]").first().click();
-    await expect(dialogueColorToggle).toBeChecked();
+    await expect(dialogueColorControl.locator('input[type="checkbox"]')).toHaveCount(0);
     await dialogueColorControl.getByRole("button", { name: /Scheme default/ }).click();
     await dialogueColorControl.getByLabel("Default Dialogue Color hex or CSS color").fill("#d946ef");
 
@@ -271,20 +329,292 @@ test("default dialogue color fills only cards without their own dialogue color",
           const persisted = JSON.parse(localStorage.getItem("marinara-engine-ui") ?? '{"state":{}}') as {
             state?: { defaultDialogueColorEnabled?: unknown; defaultDialogueColor?: unknown };
           };
-          return [persisted.state?.defaultDialogueColorEnabled, persisted.state?.defaultDialogueColor];
+          return [persisted.state?.defaultDialogueColorEnabled ?? null, persisted.state?.defaultDialogueColor];
         }),
       )
-      .toEqual([true, "#d946ef"]);
-
-    await dialogueColorControl.locator("label[for]").first().click();
-    await expect(dialogueColorToggle).not.toBeChecked();
-    await expect(uncoloredDialogue).not.toHaveCSS("color", "rgb(217, 70, 239)");
-    await expect(coloredDialogue).toHaveCSS("color", "rgb(34, 197, 94)");
+      .toEqual([null, "#d946ef"]);
   } finally {
     await page.request.delete(`/api/chats/${chat.id}`).catch(() => undefined);
     await Promise.all([
       page.request.delete(`/api/characters/${uncoloredCharacter.id}`).catch(() => undefined),
       page.request.delete(`/api/characters/${coloredCharacter.id}`).catch(() => undefined),
+    ]);
+  }
+});
+
+test("message deletion uses unified chroma controls and selection states", async ({ page }, testInfo) => {
+  const chatResponse = await page.request.post("/api/chats", {
+    data: { name: "Message Delete Chroma Smoke", mode: "roleplay", characterIds: [] },
+  });
+  expect(chatResponse.ok()).toBeTruthy();
+  const chat = (await chatResponse.json()) as { id: string };
+
+  try {
+    const messageResponses = await Promise.all(
+      ["Keep this turn.", "Start selecting here.", "Keep the final turn."].map((content) =>
+        page.request.post(`/api/chats/${chat.id}/messages`, {
+          data: { role: "user", content },
+        }),
+      ),
+    );
+    for (const response of messageResponses) expect(response.ok()).toBeTruthy();
+    const messages = (await Promise.all(messageResponses.map((response) => response.json()))) as Array<{
+      id: string;
+    }>;
+    const targetMessage = messages[1];
+    const assistantMessageResponse = await page.request.post(`/api/chats/${chat.id}/messages`, {
+      data: { role: "assistant", content: "First assistant swipe." },
+    });
+    expect(assistantMessageResponse.ok()).toBeTruthy();
+    const assistantMessage = (await assistantMessageResponse.json()) as { id: string };
+    const assistantSwipeResponse = await page.request.post(
+      `/api/chats/${chat.id}/messages/${assistantMessage.id}/swipes`,
+      { data: { content: "Alternate assistant swipe." } },
+    );
+    expect(assistantSwipeResponse.ok()).toBeTruthy();
+
+    await page.addInitScript((chatId) => localStorage.setItem("marinara-active-chat-id", chatId), chat.id);
+    await page.goto("/");
+    await page.evaluate(() => {
+      document.documentElement.style.setProperty("--marinara-app-accent-solid", "rgb(20, 184, 166)");
+    });
+
+    const messageRow = page.locator(`[data-message-id="${targetMessage.id}"]`);
+    await expect(messageRow).toBeVisible();
+    if (testInfo.project.name.includes("mobile")) {
+      await messageRow.click({ position: { x: 80, y: 24 } });
+    } else {
+      await messageRow.hover();
+    }
+
+    const openDeleteButton = messageRow.getByRole("button", { name: "Delete" });
+    await expect(openDeleteButton).toBeVisible();
+    await openDeleteButton.click();
+
+    const dialog = page.getByRole("dialog", { name: "Delete message" });
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByText("Choose what you want to remove from this message.")).toBeVisible();
+
+    const dialogActions = dialog.locator('[data-component="MessageDeleteActions"] > button');
+    await expect(dialogActions).toHaveCount(3);
+    await expect(dialog.getByRole("button", { name: "Delete this message" })).toBeVisible();
+    await expect(dialog.getByRole("button", { name: "Delete more" })).toBeVisible();
+    await expect(dialog.getByRole("button", { name: "Cancel" })).toBeVisible();
+
+    const readChromeStyles = (locator: typeof dialogActions) =>
+      locator.evaluateAll((buttons) =>
+        buttons.map((button) => {
+          const style = getComputedStyle(button);
+          return {
+            backgroundColor: style.backgroundColor,
+            borderColor: style.borderColor,
+            color: style.color,
+            className: button.className,
+          };
+        }),
+      );
+    const tealStyles = await readChromeStyles(dialogActions);
+    expect(new Set(tealStyles.map(({ backgroundColor }) => backgroundColor)).size).toBe(1);
+    expect(new Set(tealStyles.map(({ borderColor }) => borderColor)).size).toBe(1);
+    expect(new Set(tealStyles.map(({ color }) => color)).size).toBe(1);
+    for (const { className } of tealStyles) {
+      expect(className).not.toMatch(/destructive|pink|red|rose/iu);
+    }
+
+    await page.evaluate(() => {
+      document.documentElement.style.setProperty("--marinara-app-accent-solid", "rgb(59, 130, 246)");
+    });
+    await expect
+      .poll(async () => (await readChromeStyles(dialogActions))[0]?.color)
+      .not.toBe(tealStyles[0]?.color);
+    const blueStyles = await readChromeStyles(dialogActions);
+    expect(new Set(blueStyles.map(({ backgroundColor }) => backgroundColor)).size).toBe(1);
+    expect(new Set(blueStyles.map(({ borderColor }) => borderColor)).size).toBe(1);
+    expect(new Set(blueStyles.map(({ color }) => color)).size).toBe(1);
+
+    await testInfo.attach(`message-delete-dialog-${testInfo.project.name}.png`, {
+      body: await page.screenshot({ fullPage: true }),
+      contentType: "image/png",
+    });
+
+    await dialog.getByRole("button", { name: "Delete more" }).click();
+    const selectionBar = page.locator('[data-component="MessageMultiSelectBar"]');
+    await expect(selectionBar).toBeVisible();
+    await expect(selectionBar).toContainText(/\d+ selected/);
+
+    const deleteSelected = selectionBar.getByRole("button", { name: "Delete selected" });
+    const cancelSelection = selectionBar.getByRole("button", { name: "Cancel" });
+    const selectionActions = selectionBar.locator("button").filter({ hasText: /Delete selected|Cancel/ });
+    await expect(deleteSelected).toBeEnabled();
+    await expect(cancelSelection).toBeVisible();
+    const selectionActionStyles = await readChromeStyles(selectionActions);
+    expect(selectionActionStyles).toHaveLength(2);
+    expect(selectionActionStyles[0]).toEqual(selectionActionStyles[1]);
+
+    const selectedCheckbox = messageRow.getByRole("checkbox", { name: "Deselect message" });
+    await expect(selectedCheckbox).toBeVisible();
+    await expect(selectedCheckbox).toHaveCSS("background-color", "rgb(59, 130, 246)");
+    const selectionClassNames = await page
+      .locator('[aria-checked="true"], [data-component="MessageMultiSelectBar"]')
+      .evaluateAll((elements) => elements.map((element) => element.className));
+    for (const className of selectionClassNames) {
+      expect(className).not.toMatch(/destructive|pink|red|rose/iu);
+    }
+
+    await testInfo.attach(`message-delete-${testInfo.project.name}.png`, {
+      body: await page.screenshot({ fullPage: true }),
+      contentType: "image/png",
+    });
+
+    await cancelSelection.click();
+    await expect(selectionBar).toBeHidden();
+
+    const assistantRow = page.locator(`[data-message-id="${assistantMessage.id}"]`);
+    await expect(assistantRow).toContainText("Alternate assistant swipe.");
+    if (testInfo.project.name.includes("mobile")) {
+      await assistantRow.click({ position: { x: 80, y: 24 } });
+    } else {
+      await assistantRow.hover();
+    }
+    await assistantRow.getByRole("button", { name: "Delete" }).click();
+    await expect(dialog).toBeVisible();
+
+    const assistantDialogActions = dialog.locator('[data-component="MessageDeleteActions"] > button');
+    await expect(assistantDialogActions).toHaveCount(4);
+    const deleteSwipe = dialog.getByRole("button", { name: "Delete only this swipe (2/2)" });
+    await expect(deleteSwipe).toBeVisible();
+    const swipeStyles = await readChromeStyles(deleteSwipe);
+    const deleteMessageStyles = await readChromeStyles(
+      dialog.getByRole("button", { name: "Delete this message" }),
+    );
+    expect(swipeStyles).toHaveLength(1);
+    expect(swipeStyles[0]).toEqual(deleteMessageStyles[0]);
+    expect(swipeStyles[0]?.color).not.toBe(tealStyles[0]?.color);
+    expect(swipeStyles[0]?.className).not.toMatch(/destructive|pink|red|rose/iu);
+
+    await deleteSwipe.click();
+    await expect(dialog).toBeHidden();
+    await expect
+      .poll(async () => {
+        const response = await page.request.get(`/api/chats/${chat.id}/messages/${assistantMessage.id}/swipes`);
+        if (!response.ok()) return -1;
+        return ((await response.json()) as unknown[]).length;
+      })
+      .toBe(1);
+    await expect(assistantRow).toContainText("First assistant swipe.");
+  } finally {
+    await page.request.delete(`/api/chats/${chat.id}`).catch(() => undefined);
+  }
+});
+
+test("Character and Persona avatar actions stay separated and visually balanced", async ({ page }) => {
+  const suffix = Date.now().toString(36);
+  const connectionResponse = await page.request.post("/api/connections", {
+    data: {
+      name: `Avatar Actions ${suffix}`,
+      provider: "image_generation",
+      imageGenerationSource: "openai",
+    },
+  });
+  expect(connectionResponse.ok()).toBeTruthy();
+  const connection = (await connectionResponse.json()) as { id: string };
+
+  const characterName = `Avatar Character ${suffix}`;
+  const characterResponse = await page.request.post("/api/characters", {
+    data: { data: { name: characterName } },
+  });
+  expect(characterResponse.ok()).toBeTruthy();
+  const character = (await characterResponse.json()) as { id: string };
+
+  const personaName = `Avatar Persona ${suffix}`;
+  const personaResponse = await page.request.post("/api/characters/personas", {
+    data: { name: personaName },
+  });
+  expect(personaResponse.ok()).toBeTruthy();
+  const persona = (await personaResponse.json()) as { id: string };
+
+  const verifyEditor = async (panel: "characters" | "personas", resourceName: string) => {
+    await page.locator(`[data-tour="panel-${panel}"]`).click();
+    await page.getByText(resourceName, { exact: true }).first().click();
+
+    const editor = page.locator(".mari-editor-shell");
+    await expect(editor).toBeVisible();
+    const tile = editor.locator(".mari-editor-avatar-tile");
+    const generateButton = tile.getByRole("button", { name: "Generate avatar with AI" });
+    const cameraIcon = tile.locator("div.absolute.inset-0 svg");
+    await expect(generateButton).toBeVisible();
+    await expect(cameraIcon).toHaveCount(1);
+
+    const [tileBox, generateBox, cameraBox] = await Promise.all([
+      tile.boundingBox(),
+      generateButton.boundingBox(),
+      cameraIcon.boundingBox(),
+    ]);
+    expect(tileBox).not.toBeNull();
+    expect(generateBox).not.toBeNull();
+    expect(cameraBox).not.toBeNull();
+    if (!tileBox || !generateBox || !cameraBox) return;
+
+    expect(generateBox.width).toBeGreaterThanOrEqual(11.5);
+    expect(generateBox.width).toBeLessThanOrEqual(14);
+    expect(generateBox.x + generateBox.width).toBeLessThanOrEqual(tileBox.x + tileBox.width + 1);
+    expect(generateBox.y).toBeGreaterThanOrEqual(tileBox.y - 1);
+    const overlapsCamera =
+      generateBox.x < cameraBox.x + cameraBox.width &&
+      generateBox.x + generateBox.width > cameraBox.x &&
+      generateBox.y < cameraBox.y + cameraBox.height &&
+      generateBox.y + generateBox.height > cameraBox.y;
+    expect(overlapsCamera).toBe(false);
+
+    await editor
+      .getByRole("navigation", { name: "Editor sections" })
+      .getByRole("button", { name: "Metadata", exact: true })
+      .click();
+    const uploadButton = editor.getByRole("button", { name: "Upload avatar", exact: true });
+    const metadataGenerateButton = editor.getByRole("button", { name: "Generate with AI", exact: true });
+    await expect(uploadButton).toBeVisible();
+    await expect(metadataGenerateButton).toBeVisible();
+    await page.mouse.move(1, 1);
+    await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+    await expect(uploadButton).toHaveClass(/mari-chrome-control--small/);
+    await expect(metadataGenerateButton).toHaveClass(/mari-chrome-control--small/);
+    const touchHoverActive = await metadataGenerateButton.evaluate((element) => element.matches(":hover"));
+    if (!touchHoverActive) {
+      await expect
+        .poll(async () => {
+          const [uploadStyles, generateStyles] = await Promise.all(
+            [uploadButton, metadataGenerateButton].map((button) =>
+              button.evaluate((element) => {
+                const styles = getComputedStyle(element);
+                return {
+                  backgroundColor: styles.backgroundColor,
+                  borderColor: styles.borderColor,
+                  color: styles.color,
+                };
+              }),
+            ),
+          );
+          return JSON.stringify(uploadStyles) === JSON.stringify(generateStyles);
+        })
+        .toBe(true);
+    }
+
+    await editor
+      .locator(".mari-editor-header .mari-editor-action")
+      .first()
+      .evaluate((button: HTMLButtonElement) => button.click());
+    await expect(editor).toHaveCount(0);
+  };
+
+  try {
+    await page.goto("/");
+    await verifyEditor("characters", characterName);
+    await verifyEditor("personas", personaName);
+  } finally {
+    await Promise.all([
+      page.request.delete(`/api/characters/${character.id}`).catch(() => undefined),
+      page.request.delete(`/api/characters/personas/${persona.id}`).catch(() => undefined),
+      page.request.delete(`/api/connections/${connection.id}`).catch(() => undefined),
     ]);
   }
 });
@@ -570,6 +900,128 @@ test("generation fallbacks identify the replacement connection in a toast", asyn
     await page.request.delete(`/api/chats/${chat.id}`);
   }
 });
+
+for (const mode of ["roleplay", "conversation"] as const) {
+  test(`${mode} exposes reasoning on its first live chunk and retains saved reasoning`, async ({ page }, testInfo) => {
+    const characters: Array<{ id: string; name: string }> = [];
+    if (mode === "conversation") {
+      for (const name of ["Reasoning One", "Reasoning Two"]) {
+        const characterResponse = await page.request.post("/api/characters", {
+          data: { data: { name } },
+        });
+        expect(characterResponse.ok()).toBeTruthy();
+        characters.push({ id: ((await characterResponse.json()) as { id: string }).id, name });
+      }
+    }
+    const chatResponse = await page.request.post("/api/chats", {
+      data: {
+        name: `${mode} Reasoning Smoke`,
+        mode,
+        characterIds: characters.map((character) => character.id),
+      },
+    });
+    expect(chatResponse.ok()).toBeTruthy();
+    const chat = (await chatResponse.json()) as { id: string };
+
+    try {
+      if (mode === "conversation") {
+        const metadataResponse = await page.request.patch(`/api/chats/${chat.id}/metadata`, {
+          data: { conversationSetupComplete: true },
+        });
+        expect(metadataResponse.ok()).toBeTruthy();
+      }
+      const savedMessageResponse = await page.request.post(`/api/chats/${chat.id}/messages`, {
+        data: {
+          role: "assistant",
+          content:
+            mode === "conversation"
+              ? `${characters[0]!.name}: A completed response with saved reasoning.`
+              : "A completed response with saved reasoning.",
+          extra: { thinking: "Saved reasoning remains available." },
+        },
+      });
+      expect(savedMessageResponse.ok()).toBeTruthy();
+      const savedMessage = (await savedMessageResponse.json()) as { id: string };
+
+      await page.addInitScript((chatId) => {
+        localStorage.setItem("marinara-active-chat-id", chatId);
+      }, chat.id);
+      await page.goto("/");
+
+      await updateLiveReasoningState(page, chat.id, "start");
+      const liveMessageId = mode === "roleplay" ? "__streaming__" : "__conversation_live_stream__";
+      const liveMessage = page.locator(`[data-message-id="${liveMessageId}"]`);
+
+      if (mode === "roleplay") {
+        await expect(liveMessage).toBeVisible();
+        await expect(liveMessage.getByText("Thinking…", { exact: true })).toBeVisible();
+      } else {
+        await expect(liveMessage).toHaveCount(0);
+        await expect(page.locator(".mari-typing-indicator")).toBeVisible();
+      }
+      await expect(liveMessage.getByRole("button", { name: "View model thoughts" })).toHaveCount(0);
+
+      await updateLiveReasoningState(page, chat.id, "append-thinking", "First reasoning chunk.");
+      await expect(liveMessage).toBeVisible();
+      const liveThoughtsButton = liveMessage.getByRole("button", { name: "View model thoughts" });
+      await expect(liveThoughtsButton).toBeVisible();
+      await liveThoughtsButton.click();
+
+      const thoughtsDialog = page.getByRole("dialog", { name: "Model Thoughts" });
+      await expect(thoughtsDialog).toBeVisible();
+      await expect(thoughtsDialog).toContainText("First reasoning chunk.");
+
+      await updateLiveReasoningState(page, chat.id, "append-thinking", " Second reasoning chunk.");
+      await expect(thoughtsDialog).toContainText("First reasoning chunk. Second reasoning chunk.");
+      await updateLiveReasoningState(
+        page,
+        chat.id,
+        "append-content",
+        mode === "conversation"
+          ? `${characters[0]!.name}: The visible response begins.`
+          : "The visible response begins.",
+      );
+      await expect(thoughtsDialog).toBeVisible();
+      await expect(thoughtsDialog).toContainText("Second reasoning chunk.");
+      await expect(liveMessage.getByRole("button", { name: "View model thoughts" })).toBeVisible();
+      const closeThoughtsButton = thoughtsDialog.getByRole("button", { name: "Close Model Thoughts" });
+      await expect
+        .poll(() => thoughtsDialog.evaluate((dialog) => dialog.contains(document.activeElement)))
+        .toBe(true);
+      await page.keyboard.press("Tab");
+      await expect(closeThoughtsButton).toBeFocused();
+      await page.keyboard.press("Tab");
+      await expect(closeThoughtsButton).toBeFocused();
+      await page.keyboard.press("Escape");
+      await expect(thoughtsDialog).toBeHidden();
+      await expect(liveThoughtsButton).toBeFocused();
+
+      await updateLiveReasoningState(page, chat.id, "stop");
+      await expect(liveMessage).toHaveCount(0);
+
+      const savedRow = page.locator(`[data-message-id="${savedMessage.id}"]`);
+      if (testInfo.project.name.includes("mobile")) {
+        await savedRow.click();
+      } else {
+        await savedRow.hover();
+      }
+      const savedThoughtsButton = testInfo.project.name.includes("mobile")
+        ? savedRow.getByRole("button", { name: "View model thoughts" })
+        : savedRow.locator('button[title="View model thoughts"]');
+      await expect(savedThoughtsButton).toBeVisible();
+      await savedThoughtsButton.click();
+      await expect(page.getByRole("dialog", { name: "Model Thoughts" })).toContainText(
+        "Saved reasoning remains available.",
+      );
+    } finally {
+      await updateLiveReasoningState(page, chat.id, "stop").catch(() => undefined);
+      await page.request.delete(`/api/chats/${chat.id}`).catch(() => undefined);
+      await Promise.all(
+        characters.map((character) => page.request.delete(`/api/characters/${character.id}`).catch(() => undefined)),
+      );
+    }
+  });
+}
 
 test("Roleplay rewrite streaming follows the rendered message height", async ({ page }, testInfo) => {
   test.skip(!testInfo.project.name.includes("desktop"), "Roleplay rewrite scrolling is covered on desktop.");
@@ -1004,7 +1456,7 @@ test("extension API routes no longer exist", async ({ page }) => {
   }
 });
 
-test("retired extension records disappear from local state and Settings", async ({ page }, testInfo) => {
+test("legacy browser records are cleaned while extension imports stay locked", async ({ page }, testInfo) => {
   test.skip(!testInfo.project.name.includes("desktop"), "One browser proves the shared UI-state migration.");
 
   await page.goto("/");
@@ -1043,7 +1495,7 @@ test("retired extension records disappear from local state and Settings", async 
         };
       }),
     )
-    .toEqual({ version: 81, hasExtensionRecords: false, hasCleanupFlag: false });
+    .toEqual({ version: 82, hasExtensionRecords: false, hasCleanupFlag: false });
 
   expect(
     await page.evaluate(
@@ -1056,7 +1508,17 @@ test("retired extension records disappear from local state and Settings", async 
   await page.locator('[data-tour="panel-settings"]').click();
   await page.getByRole("tab", { name: "Addons" }).click();
   await expect(page.getByText("Personal Extensions", { exact: true }).first()).toBeVisible();
-  await expect(page.getByRole("button", { name: "New Draft" })).toBeVisible();
+  await expect(
+    page.getByText(
+      "Ask Professor Mari to create an extension for you. Nothing runs until you enable it and approve the exact code hash.",
+      { exact: true },
+    ).first(),
+  ).toBeVisible();
+  await expect(page.getByRole("button", { name: "New Draft" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Import Extension File" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Import Extension Folder" })).toHaveCount(0);
+  await expect(page.getByText("External Extensions", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("Supported local formats", { exact: true })).toHaveCount(0);
   await expect(page.getByText("Theme Library", { exact: true })).toBeVisible();
   await expect(page.getByText("Legacy Extension Cleanup", { exact: true })).toHaveCount(0);
   await expect(page.getByText(/Extensions have been removed/i)).toHaveCount(0);
@@ -1064,63 +1526,53 @@ test("retired extension records disappear from local state and Settings", async 
   await expect(page.getByRole("button", { name: /Export extension/i })).toHaveCount(0);
 });
 
-test("Personal Extensions require exact-code approval on desktop and mobile", async ({ page, request }, testInfo) => {
-  const suffix = testInfo.project.name.replace(/\W+/g, "-");
-  const extensionName = `Personal Extension Smoke ${suffix} ${Date.now()}`;
-  const marker = `__marinaraPersonalExtensionSmoke_${suffix.replace(/-/g, "_")}`;
-  const firstSource = `globalThis[${JSON.stringify(marker)}] = "running"; marinara.onCleanup(() => { delete globalThis[${JSON.stringify(marker)}]; });`;
-  let extensionId: string | null = null;
+test("Personal Extensions default to the Professor Mari-only locked workflow", async ({ page }) => {
+  await page.goto("/");
+  await page.locator('[data-tour="panel-settings"]').click();
+  await page.getByRole("tab", { name: "Addons" }).click();
 
-  try {
-    await page.goto("/");
-    await page.locator('[data-tour="panel-settings"]').click();
-    await page.getByRole("tab", { name: "Addons" }).click();
-    await expect(page.getByText("Personal Extensions", { exact: true }).first()).toBeVisible();
-    await page.getByRole("button", { name: "New Draft" }).click();
+  await expect(page.getByText("Personal Extensions", { exact: true }).first()).toBeVisible();
+  await expect(
+    page.getByText(
+      "Ask Professor Mari to create an extension for you. Nothing runs until you enable it and approve the exact code hash.",
+      { exact: true },
+    ).first(),
+  ).toBeVisible();
+  await expect(page.getByRole("button", { name: "New Draft" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Import Extension File" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Import Extension Folder" })).toHaveCount(0);
+  await expect(page.getByText("External Extensions", { exact: true })).toHaveCount(0);
 
-    await page.getByLabel("Name").fill(extensionName);
-    await page.getByLabel("Browser JavaScript").fill(firstSource);
-    await page.getByRole("button", { name: "Save Draft" }).click();
-    await expect(page.getByText("Disabled pending approval", { exact: true })).toBeVisible();
-    await expect
-      .poll(async () => {
-        const extensions = (await (await request.get("/api/personal-extensions")).json()) as Array<{
-          id: string;
-          name: string;
-        }>;
-        const extension = extensions.find((candidate) => candidate.name === extensionName);
-        extensionId = extension?.id ?? null;
-        return Boolean(extension);
-      })
-      .toBe(true);
+  await page.getByRole("tab", { name: "Advanced" }).click();
+  const importToggle = page.getByLabel("Allow third-party extension imports");
+  const clearAllButton = page.getByRole("button", { name: "Clear All Data" });
+  await expect(clearAllButton).toBeVisible();
+  await expect(importToggle).toBeDisabled();
+  expect(
+    await importToggle.evaluate((toggle) => {
+      const clearAll = [...document.querySelectorAll("button")].find(
+        (button) => button.textContent?.trim() === "Clear All Data",
+      );
+      return Boolean(
+        clearAll && (clearAll.compareDocumentPosition(toggle) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0,
+      );
+    }),
+  ).toBe(true);
 
-    await page.getByRole("button", { name: "Review and Run" }).click();
-    const approvalDialog = page.getByRole("dialog", { name: "Run Personal Browser Code?" });
-    await expect(approvalDialog.getByText(/Marinara's origin and can read or change data/i)).toBeVisible();
-    await approvalDialog.getByRole("button", { name: "Run Exact Code" }).click();
-    await expect(page.getByText("Running approved code", { exact: true })).toBeVisible();
-    await expect
-      .poll(() => page.evaluate((key) => (globalThis as unknown as Record<string, unknown>)[key], marker))
-      .toBe("running");
-
-    await page
-      .getByLabel("Browser JavaScript")
-      .fill(`globalThis[${JSON.stringify(marker)}] = "changed code must wait";`);
-    await page.getByRole("button", { name: "Save Draft" }).click();
-    await expect(page.getByText("Disabled pending approval", { exact: true })).toBeVisible();
-    await expect
-      .poll(() => page.evaluate((key) => (globalThis as unknown as Record<string, unknown>)[key], marker))
-      .toBeUndefined();
-  } finally {
-    if (!extensionId) {
-      const response = await request.get("/api/personal-extensions");
-      if (response.ok()) {
-        const extensions = (await response.json()) as Array<{ id: string; name: string }>;
-        extensionId = extensions.find((candidate) => candidate.name === extensionName)?.id ?? null;
-      }
-    }
-    if (extensionId) await request.delete(`/api/personal-extensions/${extensionId}`);
-  }
+  const warning = page.getByText(/Third-party extensions may contain malicious or dangerous code\./u);
+  await expect(warning).toBeVisible();
+  const warningColors = await warning.evaluate((element) => {
+    const probe = document.createElement("span");
+    probe.style.color = "var(--primary)";
+    document.body.appendChild(probe);
+    const result = {
+      accent: getComputedStyle(probe).color,
+      warning: getComputedStyle(element).color,
+    };
+    probe.remove();
+    return result;
+  });
+  expect(warningColors.warning).toBe(warningColors.accent);
 });
 
 test("Roleplay Active Context shows rich lorebook activation provenance", async ({ page, request }, testInfo) => {
@@ -1817,7 +2269,7 @@ test("UI language selection loads locale files and persists across reloads", asy
 
   // Community locales are intentionally partial. A newly extracted English
   // key must render in English when the selected locale has not translated it.
-  await languageSelect.selectOption("de");
+  await languageSelect.selectOption("es");
   await expect(page.getByPlaceholder("Search settings")).toBeVisible();
   await expect(page.getByText("Confirm before deleting", { exact: true })).toBeVisible();
 

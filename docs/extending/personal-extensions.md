@@ -1,78 +1,125 @@
 # Personal Extensions
 
-Personal Extensions let you keep private CSS or JavaScript customizations inside Marinara Engine without publishing them to a catalog. Use them for code you wrote yourself, code you inspected locally, or a draft Professor Mari created for you.
+Personal Extensions are private code drafts created for you by Professor Mari. Open **Settings** > **Addons** > **Personal Extensions**.
 
-Open **Settings** > **Addons** > **Personal Extensions**.
+The default message is:
 
-## The trust model
+> Ask Professor Mari to create an extension for you. Nothing runs until you enable it and approve the exact code hash.
 
-Personal Extensions are local and full-trust:
+There is no New Draft action and there are no import controls in this section. Ask Professor Mari to create or revise a draft. She can save code, but she cannot approve or enable it.
 
-- Marinara never downloads or automatically updates them.
-- A new import or draft always starts disabled.
-- Marinara fingerprints the exact executable code with SHA-256.
-- Choosing **Review and Run** approves only the fingerprint currently shown.
-- Editing executable code, importing an update, restoring a revision, or changing its runtime disables the extension and clears approval.
-- Profile exports and imports never transfer execution approval.
+## Review and enable
 
-This protects the approval step from changing underneath you. It does not make untrusted code safe.
+Every draft starts disabled. Marinara fingerprints the exact executable code with SHA-256. Open the draft, inspect the code, compare the displayed hash, then choose **Review and Run** only if you accept that exact version. Any executable edit or restored revision disables the extension and requires a fresh approval.
 
-A **Browser** extension runs on Marinara's browser origin. It can read and change anything available to that signed-in browser session, including chats and settings. A **Server** extension runs as trusted application code inside the Marinara server process. It can access the server's files, environment, network, and data. Only run code you understand and trust completely.
+Sandboxing reduces authority; it does not make arbitrary code trustworthy. A malicious extension can still waste CPU until the watchdog stops it, flood its own storage within enforced limits, or behave deceptively through logs. Always review code before enabling it.
 
-## Create a Personal Extension
+## Runtime isolation
 
-1. Open **Settings** > **Addons**.
-2. In **Personal Extensions**, choose **New Draft**.
-3. Enter a name and optional version and description.
-4. Choose **Browser** or **Server**.
-5. Add the code.
-6. Choose **Save Draft**.
-7. Read the warning and review the code and fingerprint.
-8. Choose **Review and Run**, then confirm **Run Exact Code**.
+A Browser Extension runs in a dedicated Worker inside an opaque-origin sandboxed iframe. It cannot access Marinara's page, DOM, cookies, browser storage, origin APIs, or network. Its capabilities are private extension storage, logging, managed timers, cleanup registration, constrained windows, and safe host contribution slots.
 
-Browser extensions may contain sanitized CSS, JavaScript, or both. Server extensions require JavaScript.
+Extensions can add top-bar actions, Extensions menu items, and persistent right-side panels with `marinara.ui.registerContribution(...)`. Marinara renders these surfaces using the active theme and a fixed set of controls: headings, text, preformatted output, buttons, text inputs, selects, toggles, sliders, color controls, and spacers. An extension supplies content and state, never HTML, CSS, URLs, React components, or host event handlers.
 
-## Ask Professor Mari
+These UI capabilities and rules are identical for every Browser Extension regardless of source. An imported third-party (External) Extension gets the same contribution API once it clears the `.env` and Danger Zone opt-ins plus exact-hash approval. It still cannot reach Marinara's DOM or APIs.
 
-You can ask Professor Mari to create or revise a Personal Extension. She saves the result as a disabled draft and can never approve or enable it. Open the draft in **Settings** > **Addons**, inspect the exact code, and approve its fingerprint yourself.
+### Add a Marinara-rendered panel
 
-Professor Mari's raw shell commands use an operating-system sandbox. Network access is denied, inherited server secrets are removed, and filesystem writes are confined to the Marinara workspace. If a supported sandbox is unavailable, raw shell commands are disabled rather than falling back to an unrestricted shell.
+```js
+const panel = marinara.ui.registerContribution({
+  id: "weather-settings",
+  kind: "panel",
+  label: "Weather controls",
+  description: "Tune a weather scene without leaving Marinara.",
+  icon: "sparkles",
+  elements: [
+    { kind: "heading", text: "Atmosphere" },
+    {
+      kind: "select",
+      id: "weather",
+      label: "Weather",
+      value: "rain",
+      options: [
+        { value: "rain", label: "Rain" },
+        { value: "snow", label: "Snow" },
+        { value: "aurora", label: "Aurora" },
+      ],
+    },
+    { kind: "slider", id: "intensity", label: "Intensity", min: 0, max: 100, value: 60 },
+    { kind: "toggle", id: "lightning", label: "Lightning", checked: false },
+    { kind: "color", id: "tint", label: "Tint", value: "#6d8cff" },
+    { kind: "button", id: "apply", label: "Apply" },
+  ],
+  onActivate: async () => {
+    const settings = await marinara.storage.get();
+    // Update the panel when stored state should be reflected in the controls.
+  },
+  onEvent: async ({ elementId, values }) => {
+    if (elementId !== "apply") return;
+    await marinara.storage.patch(values);
+  },
+});
 
-## Import and export
+marinara.onCleanup(() => panel.remove());
+```
 
-Choose **Import Local File** or **Import Local Folder** to import code from your device. Supported formats include:
+Use `kind: "button"` for a compact top-bar/Extensions-menu action and `kind: "menu-item"` for a menu-only action. Both invoke `onActivate`. A `panel` invokes `onActivate` when opened; its buttons invoke `onEvent` with the current values of every panel control. The returned handle supports `update({ label?, description?, icon?, elements? })` and `remove()`. IDs may contain letters, numbers, `.`, `_`, and `-`.
 
-- `.personal-extension.zip` and compatible `.zip` packages
-- `.json` manifests
-- `.css`
-- `.js`, `.mjs`, and `.cjs`
-- `.server.js`, `.server.mjs`, and `.server.cjs`
+Complex tools can build multi-step interfaces by updating the panel elements after an event. Keep application state in `marinara.storage`; do not encode it in markup.
 
-Older Marinara extension packages can be imported for recovery. Any `enabled` value inside a manifest is ignored.
+### Legacy extension ports
 
-Use an extension's **Export local package** action to download a portable package. Exported packages are disabled by design, so importing one on another Marinara server requires a fresh review.
+Weather controllers, prompt editors, and other substantial workflows are valid contribution use cases. Their safe ports can use a menu or top-bar launcher plus progressively updated panels. Existing packages that inject DOM overlays, query Marinara CSS selectors, traverse React internals, or call same-origin `/api` routes cannot be imported unchanged into the safe runtime.
 
-## Updates and revision history
+UI contributions provide the interface, not ambient authority. Features that need chats, presets, lorebooks, characters, personas, or visual scene effects also need a dedicated broker capability exposed by Marinara and explicitly approved by the user. Until that capability exists, an extension must not simulate it through host DOM access or unrestricted network requests.
 
-Personal Extensions have no remote updater. To update one, edit its draft, import a new local package with the same name, or ask Professor Mari to revise it.
+The older `marinara.ui.showWindow(...)` API remains available for a temporary window inside the opaque-origin iframe. It uses the same fixed controls and returns `update(...)` and `close()` handles. Prefer contributions when the tool should be reachable through Marinara's normal navigation.
 
-Executable changes save the previous code in **Revision History**. Restoring an older revision returns it as a disabled draft. Review and approve that revision again before it runs.
+A Server Extension runs in a separate permission-restricted Node process inside macOS Seatbelt or Linux Bubblewrap. It cannot access Marinara files, user files, inherited server secrets, the network, child processes, workers, or native addons. If Marinara cannot establish a supported OS sandbox, Server Extensions remain disabled.
 
-## Remote devices
+### Platform support
 
-You can use Personal Extensions from another device connected to the same Marinara server. Management actions require Admin Access when the remote browser is not already trusted for privileged actions. Set the Admin Access secret in **Settings** > **Advanced**, following [Remote Access](../REMOTE_ACCESS.md).
+Browser Extensions are sandboxed by the browser itself, so they work everywhere. Server Extensions need a supported OS sandbox; where none exists, they stay disabled and cannot be enabled — Marinara never falls back to running them unsandboxed.
 
-An approved Browser extension runs separately in each browser that opens Marinara. A Server extension runs once in the Marinara server process.
+| Platform                | Browser Extensions | Server Extensions                     |
+| ----------------------- | ------------------ | ------------------------------------- |
+| macOS                   | ✅ Sandboxed       | ✅ Sandboxed (Seatbelt)               |
+| Linux (with Bubblewrap) | ✅ Sandboxed       | ✅ Sandboxed (Bubblewrap)             |
+| Linux (without `bwrap`) | ✅ Sandboxed       | ⛔ Disabled — install `bwrap`         |
+| Windows                 | ✅ Sandboxed       | ⛔ Disabled — use a Browser Extension |
+| Android                 | ✅ Sandboxed       | ⛔ Disabled — use a Browser Extension |
 
-## If an extension misbehaves
+On Windows and Android there is no supported OS process sandbox, so Server Extensions are unavailable by design. Use a Browser Extension instead, or run the Marinara server on macOS or Linux (with `bwrap`) if you need a Server Extension.
 
-Open **Settings** > **Addons** and choose **Disable**. If the extension prevents the interface from loading, stop Marinara and edit the `installed_extensions` storage record only as a recovery measure, setting `enabled` to `"false"`. Do not set `approvedHash` by hand.
+## External Extensions
 
-For server extensions, the list shows startup errors. Fix the draft, save it, and approve the new fingerprint only after reviewing the correction.
+Third-party imports are locked and hidden by default. Two steps are required:
+
+1. On the Marinara host, set `ENABLE_EXTERNAL_EXTENSIONS=true` in `.env`.
+2. Open **Settings** > **Advanced** > **Danger Zone**, scroll below the data-deletion controls, read the warning, and enable **Allow third-party extension imports**.
+
+Only then does **Settings** > **Addons** show **External Extensions** with file and folder import controls. Supported formats are always expanded:
+
+- `.personal-extension.zip` and compatible `.zip` packages;
+- `.json` manifests;
+- `.css`;
+- `.js`, `.mjs`, and `.cjs`;
+- `.server.js`, `.server.mjs`, and `.server.cjs`.
+
+Imports never carry approval and cannot enable themselves. Legacy, profile-imported, manually stored, and unknown-source records are also treated as external. They stay hidden, cannot be approved, and are excluded from both runtimes until both gates are open.
+
+Turning either gate off stops active external server processes, removes browser workers, and disables stored external records. Reopening the gates does not automatically run them again.
+
+Third-party extensions may contain malicious or dangerous code. Always inspect every line before downloading, importing, or enabling it. You proceed entirely at your own responsibility.
+
+## Export, revisions, and recovery
+
+Use an extension's export action to download a portable package. Exported and restored packages remain disabled. Restoring a revision also returns it to a disabled draft.
+
+If an extension misbehaves, choose **Disable**. If the interface is unavailable, stop Marinara and set the relevant `installed_extensions` record's `enabled` value to `"false"`. Never set `approvedHash` by hand.
 
 ## Related guides
 
 - [Professor Mari](../home/professor-mari.md)
-- [Custom CSS Themes](../appearance/custom-css-themes.md)
+- [Server Configuration](../CONFIGURATION.md)
 - [Backup and Restore](../data/backup-and-restore.md)
 - [Remote Access](../REMOTE_ACCESS.md)
