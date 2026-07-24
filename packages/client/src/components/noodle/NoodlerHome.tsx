@@ -2894,6 +2894,7 @@ function PrivatePostComposer({
   const composerBusy = submitting || manualPending || guidePending;
   composerBusyRef.current = composerBusy;
   const guide = serializePrivatePostGuide(title, body);
+  const pollIsValid = poll ? noodlePollInputSchema.safeParse(poll).success : false;
 
   useEffect(() => {
     if (composerBusy) {
@@ -3026,7 +3027,7 @@ function PrivatePostComposer({
       setPostError("Add a body, image, or poll.");
       return;
     }
-    if (poll && !noodlePollInputSchema.safeParse(poll).success) {
+    if (poll && !pollIsValid) {
       setPostError("Polls need a question and two unique answers.");
       return;
     }
@@ -3058,13 +3059,7 @@ function PrivatePostComposer({
       setGuideError("A guided post needs a body, image, or poll.");
       return;
     }
-    if (
-      poll &&
-      (!poll.question.trim() ||
-        poll.options.length < 2 ||
-        poll.options.some((option) => !option.trim()) ||
-        new Set(poll.options.map((option) => option.trim().toLocaleLowerCase())).size !== poll.options.length)
-    ) {
+    if (poll && !pollIsValid) {
       setGuideError("Polls need a question and two unique options.");
       return;
     }
@@ -3195,7 +3190,7 @@ function PrivatePostComposer({
             disabled={
               composerBusy ||
               Boolean(pendingImage) ||
-              (!body.trim() && !image && !noodlePollInputSchema.safeParse(poll).success)
+              (!body.trim() && !image && !pollIsValid)
             }
             className="inline-flex h-8 items-center gap-1.5 rounded-full bg-[var(--noodle-accent)] px-4 text-xs font-bold text-zinc-950 [&_svg]:!text-zinc-950 disabled:cursor-not-allowed disabled:opacity-50"
           >

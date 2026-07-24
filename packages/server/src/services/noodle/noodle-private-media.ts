@@ -4,7 +4,7 @@ import type { NoodlerManagedPost } from "@marinara-engine/shared";
 import { logger } from "../../lib/logger.js";
 import { DATA_DIR } from "../../utils/data-dir.js";
 import { assertInsideDir } from "../../utils/security.js";
-import { stageImageToDisk, type StagedGalleryImage } from "../image/image-generation.js";
+import { stageImageToDisk } from "../image/image-generation.js";
 
 // NoodleR-owned private media lives under the gallery data dir but in a namespace whose
 // path contains a slash, so the public gallery serve routes (which reject slashes in the
@@ -16,18 +16,6 @@ export type NoodlerPrivatePostMediaUpload = {
   buffer: Buffer;
   extension: string;
 };
-
-function stageUploadedPrivatePostMedia(
-  accountId: string,
-  upload: NoodlerPrivatePostMediaUpload,
-): { privateMediaPath: string; stagedMedia: StagedGalleryImage } {
-  const stagedMedia = stageImageToDisk(
-    `${PRIVATE_MEDIA_PREFIX}${accountId}`,
-    upload.buffer.toString("base64"),
-    upload.extension,
-  );
-  return { privateMediaPath: stagedMedia.filePath, stagedMedia };
-}
 
 /** Access-checked serving URL for a private post's generated image. */
 export function privatePostMediaUrl(postId: string): string {
@@ -44,17 +32,21 @@ export async function persistPrivatePostWithUploadedMedia<T>(
   upload: NoodlerPrivatePostMediaUpload,
   persist: (media: { imageUrl: string; privateMediaPath: string }) => Promise<T | null>,
 ): Promise<T | null> {
-  const staged = stageUploadedPrivatePostMedia(accountId, upload);
+  const stagedMedia = stageImageToDisk(
+    `${PRIVATE_MEDIA_PREFIX}${accountId}`,
+    upload.buffer.toString("base64"),
+    upload.extension,
+  );
   try {
-    staged.stagedMedia.promote();
+    stagedMedia.promote();
     const result = await persist({
       imageUrl: privatePostMediaUrl(postId),
-      privateMediaPath: staged.privateMediaPath,
+      privateMediaPath: stagedMedia.filePath,
     });
-    if (result === null) staged.stagedMedia.compensate();
+    if (result === null) stagedMedia.compensate();
     return result;
   } catch (error) {
-    staged.stagedMedia.compensate();
+    stagedMedia.compensate();
     throw error;
   }
 }

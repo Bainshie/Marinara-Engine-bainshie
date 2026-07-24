@@ -73,6 +73,7 @@ import {
   readPrivateMediaPath,
   removePrivateAccountMedia,
   resolvePrivateMediaAbsolutePath,
+  type NoodlerPrivatePostMediaUpload,
   unlinkPrivateMedia,
 } from "../services/noodle/noodle-private-media.js";
 import {
@@ -105,8 +106,6 @@ const noodleImagePromptConfirmationSchema = z.object({
 const NOODLER_PRIVATE_MEDIA_MAX_BYTES = 20 * 1024 * 1024;
 const NOODLER_PRIVATE_MEDIA_EXTENSIONS = new Set([".jpg", ".jpeg", ".png", ".gif", ".webp", ".avif"]);
 
-type NoodlerMediaUpload = { buffer: Buffer; extension: string };
-
 class NoodlerMediaRequestError extends Error {
   constructor(
     message: string,
@@ -116,9 +115,11 @@ class NoodlerMediaRequestError extends Error {
   }
 }
 
-async function readNoodlerMultipart(req: FastifyRequest): Promise<{ payload: unknown; media: NoodlerMediaUpload }> {
+async function readNoodlerMultipart(
+  req: FastifyRequest,
+): Promise<{ payload: unknown; media: NoodlerPrivatePostMediaUpload }> {
   let payload: unknown;
-  let media: NoodlerMediaUpload | null = null;
+  let media: NoodlerPrivatePostMediaUpload | null = null;
   for await (const part of req.parts({ limits: { fileSize: NOODLER_PRIVATE_MEDIA_MAX_BYTES, files: 1 } })) {
     if (part.type === "field") {
       if (part.fieldname === "payload") {
@@ -163,7 +164,7 @@ async function readNoodlerMultipart(req: FastifyRequest): Promise<{ payload: unk
   return { payload, media };
 }
 
-async function importNoodlerMedia(imageUrl: string): Promise<NoodlerMediaUpload> {
+async function importNoodlerMedia(imageUrl: string): Promise<NoodlerPrivatePostMediaUpload> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 15_000);
   try {
@@ -205,7 +206,7 @@ async function importNoodlerMedia(imageUrl: string): Promise<NoodlerMediaUpload>
 }
 
 type DecodedNoodlerMediaRequest<T> =
-  | { success: true; data: T; media: NoodlerMediaUpload | undefined }
+  | { success: true; data: T; media: NoodlerPrivatePostMediaUpload | undefined }
   | { success: false; error: z.ZodError };
 
 async function decodeNoodlerMediaRequest<
@@ -216,7 +217,7 @@ async function decodeNoodlerMediaRequest<
   schemas: { withMedia: WithMediaSchema; withoutMedia: WithoutMediaSchema },
 ): Promise<DecodedNoodlerMediaRequest<z.output<WithMediaSchema> | z.output<WithoutMediaSchema>>> {
   let payload: unknown = req.body;
-  let media: NoodlerMediaUpload | undefined;
+  let media: NoodlerPrivatePostMediaUpload | undefined;
   if (req.headers["content-type"]?.startsWith("multipart/form-data")) {
     const multipart = await readNoodlerMultipart(req);
     payload = multipart.payload;

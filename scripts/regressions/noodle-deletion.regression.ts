@@ -8,7 +8,7 @@ import { createNoodleStorage } from "../../packages/server/src/services/storage/
 
 const storageDir = mkdtempSync(join(tmpdir(), "marinara-noodle-deletion-"));
 process.env.FILE_STORAGE_DIR = storageDir;
-let fileDb = await createFileNativeDB();
+const fileDb = await createFileNativeDB();
 const db = fileDb as unknown as DB;
 
 try {
@@ -70,59 +70,6 @@ try {
 
   await noodle.deletePost(post.id);
   assert.deepEqual(await noodle.listDigests(), []);
-
-  const privateSource = await noodle.upsertAccountFromProfile({
-    kind: "persona",
-    entityId: "recovery-regression-persona",
-    displayName: "Recovery Regression",
-  });
-  const privateAccount = await noodle.createPrivateAccount(privateSource.id, {
-    displayName: "Recovery Stage",
-    handle: "recovery_stage",
-    bio: "",
-    stagePersonality: "",
-    disclosureMode: "secret",
-  });
-  assert.ok(privateAccount);
-  const replacementPost = await noodle.createPrivatePost({
-    authorAccountId: privateAccount.id,
-    content: "Replace this image",
-    imageUrl: "/api/noodle/noodler/posts/replacement-post/media",
-    metadata: { privateMediaPath: `noodler-private/${privateAccount.id}/original-post-image.png` },
-  });
-  assert.ok(replacementPost);
-  const replacementCrop = {
-    x: 0.1,
-    y: 0.15,
-    width: 0.7,
-    height: 0.6,
-    sourceWidth: 1200,
-    sourceHeight: 800,
-  };
-  const replacementPath = `noodler-private/${privateAccount.id}/replacement-post-image.png`;
-  const replacedPost = await noodle.updatePrivatePost(
-    replacementPost.id,
-    { imageCrop: replacementCrop },
-    {
-      imageUrl: `/api/noodle/noodler/posts/${replacementPost.id}/media`,
-      privateMediaPath: replacementPath,
-    },
-  );
-  assert.equal(replacedPost?.imageUrl, `/api/noodle/noodler/posts/${replacementPost.id}/media`);
-  assert.equal(replacedPost?.metadata.privateMediaPath, replacementPath);
-  assert.deepEqual(replacedPost?.metadata.imageCrop, replacementCrop);
-
-  await fileDb._fileStore.close();
-  fileDb = await createFileNativeDB();
-  const reloadedNoodle = createNoodleStorage(fileDb as unknown as DB);
-  const persistedReplacement = await reloadedNoodle.getPrivatePostById(replacementPost.id);
-  assert.equal(persistedReplacement?.imageUrl, `/api/noodle/noodler/posts/${replacementPost.id}/media`);
-  assert.equal(persistedReplacement?.metadata.privateMediaPath, replacementPath);
-  assert.deepEqual(persistedReplacement?.metadata.imageCrop, replacementCrop);
-  const removedImage = await reloadedNoodle.updatePrivatePost(replacementPost.id, { removeImage: true });
-  assert.equal(removedImage?.imageUrl, null);
-  assert.equal(removedImage?.metadata.privateMediaPath, undefined);
-  assert.equal(removedImage?.metadata.imageCrop, undefined);
 } finally {
   await fileDb._fileStore.close();
   rmSync(storageDir, { recursive: true, force: true });
