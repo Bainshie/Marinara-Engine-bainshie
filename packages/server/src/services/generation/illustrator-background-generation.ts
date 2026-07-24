@@ -225,6 +225,7 @@ async function resolveIllustratorImageConnection(
   chatMetadata: Record<string, unknown>,
 ) {
   const configuredId =
+    readTrimmedString(chatMetadata.illustratorImageConnectionId) ||
     readTrimmedString(chatMetadata.gameImageConnectionId) ||
     readTrimmedString(illustratorAgent.settings.imageConnectionId);
   let connection = configuredId ? await connections.getWithKey(configuredId) : null;

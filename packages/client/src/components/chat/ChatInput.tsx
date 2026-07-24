@@ -671,7 +671,10 @@ export const ChatInput = memo(function ChatInput({
           return false;
         }
         if (!isSupportedChatAttachment(file)) {
-          toast.error(localizeUi("ui.chat.chatinput.value1IsNotSupportedInChatAttachImagesPdfs", { value1: file.name ||localizeUi("ui.chat.chatinput.thatFile") }),
+          toast.error(
+            localizeUi("ui.chat.chatinput.value1IsNotSupportedInChatAttachImagesPdfs", {
+              value1: file.name || localizeUi("ui.chat.chatinput.thatFile"),
+            }),
           );
           return false;
         }
@@ -810,13 +813,21 @@ export const ChatInput = memo(function ChatInput({
     setPushStoryMenuOpen((open) => !open);
   }, [isInputBusy, narrativeDirectorActive, pushStoryMode, localizeUi]);
 
-  const handleArmPushStory = useCallback((mode: NarrativeDirectorMode) => {
-    setPushStoryMode(mode);
-    setPushStoryMenuOpen(false);
-    toast.success(localizeUi("ui.chat.chatinput.theNextTimeACharacterRespondsTheyWillPush", { value1:
-        mode === "random" ?localizeUi("ui.chat.chatinput.randomly_4f73f1a") :localizeUi("ui.chat.chatinput.naturally_be60af6") }),
-    );
-  }, [localizeUi]);
+  const handleArmPushStory = useCallback(
+    (mode: NarrativeDirectorMode) => {
+      setPushStoryMode(mode);
+      setPushStoryMenuOpen(false);
+      toast.success(
+        localizeUi("ui.chat.chatinput.theNextTimeACharacterRespondsTheyWillPush", {
+          value1:
+            mode === "random"
+              ? localizeUi("ui.chat.chatinput.randomly_4f73f1a")
+              : localizeUi("ui.chat.chatinput.naturally_be60af6"),
+        }),
+      );
+    },
+    [localizeUi],
+  );
 
   // Dismiss the Push Story mode selector on outside click or Escape.
   useEffect(() => {
@@ -956,8 +967,7 @@ export const ChatInput = memo(function ChatInput({
     // Check if the chat has a connection configured
     const chat = useChatStore.getState().activeChat;
     if (chat && !chat.connectionId) {
-      toast.error(localizeUi("ui.chat.chatinput.itLooksLikeYouHavenTConnectedAnyModel"),
-      );
+      toast.error(localizeUi("ui.chat.chatinput.itLooksLikeYouHavenTConnectedAnyModel"));
       return;
     }
 
@@ -1096,7 +1106,8 @@ export const ChatInput = memo(function ChatInput({
     quoteFormat,
     canSubmitSpatialMove,
     pendingSpatialTransition,
-    availableCapabilityIds, localizeUi,
+    availableCapabilityIds,
+    localizeUi,
   ]);
 
   const runQuickSlashCommand = useCallback(
@@ -1290,7 +1301,11 @@ export const ChatInput = memo(function ChatInput({
         setInputDraft(submittingChatId, submittedDraft);
       }
       const msg = error instanceof Error ? error.message : "Failed to post message";
-      toast.error(rollbackFailed ?localizeUi("ui.chat.chatinput.value1ThePartialMessageMayNeedToBeRemoved", { value1: msg }) : msg);
+      toast.error(
+        rollbackFailed
+          ? localizeUi("ui.chat.chatinput.value1ThePartialMessageMayNeedToBeRemoved", { value1: msg })
+          : msg,
+      );
     }
   }, [
     activeChatId,
@@ -1312,7 +1327,8 @@ export const ChatInput = memo(function ChatInput({
     handleSend,
     quoteFormat,
     mode,
-    availableCapabilityIds, localizeUi,
+    availableCapabilityIds,
+    localizeUi,
   ]);
 
   const handleGuidedGenerationButton = useCallback(async () => {
@@ -1780,13 +1796,20 @@ export const ChatInput = memo(function ChatInput({
                 )}
                 title={
                   pushStoryMode
-                    ?localizeUi("ui.chat.chatinput.disarmTheNarrativeDirectorPush")
-                    :localizeUi("ui.chat.chatinput.chooseHowTheNarrativeDirectorPushesTheStoryIn")
+                    ? localizeUi("ui.chat.chatinput.disarmTheNarrativeDirectorPush")
+                    : localizeUi("ui.chat.chatinput.chooseHowTheNarrativeDirectorPushesTheStoryIn")
                 }
               >
                 <WandSparkles size="0.875rem" />
                 <span>
-                  {pushStoryMode ?localizeUi("ui.chat.chatinput.pushStoryValue1", { value1: pushStoryMode === "random" ?localizeUi("ui.chat.chatinput.randomly") :localizeUi("ui.chat.chatinput.naturally") }) :localizeUi("ui.agents.contextinjectionpanel.pushStory")}
+                  {pushStoryMode
+                    ? localizeUi("ui.chat.chatinput.pushStoryValue1", {
+                        value1:
+                          pushStoryMode === "random"
+                            ? localizeUi("ui.chat.chatinput.randomly")
+                            : localizeUi("ui.chat.chatinput.naturally"),
+                      })
+                    : localizeUi("ui.agents.contextinjectionpanel.pushStory")}
                 </span>
               </button>
               {pushStoryMenuOpen && (
@@ -1800,8 +1823,12 @@ export const ChatInput = memo(function ChatInput({
                     onClick={() => handleArmPushStory("natural")}
                     className="flex w-full flex-col items-start gap-0.5 rounded-lg px-3 py-2 text-left transition-colors hover:bg-foreground/10"
                   >
-                    <span className="text-sm font-medium text-foreground">{localizeUi("ui.chat.chatinput.naturally")}</span>
-                    <span className="text-xs text-foreground/60">{localizeUi("ui.chat.chatinput.pushTheExistingPlotForward")}</span>
+                    <span className="text-sm font-medium text-foreground">
+                      {localizeUi("ui.chat.chatinput.naturally")}
+                    </span>
+                    <span className="text-xs text-foreground/60">
+                      {localizeUi("ui.chat.chatinput.pushTheExistingPlotForward")}
+                    </span>
                   </button>
                   <button
                     type="button"
@@ -1809,8 +1836,12 @@ export const ChatInput = memo(function ChatInput({
                     onClick={() => handleArmPushStory("random")}
                     className="flex w-full flex-col items-start gap-0.5 rounded-lg px-3 py-2 text-left transition-colors hover:bg-foreground/10"
                   >
-                    <span className="text-sm font-medium text-foreground">{localizeUi("ui.chat.chatinput.randomly")}</span>
-                    <span className="text-xs text-foreground/60">{localizeUi("ui.chat.chatinput.addAPlausibleSurpriseToTheScene")}</span>
+                    <span className="text-sm font-medium text-foreground">
+                      {localizeUi("ui.chat.chatinput.randomly")}
+                    </span>
+                    <span className="text-xs text-foreground/60">
+                      {localizeUi("ui.chat.chatinput.addAPlausibleSurpriseToTheScene")}
+                    </span>
                   </button>
                 </div>
               )}
@@ -1864,7 +1895,9 @@ export const ChatInput = memo(function ChatInput({
           ))}
           {isReadingAttachments && (
             <div className="flex items-center gap-1.5 rounded-lg bg-foreground/10 px-2 py-1 text-xs text-foreground/60 ring-1 ring-foreground/10">
-              <Loader2 size="0.875rem" className="animate-spin" />{localizeUi("ui.chat.chatinput.readingFile")}</div>
+              <Loader2 size="0.875rem" className="animate-spin" />
+              {localizeUi("ui.chat.chatinput.readingFile")}
+            </div>
           )}
         </div>
       )}
@@ -1883,6 +1916,16 @@ export const ChatInput = memo(function ChatInput({
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
+        onPointerDown={(event) => {
+          const target = event.target as HTMLElement;
+          if (target.closest("button, input, textarea, select, a, [role='button']")) return;
+          event.preventDefault();
+          const textarea = textareaRef.current;
+          if (!textarea || textarea.disabled) return;
+          textarea.focus({ preventScroll: true });
+          const caret = textarea.value.length;
+          textarea.setSelectionRange(caret, caret);
+        }}
         className={getChatInputShellClass({
           dragging: isDragging,
           hasContent: hasInput || attachments.length > 0,
@@ -1999,7 +2042,11 @@ export const ChatInput = memo(function ChatInput({
                   ? "bg-foreground/10 text-foreground/75 ring-1 ring-foreground/20"
                   : "text-foreground/40 hover:bg-foreground/10 hover:text-foreground/70",
             )}
-            title={guideGenerations && hasInput ?localizeUi("ui.chat.chatinput.triggerCharacterResponseGuided") :localizeUi("ui.chat.chatinput.triggerCharacterResponse")}
+            title={
+              guideGenerations && hasInput
+                ? localizeUi("ui.chat.chatinput.triggerCharacterResponseGuided")
+                : localizeUi("ui.chat.chatinput.triggerCharacterResponse")
+            }
           >
             <Users size="1rem" />
           </button>
@@ -2077,7 +2124,9 @@ export const ChatInput = memo(function ChatInput({
               charPickerPos ? { left: charPickerPos.left, top: charPickerPos.top } : { visibility: "hidden" as const }
             }
           >
-            <div className="flex items-center justify-center border-b border-foreground/10 px-3 py-2 text-[0.6875rem] font-semibold">{localizeUi("ui.chat.chatinput.triggerResponse")}</div>
+            <div className="flex items-center justify-center border-b border-foreground/10 px-3 py-2 text-[0.6875rem] font-semibold">
+              {localizeUi("ui.chat.chatinput.triggerResponse")}
+            </div>
             <div className="overflow-y-auto p-1">
               {activeChatCharacters!.map((char) => {
                 const queuedOrder = queuedResponseOrder.get(char.id);

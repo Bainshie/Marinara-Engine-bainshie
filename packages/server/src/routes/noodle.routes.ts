@@ -55,9 +55,7 @@ import { resolveNoodleAvatarCropAfterProfileUpdate } from "../services/noodle/no
 
 import { createPublicNoodleGenerationService } from "../services/noodle/noodle-public-generation.service.js";
 import { createPublicNoodleImagesService } from "../services/noodle/noodle-public-images.service.js";
-import {
-  stageProfileContainsPublicIdentity,
-} from "../services/noodle/noodle-private-generation.service.js";
+import { stageProfileContainsPublicIdentity } from "../services/noodle/noodle-private-generation.service.js";
 import {
   createNoodlePrivatePost,
   generateNoodlePrivatePost,
@@ -155,9 +153,7 @@ export async function noodleRoutes(app: FastifyInstance) {
       ]),
     );
     const visibleAccounts = accounts.filter(
-      (account) =>
-        account.publicAccountId === viewer.id ||
-        !isNoodlerHiddenFromViewer(account, viewer.id),
+      (account) => account.publicAccountId === viewer.id || !isNoodlerHiddenFromViewer(account, viewer.id),
     );
     const postsByAccount = await noodle.listPrivatePostsByAccounts(
       visibleAccounts.map((account) => account.id),
@@ -253,9 +249,7 @@ export async function noodleRoutes(app: FastifyInstance) {
     if (!settings.enableNoodler) return reply.code(404).send({ error: "Not Found" });
     const { id } = req.params as { id: string };
     const personaId = (req.query as { personaId?: string }).personaId;
-    const post = personaId
-      ? (await resolveGatedPrivatePost(personaId, id))?.post
-      : await noodle.getPrivatePostById(id);
+    const post = personaId ? (await resolveGatedPrivatePost(personaId, id))?.post : await noodle.getPrivatePostById(id);
     if (!post) return reply.code(404).send({ error: "Not Found" });
     const mediaPath = readPrivateMediaPath(post);
     const absolute = mediaPath ? resolvePrivateMediaAbsolutePath(mediaPath) : null;
@@ -652,7 +646,15 @@ export async function noodleRoutes(app: FastifyInstance) {
     const { id } = req.params as { id: string };
     const parsed = noodleAccountUpdateSchema.safeParse(req.body);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
-    const updated = await noodle.updateAccount(id, parsed.data);
+    let updated: NoodleAccount | null;
+    try {
+      updated = await noodle.updateAccount(id, parsed.data);
+    } catch (error) {
+      if (isFileUniqueConstraintError(error, "noodle_accounts", ["handle"])) {
+        return reply.code(409).send({ code: "NOODLE_HANDLE_TAKEN", error: "That Noodle handle is already in use." });
+      }
+      throw error;
+    }
     if (!updated) return reply.code(404).send({ error: "Noodle account not found" });
     return updated;
   });
@@ -677,16 +679,24 @@ export async function noodleRoutes(app: FastifyInstance) {
         parsed.data.displayName !== undefined ||
         parsed.data.bio !== undefined ||
         parsed.data.avatarUrl !== undefined);
-    const updated = await noodle.updateAccountProfile(id, {
-      ...parsed.data,
-      ...((profileFieldsChanged || parsed.data.profile) && {
-        profile: {
-          ...parsed.data.profile,
-          ...(profileFieldsChanged && avatarCrop !== undefined ? { avatarCrop } : {}),
-          ...(profileFieldsChanged ? { profileManuallyEdited: true } : {}),
-        },
-      }),
-    });
+    let updated: NoodleAccount | null;
+    try {
+      updated = await noodle.updateAccountProfile(id, {
+        ...parsed.data,
+        ...((profileFieldsChanged || parsed.data.profile) && {
+          profile: {
+            ...parsed.data.profile,
+            ...(profileFieldsChanged && avatarCrop !== undefined ? { avatarCrop } : {}),
+            ...(profileFieldsChanged ? { profileManuallyEdited: true } : {}),
+          },
+        }),
+      });
+    } catch (error) {
+      if (isFileUniqueConstraintError(error, "noodle_accounts", ["handle"])) {
+        return reply.code(409).send({ code: "NOODLE_HANDLE_TAKEN", error: "That Noodle handle is already in use." });
+      }
+      throw error;
+    }
     if (!updated) return reply.code(404).send({ error: "Noodle account not found" });
     return updated;
   });

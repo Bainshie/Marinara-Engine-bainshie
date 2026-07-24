@@ -89,10 +89,7 @@ import {
   shouldAutoplayGeneratedTTS,
 } from "../../lib/tts-autoplay";
 import { CHAT_SCROLL_TO_BOTTOM_EVENT, type ChatScrollToBottomDetail } from "../../lib/chat-scroll-events";
-import {
-  blurActiveChatFloatingUiControl,
-  CHAT_FLOATING_UI_DISMISS_EVENT,
-} from "../../lib/chat-floating-ui-events";
+import { blurActiveChatFloatingUiControl, CHAT_FLOATING_UI_DISMISS_EVENT } from "../../lib/chat-floating-ui-events";
 import {
   CHAT_TOOLBAR_ACTION_EVENT,
   readAnnouncedChatToolbarPanelAction,
@@ -119,6 +116,7 @@ import type {
   PeekPromptData,
 } from "./chat-area.types";
 import { RecentChats } from "./RecentChats";
+import { HomeNewChatLauncher } from "./HomeNewChatLauncher";
 import { HomeCreditsModal } from "./HomeCreditsModal";
 import { HomeProfessorMariChat } from "./HomeProfessorMariChat";
 import { HomeAchievements } from "./HomeAchievements";
@@ -1182,17 +1180,20 @@ export function ChatArea() {
   const roleplayVideoReviewResolveRef = useRef<((overrides: ImagePromptOverride[] | null) => void) | null>(null);
   const conversationSelfieReviewResolveRef = useRef<((overrides: ImagePromptOverride[] | null) => void) | null>(null);
 
-  const openRoleplayVideoPromptReview = useCallback((items: ImagePromptReviewItem[]) => {
-    if (roleplayVideoReviewResolveRef.current) {
-      toast.error(localizeUi("ui.chat.chatarea.finishOrCancelTheCurrentVideoPromptReviewFirst"));
-      return Promise.resolve(null);
-    }
-    return new Promise<ImagePromptOverride[] | null>((resolve) => {
-      roleplayVideoReviewResolveRef.current = resolve;
-      setRoleplayVideoReviewSubmitting(false);
-      setRoleplayVideoReviewItems(items);
-    });
-  }, [localizeUi]);
+  const openRoleplayVideoPromptReview = useCallback(
+    (items: ImagePromptReviewItem[]) => {
+      if (roleplayVideoReviewResolveRef.current) {
+        toast.error(localizeUi("ui.chat.chatarea.finishOrCancelTheCurrentVideoPromptReviewFirst"));
+        return Promise.resolve(null);
+      }
+      return new Promise<ImagePromptOverride[] | null>((resolve) => {
+        roleplayVideoReviewResolveRef.current = resolve;
+        setRoleplayVideoReviewSubmitting(false);
+        setRoleplayVideoReviewItems(items);
+      });
+    },
+    [localizeUi],
+  );
 
   const closeRoleplayVideoPromptReview = useCallback((overrides: ImagePromptOverride[] | null) => {
     const resolve = roleplayVideoReviewResolveRef.current;
@@ -1210,17 +1211,20 @@ export function ChatArea() {
     resolve(overrides);
   }, []);
 
-  const openConversationSelfiePromptReview = useCallback((items: ImagePromptReviewItem[]) => {
-    if (conversationSelfieReviewResolveRef.current) {
-      toast.error(localizeUi("ui.chat.chatarea.finishOrCancelTheCurrentSelfiePromptReviewFirst"));
-      return Promise.resolve(null);
-    }
-    return new Promise<ImagePromptOverride[] | null>((resolve) => {
-      conversationSelfieReviewResolveRef.current = resolve;
-      setConversationSelfieReviewSubmitting(false);
-      setConversationSelfieReviewItems(items);
-    });
-  }, [localizeUi]);
+  const openConversationSelfiePromptReview = useCallback(
+    (items: ImagePromptReviewItem[]) => {
+      if (conversationSelfieReviewResolveRef.current) {
+        toast.error(localizeUi("ui.chat.chatarea.finishOrCancelTheCurrentSelfiePromptReviewFirst"));
+        return Promise.resolve(null);
+      }
+      return new Promise<ImagePromptOverride[] | null>((resolve) => {
+        conversationSelfieReviewResolveRef.current = resolve;
+        setConversationSelfieReviewSubmitting(false);
+        setConversationSelfieReviewItems(items);
+      });
+    },
+    [localizeUi],
+  );
 
   const closeConversationSelfiePromptReview = useCallback((overrides: ImagePromptOverride[] | null) => {
     const resolve = conversationSelfieReviewResolveRef.current;
@@ -1319,7 +1323,11 @@ export function ChatArea() {
         void queryClient.invalidateQueries({ queryKey: ["gallery", "scene-videos", activeChatId] });
         toast.success(localizeUi("ui.chat.chatarea.sceneVideoGenerated"), { duration: 1800 });
       } catch (error) {
-        toast.error(error instanceof Error ? error.message :localizeUi("ui.game.gamesurfacecomponent.sceneVideoGenerationFailed"));
+        toast.error(
+          error instanceof Error
+            ? error.message
+            : localizeUi("ui.game.gamesurfacecomponent.sceneVideoGenerationFailed"),
+        );
       } finally {
         closeRoleplayVideoPromptReview(null);
         roleplaySceneVideoGeneratingRef.current = false;
@@ -1332,7 +1340,8 @@ export function ChatArea() {
       chatMode,
       closeRoleplayVideoPromptReview,
       openRoleplayVideoPromptReview,
-      queryClient, localizeUi,
+      queryClient,
+      localizeUi,
     ],
   );
 
@@ -1388,7 +1397,8 @@ export function ChatArea() {
       chatMode,
       closeConversationSelfiePromptReview,
       generateGallerySelfie,
-      openConversationSelfiePromptReview, localizeUi,
+      openConversationSelfiePromptReview,
+      localizeUi,
     ],
   );
 
@@ -1476,15 +1486,13 @@ export function ChatArea() {
       useTranslationStore.getState().clearAll();
       prevChatIdRef.current = chat?.id;
     }
-    useTranslationStore
-      .getState()
-      .seedFromMessages(
-        messages as unknown as Array<{
-          id: string;
-          content?: string;
-          extra?: string | Record<string, unknown> | null;
-        }>,
-      );
+    useTranslationStore.getState().seedFromMessages(
+      messages as unknown as Array<{
+        id: string;
+        content?: string;
+        extra?: string | Record<string, unknown> | null;
+      }>,
+    );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chat?.id, msgPageCount]);
 
@@ -1823,7 +1831,8 @@ export function ChatArea() {
     deleteDialogMessageId,
     deleteSwipe,
     refreshVisibleGameState,
-    shouldRefreshGameStateOnSwipe, localizeUi,
+    shouldRefreshGameStateOnSwipe,
+    localizeUi,
   ]);
 
   const handleDeleteMore = useCallback(() => {
@@ -1939,9 +1948,9 @@ export function ChatArea() {
         !options?.skipTouchConfirm &&
         window.matchMedia("(pointer: coarse)").matches &&
         !(await showConfirmDialog({
-          title:localizeUi("ui.chat.chatarea.regenerateMessage"),
-          message:localizeUi("ui.chat.chatarea.regenerateThisMessageAsANewSwipe"),
-          confirmLabel:localizeUi("ui.agents.secretplotpanel.regenerate"),
+          title: localizeUi("ui.chat.chatarea.regenerateMessage"),
+          message: localizeUi("ui.chat.chatarea.regenerateThisMessageAsANewSwipe"),
+          confirmLabel: localizeUi("ui.agents.secretplotpanel.regenerate"),
         }))
       ) {
         return;
@@ -2093,9 +2102,9 @@ export function ChatArea() {
       if (!chatId || branchChat.isPending || branchPendingRef.current) return;
       branchPendingRef.current = true;
       const confirmed = await showConfirmDialog({
-        title:localizeUi("ui.chat.chatarea.createANewBranch"),
-        message:localizeUi("ui.chat.chatarea.thisWillCopyTheChatThroughThisMessageAnd"),
-        confirmLabel:localizeUi("ui.chat.chatarea.createBranch"),
+        title: localizeUi("ui.chat.chatarea.createANewBranch"),
+        message: localizeUi("ui.chat.chatarea.thisWillCopyTheChatThroughThisMessageAnd"),
+        confirmLabel: localizeUi("ui.chat.chatarea.createBranch"),
       });
       if (!confirmed || useChatStore.getState().activeChatId !== chatId) {
         branchPendingRef.current = false;
@@ -2110,7 +2119,11 @@ export function ChatArea() {
             toast.success(localizeUi("ui.chat.chatarea.branchCreated"));
           },
           onError: (error) => {
-            toast.error(error instanceof Error ?localizeUi("ui.chat.chatarea.branchFailedValue1", { value1: error.message }) :localizeUi("ui.chat.chatarea.branchFailed"));
+            toast.error(
+              error instanceof Error
+                ? localizeUi("ui.chat.chatarea.branchFailedValue1", { value1: error.message })
+                : localizeUi("ui.chat.chatarea.branchFailed"),
+            );
           },
           onSettled: () => {
             branchPendingRef.current = false;
@@ -2692,7 +2705,12 @@ export function ChatArea() {
 
     const targetNumber = gotoRequest.messageNumber;
     if (totalMessageCount > 0 && targetNumber > totalMessageCount) {
-      toast.error(localizeUi("ui.chat.chatarea.messageValue1DoesnTExistThisChatHasValue2", { value1: targetNumber, value2: totalMessageCount }));
+      toast.error(
+        localizeUi("ui.chat.chatarea.messageValue1DoesnTExistThisChatHasValue2", {
+          value1: targetNumber,
+          value2: totalMessageCount,
+        }),
+      );
       useChatStore.getState().clearGotoRequest();
       return;
     }
@@ -2738,7 +2756,8 @@ export function ChatArea() {
     totalMessageCount,
     hasNextPage,
     isFetchingNextPage,
-    fetchNextPage, localizeUi,
+    fetchNextPage,
+    localizeUi,
   ]);
 
   // ═══════════════════════════════════════════════
@@ -2764,7 +2783,9 @@ export function ChatArea() {
           )}
           <div className="space-y-1">
             <p className="text-sm font-medium text-[var(--foreground)]">
-              {hasOpenError ?localizeUi("ui.chat.chatarea.couldNotOpenThisChat") :localizeUi("ui.chat.chatarea.openingChat")}
+              {hasOpenError
+                ? localizeUi("ui.chat.chatarea.couldNotOpenThisChat")
+                : localizeUi("ui.chat.chatarea.openingChat")}
             </p>
             {hasOpenError && <p className="max-w-sm text-xs text-[var(--muted-foreground)]">{errorMessage}</p>}
           </div>
@@ -2773,7 +2794,9 @@ export function ChatArea() {
               type="button"
               onClick={() => setActiveChatId(null)}
               className="mari-chrome-control mari-chrome-control--small text-xs"
-            >{localizeUi("ui.chat.chatarea.backToChats")}</button>
+            >
+              {localizeUi("ui.chat.chatarea.backToChats")}
+            </button>
           )}
         </div>
       </div>
@@ -2841,10 +2864,16 @@ export function ChatArea() {
                       "mari-logo-gradient-text text-base font-bold sm:text-xl",
                       isPageActive && "mari-logo-gradient-text--active",
                     )}
-                  >{localizeUi("app.documentTitle")}</h3>
-                  <p className="mari-chrome-text-muted mt-0.5 text-[0.625rem] tracking-wide opacity-65">{localizeUi("ui.characters.charactereditor.v")}{APP_VERSION}
+                  >
+                    {localizeUi("app.documentTitle")}
+                  </h3>
+                  <p className="mari-chrome-text-muted mt-0.5 text-[0.625rem] tracking-wide opacity-65">
+                    {localizeUi("ui.characters.charactereditor.v")}
+                    {APP_VERSION}
                   </p>
                 </div>
+
+                <HomeNewChatLauncher />
 
                 {/* Recent Chats */}
                 <RecentChats />
@@ -2887,7 +2916,9 @@ export function ChatArea() {
                         target="_blank"
                         rel="noopener noreferrer"
                         className="mari-chrome-text underline decoration-[var(--marinara-chat-chrome-panel-muted)]/30 transition-colors hover:text-[var(--marinara-chat-chrome-button-text-hover)] hover:decoration-[var(--marinara-chat-chrome-button-border-hover)]"
-                      >{localizeUi("ui.chat.chatarea.marinara")}</a>
+                      >
+                        {localizeUi("ui.chat.chatarea.marinara")}
+                      </a>
                     </span>
                     <span>
                       {t("home.footer.partneredWith")}{" "}
@@ -2896,7 +2927,9 @@ export function ChatArea() {
                         target="_blank"
                         rel="noopener noreferrer"
                         className="mari-chrome-text underline decoration-[var(--marinara-chat-chrome-panel-muted)]/30 transition-colors hover:text-[var(--marinara-chat-chrome-button-text-hover)] hover:decoration-[var(--marinara-chat-chrome-button-border-hover)]"
-                      >{localizeUi("ui.panels.connectionspanel.linkapi")}</a>
+                      >
+                        {localizeUi("ui.panels.connectionspanel.linkapi")}
+                      </a>
                     </span>
                     <span>
                       {t("home.footer.artBy")}{" "}
@@ -2905,7 +2938,9 @@ export function ChatArea() {
                         target="_blank"
                         rel="noopener noreferrer"
                         className="mari-chrome-text underline decoration-[var(--marinara-chat-chrome-panel-muted)]/30 transition-colors hover:text-[var(--marinara-chat-chrome-button-text-hover)] hover:decoration-[var(--marinara-chat-chrome-button-border-hover)]"
-                      >{localizeUi("ui.chat.chatarea.huntercolliex")}</a>
+                      >
+                        {localizeUi("ui.chat.chatarea.huntercolliex")}
+                      </a>
                     </span>
                   </div>
                   <div className="flex flex-wrap justify-center gap-2">
@@ -2918,7 +2953,9 @@ export function ChatArea() {
                     >
                       <svg width="0.875rem" height="0.875rem" viewBox="0 0 24 24" fill="currentColor">
                         <path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028c.462-.63.874-1.295 1.226-1.994a.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.095 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.095 2.157 2.42 0 1.333-.947 2.418-2.157 2.418z" />
-                      </svg>{localizeUi("ui.chat.chatarea.discord")}</a>
+                      </svg>
+                      {localizeUi("ui.chat.chatarea.discord")}
+                    </a>
                     <a
                       href="https://ko-fi.com/marinara_spaghetti"
                       target="_blank"
@@ -3402,9 +3439,16 @@ function AgentInjectionReviewModal({
 }) {
   const { t: localizeUi } = useUiTranslation();
   return (
-    <Modal open onClose={onClose} title={localizeUi("ui.chat.agentinjectionreviewmodal.writerAgentReview")} width="max-w-3xl">
+    <Modal
+      open
+      onClose={onClose}
+      title={localizeUi("ui.chat.agentinjectionreviewmodal.writerAgentReview")}
+      width="max-w-3xl"
+    >
       <div className="flex flex-col gap-3">
-        <p className="text-xs leading-relaxed text-[var(--muted-foreground)]">{localizeUi("ui.chat.agentinjectionreviewmodal.editTheWriterGuidanceBeforeTheMainReplyStarts")}</p>
+        <p className="text-xs leading-relaxed text-[var(--muted-foreground)]">
+          {localizeUi("ui.chat.agentinjectionreviewmodal.editTheWriterGuidanceBeforeTheMainReplyStarts")}
+        </p>
         <div className="flex max-h-[55dvh] flex-col gap-2 overflow-y-auto pr-1">
           {request.injections.map((injection) => (
             <div key={injection.agentType} className="rounded-lg border border-[var(--border)] bg-[var(--card)]/60">
@@ -3430,13 +3474,17 @@ function AgentInjectionReviewModal({
             onClick={onClose}
             className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] px-3 py-2 text-xs text-[var(--foreground)] transition-colors hover:bg-[var(--accent)]"
           >
-            <X size="0.875rem" />{localizeUi("capabilities.actions.close")}</button>
+            <X size="0.875rem" />
+            {localizeUi("capabilities.actions.close")}
+          </button>
           <button
             type="button"
             onClick={onContinue}
             className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--primary)] px-3 py-2 text-xs font-medium text-[var(--primary-foreground)] transition-opacity hover:opacity-90"
           >
-            <Check size="0.875rem" />{localizeUi("ui.noodle.wizardfooter.continue")}</button>
+            <Check size="0.875rem" />
+            {localizeUi("ui.noodle.wizardfooter.continue")}
+          </button>
         </div>
       </div>
     </Modal>
