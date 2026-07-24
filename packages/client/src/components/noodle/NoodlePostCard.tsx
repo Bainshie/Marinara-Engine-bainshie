@@ -1109,20 +1109,21 @@ export function NoodlePostCard({
           )}
           <div className="min-w-0 flex-1">
             <div className="flex items-start gap-2">
-              <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1">
-                <button
-                  type="button"
-                  onClick={openPostAuthor}
-                  disabled={!canOpenAuthorProfile}
-                  className="font-semibold transition-colors enabled:hover:text-[var(--noodle-accent)] disabled:cursor-default"
-                >
-                  {author?.displayName ?? "Noodle User"}
-                </button>
-                <span className="text-xs text-[var(--muted-foreground)]">@{author?.handle ?? "noodle"}</span>
-                <span className="text-xs text-[var(--muted-foreground)]">{formatTime(post.createdAt)}</span>
-                <span className="rounded-full border border-[var(--noodle-divider)] px-2 py-0.5 text-[0.68rem] font-bold text-[var(--muted-foreground)]">
-                  {post.access === "ppv" ?localizeUi("ui.noodle.noodlepostcard.payToUnlock") : post.access === "subscriber" ?localizeUi("ui.noodle.privatepostcomposer.subscribers") :localizeUi("ui.noodle.noodlepostcard.public")}
-                </span>
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                  <button
+                    type="button"
+                    onClick={openPostAuthor}
+                    disabled={!canOpenAuthorProfile}
+                    className="font-semibold transition-colors enabled:hover:text-[var(--noodle-accent)] disabled:cursor-default"
+                  >
+                    {author?.displayName ?? "Noodle User"}
+                  </button>
+                  <span className="rounded-full border border-[var(--noodle-divider)] px-2 py-0.5 text-[0.68rem] font-bold text-[var(--muted-foreground)]">
+                    {post.access === "ppv" ?localizeUi("ui.noodle.postaccess.ppv") : post.access === "subscriber" ?localizeUi("ui.noodle.postaccess.subscriber") :localizeUi("ui.noodle.postaccess.public")}
+                  </span>
+                </div>
+                <p className="text-xs text-[var(--muted-foreground)]">@{author?.handle ?? "noodle"} · {formatTime(post.createdAt)}</p>
               </div>
               {ctx.postManagement && <div className="relative shrink-0">
                 <button

@@ -2743,15 +2743,16 @@ function LockedPrivatePostCard({
       {/* Author row */}
       <div className="flex gap-3">
         <ProfileInitial profile={profile} />
-        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1">
-          <span className="font-semibold">{profile.displayName}</span>
-          <span className="text-xs text-[var(--muted-foreground)]">@{profile.handle}</span>
-          <span className="text-xs text-[var(--muted-foreground)]">{formatTime(post.createdAt)}</span>
-          <span className="rounded-full border border-[var(--noodle-divider)] px-2 py-0.5 text-[0.68rem] font-bold text-[var(--muted-foreground)]">
-            {post.access === "ppv"
-              ? localizeUi("ui.noodle.noodlepostcard.payToUnlock")
-              : localizeUi("ui.noodle.privatepostcomposer.subscribers")}
-          </span>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <span className="font-semibold">{profile.displayName}</span>
+            <span className="rounded-full border border-[var(--noodle-divider)] px-2 py-0.5 text-[0.68rem] font-bold text-[var(--muted-foreground)]">
+              {localizeUi(`ui.noodle.postaccess.${post.access === "ppv" ? "ppv" : "subscriber"}`)}
+            </span>
+          </div>
+          <p className="text-xs text-[var(--muted-foreground)]">
+            @{profile.handle} · {formatTime(post.createdAt)}
+          </p>
         </div>
       </div>
 
@@ -2774,8 +2775,8 @@ function LockedPrivatePostCard({
           {/* Blurred (unreadable) body teaser */}
           {!controllerOnly && (
             <div className="mt-3 space-y-2 select-none blur-[3px]" aria-hidden="true">
-              <div className="h-3 w-full rounded bg-[var(--muted-foreground)]/40" />
-              <div className="h-3 w-4/5 rounded bg-[var(--muted-foreground)]/40" />
+              <div className="h-3.5 w-full rounded bg-[var(--muted-foreground)]/70" />
+              <div className="h-3.5 w-4/5 rounded bg-[var(--muted-foreground)]/70" />
             </div>
           )}
 
@@ -2805,20 +2806,20 @@ function LockedPrivatePostCard({
           )}
 
           {/* Footer */}
-          <div className="mt-3 flex items-center gap-4 text-xs text-[var(--muted-foreground)]">
-            <span className="flex items-center gap-1"><Heart size={14} /> {likeCount}</span>
-            <span className="flex items-center gap-1"><MessageCircle size={14} /> {replyCount}</span>
+          <div className="mt-3 flex items-center gap-4 text-sm text-[var(--muted-foreground)]">
+            <span className="flex items-center gap-1.5"><Heart size={18} /> {likeCount}</span>
+            <span className="flex items-center gap-1.5"><MessageCircle size={18} /> {replyCount}</span>
             <div className="ml-auto flex items-center gap-3">
               {onManage && (
                 <button
                   type="button"
                   onClick={onManage}
-                  className="flex items-center gap-1 hover:text-[var(--foreground)]"
+                  className="flex items-center gap-1.5 hover:text-[var(--foreground)]"
                 >
-                  <Pencil size={14} /> {localizeUi("ui.noodle.lockedprivatepostcard.managePost")}
+                  <Pencil size={18} /> {localizeUi("ui.noodle.lockedprivatepostcard.managePost")}
                 </button>
               )}
-              <span className="flex items-center gap-1"><Lock size={14} /> {localizeUi("ui.noodle.lockedprivatepostcard.locked")}</span>
+              <span className="flex items-center gap-1.5"><Lock size={18} /> {localizeUi("ui.noodle.lockedprivatepostcard.locked")}</span>
             </div>
           </div>
       </div>
