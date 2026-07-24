@@ -62,6 +62,7 @@ export function LorebooksSection({
 
   return (
     <ChatSettingsSection
+      id="lorebooks"
       label="Lorebooks"
       icon={<BookOpen size="0.875rem" />}
       count={activeLorebooks.length}

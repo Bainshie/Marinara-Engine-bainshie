@@ -25,6 +25,7 @@ export function SceneInstructionsSection({
 
   return (
     <ChatSettingsSection
+      id="scene-instructions"
       label="Scene Instructions"
       icon={<Sparkles size="0.875rem" />}
       help="The system prompt generated for this scene. You can edit it to change the AI's writing style, POV, tone, and focus."

@@ -28,6 +28,7 @@ export function ImpersonateSection({ presets, connections }: ImpersonateSectionP
 
   return (
     <ChatSettingsSection
+      id="impersonate"
       label="Impersonate"
       icon={<Drama size="0.875rem" />}
       help="Global settings applied to every /impersonate generation across all chats."

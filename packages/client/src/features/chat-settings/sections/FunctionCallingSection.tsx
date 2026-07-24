@@ -46,6 +46,7 @@ export function FunctionCallingSection({
 
   return (
     <ChatSettingsSection
+      id="function-calling"
       label="Function Calling"
       icon={<Wrench size="0.875rem" />}
       count={activeToolIds.length}

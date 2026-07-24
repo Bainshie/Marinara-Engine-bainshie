@@ -8,6 +8,7 @@ import {
   StopCircle,
   X,
   Smile,
+  SmilePlus,
   Users,
   UserCheck,
   Languages,
@@ -54,6 +55,7 @@ import { CARD_ASSET_INSERT_EVENT, type CardAssetInsertDetail } from "../../lib/c
 import { isGenerationSendBlocked } from "../../lib/generation-stream-policy";
 import { requestChatScrollToBottom } from "../../lib/chat-scroll-events";
 import { EmojiPicker } from "../ui/EmojiPicker";
+import { KaomojiPicker } from "../ui/KaomojiPicker";
 import { SpeechToTextButton } from "../ui/SpeechToTextButton";
 import { QuickConnectionSwitcher } from "./QuickConnectionSwitcher";
 import { QuickPersonaSwitcher } from "./QuickPersonaSwitcher";
@@ -221,6 +223,8 @@ export const ChatInput = memo(function ChatInput({
   const [pendingAttachmentReadsByChat, setPendingAttachmentReadsByChat] = useState<Record<string, number>>({});
   const [isTranslatingDraft, setIsTranslatingDraft] = useState(false);
   const [emojiOpen, setEmojiOpen] = useState(false);
+  const [kaomojiOpen, setKaomojiOpen] = useState(false);
+  const kaomojiButtonRef = useRef<HTMLButtonElement>(null);
   const isMobileComposerViewport = useIsMobileComposerViewport();
   // Push Story arms for the next response with an explicit mode picked from
   // the selector that opens on click; null means disarmed.
@@ -337,6 +341,7 @@ export const ChatInput = memo(function ChatInput({
     !pendingSpatialTransition &&
     !isInputBusy &&
     !emojiOpen &&
+    !kaomojiOpen &&
     !charPickerOpen;
   const activeAgentIds = useMemo(
     () =>
@@ -1957,6 +1962,31 @@ export const ChatInput = memo(function ChatInput({
             onClose={() => setEmojiOpen(false)}
             onSelect={handleEmojiSelect}
             anchorRef={emojiButtonRef}
+            containerRef={inputBarRef}
+          />
+        </div>
+
+        {/* Kaomoji picker */}
+        <div className="relative hidden shrink-0 sm:block">
+          <button
+            ref={kaomojiButtonRef}
+            onClick={() => setKaomojiOpen((v) => !v)}
+            className={cn(
+              "flex h-8 w-8 items-center justify-center rounded-full transition-colors active:scale-90",
+              kaomojiOpen
+                ? "bg-foreground/10 text-foreground/75 ring-1 ring-foreground/20"
+                : "text-foreground/40 hover:bg-foreground/10 hover:text-foreground/70",
+            )}
+            title={t("chat.input.kaomoji")}
+            aria-label={t("chat.input.kaomoji")}
+          >
+            <SmilePlus size="1.125rem" />
+          </button>
+          <KaomojiPicker
+            open={kaomojiOpen}
+            onClose={() => setKaomojiOpen(false)}
+            onSelect={handleEmojiSelect}
+            anchorRef={kaomojiButtonRef}
             containerRef={inputBarRef}
           />
         </div>

@@ -20,6 +20,7 @@ export function ConnectionSection({ connectionId, connections, isGame, onConnect
 
   return (
     <ChatSettingsSection
+      id="connection"
       label="Connection"
       icon={<Plug size="0.875rem" />}
       help={
