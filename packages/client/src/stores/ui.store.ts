@@ -3,6 +3,7 @@
 // ──────────────────────────────────────────────
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
+import { generateClientId } from "../lib/utils";
 import {
   IMAGE_STYLE_PROFILES_STORAGE_KEY,
   normalizeImageStyleProfileSettings,
@@ -411,6 +412,13 @@ export interface CustomTheme {
   installedAt: string;
 }
 
+/** A user-defined quick reply that sends a fixed prompt, macro, or slash command. */
+export interface CustomQuickReply {
+  id: string;
+  label: string;
+  content: string;
+}
+
 interface UIState {
   sidebarOpen: boolean;
   sidebarWidth: number;
@@ -582,6 +590,8 @@ interface UIState {
   showQuickReplyPostOnly: boolean;
   showQuickReplyGuide: boolean;
   showQuickReplyImpersonate: boolean;
+  /** User-defined quick replies that send a fixed prompt, macro, or slash command. */
+  customQuickReplies: CustomQuickReply[];
   confirmBeforeDelete: boolean;
   /** When true, chat exports include saved thinking/reasoning metadata. */
   includeReasoningInExports: boolean;
@@ -882,6 +892,9 @@ interface UIState {
   setShowQuickReplyPostOnly: (v: boolean) => void;
   setShowQuickReplyGuide: (v: boolean) => void;
   setShowQuickReplyImpersonate: (v: boolean) => void;
+  addCustomQuickReply: (label: string, content: string) => void;
+  updateCustomQuickReply: (id: string, patch: Partial<Omit<CustomQuickReply, "id">>) => void;
+  removeCustomQuickReply: (id: string) => void;
   setConfirmBeforeDelete: (v: boolean) => void;
   setIncludeReasoningInExports: (v: boolean) => void;
   setMessagesPerPage: (n: number) => void;
@@ -1076,6 +1089,7 @@ export function pickSyncedSettings(state: UIState) {
     showQuickReplyPostOnly: state.showQuickReplyPostOnly,
     showQuickReplyGuide: state.showQuickReplyGuide,
     showQuickReplyImpersonate: state.showQuickReplyImpersonate,
+    customQuickReplies: state.customQuickReplies,
     confirmBeforeDelete: state.confirmBeforeDelete,
     includeReasoningInExports: state.includeReasoningInExports,
     messagesPerPage: state.messagesPerPage,
@@ -1261,6 +1275,7 @@ export const useUIStore = create<UIState>()(
       showQuickReplyPostOnly: true,
       showQuickReplyGuide: true,
       showQuickReplyImpersonate: true,
+      customQuickReplies: [],
       confirmBeforeDelete: true,
       includeReasoningInExports: false,
       messagesPerPage: 20,
@@ -1993,6 +2008,23 @@ export const useUIStore = create<UIState>()(
       setShowQuickReplyPostOnly: (v) => set({ showQuickReplyPostOnly: v }),
       setShowQuickReplyGuide: (v) => set({ showQuickReplyGuide: v }),
       setShowQuickReplyImpersonate: (v) => set({ showQuickReplyImpersonate: v }),
+      addCustomQuickReply: (label, content) =>
+        set((state) => ({
+          customQuickReplies: [
+            ...state.customQuickReplies,
+            { id: generateClientId(), label: label.trim(), content },
+          ],
+        })),
+      updateCustomQuickReply: (id, patch) =>
+        set((state) => ({
+          customQuickReplies: state.customQuickReplies.map((entry) =>
+            entry.id === id
+              ? { ...entry, ...(patch.label !== undefined ? { label: patch.label } : {}), ...(patch.content !== undefined ? { content: patch.content } : {}) }
+              : entry,
+          ),
+        })),
+      removeCustomQuickReply: (id) =>
+        set((state) => ({ customQuickReplies: state.customQuickReplies.filter((entry) => entry.id !== id) })),
       setConfirmBeforeDelete: (v) => set({ confirmBeforeDelete: v }),
       setIncludeReasoningInExports: (v) => set({ includeReasoningInExports: v }),
       setMessagesPerPage: (n) => set({ messagesPerPage: n }),
@@ -2869,6 +2901,7 @@ export const useUIStore = create<UIState>()(
         showQuickReplyPostOnly: state.showQuickReplyPostOnly,
         showQuickReplyGuide: state.showQuickReplyGuide,
         showQuickReplyImpersonate: state.showQuickReplyImpersonate,
+        customQuickReplies: state.customQuickReplies,
         confirmBeforeDelete: state.confirmBeforeDelete,
         includeReasoningInExports: state.includeReasoningInExports,
         messagesPerPage: state.messagesPerPage,

@@ -1999,6 +1999,23 @@ export const ChatMessage = memo(function ChatMessage({
     return renderContent(text, dialogueColor, speakerColorMap, boldDialogue, htmlScopeClass, quoteFormat);
   }, [text, dialogueColor, speakerColorMap, boldDialogue, htmlScopeClass, quoteFormat]);
 
+  // Translated text is rendered through the same markdown pipeline as the
+  // message so bold/italics/quotes format identically.
+  const renderedTranslation = useMemo(
+    () =>
+      translatedText
+        ? renderContent(translatedText, dialogueColor, speakerColorMap, boldDialogue, htmlScopeClass, quoteFormat)
+        : null,
+    [translatedText, dialogueColor, speakerColorMap, boldDialogue, htmlScopeClass, quoteFormat],
+  );
+  const translationDisplayOnly = useMemo(
+    () => parseChatMetadata(activeChatMetadata).translationDisplayOnly === true,
+    [activeChatMetadata],
+  );
+  // When enabled, the translation replaces the original in place instead of
+  // appearing below it.
+  const showTranslationOnly = translationDisplayOnly && !!translatedText && !isTranslating;
+
   const handleCopy = () => {
     copyToClipboard(message.content);
     setCopied(true);
@@ -2145,6 +2162,8 @@ export const ChatMessage = memo(function ChatMessage({
           <>
             {diceRollResult ? (
               <DiceMessageContent diceRollResult={diceRollResult} createdAt={message.createdAt} />
+            ) : showTranslationOnly ? (
+              renderedTranslation
             ) : (
               renderedContent
             )}
@@ -2154,14 +2173,12 @@ export const ChatMessage = memo(function ChatMessage({
           </>
         )}
       </div>
-      {(translatedText || isTranslating) && (
+      {(translatedText || isTranslating) && !showTranslationOnly && (
         <div className="mt-2 border-t border-white/10 pt-2">
           {isTranslating ? (
             <span className="text-[0.75rem] italic text-white/40">Translating…</span>
           ) : (
-            <div className="whitespace-pre-wrap text-[0.8125rem] leading-relaxed text-blue-200/70">
-              {translatedText}
-            </div>
+            <div className="text-[0.8125rem] leading-relaxed text-blue-200/70">{renderedTranslation}</div>
           )}
         </div>
       )}
@@ -2278,6 +2295,8 @@ export const ChatMessage = memo(function ChatMessage({
                 >
                   {diceRollResult ? (
                     <DiceMessageContent diceRollResult={diceRollResult} createdAt={message.createdAt} />
+                  ) : showTranslationOnly ? (
+                    renderedTranslation
                   ) : (
                     renderedContent
                   )}
@@ -3027,6 +3046,8 @@ export const ChatMessage = memo(function ChatMessage({
                     <>
                       {diceRollResult ? (
                         <DiceMessageContent diceRollResult={diceRollResult} createdAt={message.createdAt} />
+                      ) : showTranslationOnly ? (
+                        renderedTranslation
                       ) : (
                         renderedContent
                       )}
@@ -3037,13 +3058,13 @@ export const ChatMessage = memo(function ChatMessage({
                   )}
                 </div>
                 {/* Translation */}
-                {(translatedText || isTranslating) && (
+                {(translatedText || isTranslating) && !showTranslationOnly && (
                   <div className="mt-2 border-t border-[var(--border)] pt-2">
                     {isTranslating ? (
                       <span className="text-[0.75rem] italic text-[var(--muted-foreground)]">Translating…</span>
                     ) : (
-                      <div className="whitespace-pre-wrap text-[0.8125rem] leading-relaxed text-[var(--muted-foreground)]">
-                        {translatedText}
+                      <div className="text-[0.8125rem] leading-relaxed text-[var(--muted-foreground)]">
+                        {renderedTranslation}
                       </div>
                     )}
                   </div>
