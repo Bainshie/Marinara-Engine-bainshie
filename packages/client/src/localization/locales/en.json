@@ -4923,6 +4923,7 @@
   "ui.noodle.disclosurestep.source": "Source:",
   "ui.noodle.invites.folderCharacters_one": "Invited {{count}} character from selected folders.",
   "ui.noodle.invites.folderCharacters_other": "Invited {{count}} characters from selected folders.",
+  "ui.noodle.lockedprivatepostcard.locked": "Locked",
   "ui.noodle.lockedprivatepostcard.managePost": "Manage post",
   "ui.noodle.lockedprivatepostcard.notVisibleToThisViewer": "Not visible to this viewer",
   "ui.noodle.lockedprivatepostcard.openTheControllerToolsToManageThisPost": "Open the controller tools to manage this post.",
