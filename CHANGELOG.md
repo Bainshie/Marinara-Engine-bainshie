@@ -4,6 +4,10 @@ This file is the release-notes source of truth for Marinara Engine. Reuse these 
 
 ## [Unreleased]
 
+### Added
+
+- Added a **Retry** action to Game Mode character-sheet editing. It regenerates only the selected Persona or party member from their card and the current campaign history, keeps the result as an unsaved draft for review, and preserves the original sheet unless the user saves (#4048).
+
 ## [2.3.5]
 
 ### Added

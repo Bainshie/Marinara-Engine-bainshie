@@ -61,7 +61,7 @@ interface GameCharacterSheetProps {
   card: CharacterSheetCard;
   onClose: () => void;
   onSave?: (gameCard: GameCharacterSheetGameCard | undefined) => Promise<void> | void;
-  onRegenerate?: () => Promise<void> | void;
+  onRegenerate?: () => Promise<GameCharacterSheetGameCard | undefined> | GameCharacterSheetGameCard | undefined;
   isRegenerating?: boolean;
 }
 
@@ -432,7 +432,12 @@ export function GameCharacterSheet({
 
   const handleRegenerate = async () => {
     if (!onRegenerate || isSaving || isRegenerating) return;
-    await onRegenerate();
+    try {
+      const regenerated = await onRegenerate();
+      if (regenerated) setDraft(createDraft(regenerated));
+    } catch {
+      return;
+    }
   };
 
   return (
@@ -454,12 +459,30 @@ export function GameCharacterSheet({
               <>
                 <button
                   onClick={handleCancelEdit}
-                  disabled={isSaving}
+                  disabled={isSaving || isRegenerating}
                   className="inline-flex h-8 items-center justify-center rounded-lg border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--marinara-chat-chrome-button-bg)] px-2.5 text-xs font-medium text-[var(--muted-foreground)] transition-colors hover:bg-[var(--marinara-chat-chrome-highlight-bg)] hover:text-[var(--foreground)] disabled:opacity-60 sm:h-auto sm:px-3 sm:py-1.5"
-                >{localizeUi("chat.delete.dialog.cancel")}</button>
+                >
+                  {localizeUi("chat.delete.dialog.cancel")}
+                </button>
+                {onRegenerate && (
+                  <button
+                    onClick={() => void handleRegenerate()}
+                    disabled={isRegenerating || isSaving}
+                    className="inline-flex h-8 min-w-8 items-center justify-center gap-1.5 rounded-lg border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--marinara-chat-chrome-button-bg)] px-2 text-xs font-medium text-[var(--muted-foreground)] transition-colors hover:bg-[var(--marinara-chat-chrome-highlight-bg)] hover:text-[var(--foreground)] disabled:cursor-wait disabled:opacity-60 sm:h-auto sm:min-w-0 sm:px-3 sm:py-1.5"
+                    title={localizeUi("game.characterSheet.regenerate.help")}
+                    aria-label={localizeUi("game.characterSheet.regenerate.label")}
+                  >
+                    <RefreshCw size={13} className={cn(isRegenerating && "animate-spin")} />
+                    <span className="hidden sm:inline">
+                      {isRegenerating
+                        ? localizeUi("game.characterSheet.regenerate.loading")
+                        : localizeUi("game.characterSheet.regenerate.label")}
+                    </span>
+                  </button>
+                )}
                 <button
                   onClick={() => void handleSave()}
-                  disabled={isSaving}
+                  disabled={isSaving || isRegenerating}
                   className="inline-flex h-8 min-w-8 items-center justify-center gap-1.5 rounded-lg bg-[var(--marinara-chat-chrome-highlight-bg)] px-2 text-xs font-semibold text-[var(--foreground)] ring-1 ring-[var(--marinara-chat-chrome-panel-border)] transition-colors hover:bg-[var(--marinara-chat-chrome-button-bg-hover)] disabled:opacity-60 sm:h-auto sm:min-w-0 sm:px-3 sm:py-1.5"
                   title={isSaving ?localizeUi("ui.noodle.stageprofileform.saving") :localizeUi("ui.game.gamecharactersheet.saveSheet")}
                   aria-label={isSaving ?localizeUi("ui.game.gamecharactersheet.savingSheet") :localizeUi("ui.game.gamecharactersheet.saveSheet_69c9b5b")}
@@ -469,32 +492,18 @@ export function GameCharacterSheet({
                 </button>
               </>
             ) : (
-              <>
-                {onRegenerate && (
-                  <button
-                    onClick={() => void handleRegenerate()}
-                    disabled={isRegenerating || isSaving}
-                    className="inline-flex h-8 min-w-8 items-center justify-center gap-1.5 rounded-lg border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--marinara-chat-chrome-button-bg)] px-2 text-xs font-medium text-[var(--muted-foreground)] transition-colors hover:bg-[var(--marinara-chat-chrome-highlight-bg)] hover:text-[var(--foreground)] disabled:cursor-wait disabled:opacity-60 sm:h-auto sm:min-w-0 sm:px-3 sm:py-1.5"
-                    title={localizeUi("ui.game.gamecharactersheet.regenerateThisSheetFromCharacterAndCurrentGameContext")}
-                    aria-label={localizeUi("ui.game.gamecharactersheet.regenerateSheet")}
-                  >
-                    <RefreshCw size={13} className={cn(isRegenerating && "animate-spin")} />
-                    <span className="hidden sm:inline">{isRegenerating ?localizeUi("ui.game.gamecharactersheet.regenerating") :localizeUi("ui.game.gamecharactersheet.regenerateSheet_aa9e497")}</span>
-                  </button>
-                )}
-                {onSave && (
-                  <button
-                    onClick={() => setIsEditing(true)}
-                    disabled={isRegenerating}
-                    className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--marinara-chat-chrome-button-bg)] p-0 text-xs font-medium text-[var(--muted-foreground)] transition-colors hover:bg-[var(--marinara-chat-chrome-highlight-bg)] hover:text-[var(--foreground)] disabled:opacity-60 sm:h-auto sm:w-auto sm:min-w-0 sm:gap-1.5 sm:px-3 sm:py-1.5"
-                    title={localizeUi("ui.game.gamecharactersheet.editSheet")}
-                    aria-label={localizeUi("ui.game.gamecharactersheet.editSheet_8c3fdc2")}
-                  >
-                    <Pencil size={13} />
-                    <span className="hidden sm:inline">{localizeUi("ui.game.gamecharactersheet.editSheet")}</span>
-                  </button>
-                )}
-              </>
+              onSave && (
+                <button
+                  onClick={() => setIsEditing(true)}
+                  disabled={isRegenerating}
+                  className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--marinara-chat-chrome-button-bg)] p-0 text-xs font-medium text-[var(--muted-foreground)] transition-colors hover:bg-[var(--marinara-chat-chrome-highlight-bg)] hover:text-[var(--foreground)] disabled:opacity-60 sm:h-auto sm:w-auto sm:min-w-0 sm:gap-1.5 sm:px-3 sm:py-1.5"
+                  title={localizeUi("ui.game.gamecharactersheet.editSheet")}
+                  aria-label={localizeUi("ui.game.gamecharactersheet.editSheet_8c3fdc2")}
+                >
+                  <Pencil size={13} />
+                  <span className="hidden sm:inline">{localizeUi("ui.game.gamecharactersheet.editSheet")}</span>
+                </button>
+              )
             )}
           </div>
         )}
