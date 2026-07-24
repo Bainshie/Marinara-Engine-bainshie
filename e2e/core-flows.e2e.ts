@@ -1913,23 +1913,10 @@ test("roleplay quick preset editor uses chat settings spacing and surfaces", asy
     await expect(drawer).toBeVisible();
     await drawer.getByText("Prompt Preset", { exact: true }).click();
 
-    const quickToggle = drawer.getByRole("button", { name: "Edit preset sections", exact: true });
-    await quickToggle.click();
     const quickEditor = drawer.locator(".mari-quick-preset-editor");
     await expect(quickEditor).toBeVisible();
-    const openQuickToggle = drawer.getByRole("button", { name: "Hide preset editor", exact: true });
-
-    const [selectChevronBox, quickChevronBox] = await Promise.all([
-      drawer.locator('[data-prompt-preset-chevron="select"]').boundingBox(),
-      openQuickToggle.locator('[data-prompt-preset-chevron="quick-editor"]').boundingBox(),
-    ]);
-    expect(selectChevronBox).not.toBeNull();
-    expect(quickChevronBox).not.toBeNull();
-    if (selectChevronBox && quickChevronBox) {
-      expect(
-        Math.abs(selectChevronBox.x + selectChevronBox.width - (quickChevronBox.x + quickChevronBox.width)),
-      ).toBeLessThanOrEqual(1);
-    }
+    await expect(drawer.getByText("Preset sections", { exact: true })).toBeVisible();
+    await expect(drawer.locator('[data-prompt-preset-chevron="select"]')).toBeVisible();
 
     const toolbar = quickEditor.locator(".mari-editor-toolbar");
     const firstToolbarControl = toolbar.locator("button").first();
@@ -2034,7 +2021,6 @@ test("mobile roleplay quick preset editor keeps marker and metadata controls com
     const drawer = page.locator(".mari-chat-settings-drawer");
     await expect(drawer).toBeVisible();
     await drawer.getByText("Prompt Preset", { exact: true }).click();
-    await drawer.getByRole("button", { name: "Edit preset sections", exact: true }).click();
 
     const quickEditor = drawer.locator(".mari-quick-preset-editor");
     await expect(quickEditor).toBeVisible();
