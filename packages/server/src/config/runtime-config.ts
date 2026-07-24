@@ -20,8 +20,10 @@ const DEFAULT_CUSTOM_TOOL_TIMEOUT_MS = 60_000;
 export const DEFAULT_CHAT_GENERATION_TIMEOUT_MS = 300_000;
 const MIN_CHAT_GENERATION_TIMEOUT_MS = 10_000;
 const MAX_CHAT_GENERATION_TIMEOUT_MS = 3_600_000;
+export const DEFAULT_AGENT_CALL_TIMEOUT_MS = 300_000;
 const MAX_TIMEOUT_MS = 2_147_483_647;
 let lastInvalidChatGenerationTimeout: string | null = null;
+let lastInvalidAgentCallTimeout: string | null = null;
 
 let envLoaded = false;
 // Keys that the .env file currently contributes to process.env. Tracked so a
@@ -453,6 +455,39 @@ export function getChatGenerationTimeoutMs() {
     );
   }
   return DEFAULT_CHAT_GENERATION_TIMEOUT_MS;
+}
+
+/**
+ * Per-call timeout for agent LLM requests (trackers, HTML reformatter, …).
+ * Unlike the main chat path, these are total-duration caps, so slow local
+ * models need a higher value here even when streaming (#3958). Read per
+ * request so .env hot reloads apply without a restart.
+ */
+export function getAgentCallTimeoutMs() {
+  const raw = normalizeEnvValue(process.env.AGENT_CALL_TIMEOUT_MS);
+  if (raw === null) return DEFAULT_AGENT_CALL_TIMEOUT_MS;
+
+  const parsed = /^\d+$/.test(raw) ? Number(raw) : Number.NaN;
+  if (
+    Number.isSafeInteger(parsed) &&
+    parsed >= MIN_CHAT_GENERATION_TIMEOUT_MS &&
+    parsed <= MAX_CHAT_GENERATION_TIMEOUT_MS
+  ) {
+    lastInvalidAgentCallTimeout = null;
+    return parsed;
+  }
+
+  if (lastInvalidAgentCallTimeout !== raw) {
+    lastInvalidAgentCallTimeout = raw;
+    sharedLogger.warn(
+      "[runtime-config] Ignoring invalid AGENT_CALL_TIMEOUT_MS=%s; expected %d-%d milliseconds, using %d",
+      raw,
+      MIN_CHAT_GENERATION_TIMEOUT_MS,
+      MAX_CHAT_GENERATION_TIMEOUT_MS,
+      DEFAULT_AGENT_CALL_TIMEOUT_MS,
+    );
+  }
+  return DEFAULT_AGENT_CALL_TIMEOUT_MS;
 }
 
 export function getMaxToolRounds() {

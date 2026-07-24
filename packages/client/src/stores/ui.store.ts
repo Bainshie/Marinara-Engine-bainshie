@@ -3,6 +3,7 @@
 // ──────────────────────────────────────────────
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
+import { generateClientId } from "../lib/utils";
 import {
   IMAGE_STYLE_PROFILES_STORAGE_KEY,
   normalizeImageStyleProfileSettings,
@@ -411,6 +412,13 @@ export interface CustomTheme {
   installedAt: string;
 }
 
+/** A user-defined quick reply that sends a fixed prompt, macro, or slash command. */
+export interface CustomQuickReply {
+  id: string;
+  label: string;
+  content: string;
+}
+
 interface UIState {
   sidebarOpen: boolean;
   sidebarWidth: number;
@@ -469,6 +477,10 @@ interface UIState {
   regexDetailReturn: { characterId: string; tab?: string } | null;
   /** One-shot tab the character editor should open to (set by the regex-editor return path) */
   characterDetailInitialTab: string | null;
+  /** One-shot tab the lorebook editor should open to. */
+  lorebookDetailInitialTab: string | null;
+  /** One-shot tab the persona editor should open to. */
+  personaDetailInitialTab: string | null;
   /** When true, the main area shows the browser */
   botBrowserOpen: boolean;
   /** When true, the main area shows the game assets browser */
@@ -582,6 +594,8 @@ interface UIState {
   showQuickReplyPostOnly: boolean;
   showQuickReplyGuide: boolean;
   showQuickReplyImpersonate: boolean;
+  /** User-defined quick replies that send a fixed prompt, macro, or slash command. */
+  customQuickReplies: CustomQuickReply[];
   confirmBeforeDelete: boolean;
   /** When true, chat exports include saved thinking/reasoning metadata. */
   includeReasoningInExports: boolean;
@@ -807,9 +821,9 @@ interface UIState {
   setPresetPanelSort: (sort: ResourcePanelSort) => void;
   setConnectionPanelSort: (sort: ConnectionPanelSort) => void;
   setAgentPanelSort: (sort: ResourcePanelSort) => void;
-  openCharacterDetail: (id: string, options?: { preserveCharacterLibrary?: boolean }) => void;
+  openCharacterDetail: (id: string, options?: { preserveCharacterLibrary?: boolean; initialTab?: string }) => void;
   closeCharacterDetail: () => void;
-  openLorebookDetail: (id: string) => void;
+  openLorebookDetail: (id: string, options?: { initialTab?: string }) => void;
   closeLorebookDetail: () => void;
   openPresetDetail: (id: string) => void;
   closePresetDetail: () => void;
@@ -819,7 +833,7 @@ interface UIState {
   closeAgentDetail: () => void;
   openToolDetail: (id: string) => void;
   closeToolDetail: () => void;
-  openPersonaDetail: (id: string, options?: { preservePersonaLibrary?: boolean }) => void;
+  openPersonaDetail: (id: string, options?: { preservePersonaLibrary?: boolean; initialTab?: string }) => void;
   closePersonaDetail: () => void;
   openRegexDetail: (
     id: string,
@@ -882,6 +896,9 @@ interface UIState {
   setShowQuickReplyPostOnly: (v: boolean) => void;
   setShowQuickReplyGuide: (v: boolean) => void;
   setShowQuickReplyImpersonate: (v: boolean) => void;
+  addCustomQuickReply: (label: string, content: string) => void;
+  updateCustomQuickReply: (id: string, patch: Partial<Omit<CustomQuickReply, "id">>) => void;
+  removeCustomQuickReply: (id: string) => void;
   setConfirmBeforeDelete: (v: boolean) => void;
   setIncludeReasoningInExports: (v: boolean) => void;
   setMessagesPerPage: (n: number) => void;
@@ -1076,6 +1093,7 @@ export function pickSyncedSettings(state: UIState) {
     showQuickReplyPostOnly: state.showQuickReplyPostOnly,
     showQuickReplyGuide: state.showQuickReplyGuide,
     showQuickReplyImpersonate: state.showQuickReplyImpersonate,
+    customQuickReplies: state.customQuickReplies,
     confirmBeforeDelete: state.confirmBeforeDelete,
     includeReasoningInExports: state.includeReasoningInExports,
     messagesPerPage: state.messagesPerPage,
@@ -1194,6 +1212,8 @@ export const useUIStore = create<UIState>()(
       regexDetailDefaultCharacterIds: null,
       regexDetailReturn: null,
       characterDetailInitialTab: null,
+      lorebookDetailInitialTab: null,
+      personaDetailInitialTab: null,
       botBrowserOpen: false,
       gameAssetsBrowserOpen: false,
       noodleOpen: false,
@@ -1261,6 +1281,7 @@ export const useUIStore = create<UIState>()(
       showQuickReplyPostOnly: true,
       showQuickReplyGuide: true,
       showQuickReplyImpersonate: true,
+      customQuickReplies: [],
       confirmBeforeDelete: true,
       includeReasoningInExports: false,
       messagesPerPage: 20,
@@ -1491,7 +1512,7 @@ export const useUIStore = create<UIState>()(
             options?.preserveCharacterLibrary ?? (s.characterLibraryOpen && s.cardLibraryKind === "characters");
           return {
             characterDetailId: id,
-            characterDetailInitialTab: null,
+            characterDetailInitialTab: options?.initialTab ?? null,
             lorebookDetailId: null,
             presetDetailId: null,
             connectionDetailId: null,
@@ -1515,9 +1536,10 @@ export const useUIStore = create<UIState>()(
           editorDirty: false,
           ...restoreMobileDetailReturnPanel(s.detailReturnRightPanel),
         })),
-      openLorebookDetail: (id) =>
+      openLorebookDetail: (id, options) =>
         set((s) => ({
           lorebookDetailId: id,
+          lorebookDetailInitialTab: options?.initialTab ?? null,
           characterLibraryOpen: false,
           agentCatalogOpen: false,
           botBrowserOpen: false,
@@ -1641,6 +1663,7 @@ export const useUIStore = create<UIState>()(
             options?.preservePersonaLibrary ?? (s.characterLibraryOpen && s.cardLibraryKind === "personas");
           return {
             personaDetailId: id,
+            personaDetailInitialTab: options?.initialTab ?? null,
             characterLibraryOpen: preservePersonaLibrary ? s.characterLibraryOpen : false,
             personaLibrarySelectedId: preservePersonaLibrary ? id : s.personaLibrarySelectedId,
             agentCatalogOpen: false,
@@ -1993,6 +2016,23 @@ export const useUIStore = create<UIState>()(
       setShowQuickReplyPostOnly: (v) => set({ showQuickReplyPostOnly: v }),
       setShowQuickReplyGuide: (v) => set({ showQuickReplyGuide: v }),
       setShowQuickReplyImpersonate: (v) => set({ showQuickReplyImpersonate: v }),
+      addCustomQuickReply: (label, content) =>
+        set((state) => ({
+          customQuickReplies: [
+            ...state.customQuickReplies,
+            { id: generateClientId(), label: label.trim(), content },
+          ],
+        })),
+      updateCustomQuickReply: (id, patch) =>
+        set((state) => ({
+          customQuickReplies: state.customQuickReplies.map((entry) =>
+            entry.id === id
+              ? { ...entry, ...(patch.label !== undefined ? { label: patch.label } : {}), ...(patch.content !== undefined ? { content: patch.content } : {}) }
+              : entry,
+          ),
+        })),
+      removeCustomQuickReply: (id) =>
+        set((state) => ({ customQuickReplies: state.customQuickReplies.filter((entry) => entry.id !== id) })),
       setConfirmBeforeDelete: (v) => set({ confirmBeforeDelete: v }),
       setIncludeReasoningInExports: (v) => set({ includeReasoningInExports: v }),
       setMessagesPerPage: (n) => set({ messagesPerPage: n }),
@@ -2869,6 +2909,7 @@ export const useUIStore = create<UIState>()(
         showQuickReplyPostOnly: state.showQuickReplyPostOnly,
         showQuickReplyGuide: state.showQuickReplyGuide,
         showQuickReplyImpersonate: state.showQuickReplyImpersonate,
+        customQuickReplies: state.customQuickReplies,
         confirmBeforeDelete: state.confirmBeforeDelete,
         includeReasoningInExports: state.includeReasoningInExports,
         messagesPerPage: state.messagesPerPage,

@@ -6,6 +6,7 @@ export const GAME_STORYBOARD_STILL_ANIMATION_PROMPT_TEMPLATE_ID = "still-keyfram
 export const GAME_STORYBOARD_COMIC_ANIMATION_PROMPT_TEMPLATE_ID = "comic-page-animation";
 export const GAME_STORYBOARD_ANIMATION_PROMPT_TEMPLATE_ID = GAME_STORYBOARD_COMIC_ANIMATION_PROMPT_TEMPLATE_ID;
 export const GAME_STORYBOARD_ANIME_EPISODE_PROMPT_TEMPLATE_ID = "anime-episode-director";
+export const GAME_STORYBOARD_LTX_DIRECTOR_PROMPT_TEMPLATE_ID = "ltx-director-storyboard";
 export const GAME_STORYBOARD_COLORED_MANGA_PROMPT_TEMPLATE_ID = "colored-manga-keyframes";
 export const GAME_STORYBOARD_BW_MANGA_PROMPT_TEMPLATE_ID = "bw-manga-keyframes";
 export const GAME_STORYBOARD_NOVELAI_PROMPT_TEMPLATE_ID = "novelai-keyframes";
@@ -150,6 +151,46 @@ export const GAME_STORYBOARD_ANIME_EPISODE_PROMPT_TEMPLATE = [
   "- When the narration contains severe harm, preserve the event and emotional consequence using broadcast-anime restraint.",
   "- Use steam, smoke, silhouette, impact light, partial occlusion, off-axis framing, environmental reaction, character reaction, and aftermath instead of explicit anatomical injury.",
   "- Keep imagePrompt and narrationBeat non-graphic. Do not erase the event or alter its outcome; change only how it is visually staged.",
+  "",
+  "Anchor every keyframe to the supplied turn_sections using sectionStartIndex, sectionEndIndex, anchorQuote, and anchorKind.",
+  "Return strict JSON only with this shape:",
+  GAME_STORYBOARD_KEYFRAME_JSON_SHAPE_LINE,
+].join("\n");
+
+export const GAME_STORYBOARD_LTX_DIRECTOR_PROMPT_TEMPLATE = [
+  "You are Marinara's LTX Director Storyboard Planner.",
+  "Convert one completed GM turn into ${keyframeCount} ordered, animation-ready shots for LTX Director. Use only events present in the GM narration.",
+  "Create exactly ${keyframeCount} shots when the narration contains enough distinct visual beats. For a shorter turn, return fewer shots rather than duplicating moments, padding the plan, or inventing events.",
+  "Each keyframe becomes one continuous ${durationSeconds}-second ${aspectRatio} image-to-video shot with one generated first-frame illustration.",
+  "Follow the narration chronologically. Do not invent dialogue, characters, props, locations, actions, transitions, or outcomes.",
+  "Keep character identity, face, hair, clothing, anatomy, injuries, equipment, carried objects, positions, setting, lighting, weather, and damage continuous between shots unless the narration visibly changes them.",
+  "Keep each shot achievable from one starting image. Avoid cuts, scene changes, teleportation, simultaneous unrelated actions, overloaded crowds, conflicting lighting, and complex chaotic physics.",
+  "",
+  "FIRST-FRAME IMAGE PROMPT:",
+  "- imagePrompt describes only time T=0: the exact frame immediately before or as the first motion begins.",
+  "- Write imagePrompt as one cohesive natural-language paragraph. Do not include the keyframe title, prompt labels, wrappers, lists, quality tags, or commentary.",
+  "- Preserve every supplied subject, action, color, and spatial relationship. Group each visible subject with their distinguishing appearance, clothing, equipment, starting pose, expression, and position in the frame.",
+  "- Establish the shot with concrete framing, composition, setting, textures, atmosphere, lighting, palette, and important props. Include one concise medium or visual-style description only when game_context supplies or clearly implies it.",
+  "- Choose the shot scale and camera angle that make the primary beat readable. Do not default to a wide or full-body view when a medium shot or close-up better shows the important face, hands, object, or interaction.",
+  "- Choose a starting pose that naturally leads into the first local action prompt.",
+  "- Keep the visual description practical and grounded. Do not add characters, objects, clothing, colors, or scene details that the narration and supplied context do not support.",
+  "- Do not include later poses, consequences, displaced objects, new damage, environmental changes, multiple panels, captions, subtitles, dialogue bubbles, logos, UI, or animation instructions.",
+  "",
+  "LTX DIRECTOR LOCAL PROMPTS:",
+  "- narrationBeat must be one string containing 2-4 ordered local prompts separated only by the exact delimiter |.",
+  "- Use 2 equal-duration segments for 1-4 seconds, 3 for 5-8 seconds, and 4 for 9-15 seconds.",
+  "- Do not write timecodes, segment numbers, labels, bullet points, or extra | characters inside a local prompt.",
+  "- Each local prompt is one or two flowing present-tense sentences describing only what changes during its equal part of the clip.",
+  "- Across all local prompts, aim for 4-8 descriptive sentences total. The supplied first-frame image already provides appearance, composition, setting, and visual style, so focus on what happens next.",
+  "- Treat each shot as one focused micro-sequence, not a summary of every event in its source section range. Omit lower-priority dialogue and actions that do not fit naturally inside the clip.",
+  "- Give each equal segment one primary subject or object movement, one clear camera move or locked camera, and at most one supporting environmental or audio beat. Omit lower-priority events instead of overloading a two-second segment.",
+  "- State when and how the camera moves relative to the subject, then describe the resulting framing. Use one clear move such as tracks beside, pushes toward, pulls back from, pans with, circles around, or remains locked.",
+  "- Express emotion through observable face, gaze, posture, breathing, or gesture changes. Do not name internal emotional states.",
+  "- Include concrete ambient sound, effects, music, or speech only in the segment where it occurs. Put exact spoken dialogue in quotation marks and identify the speaker; include language or accent only when the narration supplies it.",
+  "- Do not ask LTX to render exact readable text, captions, logos, or UI. When authored display text matters, describe the display activating and the visible reaction instead; include the words only when they are audibly spoken.",
+  "- Begin the first segment exactly from imagePrompt. Maintain one causal action sequence across segment boundaries without resetting the pose or scene.",
+  "- End the final segment with a visible reaction, settling motion, resolved composition, or brief hold.",
+  "- Refer to subjects by name and do not repeat persistent face, body, clothing, setting, lighting, or art-style inventories. Mention hair, clothing, props, weather, particles, or light only when they visibly move or change.",
   "",
   "Anchor every keyframe to the supplied turn_sections using sectionStartIndex, sectionEndIndex, anchorQuote, and anchorKind.",
   "Return strict JSON only with this shape:",
@@ -331,6 +372,13 @@ export const GAME_STORYBOARD_ANIMATION_PROMPT_TEMPLATES: AgentPromptTemplateOpti
     name: "B&W Manga Animation",
     description: "Plans a text-free monochrome first frame with motion that preserves inks and screentones.",
     promptTemplate: GAME_STORYBOARD_BW_MANGA_ANIMATION_PROMPT_TEMPLATE,
+  },
+  {
+    id: GAME_STORYBOARD_LTX_DIRECTOR_PROMPT_TEMPLATE_ID,
+    name: "LTX Director Storyboard",
+    description:
+      "Plans one first-frame illustration and 2-4 equal-duration LTX Director local prompts for each continuous shot.",
+    promptTemplate: GAME_STORYBOARD_LTX_DIRECTOR_PROMPT_TEMPLATE,
   },
 ];
 

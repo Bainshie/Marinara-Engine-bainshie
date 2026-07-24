@@ -89,8 +89,15 @@ import {
   shouldAutoplayGeneratedTTS,
 } from "../../lib/tts-autoplay";
 import { CHAT_SCROLL_TO_BOTTOM_EVENT, type ChatScrollToBottomDetail } from "../../lib/chat-scroll-events";
-import { CHAT_FLOATING_UI_DISMISS_EVENT } from "../../lib/chat-floating-ui-events";
-import { CHAT_TOOLBAR_ACTION_EVENT, readChatToolbarFloatingPanelAnchor } from "./ChatToolbarControls";
+import {
+  blurActiveChatFloatingUiControl,
+  CHAT_FLOATING_UI_DISMISS_EVENT,
+} from "../../lib/chat-floating-ui-events";
+import {
+  CHAT_TOOLBAR_ACTION_EVENT,
+  readAnnouncedChatToolbarPanelAction,
+  readChatToolbarFloatingPanelAnchor,
+} from "./ChatToolbarControls";
 import { mirrorSpritePlacements, normalizeSpritePlacements } from "./sprite-placement";
 import {
   loadLocalSpriteVisualSettings,
@@ -427,7 +434,7 @@ function preloadCharacterScheduleEditorModal() {
 
 const CharacterScheduleEditorModal = lazy(preloadCharacterScheduleEditorModal);
 
-type FloatingPanelAnchor = { right: number; top: number } | null;
+type FloatingPanelAnchor = ReturnType<typeof readChatToolbarFloatingPanelAnchor>;
 type OpenSettingsOptions = { initialSection?: ChatSettingsInitialSection };
 
 type HomeGlistenStar = {
@@ -638,30 +645,34 @@ export function ChatArea() {
   const handleOpenSettingsPanel = useCallback(
     (event?: ReactMouseEvent<HTMLElement>, options?: OpenSettingsOptions) => {
       void preloadChatSettingsDrawer();
+      const nextOpen = event ? !settingsOpen : true;
       setGalleryOpen(false);
       setGalleryAnchor(null);
-      setSettingsAnchor(readFloatingPanelAnchor(event));
-      setSettingsInitialSection(options?.initialSection ?? null);
-      setSettingsOpen(true);
+      setSettingsAnchor(nextOpen ? readFloatingPanelAnchor(event) : null);
+      setSettingsInitialSection(nextOpen ? (options?.initialSection ?? null) : null);
+      setSettingsOpen(nextOpen);
     },
-    [readFloatingPanelAnchor],
+    [readFloatingPanelAnchor, settingsOpen],
   );
   const handleOpenGalleryPanel = useCallback(
     (event?: ReactMouseEvent<HTMLElement>) => {
+      const nextOpen = event ? !galleryOpen : true;
       setSettingsOpen(false);
       setSettingsAnchor(null);
       setSettingsInitialSection(null);
-      setGalleryAnchor(readFloatingPanelAnchor(event));
-      setGalleryOpen(true);
+      setGalleryAnchor(nextOpen ? readFloatingPanelAnchor(event) : null);
+      setGalleryOpen(nextOpen);
     },
-    [readFloatingPanelAnchor],
+    [galleryOpen, readFloatingPanelAnchor],
   );
   const handleCloseSettingsPanel = useCallback(() => {
+    blurActiveChatFloatingUiControl();
     setSettingsOpen(false);
     setSettingsAnchor(null);
     setSettingsInitialSection(null);
   }, []);
   const handleCloseGalleryPanel = useCallback(() => {
+    blurActiveChatFloatingUiControl();
     setGalleryOpen(false);
     setGalleryAnchor(null);
   }, []);
@@ -671,12 +682,18 @@ export function ChatArea() {
     setHomeProfessorChatOpen(false);
     setHomeProfessorChatActive(false);
   }, [activeChatId]);
-  const closeFloatingChatDrawers = useCallback(() => {
-    setSettingsOpen(false);
-    setSettingsAnchor(null);
-    setSettingsInitialSection(null);
-    setGalleryOpen(false);
-    setGalleryAnchor(null);
+  const closeFloatingChatDrawers = useCallback((event?: Event) => {
+    const preservedPanel = event ? readAnnouncedChatToolbarPanelAction(event) : null;
+    blurActiveChatFloatingUiControl();
+    if (preservedPanel !== "settings") {
+      setSettingsOpen(false);
+      setSettingsAnchor(null);
+      setSettingsInitialSection(null);
+    }
+    if (preservedPanel !== "gallery") {
+      setGalleryOpen(false);
+      setGalleryAnchor(null);
+    }
     setPeekPromptData(null);
     setDeleteDialogMessageId(null);
   }, []);
@@ -1460,7 +1477,13 @@ export function ChatArea() {
     }
     useTranslationStore
       .getState()
-      .seedFromMessages(messages as unknown as Array<{ id: string; extra?: string | Record<string, unknown> | null }>);
+      .seedFromMessages(
+        messages as unknown as Array<{
+          id: string;
+          content?: string;
+          extra?: string | Record<string, unknown> | null;
+        }>,
+      );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chat?.id, msgPageCount]);
 
