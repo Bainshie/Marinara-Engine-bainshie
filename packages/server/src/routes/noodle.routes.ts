@@ -155,6 +155,56 @@ export async function noodleRoutes(app: FastifyInstance) {
   const privateImages = createPrivateNoodleImagesService(app.db);
   let refreshInFlight = false;
 
+  async function stagePrivateMediaBuffer(ownerAccountId: string, buffer: Buffer, contentType: string) {
+    const cleanupResults = privateMediaRecoveryTrusted
+      ? await Promise.allSettled([
+          reconcileNoodlerPrivateMediaFiles((storageKey) => noodle.privateMediaAssetExists(storageKey), 20),
+          noodle.cleanupStalePrivateMediaAssets(
+            new Date(Date.now() - NOODLER_PRIVATE_MEDIA_STALE_MS).toISOString(),
+            20,
+          ),
+        ])
+      : [];
+    for (const result of cleanupResults) {
+      if (result.status === "rejected") {
+        logger.warn(result.reason, "[noodler] Bounded private-media cleanup did not complete");
+      }
+    }
+
+    const storageKey = await writeNoodlerPrivateMediaFile(buffer, contentType);
+    try {
+      const locked = await tryNoodlePrivateAccountOperation(ownerAccountId, () =>
+        noodle.createPrivateMediaAsset({
+          ownerAccountId,
+          storageKey,
+          contentType,
+          byteLength: buffer.byteLength,
+        }),
+      );
+      if (!locked.acquired) {
+        await removeNewNoodlerPrivateMediaFile(storageKey);
+        return { status: "busy" as const };
+      }
+      const asset = locked.value;
+      if (!asset) {
+        await removeNewNoodlerPrivateMediaFile(storageKey);
+        return { status: "missing_account" as const };
+      }
+      return {
+        status: "created" as const,
+        image: {
+          id: asset.id,
+          imageUrl: `/api/noodle/noodler/media/${asset.id}?accountId=${encodeURIComponent(ownerAccountId)}`,
+          contentType: asset.contentType,
+          byteLength: asset.byteLength,
+        },
+      };
+    } catch (error) {
+      await removeNewNoodlerPrivateMediaFile(storageKey);
+      throw error;
+    }
+  }
+
   app.get("/", async () => {
     return bootstrapVisibleNoodle(noodle, characters);
   });
@@ -363,6 +413,10 @@ export async function noodleRoutes(app: FastifyInstance) {
     const { id } = req.params as { id: string };
     const existing = await noodle.getPrivatePostById(id);
     if (!existing) return reply.code(404).send({ error: "NoodleR post not found" });
+    const nextContent = parsed.data.content === undefined ? existing.content : parsed.data.content;
+    if (!nextContent.trim() && !readNoodlePollFromMetadata(existing.metadata)) {
+      return reply.code(400).send({ error: "Posts need a body or poll." });
+    }
     try {
       const locked = await tryNoodlePrivateAccountOperation(existing.authorAccountId, () =>
         noodle.updatePrivatePost(id, parsed.data),
@@ -425,49 +479,14 @@ export async function noodleRoutes(app: FastifyInstance) {
     if (!detected || (extension === ".jpeg" ? "jpg" : extension.slice(1)) !== detected.ext) {
       return reply.code(400).send({ error: "Unsupported or invalid image file." });
     }
-    const cleanupResults = privateMediaRecoveryTrusted
-      ? await Promise.allSettled([
-          reconcileNoodlerPrivateMediaFiles((storageKey) => noodle.privateMediaAssetExists(storageKey), 20),
-          noodle.cleanupStalePrivateMediaAssets(
-            new Date(Date.now() - NOODLER_PRIVATE_MEDIA_STALE_MS).toISOString(),
-            20,
-          ),
-        ])
-      : [];
-    for (const result of cleanupResults) {
-      if (result.status === "rejected") {
-        logger.warn(result.reason, "[noodler] Bounded private-media cleanup did not complete");
-      }
+    const staged = await stagePrivateMediaBuffer(id, buffer, detected.mimeType);
+    if (staged.status === "busy") {
+      return reply.code(409).send({ error: "Another operation for this NoodleR account is already running." });
     }
-    const storageKey = await writeNoodlerPrivateMediaFile(buffer, detected.mimeType);
-    try {
-      const locked = await tryNoodlePrivateAccountOperation(id, () =>
-        noodle.createPrivateMediaAsset({
-          ownerAccountId: id,
-          storageKey,
-          contentType: detected.mimeType,
-          byteLength: buffer.byteLength,
-        }),
-      );
-      if (!locked.acquired) {
-        await removeNewNoodlerPrivateMediaFile(storageKey);
-        return reply.code(409).send({ error: "Another operation for this NoodleR account is already running." });
-      }
-      const asset = locked.value;
-      if (!asset) {
-        await removeNewNoodlerPrivateMediaFile(storageKey);
-        return reply.code(404).send({ error: "NoodleR stage profile not found" });
-      }
-      return reply.code(201).send({
-        id: asset.id,
-        imageUrl: `/api/noodle/noodler/media/${asset.id}?accountId=${encodeURIComponent(id)}`,
-        contentType: asset.contentType,
-        byteLength: asset.byteLength,
-      });
-    } catch (error) {
-      await removeNewNoodlerPrivateMediaFile(storageKey);
-      throw error;
+    if (staged.status === "missing_account") {
+      return reply.code(404).send({ error: "NoodleR stage profile not found" });
     }
+    return reply.code(201).send(staged.image);
   });
 
   app.post("/noodler/accounts/:id/media/import-url", async (req, reply) => {
@@ -482,6 +501,7 @@ export async function noodleRoutes(app: FastifyInstance) {
 
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 15_000);
+    let importedImage: { buffer: Buffer; contentType: string };
     try {
       const response = await safeFetch(parsed.data.imageUrl, {
         signal: controller.signal,
@@ -504,11 +524,7 @@ export async function noodleRoutes(app: FastifyInstance) {
       if (!detected) {
         return reply.code(415).send({ error: "The URL did not return a supported image." });
       }
-      return reply
-        .header("Content-Type", detected.mimeType)
-        .header("Content-Length", String(buffer.byteLength))
-        .header("Cache-Control", "no-store")
-        .send(buffer);
+      importedImage = { buffer, contentType: detected.mimeType };
     } catch (error) {
       logger.warn(error, "[noodler] Could not import image URL");
       const tooLarge = error instanceof Error && /exceeded \d+ bytes/iu.test(error.message);
@@ -520,6 +536,15 @@ export async function noodleRoutes(app: FastifyInstance) {
     } finally {
       clearTimeout(timeout);
     }
+
+    const staged = await stagePrivateMediaBuffer(id, importedImage.buffer, importedImage.contentType);
+    if (staged.status === "busy") {
+      return reply.code(409).send({ error: "Another operation for this NoodleR account is already running." });
+    }
+    if (staged.status === "missing_account") {
+      return reply.code(404).send({ error: "NoodleR stage profile not found" });
+    }
+    return reply.code(201).send(staged.image);
   });
 
   app.delete("/noodler/accounts/:accountId/media/:id", async (req, reply) => {

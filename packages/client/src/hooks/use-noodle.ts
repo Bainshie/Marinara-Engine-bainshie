@@ -271,22 +271,11 @@ export function useUploadNoodlerPostImage() {
 
 export function useImportNoodlerPostImageUrl() {
   return useMutation({
-    mutationFn: async ({ accountId, imageUrl }: { accountId: string; imageUrl: string }) => {
-      const response = await api.raw(`/noodle/noodler/accounts/${encodeURIComponent(accountId)}/media/import-url`, {
-        method: "POST",
-        body: JSON.stringify({ imageUrl }),
-      });
-      if (!response.ok) {
-        const payload = (await response.json().catch(() => null)) as { error?: unknown } | null;
-        throw new Error(typeof payload?.error === "string" ? payload.error : "Could not import this image URL.");
-      }
-      const blob = await response.blob();
-      const extension = imageFileExtension(blob.type);
-      return new File([blob], `noodler-import.${extension}`, {
-        type: blob.type,
-        lastModified: Date.now(),
-      });
-    },
+    mutationFn: ({ accountId, imageUrl }: { accountId: string; imageUrl: string }) =>
+      api.post<NoodlerStagedImage>(
+        `/noodle/noodler/accounts/${encodeURIComponent(accountId)}/media/import-url`,
+        { imageUrl },
+      ),
   });
 }
 

@@ -429,7 +429,7 @@ export const noodlePrivatePostCreateSchema = z
 export const noodlePrivatePostUpdateSchema = z
   .object({
     title: noodlePrivatePostTitleUpdateSchema,
-    content: z.string().trim().min(1).max(NOODLE_PRIVATE_POST_CONTENT_MAX_LENGTH).optional(),
+    content: z.string().trim().max(NOODLE_PRIVATE_POST_CONTENT_MAX_LENGTH).optional(),
     imageAssetId: z.string().min(1).nullable().optional(),
     imageCrop: noodlePostImageCropSchema.nullable().optional(),
   })

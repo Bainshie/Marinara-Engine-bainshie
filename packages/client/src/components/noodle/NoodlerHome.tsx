@@ -131,6 +131,11 @@ interface PrivatePostDraft {
   poll: NoodlePollInput | null;
 }
 
+interface PendingPrivateImage {
+  source: File | string;
+  stagedAsset: { id: string; imageUrl: string } | null;
+}
+
 const EMPTY_PRIVATE_POST_DRAFT: PrivatePostDraft = {
   title: "",
   body: "",
@@ -513,7 +518,7 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
         id: post.id,
         accountId: post.authorAccountId,
         title: input.title,
-        content: input.content,
+        ...(input.content !== post.content.trim() && { content: input.content }),
         ...(input.image?.kind === "replace" && {
           imageAssetId: stagedImageId,
           imageCrop: input.image.crop,
@@ -554,6 +559,7 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
       (type === "reply" || type === "vote") && createInteraction.isPending,
     updatePostPending: updatePost.isPending || uploadEditedPostImage.isPending || deleteStagedImage.isPending,
     titleMaxLength: NOODLE_PRIVATE_POST_TITLE_MAX_LENGTH,
+    allowPollOnlyEdits: true,
     deduplicatePollBody: false,
     imageFit: "contain",
     imageEditing: {
@@ -2842,7 +2848,7 @@ function PrivatePostComposer({
   const [pollEditorValue, setPollEditorValue] = useState<NoodlePollInput | null>(null);
   const [mediaPickerTab, setMediaPickerTab] = useState<ConversationMediaPickerTabId>("emoji");
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
-  const [pendingImageFile, setPendingImageFile] = useState<File | null>(null);
+  const [pendingImage, setPendingImage] = useState<PendingPrivateImage | null>(null);
   const [imageUrlDraft, setImageUrlDraft] = useState("");
   const [localOperation, setLocalOperation] = useState<"submission" | "upload" | "remove" | null>(null);
   const imageFileRef = useRef<HTMLInputElement | null>(null);
@@ -2852,12 +2858,12 @@ function PrivatePostComposer({
   const coinToolRef = useRef<HTMLDivElement | null>(null);
   const composerBusyRef = useRef(false);
   const draftRevisionRef = useRef(0);
-  const editableImageSourceRef = useRef<{ imageId: string; file: File } | null>(null);
+  const editableImageSourceRef = useRef<{ imageId: string; source: File | string } | null>(null);
   const { title, body, access, ppvPrice, image, poll } = draft;
   const uploadImage = useUploadNoodlerPostImage();
   const importImageUrl = useImportNoodlerPostImageUrl();
   const deleteImage = useDeleteNoodlerPostImage();
-  const hasDraft = pendingImageFile !== null || !isEmptyPrivatePostDraft(draft);
+  const hasDraft = pendingImage !== null || !isEmptyPrivatePostDraft(draft);
   const parsedPrice = Number(ppvPrice);
   const composerBusy =
     localOperation !== null ||
@@ -2883,6 +2889,18 @@ function PrivatePostComposer({
   const finishOperation = (operation: "submission" | "upload" | "remove") => {
     setLocalOperation((current) => (current === operation ? null : current));
   };
+  const discardPendingImage = () => {
+    const stagedAsset = pendingImage?.stagedAsset;
+    setPendingImage(null);
+    if (!stagedAsset) return;
+    deleteImage.mutate(
+      { accountId: profile.id, imageId: stagedAsset.id },
+      {
+        onError: () =>
+          setAttachmentError("The imported image was discarded, but cleanup will be retried by the server."),
+      },
+    );
+  };
 
   const clearDraft = () => {
     draftRevisionRef.current += 1;
@@ -2890,7 +2908,7 @@ function PrivatePostComposer({
     setPostError(null);
     setGuideError(null);
     setAttachmentError(null);
-    setPendingImageFile(null);
+    discardPendingImage();
     setImageUrlDraft("");
     setPollEditorValue(null);
     editableImageSourceRef.current = null;
@@ -2904,7 +2922,7 @@ function PrivatePostComposer({
     setPostError(null);
     setGuideError(null);
     setAttachmentError(null);
-    setPendingImageFile(null);
+    discardPendingImage();
     setImageUrlDraft("");
     setPollEditorValue(null);
     editableImageSourceRef.current = null;
@@ -2917,7 +2935,7 @@ function PrivatePostComposer({
     composerBusyRef.current = true;
     setLocalOperation("remove");
     onDraftChange({ image: null });
-    setPendingImageFile(null);
+    setPendingImage(null);
     editableImageSourceRef.current = null;
     deleteImage.mutate(
       { accountId: profile.id, imageId: image.id },
@@ -2940,7 +2958,8 @@ function PrivatePostComposer({
       return;
     }
     setAttachmentError(null);
-    setPendingImageFile(file);
+    discardPendingImage();
+    setPendingImage({ source: file, stagedAsset: null });
     setActiveTool(null);
   };
   const handleImageUrl = async () => {
@@ -2949,24 +2968,37 @@ function PrivatePostComposer({
     setAttachmentError(null);
     setActiveTool(null);
     try {
-      const file = await importImageUrl.mutateAsync({ accountId: profile.id, imageUrl });
+      const stagedAsset = await importImageUrl.mutateAsync({ accountId: profile.id, imageUrl });
+      const replacedStagedAsset = pendingImage?.stagedAsset;
       setImageUrlDraft("");
-      setPendingImageFile(file);
+      setPendingImage({
+        source: stagedAsset.imageUrl,
+        stagedAsset: { id: stagedAsset.id, imageUrl: stagedAsset.imageUrl },
+      });
+      if (replacedStagedAsset && replacedStagedAsset.id !== stagedAsset.id) {
+        deleteImage.mutate(
+          { accountId: profile.id, imageId: replacedStagedAsset.id },
+          {
+            onError: () =>
+              setAttachmentError("The previous imported image could not be removed; cleanup will be retried."),
+          },
+        );
+      }
     } catch (error) {
       setAttachmentError(errorMessage(error, "Could not import this image URL."));
     }
   };
   const applyImageCrop = async (crop: NoodlePostImageCrop) => {
     if (composerBusyRef.current) return;
-    const sourceFile = pendingImageFile;
-    if (!sourceFile) return;
+    const pending = pendingImage;
+    if (!pending) return;
     if (
       image &&
       editableImageSourceRef.current?.imageId === image.id &&
-      editableImageSourceRef.current.file === sourceFile
+      editableImageSourceRef.current.source === pending.source
     ) {
       onDraftChange({ image: { ...image, crop } });
-      setPendingImageFile(null);
+      setPendingImage(null);
       setActiveTool(null);
       return;
     }
@@ -2976,12 +3008,19 @@ function PrivatePostComposer({
     setLocalOperation("upload");
     setAttachmentError(null);
     try {
-      const next = await uploadImage.mutateAsync({ accountId: profile.id, file: sourceFile });
+      const next = pending.stagedAsset
+        ? pending.stagedAsset
+        : pending.source instanceof File
+          ? await uploadImage.mutateAsync({ accountId: profile.id, file: pending.source })
+          : null;
+      if (!next) throw new Error("The editable image source is no longer available.");
       if (draftRevisionRef.current !== revision) return;
-      if (replacedImage) deleteImage.mutate({ accountId: profile.id, imageId: replacedImage.id });
-      editableImageSourceRef.current = { imageId: next.id, file: sourceFile };
-      onDraftChange({ image: { ...next, crop } });
-      setPendingImageFile(null);
+      if (replacedImage && replacedImage.id !== next.id) {
+        deleteImage.mutate({ accountId: profile.id, imageId: replacedImage.id });
+      }
+      editableImageSourceRef.current = { imageId: next.id, source: pending.source };
+      onDraftChange({ image: { id: next.id, imageUrl: next.imageUrl, crop } });
+      setPendingImage(null);
       setActiveTool(null);
     } catch (error) {
       if (draftRevisionRef.current === revision) {
@@ -3037,7 +3076,7 @@ function PrivatePostComposer({
   const publish = async () => {
     if (composerBusyRef.current) return;
     setPostError(null);
-    if (pendingImageFile) {
+    if (pendingImage) {
       setPostError("Apply or cancel the image crop before posting.");
       return;
     }
@@ -3070,7 +3109,7 @@ function PrivatePostComposer({
   const guidePost = async () => {
     if (composerBusyRef.current) return;
     setGuideError(null);
-    if (pendingImageFile) {
+    if (pendingImage) {
       setGuideError("Apply or cancel the image crop before generating.");
       return;
     }
@@ -3194,7 +3233,7 @@ function PrivatePostComposer({
           <button
             type="button"
             onClick={() => void guidePost()}
-            disabled={composerBusy || Boolean(pendingImageFile)}
+            disabled={composerBusy || Boolean(pendingImage)}
             className="inline-flex h-8 items-center gap-1.5 rounded-full border border-[var(--noodle-divider)] px-3 text-xs font-bold hover:bg-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-50"
           >
             {guidePending ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
@@ -3215,7 +3254,7 @@ function PrivatePostComposer({
             onClick={() => void publish()}
             disabled={
               composerBusy ||
-              Boolean(pendingImageFile) ||
+              Boolean(pendingImage) ||
               (!body.trim() && !image && !noodlePollInputSchema.safeParse(poll).success)
             }
             className="inline-flex h-8 items-center gap-1.5 rounded-full bg-[var(--noodle-blue)] px-4 text-xs font-bold text-zinc-950 [&_svg]:!text-zinc-950 disabled:cursor-not-allowed disabled:opacity-50"
@@ -3351,16 +3390,16 @@ function PrivatePostComposer({
         placeholder="What's simmering, privately?"
         className="min-h-20 w-full resize-none border-0 bg-transparent py-2 text-[1rem] leading-6 text-[var(--foreground)] outline-none placeholder:text-[var(--muted-foreground)]"
       />
-      {pendingImageFile && (
+      {pendingImage && (
         <PostImageCropEditor
-          source={pendingImageFile}
+          source={pendingImage.source}
           crop={image && editableImageSourceRef.current?.imageId === image.id ? image.crop : null}
           disabled={composerBusy}
-          onCancel={() => setPendingImageFile(null)}
+          onCancel={discardPendingImage}
           onApply={applyImageCrop}
         />
       )}
-      {image && !pendingImageFile && (
+      {image && !pendingImage && (
         <div className="mb-3 overflow-hidden rounded-xl border border-[var(--noodle-divider)] bg-[var(--noodle-blue)]/10">
           <PostImageFrame src={image.imageUrl} crop={image.crop} alt="Attached post image" maxHeight={240} />
           <div className="flex items-center justify-between gap-2 px-3 py-2 text-xs text-[var(--noodle-blue)]">
@@ -3369,7 +3408,12 @@ function PrivatePostComposer({
               {editableImageSourceRef.current?.imageId === image.id && (
                 <button
                   type="button"
-                  onClick={() => setPendingImageFile(editableImageSourceRef.current!.file)}
+                  onClick={() =>
+                    setPendingImage({
+                      source: editableImageSourceRef.current!.source,
+                      stagedAsset: null,
+                    })
+                  }
                   disabled={composerBusy}
                   className="min-h-8 px-2 font-bold disabled:opacity-50"
                 >

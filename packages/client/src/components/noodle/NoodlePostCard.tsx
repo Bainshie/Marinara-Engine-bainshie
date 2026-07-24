@@ -737,6 +737,8 @@ interface NoodlePostCardCtx {
   postManagement: boolean;
   /** Private-title editing. Public Noodle omits this capability and remains titleless. */
   titleEditing?: NoodlePostCardTitleEditingCap;
+  /** Allow an empty edited body when the existing post has a poll. */
+  allowPollOnlyEdits?: boolean;
   /** Navigate to an author/mention profile. Omit on hosts without profile navigation (NoodleR). */
   openProfile?: (account: NoodleAccount | null) => void;
   /** Navigate by private author ID when no public account object exists. */
@@ -779,6 +781,7 @@ interface NoodlePostCardControllerOptions {
   ) => boolean;
   updatePostPending: boolean;
   titleMaxLength?: number;
+  allowPollOnlyEdits?: boolean;
   openAuthorProfile?: (accountId: string) => void;
   voteInPoll?: (post: NoodlePostCardModel, optionId: string, selectedOptionId: string | null) => void;
   deduplicatePollBody?: boolean;
@@ -943,7 +946,7 @@ export function useNoodlePostCardController(options: NoodlePostCardControllerOpt
   };
   const saveEditedPost = (post: NoodlePostCardModel) => {
     const content = editingPostContent.trim();
-    if (!content) return;
+    if (!content && !(options.allowPollOnlyEdits && readNoodlePollFromMetadata(post.metadata))) return;
     void options
       .savePost(post, {
         title: editingPostTitle.trim() || null,
@@ -1013,6 +1016,7 @@ export function useNoodlePostCardController(options: NoodlePostCardControllerOpt
           maxLength: options.titleMaxLength,
         }
       : undefined,
+    allowPollOnlyEdits: options.allowPollOnlyEdits,
   };
   return { ctx, reset };
 }
@@ -1313,7 +1317,8 @@ export function NoodlePostCard({
           type="button"
           onClick={() => saveEditedPost(post)}
           disabled={
-            !editingPostContent.trim() ||
+            (!editingPostContent.trim() &&
+              !(ctx.allowPollOnlyEdits && readNoodlePollFromMetadata(post.metadata))) ||
             updatePostPending ||
             imageEditing?.loading ||
             Boolean(imageEditing?.cropSource)

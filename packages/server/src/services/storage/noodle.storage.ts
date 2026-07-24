@@ -114,6 +114,7 @@ type InsertInteractionCommand = {
   imageUrl?: string | null;
   parentInteractionId: string | null;
 };
+type PollVoteAuthorVisibility = "public" | "private";
 type PrivatePostPersistenceInput = {
   /** Optional caller-supplied id so a serving URL can be derived before the row is inserted. */
   id?: string;
@@ -659,6 +660,75 @@ export function createNoodleStorage(db: DB) {
     }
     const rows = await db.select().from(noodleInteractions).where(eq(noodleInteractions.id, id));
     return rows[0] ? mapInteraction(rows[0]) : null;
+  };
+
+  const upsertPollVote = async (
+    postId: string,
+    actorAccountId: string,
+    optionId: string,
+    authorVisibility: PollVoteAuthorVisibility,
+    imageUrl: string | null,
+  ): Promise<NoodleInteraction | null> => {
+    return db.transaction(async (tx) => {
+      const [postRows, actorRows] = await Promise.all([
+        tx.select().from(noodlePosts).where(eq(noodlePosts.id, postId)),
+        tx
+          .select()
+          .from(noodleAccounts)
+          .where(and(eq(noodleAccounts.id, actorAccountId), eq(noodleAccounts.visibility, "public"))),
+      ]);
+      const currentPost = postRows[0];
+      if (!currentPost || !actorRows[0]) return null;
+      const authorRows = await tx
+        .select()
+        .from(noodleAccounts)
+        .where(and(eq(noodleAccounts.id, currentPost.authorAccountId), eq(noodleAccounts.visibility, authorVisibility)));
+      const currentPoll = readNoodlePollFromMetadata(parseRecord(currentPost.metadata));
+      if (!authorRows[0] || !currentPoll?.options.some((option) => option.id === optionId)) return null;
+
+      const currentActor = mapAccount(actorRows[0]);
+      const existingVotes = await tx
+        .select()
+        .from(noodleInteractions)
+        .where(
+          and(
+            eq(noodleInteractions.postId, postId),
+            eq(noodleInteractions.actorAccountId, actorAccountId),
+            eq(noodleInteractions.type, "vote"),
+            isNull(noodleInteractions.parentInteractionId),
+          ),
+        );
+      const existingVote = existingVotes[0];
+      const voteId = existingVote?.id ?? newId();
+      if (existingVotes.length > 1) {
+        await tx
+          .delete(noodleInteractions)
+          .where(inArray(noodleInteractions.id, existingVotes.slice(1).map((vote) => vote.id)));
+      }
+      if (existingVote) {
+        await tx
+          .update(noodleInteractions)
+          .set({
+            content: optionId,
+            actorSnapshot: JSON.stringify(snapshotForAccount(currentActor)),
+          })
+          .where(eq(noodleInteractions.id, voteId));
+      } else {
+        await tx.insert(noodleInteractions).values({
+          id: voteId,
+          postId,
+          parentInteractionId: null,
+          actorAccountId: currentActor.id,
+          type: "vote",
+          content: optionId,
+          imageUrl,
+          actorSnapshot: JSON.stringify(snapshotForAccount(currentActor)),
+          createdAt: now(),
+        });
+      }
+      const updated = await tx.select().from(noodleInteractions).where(eq(noodleInteractions.id, voteId));
+      return updated[0] ? mapInteraction(updated[0]) : null;
+    });
   };
 
   const deleteStoredInteraction = async (
@@ -2083,43 +2153,24 @@ export function createNoodleStorage(db: DB) {
     },
 
     async createInteraction(postId: string, input: PublicCreateInteractionCommand): Promise<NoodleInteraction | null> {
+      const parentInteractionId = input.parentInteractionId ?? null;
+      if (input.type === "vote") {
+        if (parentInteractionId) return null;
+        return upsertPollVote(
+          postId,
+          input.actorAccountId,
+          input.content?.trim() ?? "",
+          "public",
+          input.imageUrl?.trim() || null,
+        );
+      }
+
       const [post, actor] = await Promise.all([this.getPostById(postId), this.getAccountById(input.actorAccountId)]);
       if (!post || !actor) return null;
 
-      const parentInteractionId = input.parentInteractionId ?? null;
       if (parentInteractionId) {
         const parent = await this.getInteractionById(parentInteractionId);
         if (!parent || parent.postId !== postId || parent.type !== "reply") return null;
-      }
-
-      if (input.type === "vote") {
-        if (parentInteractionId) return null;
-        const poll = readNoodlePollFromMetadata(post.metadata);
-        const optionId = input.content?.trim() ?? "";
-        if (!poll || !poll.options.some((option) => option.id === optionId)) return null;
-        const existingVotes = await db
-          .select()
-          .from(noodleInteractions)
-          .where(
-            and(
-              eq(noodleInteractions.postId, postId),
-              eq(noodleInteractions.actorAccountId, input.actorAccountId),
-              eq(noodleInteractions.type, "vote"),
-              isNull(noodleInteractions.parentInteractionId),
-            ),
-          );
-        const existingVote = existingVotes[0];
-        if (existingVote) {
-          await db
-            .update(noodleInteractions)
-            .set({
-              content: optionId,
-              actorSnapshot: JSON.stringify(snapshotForAccount(actor)),
-            })
-            .where(eq(noodleInteractions.id, existingVote.id));
-          const updated = await db.select().from(noodleInteractions).where(eq(noodleInteractions.id, existingVote.id));
-          return updated[0] ? mapInteraction(updated[0]) : null;
-        }
       }
 
       return insertInteraction(postId, {
@@ -2154,13 +2205,18 @@ export function createNoodleStorage(db: DB) {
       postId: string,
       input: PrivateCreateInteractionCommand,
     ): Promise<NoodleInteraction | null> {
+      const parentInteractionId = input.parentInteractionId ?? null;
+      if (input.type === "vote") {
+        if (parentInteractionId) return null;
+        return upsertPollVote(postId, input.actorAccountId, input.content?.trim() ?? "", "private", null);
+      }
+
       const [post, actor] = await Promise.all([
         this.getPrivatePostById(postId),
         this.getAccountById(input.actorAccountId),
       ]);
       if (!post || !actor) return null;
 
-      const parentInteractionId = input.parentInteractionId ?? null;
       if (parentInteractionId) {
         const parentRows = await db
           .select()
@@ -2168,72 +2224,6 @@ export function createNoodleStorage(db: DB) {
           .where(eq(noodleInteractions.id, parentInteractionId));
         const parent = parentRows[0];
         if (!parent || parent.postId !== postId || parent.type !== "reply") return null;
-      }
-
-      if (input.type === "vote") {
-        if (parentInteractionId) return null;
-        const poll = readNoodlePollFromMetadata(post.metadata);
-        const optionId = input.content?.trim() ?? "";
-        if (!poll || !poll.options.some((option) => option.id === optionId)) return null;
-        return db.transaction(async (tx) => {
-          const [postRows, actorRows] = await Promise.all([
-            tx.select().from(noodlePosts).where(eq(noodlePosts.id, postId)),
-            tx
-              .select()
-              .from(noodleAccounts)
-              .where(and(eq(noodleAccounts.id, input.actorAccountId), eq(noodleAccounts.visibility, "public"))),
-          ]);
-          const currentPost = postRows[0];
-          if (!currentPost || !actorRows[0]) return null;
-          const authorRows = await tx
-            .select()
-            .from(noodleAccounts)
-            .where(and(eq(noodleAccounts.id, currentPost.authorAccountId), eq(noodleAccounts.visibility, "private")));
-          const currentPoll = readNoodlePollFromMetadata(parseRecord(currentPost.metadata));
-          if (!authorRows[0] || !currentPoll?.options.some((option) => option.id === optionId)) return null;
-          const currentActor = mapAccount(actorRows[0]);
-          const existingVotes = await tx
-            .select()
-            .from(noodleInteractions)
-            .where(
-              and(
-                eq(noodleInteractions.postId, postId),
-                eq(noodleInteractions.actorAccountId, input.actorAccountId),
-                eq(noodleInteractions.type, "vote"),
-                isNull(noodleInteractions.parentInteractionId),
-              ),
-            );
-          const existingVote = existingVotes[0];
-          const voteId = existingVote?.id ?? newId();
-          if (existingVotes.length > 1) {
-            await tx
-              .delete(noodleInteractions)
-              .where(inArray(noodleInteractions.id, existingVotes.slice(1).map((vote) => vote.id)));
-          }
-          if (existingVote) {
-            await tx
-              .update(noodleInteractions)
-              .set({
-                content: optionId,
-                actorSnapshot: JSON.stringify(snapshotForAccount(currentActor)),
-              })
-              .where(eq(noodleInteractions.id, voteId));
-          } else {
-            await tx.insert(noodleInteractions).values({
-              id: voteId,
-              postId,
-              parentInteractionId: null,
-              actorAccountId: currentActor.id,
-              type: "vote",
-              content: optionId,
-              imageUrl: null,
-              actorSnapshot: JSON.stringify(snapshotForAccount(currentActor)),
-              createdAt: now(),
-            });
-          }
-          const updated = await tx.select().from(noodleInteractions).where(eq(noodleInteractions.id, voteId));
-          return updated[0] ? mapInteraction(updated[0]) : null;
-        });
       }
 
       return insertInteraction(postId, {
