@@ -624,6 +624,8 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
       setEditingProfileId(null);
       setDraftPublicAccountId(null);
       setPreviousDraft(null);
+      setCreationStep(null);
+      setAutoPostSetupId(null);
       onNavigate({ mode: "private", view: "profile", accountId: profile.id });
       toast.success(editingProfileId ?localizeUi("ui.noodle.noodlerhome.stageProfileUpdated") :localizeUi("ui.noodle.noodlerhome.stageProfileCreated"));
     };

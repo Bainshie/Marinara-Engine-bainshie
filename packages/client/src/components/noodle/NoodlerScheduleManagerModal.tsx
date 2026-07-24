@@ -141,8 +141,8 @@ export function NoodlerScheduleManagerModal({ open, onClose }: { open: boolean; 
                 onClick={() =>
                   refreshAllNow.mutate(undefined, {
                     onSuccess: ({ outcomes }) => {
-                      const { ok, message } = summarizeRefreshOutcomes(outcomes);
-                      (ok ? toast.success : toast.error)(message);
+                      const { ok, key, params } = summarizeRefreshOutcomes(outcomes);
+                      (ok ? toast.success : toast.error)(localizeUi(key, params));
                     },
                     onError: (error) => toast.error(errorMessage(error,localizeUi("ui.noodle.noodlerschedulemanagermodal.couldNotRefreshCreators"))),
                   })
