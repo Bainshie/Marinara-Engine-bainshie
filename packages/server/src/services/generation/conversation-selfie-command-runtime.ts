@@ -159,9 +159,11 @@ async function generateSelfie(
     readNestedString(args.chatMeta.gameSetupConfig, "imageStyleProfileId") ??
     (typeof args.chatMeta.imageStyleProfileId === "string" ? args.chatMeta.imageStyleProfileId : null);
   const styleProfileId =
-    typeof configuredStyleProfileId === "string" && configuredStyleProfileId.trim()
+    (typeof configuredStyleProfileId === "string" && configuredStyleProfileId.trim()
       ? configuredStyleProfileId.trim()
-      : imageSettings.styleProfiles.defaultProfileId;
+      : undefined) ??
+    imageDefaults?.styleProfileId ??
+    imageSettings.styleProfiles.defaultProfileId;
   // Style is fed to the prompt-building model as guidance so it shapes the
   // generated prompt, instead of being pasted verbatim into the image prompt.
   const styleGuidance = resolveImageStyleGuidanceText(imageSettings.styleProfiles, styleProfileId);

@@ -927,15 +927,18 @@ export async function galleryRoutes(app: FastifyInstance) {
     const selfiePositivePrompt = readTrimmedString(meta.selfiePositivePrompt) ?? selfieTags.join(", ").trim();
     const selfieNegativePrompt = readTrimmedString(meta.selfieNegativePrompt) ?? "";
     const promptOverridesStorage = createPromptOverridesStorage(app.db);
+    const imageDefaults = resolveConnectionImageDefaults(imageConn);
     const imageSettings = await loadImageGenerationUserSettings(app.db);
     const configuredStyleProfileId =
       ((meta.gameSetupConfig as Record<string, unknown> | undefined)?.imageStyleProfileId as string | undefined) ??
       (meta.imageStyleProfileId as string | undefined) ??
       null;
     const styleProfileId =
-      typeof configuredStyleProfileId === "string" && configuredStyleProfileId.trim()
+      (typeof configuredStyleProfileId === "string" && configuredStyleProfileId.trim()
         ? configuredStyleProfileId.trim()
-        : imageSettings.styleProfiles.defaultProfileId;
+        : undefined) ??
+      imageDefaults?.styleProfileId ??
+      imageSettings.styleProfiles.defaultProfileId;
     // Style feeds the prompt-building model as guidance rather than being pasted
     // verbatim into the final image prompt (#4028).
     const styleGuidance = resolveImageStyleGuidanceText(imageSettings.styleProfiles, styleProfileId);
@@ -1052,7 +1055,6 @@ export async function galleryRoutes(app: FastifyInstance) {
       }
     }
 
-    const imageDefaults = resolveConnectionImageDefaults(imageConn);
     const selfieResolution = readTrimmedString(meta.selfieResolution) ?? "";
     const [selfieWidth, selfieHeight] = selfieResolution.split("x").map(Number) as [number, number];
     const width = Number.isSafeInteger(selfieWidth) && selfieWidth > 0 ? selfieWidth : imageSettings.selfie.width;
