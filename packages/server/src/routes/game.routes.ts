@@ -1799,6 +1799,14 @@ const recruitPartyMemberSchema = z.object({
   connectionId: z.string().optional(),
 });
 
+const regenerateCharacterSheetSchema = z.object({
+  chatId: z.string().min(1),
+  characterId: z.string().min(1).max(500),
+  characterName: z.string().min(1).max(200),
+  connectionId: z.string().optional(),
+  debugMode: z.boolean().optional().default(false),
+});
+
 const removePartyMemberSchema = z.object({
   chatId: z.string().min(1),
   characterName: z.string().min(1).max(200),
@@ -2238,6 +2246,9 @@ function buildRecruitCharacterSourceCard(characterData: Record<string, any>): st
   if (typeof characterData.personality === "string" && characterData.personality.trim()) {
     lines.push(`Personality: ${characterData.personality.trim()}`);
   }
+  if (typeof characterData.scenario === "string" && characterData.scenario.trim()) {
+    lines.push(`Scenario: ${characterData.scenario.trim()}`);
+  }
   const backstory =
     typeof characterData.extensions?.backstory === "string" && characterData.extensions.backstory.trim()
       ? characterData.extensions.backstory.trim()
@@ -2305,6 +2316,17 @@ function normalizeGeneratedGameCharacterCard(raw: Record<string, unknown>, fallb
     weaknesses: normalizeStringArray(raw.weaknesses),
     extra: extraEntries,
   };
+}
+
+function hasGeneratedGameCharacterCardContent(card: ReturnType<typeof normalizeGeneratedGameCharacterCard>): boolean {
+  return (
+    !!card.shortDescription ||
+    !!card.class ||
+    card.abilities.length > 0 ||
+    card.strengths.length > 0 ||
+    card.weaknesses.length > 0 ||
+    Object.keys(card.extra).length > 0
+  );
 }
 
 function applyGeneratedGameCharacterCards(
@@ -8160,6 +8182,283 @@ export async function gameRoutes(app: FastifyInstance) {
       gameId,
       campaignProgression: updatedProgression,
     };
+  });
+
+  // ── POST /game/character-sheet/regenerate ──
+  // Generates a replacement draft only. The client keeps it local until the user saves the sheet.
+  app.post("/character-sheet/regenerate", async (req, reply) => {
+    const input = regenerateCharacterSheetSchema.parse(req.body);
+    const chats = createChatsStorage(app.db);
+    const characters = createCharactersStorage(app.db);
+    const connections = createConnectionsStorage(app.db);
+    const stateStore = createGameStateStorage(app.db);
+
+    const chat = await chats.getById(input.chatId);
+    if (!chat) throw new Error("Chat not found");
+    if ((chat.mode as string) !== "game") {
+      throw new Error("Character sheets can only be regenerated in game mode");
+    }
+
+    const meta = parseMeta(chat.metadata);
+    const setupConfig = meta.gameSetupConfig as GameSetupConfig | null;
+    if (!setupConfig) throw new Error("No game setup config found");
+
+    const requestedName = input.characterName.trim();
+    const currentCards = Array.isArray(meta.gameCharacterCards)
+      ? (meta.gameCharacterCards as Array<Record<string, unknown>>)
+      : [];
+    let targetName = requestedName;
+    let targetCharacterCard = "";
+    let sourceRpgStats: unknown;
+
+    if (input.characterId.startsWith("persona:")) {
+      const embeddedPersonaId = input.characterId.slice("persona:".length);
+      const personaId =
+        (embeddedPersonaId && !["active", "default"].includes(embeddedPersonaId) ? embeddedPersonaId : null) ??
+        chat.personaId ??
+        setupConfig.personaId ??
+        null;
+      const persona = personaId ? await characters.getPersona(personaId) : null;
+      if (persona) {
+        targetName = persona.name?.trim() || requestedName;
+        targetCharacterCard = buildRecruitCharacterSourceCard({
+          name: targetName,
+          description: persona.description,
+          personality: persona.personality,
+          scenario: persona.scenario,
+          backstory: persona.backstory,
+          appearance: persona.appearance,
+        });
+        try {
+          const statsData = persona.personaStats ? JSON.parse(persona.personaStats) : null;
+          if (statsData?.rpgStats?.enabled) {
+            sourceRpgStats = statsData.rpgStats;
+          }
+        } catch {
+          /* skip */
+        }
+      } else {
+        targetCharacterCard = [
+          `Name: ${targetName}`,
+          setupConfig.playerGoals ? `Player goals: ${setupConfig.playerGoals}` : "",
+          setupConfig.setting ? `Campaign setting: ${setupConfig.setting}` : "",
+        ]
+          .filter(Boolean)
+          .join("\n");
+      }
+    } else {
+      const chatCharacterIds = parseChatCharacterIds(chat.characterIds);
+      const activePartyIds = new Set([
+        ...getStoredPartyCharacterIds(meta, setupConfig, chatCharacterIds),
+        ...chatCharacterIds,
+      ]);
+      if (!activePartyIds.has(input.characterId)) {
+        throw new Error("The selected character is not in the active party");
+      }
+
+      const character = await characters.getById(input.characterId);
+      if (character) {
+        const data = (typeof character.data === "string" ? JSON.parse(character.data) : character.data) as Record<
+          string,
+          any
+        >;
+        targetName = typeof data.name === "string" && data.name.trim() ? data.name.trim() : requestedName;
+        targetCharacterCard = buildRecruitCharacterSourceCard(data);
+        sourceRpgStats = extractRecruitCharacterRpgStats(data);
+      } else {
+        const gameNpcs = Array.isArray(meta.gameNpcs) ? (meta.gameNpcs as GameNpc[]) : [];
+        const npc =
+          gameNpcs.find((candidate) => buildPartyNpcId(candidate.name) === input.characterId) ??
+          findGameNpcByName(gameNpcs, requestedName);
+        if (npc) {
+          targetName = npc.name;
+          targetCharacterCard = buildNpcRecruitCharacterSourceCard(npc);
+        }
+      }
+    }
+
+    const targetCardIndex = findExistingGameCharacterCardIndex(currentCards, targetName);
+    const existingTargetCard = targetCardIndex >= 0 ? currentCards[targetCardIndex]! : null;
+    if (!targetCharacterCard) {
+      targetCharacterCard = existingTargetCard
+        ? [`Name: ${targetName}`, `Current game sheet: ${JSON.stringify(existingTargetCard, null, 2)}`].join("\n")
+        : `Name: ${targetName}`;
+    }
+
+    const gameNpcs = Array.isArray(meta.gameNpcs) ? (meta.gameNpcs as GameNpc[]) : [];
+    const chatCharacterIds = parseChatCharacterIds(chat.characterIds);
+    const partyIds = Array.from(
+      new Set([...getStoredPartyCharacterIds(meta, setupConfig, chatCharacterIds), ...chatCharacterIds]),
+    );
+    const partyNames: string[] = [];
+    for (const partyId of partyIds) {
+      if (isPartyNpcId(partyId)) {
+        const npc = gameNpcs.find((candidate) => buildPartyNpcId(candidate.name) === partyId);
+        const card = currentCards.find(
+          (candidate) => typeof candidate.name === "string" && buildPartyNpcId(candidate.name) === partyId,
+        );
+        const name = npc?.name ?? (typeof card?.name === "string" ? card.name.trim() : "");
+        if (name) partyNames.push(name);
+        continue;
+      }
+      const row = await characters.getById(partyId);
+      if (!row) continue;
+      try {
+        const data = (typeof row.data === "string" ? JSON.parse(row.data) : row.data) as Record<string, unknown>;
+        if (typeof data.name === "string" && data.name.trim()) partyNames.push(data.name.trim());
+      } catch {
+        // A malformed library card should not prevent regenerating a usable game sheet.
+      }
+    }
+    if (!partyNames.some((name) => characterNamesLikelyMatch(name, targetName))) {
+      partyNames.unshift(targetName);
+    }
+    const otherPartyCards =
+      targetCardIndex >= 0 ? currentCards.filter((_, index) => index !== targetCardIndex) : currentCards;
+
+    const latestState = await stateStore.getLatest(input.chatId);
+    const previousSessionSummaries = Array.isArray(meta.gamePreviousSessionSummaries)
+      ? meta.gamePreviousSessionSummaries
+      : [];
+    const systemPrompt = buildPartyRecruitCardPrompt({
+      targetCharacterName: targetName,
+      targetCharacterCard,
+      currentPartyNames: Array.from(new Set(partyNames)),
+      currentPartyCards: otherPartyCards.length > 0 ? JSON.stringify(otherPartyCards, null, 2) : null,
+      existingTargetCard: existingTargetCard ? JSON.stringify(existingTargetCard, null, 2) : null,
+      worldOverview: (meta.gameWorldOverview as string) || null,
+      storyArc: (meta.gameStoryArc as string) || null,
+      plotTwists: Array.isArray(meta.gamePlotTwists) ? (meta.gamePlotTwists as string[]) : null,
+      campaignHistory: previousSessionSummaries.length > 0 ? JSON.stringify(previousSessionSummaries, null, 2) : null,
+      currentState: latestState ? JSON.stringify(latestState, null, 2) : null,
+      language: setupConfig.language ?? null,
+      purpose: "regenerate",
+    });
+
+    const historyMessages: ChatMessage[] = applyGameSegmentEditsForPrompt(
+      await chats.listMessages(input.chatId),
+      meta,
+    ).flatMap((message) => {
+      if (message.role === "system" || isSessionConclusionMessage(message.content)) return [];
+      const content = stripGmCommandTags(message.content).trim();
+      if (!content) return [];
+      return [
+        {
+          role: message.role === "user" ? "user" : "assistant",
+          content,
+          contextKind: "history",
+        } satisfies ChatMessage,
+      ];
+    });
+
+    const { conn, baseUrl, defaultGenerationParameters } = await resolveConnection(
+      connections,
+      input.connectionId,
+      chat.connectionId,
+    );
+    const generationParameters = resolveStoredGameGenerationParameters(meta, defaultGenerationParameters);
+    const modelAccessPolicy = resolveGameModelAccessPolicy({
+      provider: conn.provider,
+      model: conn.model,
+      maxContext: conn.maxContext,
+      parameters: generationParameters,
+    });
+    const requestOptions = gameGenOptions(
+      conn.model,
+      {
+        temperature: 0.45,
+        maxTokens: 1200,
+        signal: createResponseAbortSignal(reply, GAME_GENERATION_TIMEOUT_MS, "Game character sheet regeneration"),
+        debugMode: input.debugMode || isDebugAgentsEnabled(),
+      },
+      generationParameters,
+      conn.provider,
+    );
+    const regenerationMessages: ChatMessage[] = [
+      { role: "system", content: systemPrompt, contextKind: "prompt" },
+      ...historyMessages,
+      {
+        role: "user",
+        content: `Regenerate only ${targetName}'s character sheet now. Return the JSON object and nothing else.`,
+        contextKind: "prompt",
+      },
+    ];
+    const fitted = fitMessagesToModelAccessContext({
+      messages: regenerationMessages,
+      policy: modelAccessPolicy,
+      maxTokens: requestOptions.maxTokens,
+    });
+
+    const requestDebug = input.debugMode === true;
+    const debugOverrideEnabled = requestDebug || isDebugAgentsEnabled();
+    const debugLogsEnabled = debugOverrideEnabled || logger.isLevelEnabled("debug");
+    const debugLog = (message: string, ...args: any[]) => {
+      logDebugOverride(debugOverrideEnabled, message, ...args);
+    };
+    if (debugLogsEnabled) {
+      debugLog(
+        "[game/character-sheet/regenerate] Prompt for %s (%d messages, ~%d fitted tokens):\n%s",
+        targetName,
+        fitted.messages.length,
+        fitted.estimatedTokensAfter,
+        fitted.messages.map((message) => `[${message.role}] ${message.content}`).join("\n\n"),
+      );
+    }
+
+    const provider = await createGameMainProvider(connections, conn, baseUrl);
+    const result = await runGameChatComplete(
+      provider,
+      fitted.messages,
+      { ...requestOptions, maxTokens: fitted.maxTokens ?? requestOptions.maxTokens },
+      "Game character sheet regeneration",
+    );
+    const extraction = extractLeadingThinkingBlocks(result.content ?? "", generationParameters?.customThinkingTags);
+    if (extraction.thinking) {
+      debugLog(
+        "[game/character-sheet/regenerate] Thinking tokens (%d chars):\n%s",
+        extraction.thinking.length,
+        extraction.thinking,
+      );
+    }
+    if (debugLogsEnabled) {
+      debugLog(
+        "[game/character-sheet/regenerate] Raw response for %s (%d chars):\n%s",
+        targetName,
+        extraction.content.length,
+        extraction.content,
+      );
+    }
+
+    const parsed = parseJSON(extraction.content);
+    const rawCard =
+      parsed && typeof parsed === "object" && !Array.isArray(parsed)
+        ? (parsed as Record<string, unknown>)
+        : Array.isArray(parsed) && parsed[0] && typeof parsed[0] === "object"
+          ? (parsed[0] as Record<string, unknown>)
+          : null;
+    if (!rawCard) throw new Error("The model did not return a character sheet JSON object");
+
+    const regeneratedCard = {
+      ...normalizeGeneratedGameCharacterCard(rawCard, targetName),
+      name: targetName,
+    };
+    if (!hasGeneratedGameCharacterCardContent(regeneratedCard)) {
+      throw new Error("The model returned an empty character sheet");
+    }
+
+    const preservedRpgStats =
+      existingTargetCard?.rpgStats &&
+      typeof existingTargetCard.rpgStats === "object" &&
+      !Array.isArray(existingTargetCard.rpgStats)
+        ? existingTargetCard.rpgStats
+        : sourceRpgStats;
+    const gameCard = {
+      ...regeneratedCard,
+      ...(preservedRpgStats ? { rpgStats: preservedRpgStats } : {}),
+    };
+
+    logger.info("[game/character-sheet/regenerate] Generated draft sheet for %s in chat %s", targetName, input.chatId);
+    return { characterName: targetName, gameCard };
   });
 
   // ── POST /game/party/recruit ──
