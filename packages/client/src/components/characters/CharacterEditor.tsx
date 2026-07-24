@@ -1624,7 +1624,7 @@ function CharacterVersionHistoryPanel({
   const handleRestore = async (version: CharacterCardVersion) => {
     const confirmed = await showConfirmDialog({
       title: "Restore Character Version",
-      message: `Restore ${currentData.name || "this character"} to ${getVersionTitle(version)}? The current card is saved to version history first, so you can switch back to it later.`,
+      message: `Restore ${currentData.name || "this character"} to ${getVersionTitle(version)}? The current card is saved to version history first (unless it already matches this version), so you can switch back to it later.`,
       confirmLabel: "Restore",
     });
     if (!confirmed) return;

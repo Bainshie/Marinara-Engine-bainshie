@@ -3062,7 +3062,7 @@ function PersonaVersionHistoryPanel({
   const handleRestore = async (version: PersonaCardVersion) => {
     const confirmed = await showConfirmDialog({
       title: "Restore Persona Version",
-      message: `Restore ${currentData.name || "this persona"} to ${getPersonaVersionTitle(version)}? The current persona card is saved to version history first, so you can switch back to it later.`,
+      message: `Restore ${currentData.name || "this persona"} to ${getPersonaVersionTitle(version)}? The current persona card is saved to version history first (unless it already matches this version), so you can switch back to it later.`,
       confirmLabel: "Restore",
     });
     if (!confirmed) return;

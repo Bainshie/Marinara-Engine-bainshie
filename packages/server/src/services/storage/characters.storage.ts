@@ -469,32 +469,44 @@ export function createCharactersStorage(db: DB) {
     async restoreVersion(characterId: string, versionId: string) {
       const version = await this.getVersionById(characterId, versionId);
       if (!version) return null;
-      const existing = await this.getById(characterId);
-      if (!existing) return null;
-      // Snapshot the current card before overwriting it, so restoring an older
-      // version never permanently discards the newer one (git-style history,
-      // #4040). Skip when the current card already matches the target version.
-      const currentData = parseCharacterData(existing.data);
-      const alreadyMatches =
-        !characterDataChanged(currentData, version.data) &&
-        (existing.comment ?? "") === (version.comment ?? "") &&
-        (existing.avatarPath ?? null) === (version.avatarPath ?? null);
-      if (!alreadyMatches) {
-        await this.createVersionSnapshot(characterId, {
-          source: "restore",
-          reason: "Saved before restoring an earlier version",
-          createdAt: existing.updatedAt ?? null,
-        });
-      }
-      await db
-        .update(characters)
-        .set({
-          data: JSON.stringify(version.data),
-          comment: version.comment ?? "",
-          avatarPath: version.avatarPath ?? null,
-          updatedAt: now(),
-        })
-        .where(eq(characters.id, characterId));
+      // Snapshot the current card and overwrite it atomically, so restoring an
+      // older version never permanently discards the newer one and can't leave
+      // a half-applied state if interrupted (git-style history, #4040). The
+      // snapshot is skipped when the current card already matches the target.
+      const ok = await db.transaction(async (tx) => {
+        const rows = await tx.select().from(characters).where(eq(characters.id, characterId));
+        const existing = rows[0];
+        if (!existing) return false;
+        const currentData = parseCharacterData(existing.data);
+        const alreadyMatches =
+          !characterDataChanged(currentData, version.data) &&
+          (existing.comment ?? "") === (version.comment ?? "") &&
+          (existing.avatarPath ?? null) === (version.avatarPath ?? null);
+        if (!alreadyMatches) {
+          await tx.insert(characterCardVersions).values({
+            id: newId(),
+            characterId,
+            data: JSON.stringify(currentData),
+            comment: existing.comment ?? "",
+            avatarPath: existing.avatarPath ?? null,
+            version: currentData.character_version ?? "",
+            source: "restore",
+            reason: "Saved before restoring an earlier version",
+            createdAt: existing.updatedAt ?? now(),
+          });
+        }
+        await tx
+          .update(characters)
+          .set({
+            data: JSON.stringify(version.data),
+            comment: version.comment ?? "",
+            avatarPath: version.avatarPath ?? null,
+            updatedAt: now(),
+          })
+          .where(eq(characters.id, characterId));
+        return true;
+      });
+      if (!ok) return null;
       return this.getById(characterId);
     },
 
@@ -875,52 +887,64 @@ export function createCharactersStorage(db: DB) {
     async restorePersonaVersion(personaId: string, versionId: string) {
       const version = await this.getPersonaVersionById(personaId, versionId);
       if (!version) return null;
-      const existing = await this.getPersona(personaId);
-      if (!existing) return null;
       const data = normalizePersonaSnapshot(version.data);
-      // Snapshot the current persona before overwriting so restoring an older
-      // version never discards the newer one (#4040), unless they already match.
-      const currentSnapshot = buildPersonaSnapshot(existing);
-      const alreadyMatches =
-        !personaSnapshotChanged(currentSnapshot, data) &&
-        (existing.comment ?? "") === (version.comment ?? "") &&
-        (existing.avatarPath ?? null) === (version.avatarPath ?? null);
-      if (!alreadyMatches) {
-        await this.createPersonaVersionSnapshot(personaId, {
-          source: "restore",
-          reason: "Saved before restoring an earlier version",
-          createdAt: existing.updatedAt ?? null,
-        });
-      }
-      await db
-        .update(personas)
-        .set({
-          name: data.name,
-          comment: version.comment ?? "",
-          creator: data.creator,
-          personaVersion: data.personaVersion,
-          creatorNotes: data.creatorNotes,
-          phoneticName: data.phoneticName ?? "",
-          description: data.description,
-          personality: data.personality,
-          scenario: data.scenario,
-          backstory: data.backstory,
-          appearance: data.appearance,
-          avatarPath: version.avatarPath ?? null,
-          avatarCrop: data.avatarCrop,
-          nameColor: data.nameColor,
-          dialogueColor: data.dialogueColor,
-          boxColor: data.boxColor,
-          trackerCardColors: data.trackerCardColors,
-          personaStats: data.personaStats,
-          tags: data.tags,
-          savedStatusOptions: data.savedStatusOptions,
-          convoDisplayName: data.convoDisplayName,
-          aboutMe: data.aboutMe,
-          convoBehavior: data.convoBehavior,
-          updatedAt: now(),
-        })
-        .where(eq(personas.id, personaId));
+      // Snapshot the current persona and overwrite it atomically, so restoring
+      // an older version never discards the newer one and can't leave a
+      // half-applied state (#4040). Skip the snapshot when they already match.
+      const ok = await db.transaction(async (tx) => {
+        const rows = await tx.select().from(personas).where(eq(personas.id, personaId));
+        const existing = rows[0];
+        if (!existing) return false;
+        const currentSnapshot = buildPersonaSnapshot(existing);
+        const alreadyMatches =
+          !personaSnapshotChanged(currentSnapshot, data) &&
+          (existing.comment ?? "") === (version.comment ?? "") &&
+          (existing.avatarPath ?? null) === (version.avatarPath ?? null);
+        if (!alreadyMatches) {
+          await tx.insert(personaCardVersions).values({
+            id: newId(),
+            personaId,
+            data: JSON.stringify(currentSnapshot),
+            comment: existing.comment ?? "",
+            avatarPath: existing.avatarPath ?? null,
+            version: currentSnapshot.personaVersion ?? "",
+            source: "restore",
+            reason: "Saved before restoring an earlier version",
+            createdAt: existing.updatedAt ?? now(),
+          });
+        }
+        await tx
+          .update(personas)
+          .set({
+            name: data.name,
+            comment: version.comment ?? "",
+            creator: data.creator,
+            personaVersion: data.personaVersion,
+            creatorNotes: data.creatorNotes,
+            phoneticName: data.phoneticName ?? "",
+            description: data.description,
+            personality: data.personality,
+            scenario: data.scenario,
+            backstory: data.backstory,
+            appearance: data.appearance,
+            avatarPath: version.avatarPath ?? null,
+            avatarCrop: data.avatarCrop,
+            nameColor: data.nameColor,
+            dialogueColor: data.dialogueColor,
+            boxColor: data.boxColor,
+            trackerCardColors: data.trackerCardColors,
+            personaStats: data.personaStats,
+            tags: data.tags,
+            savedStatusOptions: data.savedStatusOptions,
+            convoDisplayName: data.convoDisplayName,
+            aboutMe: data.aboutMe,
+            convoBehavior: data.convoBehavior,
+            updatedAt: now(),
+          })
+          .where(eq(personas.id, personaId));
+        return true;
+      });
+      if (!ok) return null;
       return this.getPersona(personaId);
     },
 
