@@ -53,6 +53,8 @@ import {
   GAME_STORYBOARD_ILLUSTRATION_PROMPT_TEMPLATES,
   GAME_STORYBOARD_IMAGE_BUILT_IN_PROMPT_TEMPLATES,
   GAME_STORYBOARD_IMAGE_PROMPT_TEMPLATE_ID,
+  STORYBOARD_FIRST_FRAME_IMAGE_PROMPT_TEMPLATE,
+  STORYBOARD_FIRST_FRAME_IMAGE_PROMPT_TEMPLATE_ID,
   STORYBOARD_OPTIMIZED_IMAGE_PROMPT_TEMPLATE,
   STORYBOARD_OPTIMIZED_IMAGE_PROMPT_TEMPLATE_ID,
   GAME_STORYBOARD_NOVELAI_ANIMATION_PROMPT_TEMPLATE,
@@ -2082,6 +2084,11 @@ const cases: RegressionCase[] = [
         ],
         ctx,
       });
+      const firstFramePrompt = await loadGameStoryboardImagePrompt({
+        promptOverridesStorage,
+        templateId: STORYBOARD_FIRST_FRAME_IMAGE_PROMPT_TEMPLATE_ID,
+        ctx,
+      });
 
       assert.equal(legacyPrompt, "GLOBAL SCENE Mira braces beneath a storm-lit archway.");
       assert.match(optimizedPrompt, /Storyboard keyframe: Mira braces beneath a storm-lit archway/);
@@ -2091,12 +2098,23 @@ const cases: RegressionCase[] = [
       assert.doesNotMatch(optimizedPrompt, /GLOBAL SCENE/);
       assert.equal(customPrompt, "CUSTOM Mira braces beneath a storm-lit archway. Art direction: painterly fantasy.");
       assert.doesNotMatch(customPrompt, /Final visibility rule/);
-      assert.equal(GAME_STORYBOARD_IMAGE_BUILT_IN_PROMPT_TEMPLATES.length, 2);
+      assert.equal(
+        firstFramePrompt,
+        "Mira braces beneath a storm-lit archway. User image instructions: keep the silver cloak.",
+      );
+      assert.doesNotMatch(firstFramePrompt, /Mira at the gate|Storyboard keyframe|Final visibility rule|Art direction/);
+      assert.equal(GAME_STORYBOARD_IMAGE_BUILT_IN_PROMPT_TEMPLATES.length, 3);
       assert.equal(
         GAME_STORYBOARD_IMAGE_BUILT_IN_PROMPT_TEMPLATES.find(
           (template) => template.id === STORYBOARD_OPTIMIZED_IMAGE_PROMPT_TEMPLATE_ID,
         )?.promptTemplate,
         STORYBOARD_OPTIMIZED_IMAGE_PROMPT_TEMPLATE,
+      );
+      assert.equal(
+        GAME_STORYBOARD_IMAGE_BUILT_IN_PROMPT_TEMPLATES.find(
+          (template) => template.id === STORYBOARD_FIRST_FRAME_IMAGE_PROMPT_TEMPLATE_ID,
+        )?.promptTemplate,
+        STORYBOARD_FIRST_FRAME_IMAGE_PROMPT_TEMPLATE,
       );
       assert.equal(GAME_STORYBOARD_IMAGE_PROMPT_TEMPLATE_ID, "game-scene-illustration");
     },

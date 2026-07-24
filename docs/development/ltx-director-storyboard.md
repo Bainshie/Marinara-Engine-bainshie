@@ -1,12 +1,14 @@
 # LTX Director Storyboard
 
-Status: Draft for maintainer review. Implementation remains paused until this document is approved.
+Status: Implemented on the development branch and undergoing local review.
 
 ## Problem
 
 The current Storyboard path produces one first-frame illustration and one prose `narrationBeat`. The selected Storyboard Video Prompt then combines that action plan, character names, setting, art style, and a large excerpt of the first-frame image prompt into one `%prompt%`. ComfyUI sends that entire string to LTX Director as `global_prompt`, while `local_prompts` and `segment_lengths` remain empty. LTX Director therefore takes its single-prompt path instead of its multi-segment temporal path.
 
 The live six-second Storyboard setting resolves `%length%` to 96 frames at Marinara's existing 16 FPS contract, but the saved LTX workflow still contains hard-coded five-second UI fields. The frame count is effective at runtime; the seconds fields are inconsistent metadata.
+
+The first-frame image path also adds the keyframe title, `Storyboard keyframe:` label, visibility metadata, and genre/setting art-direction line around the planner's already complete T=0 description. Natural-language image profiles such as Z-Image Turbo Narrative do not need those wrappers, and the keyframe title can unintentionally influence the generated image.
 
 This is an opt-in addition. Do not edit, rename, remove, migrate, or change the defaults of any existing Storyboard Planner or Game/Storyboard Video Prompt. In particular, keep Anime Episode Director and Anime Game Video unchanged.
 
@@ -21,12 +23,15 @@ This is an opt-in addition. Do not edit, rename, remove, migrate, or change the 
 
 ## Product decision
 
-Add two new built-in choices that are designed to be selected together:
+Add three new built-in choices that are designed to be selected together:
 
 1. **LTX Director Storyboard** — a new Animation Planner.
-2. **LTX Director Video** — a new Storyboard Video Prompt.
+2. **Storyboard First Frame** — a new Storyboard Illustration Prompt that sends the planner's T=0 scene directly.
+3. **LTX Director Video** — a new Storyboard Video Prompt.
 
-Existing choices and saved selections remain unchanged. A user opts in by selecting both new templates in Chat Settings.
+Existing choices and saved selections remain unchanged. A user opts in by selecting the three new templates in Chat Settings.
+
+The first-frame formatter uses the existing global Image Style selector instead of adding provider detection or a hidden style override. For Krea 2, Z-Image Turbo Narrative supplies the existing natural-language prompt grammar while the planner supplies the concrete scene and visual treatment.
 
 ### New planner output
 
@@ -81,7 +86,7 @@ For `%prompt%` compatibility, the Storyboard route also composes one conventiona
 ## Desired data flow
 
 1. The selected LTX planner returns one T=0 `imagePrompt` and a pipe-delimited `narrationBeat`.
-2. Storyboard image generation creates exactly one reference illustration, as it does now.
+2. The Storyboard First Frame formatter passes the complete T=0 scene and optional user image instructions without adding the keyframe title, metadata labels, or repeated art direction. The existing Image Style compiler then applies the user's selected global profile, and Storyboard image generation creates exactly one reference illustration.
 3. A small sanitizer splits `narrationBeat` on `|`, trims segments, and removes empty values. It accepts 2-4 segments; if more than four survive, retain the first three and the final segment so the ending hold is not discarded.
 4. The selected LTX Director Video template renders the stable global prompt without the action plan or full first-frame prompt.
 5. The Storyboard route creates a small LTX Director prompt payload beside the normal video request:
@@ -159,19 +164,21 @@ Do not duplicate the reference image at every prompt boundary. That would create
 
 ## Implementation plan
 
-1. Add the new LTX planner constant and option in `packages/shared/src/constants/game-storyboard-prompts.ts`. Do not change any existing template text, IDs, order-dependent defaults, or selection behavior.
-2. Add the new LTX Director Video constant and option in `packages/shared/src/constants/game-video-prompts.ts`. Use the existing video-template variables, but intentionally omit action and full illustration variables from this template's text. Do not change existing templates.
-3. In `packages/server/src/routes/game.routes.ts`, recognize the opt-in LTX pairing, sanitize the planner beats, render the stable global prompt, and compose the complete `%prompt%` fallback. Thread the optional LTX Director prompt payload and existing debug mode only for Storyboard keyframe video generation.
-4. In `packages/server/src/services/video/video-generation.ts`, extend the optional request shape and existing recursive replacement map with `%global_prompt%`, `%local_prompts%`, `%segment_lengths%`, and `%duration_seconds%`. When Director data is absent, use the existing full prompt as the global value and empty local/length values. Do not inspect node types or rewrite workflows.
-5. Immediately before the ComfyUI queue request, use the shared Pino debug override to record the final resolved global prompt, ordered local prompts, and segment-length value. Do not log image data or API keys.
-6. Extend `scripts/regressions/prompt.regression.ts` with focused deterministic coverage. Do not create or retain `.test.ts` files.
+1. Add the new LTX planner constant and option in `packages/shared/src/constants/game-storyboard-prompts.ts`. Do not change any pre-existing template text, IDs, order-dependent defaults, or selection behavior.
+2. Add the Storyboard First Frame formatter in `packages/shared/src/constants/game-storyboard-image-prompts.ts`. It uses only the complete `scenePrompt` and optional image instructions so the existing Image Style selector remains authoritative.
+3. Add the new LTX Director Video constant and option in `packages/shared/src/constants/game-video-prompts.ts`. Use the existing video-template variables, but intentionally omit action and full illustration variables from this template's text. Do not change existing templates.
+4. In `packages/server/src/routes/game.routes.ts`, recognize the opt-in LTX pairing, sanitize the planner beats, render the stable global prompt, and compose the complete `%prompt%` fallback. Thread the optional LTX Director prompt payload and existing debug mode only for Storyboard keyframe video generation.
+5. In `packages/server/src/services/video/video-generation.ts`, extend the optional request shape and existing recursive replacement map with `%global_prompt%`, `%local_prompts%`, `%segment_lengths%`, and `%duration_seconds%`. When Director data is absent, use the existing full prompt as the global value and empty local/length values. Do not inspect node types or rewrite workflows.
+6. Immediately before the ComfyUI queue request, use the shared Pino debug override to record the final resolved global prompt, ordered local prompts, and segment-length value. Do not log image data or API keys.
+7. Extend `scripts/regressions/prompt.regression.ts` with focused deterministic coverage. Do not create or retain `.test.ts` files.
 
-Expected implementation footprint: the five files above. No client UI, localization, storage schema, migration, version, service restart, or Marinara-Agents work is expected.
+No client UI, localization, storage schema, migration, version, service restart, or Marinara-Agents work is expected.
 
 ## Acceptance criteria
 
 - Every existing Storyboard Planner and Video Prompt string remains unchanged; existing defaults and saved selections remain unchanged.
-- The two new LTX choices appear as opt-in built-ins and can be selected independently through the existing settings controls.
+- The new LTX planner, Storyboard First Frame formatter, and LTX video prompt appear as opt-in built-ins through the existing settings controls.
+- Storyboard First Frame omits the keyframe title, `Storyboard keyframe:` label, final visibility metadata, and genre/setting art-direction wrapper while retaining the planner's full T=0 scene.
 - A three-segment LTX `narrationBeat` produces exactly two `|` delimiters in `local_prompts`.
 - Whitespace and empty segments are removed without reordering; an over-four result keeps the first three and final segment.
 - The global prompt contains no pipe-delimited action plan, timecodes, or full first-frame illustration prompt.
@@ -190,6 +197,6 @@ Expected implementation footprint: the five files above. No client UI, localizat
 2. Resolve a representative LTX workflow and assert the global/local values, empty segment lengths, six-second/96-frame fields, one frame-zero reference, one guide strength, and preservation of unrelated timeline wrapper keys.
 3. Add a negative control using an existing `%prompt%`-only workflow and existing prompt selections, asserting identical resolved output.
 4. Run `pnpm regression:prompt`, `pnpm check`, and `git diff --check`. Do not build or restart the service separately unless requested or required for later local review.
-5. After code review, manually select LTX Director Storyboard and LTX Director Video, then update the saved `ltx-2.3-distilled` workflow with the four new placeholders. Generate one six-second, three-beat clip in debug mode and inspect the queued values and rendered continuity.
+5. After code review, manually select LTX Director Storyboard, Storyboard First Frame, LTX Director Video, and the desired global Image Style. Update the saved `ltx-2.3-distilled` workflow with the four new placeholders, generate one six-second three-beat clip in debug mode, and inspect the compiled first-frame prompt, queued Director values, and rendered continuity.
 
 No issue or PR will be opened until the implementation is ready and the user requests it.
