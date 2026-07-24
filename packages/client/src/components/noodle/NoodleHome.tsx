@@ -17,6 +17,7 @@ import {
   Loader2,
   MessageCircle,
   Pencil,
+  Plus,
   RefreshCw,
   RotateCcw,
   Save,
@@ -46,7 +47,6 @@ import {
   type NoodleTextMention,
   type APIConnection,
   type NoodleAccount,
-  type NoodleAutoPostingIntensity,
   type NoodleCarryoverTarget,
   type NoodleInteraction,
   type NoodleInteractionType,
@@ -93,13 +93,11 @@ import {
   useNoodle,
   useNoodlerAccounts,
   usePatchNoodleAccountSettings,
-  useRefreshAllNoodlerCreatorsNow,
   useRefreshNoodle,
   useRemoveNoodleCharacter,
   useRemoveNoodleInteraction,
   useRescheduleNoodleRefresh,
   useResetNoodleTimeline,
-  useUpdateNoodlerAutoPosting,
   useUpdateNoodleAccountFollow,
   useUpdateNoodleAccountProfile,
   useUpdateNoodleInteraction,
@@ -121,6 +119,8 @@ import type {
   NoodleProfileConnection,
 } from "./noodle-navigation.types";
 import { NoodleProfileSurface } from "./NoodleProfileSurface";
+import { NoodlerBulkCreatePanel } from "./NoodlerBulkCreatePanel";
+import { NoodlerScheduleManagerModal } from "./NoodlerScheduleManagerModal";
 import { BrowserChrome, formatTime } from "./NoodleBrowserChrome";
 import {
   insertAtSelection,
@@ -166,14 +166,6 @@ const textareaClass =
   "mari-chrome-field min-h-24 w-full min-w-0 resize-y rounded-md border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)] p-3 text-xs leading-relaxed text-[var(--foreground)] outline-none transition-colors focus:border-[var(--noodle-blue)]";
 const labelClass =
   "text-[0.68rem] font-semibold uppercase tracking-normal text-[var(--marinara-chat-chrome-panel-muted)]";
-const NOODLER_AUTO_POST_INTENSITIES: { label: string; value: 1 | 3 | 6 }[] = [
-  { label: "Low", value: 1 },
-  { label: "Medium", value: 3 },
-  { label: "High", value: 6 },
-];
-function errorMessage(error: unknown, fallback: string) {
-  return error instanceof Error ? error.message : fallback;
-}
 const NOODLE_INVITE_PAGE_SIZE = 50;
 const NOODLE_MENTION_SUGGESTION_LIMIT = 8;
 const NOODLE_CARRYOVER_TARGETS: NoodleCarryoverTarget[] = ["conversation", "roleplay", "game"];
@@ -538,8 +530,6 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
   const updateInteraction = useUpdateNoodleInteraction();
   const deleteInteraction = useDeleteNoodleInteraction();
   const rescheduleRefresh = useRescheduleNoodleRefresh();
-  const updateNoodlerAutoPosting = useUpdateNoodlerAutoPosting();
-  const refreshAllNoodlerCreators = useRefreshAllNoodlerCreatorsNow();
   const refreshNoodle = useRefreshNoodle();
   const confirmNoodleImagePrompts = useConfirmNoodleImagePrompts();
   const resetNoodleTimeline = useResetNoodleTimeline();
@@ -655,7 +645,7 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
   const [imageGenerationPromptDraft, setImageGenerationPromptDraft] = useState("");
   const [privateGenerationGuidanceDraft, setPrivateGenerationGuidanceDraft] = useState("");
   const [scheduleManagerOpen, setScheduleManagerOpen] = useState(false);
-  const [selectedScheduleIds, setSelectedScheduleIds] = useState<Set<string>>(new Set());
+  const [bulkCreateOpen, setBulkCreateOpen] = useState(false);
   const [pollQuestion, setPollQuestion] = useState("");
   const [pollOptions, setPollOptions] = useState(["", ""]);
   const [draftPoll, setDraftPoll] = useState<NoodlePollInput | null>(null);
@@ -894,26 +884,6 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
     updateSettings.mutate(patch, {
       onError: (error) => toast.error(error instanceof Error ? error.message : "Could not update Noodle settings."),
     });
-  };
-
-  const toggleScheduleSelection = (id: string) => {
-    setSelectedScheduleIds((current) => {
-      const next = new Set(current);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  };
-
-  const applyBulkAutoPosting = async (patch: { enabled?: boolean; intensity?: NoodleAutoPostingIntensity }) => {
-    const ids = [...selectedScheduleIds];
-    if (ids.length === 0) return;
-    try {
-      await Promise.all(ids.map((accountId) => updateNoodlerAutoPosting.mutateAsync({ accountId, ...patch })));
-      toast.success(`Updated ${ids.length} creator${ids.length === 1 ? "" : "s"}.`);
-    } catch (error) {
-      toast.error(errorMessage(error, "Could not apply the bulk change."));
-    }
   };
 
   const openNoodlePromptEditor = () => {
@@ -3163,15 +3133,25 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
                   <p className="text-xs text-[var(--muted-foreground)]">
                     {noodlerScheduleSummary}
                   </p>
-                  <button
-                    type="button"
-                    disabled={noodlerCreatorCount === 0}
-                    onClick={() => setScheduleManagerOpen(true)}
-                    className="flex min-h-10 w-full items-center justify-center gap-2 rounded-md border border-[var(--noodle-blue)]/40 bg-[var(--noodle-blue)]/10 px-3 text-xs font-semibold text-[var(--noodle-blue)] transition-colors hover:bg-[var(--noodle-blue)]/15 disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    <CalendarClock size={15} />
-                    {noodlerCreatorCount === 0 ? "No creators to schedule yet" : "Manage schedules"}
-                  </button>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <button
+                      type="button"
+                      disabled={noodlerCreatorCount === 0}
+                      onClick={() => setScheduleManagerOpen(true)}
+                      className="flex min-h-10 w-full items-center justify-center gap-2 rounded-md border border-[var(--noodle-blue)]/40 bg-[var(--noodle-blue)]/10 px-3 text-xs font-semibold text-[var(--noodle-blue)] transition-colors hover:bg-[var(--noodle-blue)]/15 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      <CalendarClock size={15} />
+                      {noodlerCreatorCount === 0 ? "No creators to schedule yet" : "Manage schedules"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setBulkCreateOpen(true)}
+                      className="flex min-h-10 w-full items-center justify-center gap-2 rounded-md border border-[var(--noodle-blue)]/40 bg-[var(--noodle-blue)]/10 px-3 text-xs font-semibold text-[var(--noodle-blue)] transition-colors hover:bg-[var(--noodle-blue)]/15"
+                    >
+                      <Plus size={15} />
+                      Add creators
+                    </button>
+                  </div>
                 </div>
               </div>
             </Section>
@@ -3198,230 +3178,15 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
         </>
       )}
 
+      <NoodlerScheduleManagerModal open={scheduleManagerOpen} onClose={() => setScheduleManagerOpen(false)} />
       <Modal
-        open={scheduleManagerOpen}
-        onClose={() => setScheduleManagerOpen(false)}
-        title="NoodleR schedules"
-        width="max-w-2xl"
+        open={bulkCreateOpen}
+        onClose={() => setBulkCreateOpen(false)}
+        title="Add creators"
+        width="max-w-md"
         panelStyle={{ "--noodle-blue": NOODLE_PINK } as CSSProperties}
       >
-        <div className="space-y-3">
-          {(() => {
-            const scheduleEnabled = settings?.autoPostingScheduleEnabled ?? true;
-            const defaultIntensity = settings?.autoPostingDefaultIntensity ?? 1;
-            const selectedCount = selectedScheduleIds.size;
-            const allSelected = noodlerCreators.length > 0 && selectedCount === noodlerCreators.length;
-            const bulkBusy = updateNoodlerAutoPosting.isPending;
-            return (
-              <>
-                {/* Global controls */}
-                <div className="space-y-3 rounded-lg bg-[var(--secondary)] p-3 ring-1 ring-[var(--border)]">
-                  <label className="flex items-center justify-between gap-3">
-                    <span className="min-w-0">
-                      <span className="block text-sm font-semibold">Automatic posting schedule</span>
-                      <span className="block text-xs text-[var(--muted-foreground)]">
-                        {scheduleEnabled ? "Creators post on their schedule." : "Paused globally — no automatic posts."}
-                      </span>
-                    </span>
-                    <input
-                      type="checkbox"
-                      checked={scheduleEnabled}
-                      disabled={updateSettings.isPending}
-                      onChange={(event) => saveSettings({ autoPostingScheduleEnabled: event.target.checked })}
-                      className="h-5 w-5 shrink-0 accent-[var(--noodle-blue)]"
-                    />
-                  </label>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-xs font-semibold">Default cadence</span>
-                    {NOODLER_AUTO_POST_INTENSITIES.map(({ label, value }) => (
-                      <button
-                        key={value}
-                        type="button"
-                        disabled={updateSettings.isPending}
-                        onClick={() => saveSettings({ autoPostingDefaultIntensity: value })}
-                        className={cn(
-                          "h-8 rounded-full px-3 text-xs font-semibold ring-1 transition-colors disabled:opacity-40",
-                          defaultIntensity === value
-                            ? "bg-[var(--noodle-blue)] text-zinc-950 ring-transparent"
-                            : "bg-[var(--background)] text-[var(--foreground)] ring-[var(--border)] hover:bg-[var(--accent)]",
-                        )}
-                      >
-                        {label}
-                      </button>
-                    ))}
-                    <button
-                      type="button"
-                      disabled={refreshAllNoodlerCreators.isPending}
-                      onClick={() =>
-                        refreshAllNoodlerCreators.mutate(undefined, {
-                          onSuccess: (result) =>
-                            toast.success(`Refreshed ${result.outcomes.length} creator${result.outcomes.length === 1 ? "" : "s"}.`),
-                          onError: (error) => toast.error(errorMessage(error, "Could not refresh creators.")),
-                        })
-                      }
-                      className="ml-auto inline-flex h-8 items-center gap-1.5 rounded-full bg-[var(--background)] px-3 text-xs font-semibold ring-1 ring-[var(--border)] transition-colors hover:bg-[var(--accent)] disabled:opacity-40"
-                    >
-                      <RefreshCw size={13} className={refreshAllNoodlerCreators.isPending ? "animate-spin" : undefined} />
-                      Refresh all now
-                    </button>
-                  </div>
-                  {noodlerCreators.length > 0 && (
-                    <div className="flex flex-wrap items-center gap-2 border-t border-[var(--border)] pt-3">
-                      <label className="flex items-center gap-2 text-xs font-semibold">
-                        <input
-                          type="checkbox"
-                          checked={allSelected}
-                          onChange={(event) =>
-                            setSelectedScheduleIds(
-                              event.target.checked ? new Set(noodlerCreators.map((profile) => profile.id)) : new Set(),
-                            )
-                          }
-                          className="h-4 w-4 accent-[var(--noodle-blue)]"
-                        />
-                        {selectedCount > 0 ? `${selectedCount} selected` : "Select all"}
-                      </label>
-                      <div className="ml-auto flex flex-wrap items-center gap-1.5">
-                        <button
-                          type="button"
-                          disabled={selectedCount === 0 || bulkBusy}
-                          onClick={() => applyBulkAutoPosting({ enabled: true })}
-                          className="h-8 rounded-full bg-[var(--background)] px-3 text-xs font-semibold ring-1 ring-[var(--border)] hover:bg-[var(--accent)] disabled:opacity-40"
-                        >
-                          Enable
-                        </button>
-                        <button
-                          type="button"
-                          disabled={selectedCount === 0 || bulkBusy}
-                          onClick={() => applyBulkAutoPosting({ enabled: false })}
-                          className="h-8 rounded-full bg-[var(--background)] px-3 text-xs font-semibold ring-1 ring-[var(--border)] hover:bg-[var(--accent)] disabled:opacity-40"
-                        >
-                          Disable
-                        </button>
-                        {NOODLER_AUTO_POST_INTENSITIES.map(({ label, value }) => (
-                          <button
-                            key={value}
-                            type="button"
-                            disabled={selectedCount === 0 || bulkBusy}
-                            onClick={() => applyBulkAutoPosting({ intensity: value })}
-                            className="h-8 rounded-full bg-[var(--background)] px-3 text-xs font-semibold ring-1 ring-[var(--border)] hover:bg-[var(--accent)] disabled:opacity-40"
-                            title={`Set cadence to ${label}`}
-                          >
-                            {label}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {/* Per-creator cards */}
-                {noodlerCreators.length === 0 ? (
-                  <p className="text-sm text-[var(--muted-foreground)]">
-                    No managed creators yet. Create a stage profile to schedule automatic posts.
-                  </p>
-                ) : (
-                  noodlerCreators.map((profile) => {
-                    const auto = profile.autoPosting;
-                    const selected = selectedScheduleIds.has(profile.id);
-                    return (
-                      <div
-                        key={profile.id}
-                        className="space-y-3 rounded-lg bg-[var(--secondary)] p-3 ring-1 ring-[var(--border)]"
-                      >
-                        <div className="flex items-center gap-3">
-                          <input
-                            type="checkbox"
-                            checked={selected}
-                            onChange={() => toggleScheduleSelection(profile.id)}
-                            aria-label={`Select ${profile.displayName}`}
-                            className="h-4 w-4 shrink-0 accent-[var(--noodle-blue)]"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setScheduleManagerOpen(false);
-                              onNavigate({ mode: "private", view: "profile", accountId: profile.id });
-                            }}
-                            className="flex min-w-0 flex-1 items-center gap-3 text-left"
-                          >
-                            <Avatar account={profile} />
-                            <span className="min-w-0">
-                              <span className="block truncate text-sm font-semibold">{profile.displayName}</span>
-                              <span className="block truncate text-xs text-[var(--muted-foreground)]">
-                                @{profile.handle}
-                              </span>
-                            </span>
-                          </button>
-                          <span
-                            className={cn(
-                              "shrink-0 rounded-full px-2 py-1 text-[0.625rem] font-medium ring-1 ring-[var(--border)]",
-                              auto.enabled
-                                ? "bg-[var(--noodle-blue)]/12 text-[var(--noodle-blue)]"
-                                : "bg-[var(--background)] text-[var(--muted-foreground)]",
-                            )}
-                          >
-                            {auto.enabled
-                              ? auto.nextRunAt
-                                ? `Next ${new Date(auto.nextRunAt).toLocaleString()}`
-                                : "Scheduling…"
-                              : "Paused"}
-                          </span>
-                          <label className="flex shrink-0 items-center gap-2">
-                            <span className="text-xs font-semibold">{auto.enabled ? "On" : "Off"}</span>
-                            <input
-                              type="checkbox"
-                              checked={auto.enabled}
-                              disabled={updateNoodlerAutoPosting.isPending}
-                              onChange={(event) =>
-                                updateNoodlerAutoPosting.mutate(
-                                  { accountId: profile.id, enabled: event.target.checked },
-                                  {
-                                    onError: (error) =>
-                                      toast.error(errorMessage(error, "Could not update automatic posting.")),
-                                  },
-                                )
-                              }
-                              className="h-5 w-5 accent-[var(--noodle-blue)]"
-                            />
-                          </label>
-                        </div>
-                        <div className="flex flex-wrap items-center gap-2">
-                          {NOODLER_AUTO_POST_INTENSITIES.map(({ label, value }) => (
-                            <button
-                              key={value}
-                              type="button"
-                              disabled={!auto.enabled || updateNoodlerAutoPosting.isPending}
-                              onClick={() =>
-                                updateNoodlerAutoPosting.mutate(
-                                  { accountId: profile.id, intensity: value },
-                                  {
-                                    onError: (error) =>
-                                      toast.error(errorMessage(error, "Could not update cadence.")),
-                                  },
-                                )
-                              }
-                              className={cn(
-                                "h-8 flex-1 rounded-full px-3 text-xs font-semibold ring-1 transition-colors disabled:opacity-40",
-                                auto.intensity === value
-                                  ? "bg-[var(--noodle-blue)] text-zinc-950 ring-transparent"
-                                  : "bg-[var(--background)] text-[var(--foreground)] ring-[var(--border)] hover:bg-[var(--accent)]",
-                              )}
-                            >
-                              {label}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    );
-                  })
-                )}
-                <p className="text-[0.6875rem] text-[var(--muted-foreground)]">
-                  Reschedule a specific run or generate one now from that creator&apos;s profile page.
-                </p>
-              </>
-            );
-          })()}
-        </div>
+        <NoodlerBulkCreatePanel />
       </Modal>
     </>
   );

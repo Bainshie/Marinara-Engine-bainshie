@@ -242,6 +242,12 @@ const noodleStageProfileShape = {
 
 export const noodleStageProfileSchema = z.object(noodleStageProfileShape).strict();
 export const noodlePrivateAccountCreateSchema = z.object({ stageProfile: noodleStageProfileSchema }).strict();
+export const noodleBulkPrivateAccountCreateSchema = z
+  .object({
+    publicAccountIds: z.array(z.string().min(1)).min(1),
+    disclosureMode: noodleIdentityDisclosureSchema,
+  })
+  .strict();
 export const noodleStageProfileUpdateSchema = z.object(noodleStageProfileShape).strict();
 
 export const noodleStageProfileDraftRequestSchema = z
@@ -636,6 +642,7 @@ export type NoodleAccountProfileUpdateInput = z.infer<typeof noodleAccountProfil
 export type NoodleAccountSettingsPatchInput = z.infer<typeof noodleAccountSettingsPatchSchema>;
 export type NoodleAccountFollowUpdateInput = z.infer<typeof noodleAccountFollowUpdateSchema>;
 export type NoodlePrivateAccountCreateInput = z.infer<typeof noodlePrivateAccountCreateSchema>;
+export type NoodleBulkPrivateAccountCreateInput = z.infer<typeof noodleBulkPrivateAccountCreateSchema>;
 export type NoodleStageProfileInput = z.infer<typeof noodleStageProfileSchema>;
 export type NoodleStageProfileDraftRequest = z.infer<typeof noodleStageProfileDraftRequestSchema>;
 export type NoodleInviteInput = z.infer<typeof noodleInviteSchema>;

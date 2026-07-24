@@ -14,6 +14,7 @@ import {
   noodleAutoPostRescheduleSchema,
   noodleAccountUpdateSchema,
   noodleBulkInviteSchema,
+  noodleBulkPrivateAccountCreateSchema,
   noodleCreateInteractionSchema,
   noodleCreatePostSchema,
   noodleInviteSchema,
@@ -499,6 +500,62 @@ export async function noodleRoutes(app: FastifyInstance) {
       }
       throw error;
     }
+  });
+
+  app.post("/noodler/accounts/bulk", async (req, reply) => {
+    const settings = await noodle.getSettings();
+    if (!settings.enableNoodler) return reply.code(404).send({ error: "Not Found" });
+    const parsed = noodleBulkPrivateAccountCreateSchema.safeParse(req.body ?? {});
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    const { publicAccountIds, disclosureMode } = parsed.data;
+    const created: string[] = [];
+    const skipped: string[] = [];
+    for (const publicAccountId of publicAccountIds) {
+      const publicAccount = await noodle.getAccountById(publicAccountId);
+      if (!publicAccount) {
+        skipped.push(publicAccountId);
+        continue;
+      }
+      const stageProfile =
+        disclosureMode === "open"
+          ? {
+              displayName: publicAccount.displayName,
+              handle: publicAccount.handle,
+              bio: publicAccount.bio,
+              stagePersonality: "",
+              disclosureMode,
+            }
+          : {
+              displayName: "New stage persona",
+              handle: `${publicAccount.handle}_stage`,
+              bio: "",
+              stagePersonality: "",
+              disclosureMode,
+            };
+      if (stageProfileContainsPublicIdentity(stageProfile, publicAccount)) {
+        skipped.push(publicAccountId);
+        continue;
+      }
+      try {
+        const account = await noodle.createPrivateAccount(publicAccountId, stageProfile);
+        if (!account) {
+          skipped.push(publicAccountId);
+          continue;
+        }
+        created.push(account.id);
+      } catch (error) {
+        if (isFileUniqueConstraintError(error, "noodle_accounts", ["publicAccountId"])) {
+          skipped.push(publicAccountId);
+          continue;
+        }
+        throw error;
+      }
+    }
+    const profiles = await noodle.listNoodlerStageProfiles();
+    return reply.code(201).send({
+      created: profiles.filter((profile) => created.includes(profile.id)),
+      skipped,
+    });
   });
 
   app.put("/noodler/accounts/:id/stage-profile", async (req, reply) => {

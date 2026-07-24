@@ -90,6 +90,8 @@ import {
 } from "./NoodlePostCard";
 import { Avatar, NoodleShell, NOODLE_PERSONA_SWITCHER_PAGE_SIZE, NOODLE_PINK, useNoodleAccent } from "./NoodleShell";
 import { NoodleProfileSurface } from "./NoodleProfileSurface";
+import { NOODLE_AUTO_POST_INTENSITIES } from "./noodle-auto-post";
+import { NoodlerBulkCreatePanel } from "./NoodlerBulkCreatePanel";
 import {
   ConversationMediaPickerPanel,
   type ConversationMediaPickerTabId,
@@ -890,7 +892,7 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
             <fieldset className="space-y-2">
               <legend className="text-xs font-bold">Cadence</legend>
               <div className="flex gap-2">
-                {AUTO_POST_INTENSITIES.map(({ label, value }) => (
+                {NOODLE_AUTO_POST_INTENSITIES.map(({ label, value }) => (
                   <button
                     key={value}
                     type="button"
@@ -1086,6 +1088,8 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
           onToggleSubscription={toggleCreatorSubscription}
           togglePending={toggleSubscription.isPending}
         />
+
+        <NoodlerBulkCreatePanel />
       </div>
     </aside>
   );
@@ -2387,7 +2391,7 @@ function StageProfileView({
           <fieldset disabled={!autoPosting.enabled || updateAutoPosting.isPending} className="disabled:opacity-50">
             <legend className="text-xs font-bold">Cadence</legend>
             <div className="mt-2 flex gap-2">
-              {AUTO_POST_INTENSITIES.map(({ label, value }) => (
+              {NOODLE_AUTO_POST_INTENSITIES.map(({ label, value }) => (
                 <button
                   key={value}
                   type="button"
@@ -2486,12 +2490,6 @@ function StageProfileView({
     </>
   );
 }
-
-const AUTO_POST_INTENSITIES: { label: string; value: NoodleAutoPostingIntensity }[] = [
-  { label: "Low", value: 1 },
-  { label: "Medium", value: 3 },
-  { label: "High", value: 6 },
-];
 
 function ViewerHub({
   personas,
