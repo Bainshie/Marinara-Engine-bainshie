@@ -203,7 +203,7 @@ A timeout is the longest time the server waits for a slow job before giving up. 
 | `CUSTOM_TOOL_TIMEOUT_MS` | `60000` (1 minute) | Time allowed for one custom tool call. |
 | `MAX_TOOL_ROUNDS` | `100` | Most tool-call rounds before the model must give a final answer. |
 
-The image, video, sprite, and ComfyUI timeouts are locked in at startup, so a change to them needs a restart. Chat-generation, embedding, and custom-tool timeouts take effect on the next request, with no restart. Invalid, zero, negative, or out-of-range chat timeout values log a warning and safely use the five-minute default. Raise a media timeout when large or high-quality jobs fail partway through. To learn more about video jobs, see [Scene Video](media/scene-video.md).
+The image, video, sprite, and ComfyUI timeouts are locked in at startup, so a change to them needs a restart. Chat-generation, agent, embedding, and custom-tool timeouts take effect on the next request or agent run, with no restart. Invalid, zero, negative, or out-of-range chat or agent timeout values log a warning and safely use the five-minute default. Raise a media timeout when large or high-quality jobs fail partway through. To learn more about video jobs, see [Scene Video](media/scene-video.md).
 
 ## Privileged APIs (ADMIN_SECRET)
 

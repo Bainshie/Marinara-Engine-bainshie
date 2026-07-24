@@ -818,7 +818,10 @@ async function executeAgentWithTools(
   let totalTokens = 0;
   const debugAgentsEnabled = isDebugAgentsEnabled() && logger.isLevelEnabled("debug");
   const customParameters = agentCustomParameters(config);
-  const toolLoopSignal = agentCallSignal(context.signal, config.type === "illustrator" ? "illustrator" : undefined);
+  // Fresh per-call so AGENT_CALL_TIMEOUT_MS caps each LLM call, not the whole
+  // tool loop; earlier rounds must not eat a later round's budget.
+  const nextCallSignal = () =>
+    agentCallSignal(context.signal, config.type === "illustrator" ? "illustrator" : undefined);
 
   for (let round = 0; round < maxToolRounds; round++) {
     emitAgentDebug(context, {
@@ -839,7 +842,7 @@ async function executeAgentWithTools(
       customParameters,
       stream: streamResponses,
       tools: toolContext.tools,
-      signal: toolLoopSignal,
+      signal: nextCallSignal(),
     });
 
     totalTokens += result.usage?.totalTokens ?? 0;
@@ -922,7 +925,7 @@ async function executeAgentWithTools(
     cachingAtDepth: config.cachingAtDepth,
     customParameters,
     stream: streamResponses,
-    signal: toolLoopSignal,
+    signal: nextCallSignal(),
   });
   totalTokens += finalResult.usage?.totalTokens ?? 0;
   const responseText = finalResult.content?.trim() ?? "";
