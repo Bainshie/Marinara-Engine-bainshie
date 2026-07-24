@@ -6369,10 +6369,10 @@ test("Noodle polls support character creation and voting on both sides", async (
 
     const composer = noodle.locator('[data-component="NoodleView.InlineComposer"]');
     await composer.getByTitle("Create poll").click();
-    await page.getByPlaceholder("Ask a question").fill("Which experiment comes next?");
+    await page.getByPlaceholder("What question do you want to ask?").fill("Which experiment comes next?");
     await page.getByPlaceholder("Option 1").fill("Robotics");
     await page.getByPlaceholder("Option 2").fill("Alchemy");
-    await page.getByRole("button", { name: "Add Poll", exact: true }).click();
+    await page.getByRole("button", { name: "Add poll", exact: true }).click();
     await expect(composer.locator('[data-component="NoodleView.DraftPoll"]')).toBeVisible();
 
     const personaPollResponsePromise = page.waitForResponse(
@@ -6928,9 +6928,12 @@ test("Noodle reply notifications focus the actionable timeline reply", async ({ 
     ).toBe(true);
 
     await nestedComposer.getByTitle("Attach image").click();
-    const replyImageDivider = page.locator('[data-component="NoodleView.ReplyImageDivider"]');
-    await expect(replyImageDivider).toBeVisible();
-    await expect(replyImageDivider).toHaveCSS("color", "rgb(126, 167, 255)");
+    await expect(page.getByRole("heading", { name: "Add an image", exact: true })).toBeVisible();
+    await expect(page.getByRole("textbox", { name: "Image URL", exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Upload from device", exact: true })).toHaveCSS(
+      "background-color",
+      "rgb(126, 167, 255)",
+    );
 
     expect(errors).toEqual([]);
   } finally {
