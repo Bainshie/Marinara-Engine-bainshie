@@ -450,7 +450,12 @@ export function ConversationView({
         compact={compact}
       />
       <ActiveLorebookEntriesButton chatId={chatId} />
-      <ChatToolbarButton icon={<ImageIcon size="0.875rem" />} title="Gallery" onClick={onOpenGallery} />
+      <ChatToolbarButton
+        icon={<ImageIcon size="0.875rem" />}
+        title="Gallery"
+        panelAction="gallery"
+        onClick={onOpenGallery}
+      />
       {onSwitchChat && (
         <ChatToolbarButton
           icon={<ArrowRightLeft size="0.875rem" />}
@@ -458,7 +463,12 @@ export function ConversationView({
           onClick={onSwitchChat}
         />
       )}
-      <ChatToolbarButton icon={<Settings2 size="0.875rem" />} title="Chat Settings" onClick={onOpenSettings} />
+      <ChatToolbarButton
+        icon={<Settings2 size="0.875rem" />}
+        title="Chat Settings"
+        panelAction="settings"
+        onClick={onOpenSettings}
+      />
     </>
   );
   const renderHeader = () => (

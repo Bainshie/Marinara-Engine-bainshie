@@ -477,6 +477,10 @@ interface UIState {
   regexDetailReturn: { characterId: string; tab?: string } | null;
   /** One-shot tab the character editor should open to (set by the regex-editor return path) */
   characterDetailInitialTab: string | null;
+  /** One-shot tab the lorebook editor should open to. */
+  lorebookDetailInitialTab: string | null;
+  /** One-shot tab the persona editor should open to. */
+  personaDetailInitialTab: string | null;
   /** When true, the main area shows the browser */
   botBrowserOpen: boolean;
   /** When true, the main area shows the game assets browser */
@@ -817,9 +821,9 @@ interface UIState {
   setPresetPanelSort: (sort: ResourcePanelSort) => void;
   setConnectionPanelSort: (sort: ConnectionPanelSort) => void;
   setAgentPanelSort: (sort: ResourcePanelSort) => void;
-  openCharacterDetail: (id: string, options?: { preserveCharacterLibrary?: boolean }) => void;
+  openCharacterDetail: (id: string, options?: { preserveCharacterLibrary?: boolean; initialTab?: string }) => void;
   closeCharacterDetail: () => void;
-  openLorebookDetail: (id: string) => void;
+  openLorebookDetail: (id: string, options?: { initialTab?: string }) => void;
   closeLorebookDetail: () => void;
   openPresetDetail: (id: string) => void;
   closePresetDetail: () => void;
@@ -829,7 +833,7 @@ interface UIState {
   closeAgentDetail: () => void;
   openToolDetail: (id: string) => void;
   closeToolDetail: () => void;
-  openPersonaDetail: (id: string, options?: { preservePersonaLibrary?: boolean }) => void;
+  openPersonaDetail: (id: string, options?: { preservePersonaLibrary?: boolean; initialTab?: string }) => void;
   closePersonaDetail: () => void;
   openRegexDetail: (
     id: string,
@@ -1208,6 +1212,8 @@ export const useUIStore = create<UIState>()(
       regexDetailDefaultCharacterIds: null,
       regexDetailReturn: null,
       characterDetailInitialTab: null,
+      lorebookDetailInitialTab: null,
+      personaDetailInitialTab: null,
       botBrowserOpen: false,
       gameAssetsBrowserOpen: false,
       noodleOpen: false,
@@ -1506,7 +1512,7 @@ export const useUIStore = create<UIState>()(
             options?.preserveCharacterLibrary ?? (s.characterLibraryOpen && s.cardLibraryKind === "characters");
           return {
             characterDetailId: id,
-            characterDetailInitialTab: null,
+            characterDetailInitialTab: options?.initialTab ?? null,
             lorebookDetailId: null,
             presetDetailId: null,
             connectionDetailId: null,
@@ -1530,9 +1536,10 @@ export const useUIStore = create<UIState>()(
           editorDirty: false,
           ...restoreMobileDetailReturnPanel(s.detailReturnRightPanel),
         })),
-      openLorebookDetail: (id) =>
+      openLorebookDetail: (id, options) =>
         set((s) => ({
           lorebookDetailId: id,
+          lorebookDetailInitialTab: options?.initialTab ?? null,
           characterLibraryOpen: false,
           agentCatalogOpen: false,
           botBrowserOpen: false,
@@ -1656,6 +1663,7 @@ export const useUIStore = create<UIState>()(
             options?.preservePersonaLibrary ?? (s.characterLibraryOpen && s.cardLibraryKind === "personas");
           return {
             personaDetailId: id,
+            personaDetailInitialTab: options?.initialTab ?? null,
             characterLibraryOpen: preservePersonaLibrary ? s.characterLibraryOpen : false,
             personaLibrarySelectedId: preservePersonaLibrary ? id : s.personaLibrarySelectedId,
             agentCatalogOpen: false,

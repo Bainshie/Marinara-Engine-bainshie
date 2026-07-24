@@ -62,6 +62,8 @@ interface Props {
   lorebookId: string;
   isExpanded: boolean;
   onToggleExpand: () => void;
+  /** Drawer-friendly layout: hides wide inline controls and stacks expanded fields. */
+  compact?: boolean;
   characters: Array<{ id: string; name: string; tags: string[] }>;
   characterTags: string[];
   /**
@@ -93,7 +95,14 @@ interface Props {
    */
   previewMatch?: "matched" | "constant";
   mapBacklinks?: Array<{ chatId: string; locationId: string; locationName: string }>;
+  onUpdateEntry?: LorebookEntryUpdateHandler;
 }
+
+type LorebookEntryUpdateHandler = (
+  entryId: string,
+  changes: Partial<LorebookEntry>,
+  changedFields: Partial<LorebookEntry>,
+) => Promise<unknown>;
 
 /** Maps the (constant, selective) boolean pair into a single status enum for the inline select. */
 type EntryStatus = "constant" | "selective" | "normal";
@@ -131,9 +140,7 @@ const STATUS_DOT_COLOR: Record<EntryStatus, string> = {
 function isHeaderInlineControlTarget(target: EventTarget | null) {
   if (!(target instanceof Element)) return false;
   return Boolean(
-    target.closest(
-      'button, input, select, textarea, a, [role="button"], [role="menuitem"], [role="menuitemradio"]',
-    ),
+    target.closest('button, input, select, textarea, a, [role="button"], [role="menuitem"], [role="menuitemradio"]'),
   );
 }
 
@@ -197,6 +204,7 @@ export function LorebookEntryRow({
   lorebookId,
   isExpanded,
   onToggleExpand,
+  compact = false,
   characters,
   characterTags,
   folders,
@@ -215,6 +223,7 @@ export function LorebookEntryRow({
   onToggleSelected,
   previewMatch,
   mapBacklinks = [],
+  onUpdateEntry,
 }: Props) {
   const updateEntry = useUpdateLorebookEntry();
   const deleteEntry = useDeleteLorebookEntry();
@@ -337,9 +346,13 @@ export function LorebookEntryRow({
 
   const patch = useCallback(
     (changes: Partial<LorebookEntry>, options?: { onError?: () => void }) => {
+      if (onUpdateEntry) {
+        void onUpdateEntry(entry.id, changes, changes).catch(() => options?.onError?.());
+        return;
+      }
       updateEntry.mutate({ lorebookId, entryId: entry.id, ...changes }, options);
     },
-    [lorebookId, entry.id, updateEntry],
+    [lorebookId, entry.id, onUpdateEntry, updateEntry],
   );
 
   const handleStatusChange = useCallback(
@@ -352,13 +365,10 @@ export function LorebookEntryRow({
     [localStatus, patch],
   );
 
-  const handleStatusMenuToggle = useCallback(
-    (e: ReactMouseEvent) => {
-      e.stopPropagation();
-      setShowStatusMenu((current) => !current);
-    },
-    [],
-  );
+  const handleStatusMenuToggle = useCallback((e: ReactMouseEvent) => {
+    e.stopPropagation();
+    setShowStatusMenu((current) => !current);
+  }, []);
 
   const handleEnabledChange = useCallback(
     (next: boolean) => {
@@ -477,7 +487,9 @@ export function LorebookEntryRow({
     <div
       className={cn(
         "mari-editor-panel mari-editor-panel--soft relative transition-all",
-        isExpanded ? "border-[var(--marinara-editor-border-strong)]" : "hover:border-[var(--marinara-editor-border-strong)]",
+        isExpanded
+          ? "border-[var(--marinara-editor-border-strong)]"
+          : "hover:border-[var(--marinara-editor-border-strong)]",
         selectionMode && isSelected && "mari-chrome-accent-surface mari-accent-animated",
         isDragging && "opacity-40",
       )}
@@ -511,6 +523,7 @@ export function LorebookEntryRow({
           type="button"
           className={cn(
             "flex h-6 w-4 shrink-0 items-center justify-center rounded p-0 text-[var(--muted-foreground)] transition-colors sm:h-auto sm:w-auto sm:p-0.5",
+            compact && "hidden",
             draggable
               ? "cursor-grab hover:bg-[var(--accent)] hover:text-[var(--foreground)] active:cursor-grabbing"
               : "cursor-not-allowed opacity-40",
@@ -741,7 +754,11 @@ export function LorebookEntryRow({
           )}
         </button>
 
-        <div ref={mobileControlsRef} className="relative shrink-0 md:hidden" onClick={(e) => e.stopPropagation()}>
+        <div
+          ref={mobileControlsRef}
+          className={cn("relative shrink-0", !compact && "md:hidden")}
+          onClick={(e) => e.stopPropagation()}
+        >
           <button
             type="button"
             aria-label="Entry quick controls"
@@ -841,7 +858,10 @@ export function LorebookEntryRow({
         {/* ── Inline editable controls cluster ── */}
         {/* Hidden on very narrow viewports to keep the row from overflowing.
             Users on mobile can expand the drawer to access them. */}
-        <div className="hidden shrink-0 items-center gap-0.5 md:flex" onClick={(e) => e.stopPropagation()}>
+        <div
+          className={cn("hidden shrink-0 items-center gap-0.5", !compact && "md:flex")}
+          onClick={(e) => e.stopPropagation()}
+        >
           <CompactSelect
             value={String(localPosition)}
             onChange={(v) => {
@@ -911,7 +931,10 @@ export function LorebookEntryRow({
         <div className="flex shrink-0 items-center gap-1" onClick={(e) => e.stopPropagation()}>
           {/* Token estimate (compact) */}
           <span
-            className="hidden items-center gap-0.5 rounded px-1 py-0.5 text-[0.625rem] text-[var(--muted-foreground)] lg:inline-flex"
+            className={cn(
+              "hidden items-center gap-0.5 rounded px-1 py-0.5 text-[0.625rem] text-[var(--muted-foreground)]",
+              !compact && "lg:inline-flex",
+            )}
             title={`~${estimateTokens(entry.content).toLocaleString()} tokens (estimated)`}
           >
             <Hash size="0.5625rem" />
@@ -944,7 +967,14 @@ export function LorebookEntryRow({
 
       {/* ── Expanded drawer ── */}
       {isExpanded && (
-        <ExpandedDrawer entry={entry} lorebookId={lorebookId} characters={characters} characterTags={characterTags} />
+        <ExpandedDrawer
+          entry={entry}
+          lorebookId={lorebookId}
+          characters={characters}
+          characterTags={characterTags}
+          compact={compact}
+          onUpdateEntry={onUpdateEntry}
+        />
       )}
     </div>
   );
@@ -972,10 +1002,7 @@ function CompactSelect({
       value={value}
       title={title}
       onChange={(e) => onChange(e.target.value)}
-      className={cn(
-        "mari-editor-field h-6 min-w-0 truncate px-1 text-[0.625rem]",
-        className,
-      )}
+      className={cn("mari-editor-field h-6 min-w-0 truncate px-1 text-[0.625rem]", className)}
     >
       {options.map((opt) => (
         <option key={opt.value} value={opt.value}>
@@ -1029,10 +1056,7 @@ function CompactNumber({
   };
 
   return (
-    <label
-      className="mari-editor-field flex h-6 items-center gap-px px-1 text-[0.625rem]"
-      title={title}
-    >
+    <label className="mari-editor-field flex h-6 items-center gap-px px-1 text-[0.625rem]" title={title}>
       {prefix && <span className="text-[var(--muted-foreground)]">{prefix}:</span>}
       <input
         type="number"
@@ -1254,11 +1278,15 @@ function ExpandedDrawer({
   lorebookId,
   characters,
   characterTags,
+  compact,
+  onUpdateEntry,
 }: {
   entry: LorebookEntry;
   lorebookId: string;
   characters: Array<{ id: string; name: string; tags: string[] }>;
   characterTags: string[];
+  compact: boolean;
+  onUpdateEntry?: LorebookEntryUpdateHandler;
 }) {
   const { mutate: mutateEntry, mutateAsync: mutateEntryAsync } = useUpdateLorebookEntry();
   const [form, setForm] = useState<Partial<LorebookEntry>>(() => ({ ...entry }));
@@ -1268,6 +1296,7 @@ function ExpandedDrawer({
   const loadedEntryIdRef = useRef(entry.id);
   const formRef = useRef<Partial<LorebookEntry>>({ ...entry });
   const dirtyRef = useRef(false);
+  const changedFieldsRef = useRef<Partial<LorebookEntry>>({});
   const savingRef = useRef(false);
   const changeVersionRef = useRef(0);
   const autosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1298,6 +1327,7 @@ function ExpandedDrawer({
     const versionAtStart = changeVersionRef.current;
     const entryIdAtStart = loadedEntryIdRef.current;
     const snapshot = formRef.current;
+    const changedFieldsAtStart = { ...changedFieldsRef.current };
     savingRef.current = true;
     if (mountedRef.current) {
       setSaving(true);
@@ -1305,13 +1335,24 @@ function ExpandedDrawer({
     }
 
     try {
-      await mutateEntryAsync({
-        lorebookId,
-        entryId: entryIdAtStart,
-        ...buildEntrySavePayload(snapshot),
-      });
+      const sourceChanges = buildEntrySavePayload(snapshot);
+      if (onUpdateEntry) {
+        await onUpdateEntry(entryIdAtStart, sourceChanges, changedFieldsAtStart);
+      } else {
+        await mutateEntryAsync({
+          lorebookId,
+          entryId: entryIdAtStart,
+          ...sourceChanges,
+        });
+      }
 
       if (!mountedRef.current) return;
+      for (const [field, value] of Object.entries(changedFieldsAtStart)) {
+        const key = field as keyof LorebookEntry;
+        if (Object.is(changedFieldsRef.current[key], value)) {
+          delete changedFieldsRef.current[key];
+        }
+      }
       if (changeVersionRef.current === versionAtStart) {
         dirtyRef.current = false;
         setDirty(false);
@@ -1327,7 +1368,7 @@ function ExpandedDrawer({
       savingRef.current = false;
       if (mountedRef.current) setSaving(false);
     }
-  }, [clearAutosaveTimer, lorebookId, mutateEntryAsync, queueAutosave]);
+  }, [clearAutosaveTimer, lorebookId, mutateEntryAsync, onUpdateEntry, queueAutosave]);
 
   useEffect(() => {
     saveNowRef.current = saveNow;
@@ -1339,38 +1380,50 @@ function ExpandedDrawer({
       mountedRef.current = false;
       clearAutosaveTimer();
       if (dirtyRef.current) {
-        mutateEntry({
-          lorebookId,
-          entryId: loadedEntryIdRef.current,
-          ...buildEntrySavePayload(formRef.current),
-        });
+        const sourceChanges = buildEntrySavePayload(formRef.current);
+        if (onUpdateEntry) {
+          void onUpdateEntry(loadedEntryIdRef.current, sourceChanges, changedFieldsRef.current).catch(() => undefined);
+        } else {
+          mutateEntry({
+            lorebookId,
+            entryId: loadedEntryIdRef.current,
+            ...sourceChanges,
+          });
+        }
       }
     };
-  }, [clearAutosaveTimer, lorebookId, mutateEntry]);
+  }, [clearAutosaveTimer, lorebookId, mutateEntry, onUpdateEntry]);
 
   // If the underlying entry changes (e.g. due to an inline-control patch), refresh
   // the drawer form unless the user is in the middle of editing.
   useEffect(() => {
     const switched = loadedEntryIdRef.current !== entry.id;
     if (switched && dirtyRef.current) {
-      mutateEntry({
-        lorebookId,
-        entryId: loadedEntryIdRef.current,
-        ...buildEntrySavePayload(formRef.current),
-      });
+      const sourceChanges = buildEntrySavePayload(formRef.current);
+      if (onUpdateEntry) {
+        void onUpdateEntry(loadedEntryIdRef.current, sourceChanges, changedFieldsRef.current).catch(() => undefined);
+      } else {
+        mutateEntry({
+          lorebookId,
+          entryId: loadedEntryIdRef.current,
+          ...sourceChanges,
+        });
+      }
       dirtyRef.current = false;
+      changedFieldsRef.current = {};
       setDirty(false);
     }
 
     if (switched || (!dirtyRef.current && !savingRef.current)) {
       const next = { ...entry };
       formRef.current = next;
+      changedFieldsRef.current = {};
       setForm(next);
       setDirty(false);
       setSaveError(false);
       loadedEntryIdRef.current = entry.id;
     }
-  }, [entry, lorebookId, mutateEntry]);
+  }, [entry, lorebookId, mutateEntry, onUpdateEntry]);
 
   const update = useCallback(
     (patch: Partial<LorebookEntry>) => {
@@ -1380,6 +1433,7 @@ function ExpandedDrawer({
       setSaveError(false);
       const next = { ...formRef.current, ...patch };
       formRef.current = next;
+      changedFieldsRef.current = { ...changedFieldsRef.current, ...patch };
       setForm(next);
       queueAutosave();
     },
@@ -1399,7 +1453,12 @@ function ExpandedDrawer({
         flushAutosave();
       }}
     >
-      <div className="grid items-start gap-3 lg:grid-cols-[minmax(12rem,0.9fr)_minmax(13rem,1fr)_minmax(14rem,1.1fr)]">
+      <div
+        className={cn(
+          "grid items-start gap-3",
+          !compact && "lg:grid-cols-[minmax(12rem,0.9fr)_minmax(13rem,1fr)_minmax(14rem,1.1fr)]",
+        )}
+      >
         {/* Description */}
         <FieldGroup
           label="Description"
@@ -1458,7 +1517,7 @@ function ExpandedDrawer({
           Context filters & matching sources
         </summary>
         <div className="mt-3 space-y-3">
-          <div className="grid gap-3 lg:grid-cols-3">
+          <div className={cn("grid gap-3", !compact && "lg:grid-cols-3")}>
             <div className="mari-editor-panel mari-editor-panel--soft space-y-2 p-2">
               <div className="flex items-center justify-between gap-2">
                 <span className="text-[0.6875rem] font-medium">Characters</span>
@@ -1579,7 +1638,12 @@ function ExpandedDrawer({
         />
       </div>
 
-      <div className="grid items-start gap-3 lg:grid-cols-[minmax(8rem,0.65fr)_minmax(18rem,1.5fr)_minmax(16rem,1.15fr)]">
+      <div
+        className={cn(
+          "grid items-start gap-3",
+          !compact && "lg:grid-cols-[minmax(8rem,0.65fr)_minmax(18rem,1.5fr)_minmax(16rem,1.15fr)]",
+        )}
+      >
         {/* Role (position/depth/order/probability live on the row header). */}
         <FieldGroup
           label="Role"
@@ -1616,12 +1680,7 @@ function ExpandedDrawer({
               onChange={(v) => update({ cooldown: v || null })}
               min={0}
             />
-            <NumberField
-              label="Delay"
-              value={form.delay ?? 0}
-              onChange={(v) => update({ delay: v || null })}
-              min={0}
-            />
+            <NumberField label="Delay" value={form.delay ?? 0} onChange={(v) => update({ delay: v || null })} min={0} />
             <NumberField
               label="Ephemeral"
               value={form.ephemeral ?? 0}

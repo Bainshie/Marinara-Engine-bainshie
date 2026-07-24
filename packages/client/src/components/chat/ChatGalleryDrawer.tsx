@@ -18,12 +18,17 @@ import type { ChatImage } from "../../hooks/use-gallery";
 import { useInstalledCapabilityPackages } from "../../hooks/use-capability-packages";
 import { isDesktopShellNavigationTarget } from "../../lib/chat-floating-ui-events";
 import { parseChatMetadata } from "../../lib/chat-display";
+import {
+  getChatFloatingPanelDesktopRight,
+  isChatToolbarPanelTrigger,
+  type ChatToolbarFloatingPanelAnchor,
+} from "./ChatToolbarControls";
 
 interface ChatGalleryDrawerProps {
   chat: Chat;
   open: boolean;
   onClose: () => void;
-  anchor?: { right: number; top: number } | null;
+  anchor?: ChatToolbarFloatingPanelAnchor;
   /** Manually trigger the Illustrator agent */
   onIllustrate?: () => void | Promise<void>;
   /** Generate an on-demand Conversation selfie. */
@@ -89,6 +94,7 @@ export function ChatGalleryDrawer({
     const handlePointerDown = (event: PointerEvent) => {
       const target = event.target;
       if (isDesktopShellNavigationTarget(target)) return;
+      if (isChatToolbarPanelTrigger(target, "gallery")) return;
       if (!(target instanceof Node)) return;
       if (panelRef.current?.contains(target)) return;
       if (target instanceof Element && target.closest("[data-chat-floating-panel]")) return;
@@ -101,10 +107,15 @@ export function ChatGalleryDrawer({
 
   if (!open) return null;
   const panelStyle: CSSProperties | undefined = anchor
-    ? {
-        right: `max(${anchor.right}px, calc(var(--mari-chat-ui-inset-right, 0px) + 0.75rem))`,
-        top: `${anchor.top}px`,
-      }
+    ? typeof window !== "undefined" && window.innerWidth < 768
+      ? {
+          right: `${anchor.right}px`,
+          top: `${anchor.top}px`,
+        }
+      : {
+          right: getChatFloatingPanelDesktopRight(anchor),
+          top: `${anchor.top}px`,
+        }
     : undefined;
 
   return (
