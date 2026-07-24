@@ -14,6 +14,7 @@ import {
 } from "./neutral-surface-styles";
 import { useDialogFocusScope } from "../../hooks/use-dialog-focus-scope";
 import { useLocalizedUiText } from "../../localization/use-localized-ui-text";
+import { useTranslation as useUiTranslation } from "react-i18next";
 
 interface ModalProps {
   open: boolean;
@@ -52,6 +53,7 @@ export function Modal({
   panelStyle,
   closeDisabled = false,
 }: ModalProps) {
+  const { t: localizeUi } = useUiTranslation();
   const localize = useLocalizedUiText();
   const localizedTitle = localize(title);
   const overlayRef = useRef<HTMLDivElement>(null);
@@ -176,7 +178,7 @@ export function Modal({
             type="button"
             onClick={onClose}
             disabled={closeDisabled}
-            aria-label={`${localize("Close")} ${localizedTitle}`}
+            aria-label={localizeUi("ui.ui.modal.value1Value2", { value1: localize("Close"), value2: localizedTitle })}
             className="rounded-lg p-1.5 text-[var(--marinara-chat-chrome-panel-muted)] transition-colors hover:bg-[var(--marinara-chat-chrome-highlight-bg-hover)] hover:text-[var(--marinara-chat-chrome-highlight-text)] disabled:cursor-wait disabled:opacity-40"
           >
             <X size="1rem" />

@@ -97,6 +97,7 @@ import {
 import { HelpTooltip } from "../ui/HelpTooltip";
 import { Modal } from "../ui/Modal";
 import type { NoodleNavigationState } from "./noodle-navigation.types";
+import { useTranslation as useUiTranslation } from "react-i18next";
 
 interface NoodlerHomeProps {
   navigation: Extract<NoodleNavigationState, { mode: "private" | "verification" }>;
@@ -232,6 +233,7 @@ function errorMessage(error: unknown, fallback: string) {
 }
 
 export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
+  const { t: localizeUi } = useUiTranslation();
   const { data, isError, refetch } = useNoodle();
   const updateSettings = useUpdateNoodleSettings();
   const enabled = data?.settings.enableNoodler === true;
@@ -320,7 +322,7 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
   };
   const confirmDiscardPrivatePostDrafts = () =>
     Object.keys(privatePostDrafts).length === 0 ||
-    window.confirm("Discard unpublished NoodleR post drafts?");
+    window.confirm(localizeUi("ui.noodle.noodlerhome.discardUnpublishedNoodlerPostDrafts"));
   const exitToPublic = () => {
     if (!confirmDiscardPrivatePostDrafts()) return;
     setPrivatePostDrafts({});
@@ -415,7 +417,7 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
       };
       if (JSON.stringify(profileDraft) === JSON.stringify(savedDraft)) return true;
     }
-    return window.confirm("Discard unsaved profile changes?");
+    return window.confirm(localizeUi("ui.noodle.noodlerhome.discardUnsavedProfileChanges"));
   };
   const goToHub = () => {
     if (!confirmDiscardProfileDraft()) return;
@@ -430,14 +432,14 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
   const reactToPost = (post: NoodlePostCardModel, type: "like" | "repost", active = false) => {
     if (!viewerPersonaId) return;
     const onError = (error: unknown) =>
-      toast.error(errorMessage(error, active ? "Could not undo that reaction." : "Could not react to this post."));
+      toast.error(errorMessage(error, active ?localizeUi("ui.noodle.noodlerhome.couldNotUndoThatReaction") :localizeUi("ui.noodle.noodlerhome.couldNotReactToThisPost")));
     if (active) removeInteraction.mutate({ postId: post.id, personaId: viewerPersonaId, type }, { onError });
     else createInteraction.mutate({ postId: post.id, personaId: viewerPersonaId, type }, { onError });
   };
   const reactToReply = (post: NoodlePostCardModel, reply: NoodleInteraction, active: boolean) => {
     if (!viewerPersonaId) return;
     const payload = { postId: post.id, personaId: viewerPersonaId, type: "like" as const, parentInteractionId: reply.id };
-    const onError = (error: unknown) => toast.error(errorMessage(error, "Could not react to this reply."));
+    const onError = (error: unknown) => toast.error(errorMessage(error,localizeUi("ui.noodle.noodlerhome.couldNotReactToThisReply")));
     if (active) removeInteraction.mutate(payload, { onError });
     else createInteraction.mutate(payload, { onError });
   };
@@ -455,7 +457,7 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
         ...(input.parentInteractionId ? { parentInteractionId: input.parentInteractionId } : {}),
       },
       {
-        onError: (error) => toast.error(errorMessage(error, "Could not post this reply.")),
+        onError: (error) => toast.error(errorMessage(error,localizeUi("ui.noodle.noodlerhome.couldNotPostThisReply"))),
       },
     );
   };
@@ -463,14 +465,14 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
     await updatePost.mutateAsync(
       { id: post.id, accountId: post.authorAccountId, title: input.title, content: input.content },
       {
-        onError: (error) => toast.error(errorMessage(error, "Could not update this post.")),
+        onError: (error) => toast.error(errorMessage(error,localizeUi("ui.noodle.noodlerhome.couldNotUpdateThisPost"))),
       },
     );
   };
   const deleteNoodlePost = (post: NoodlePostCardModel) => {
-    if (!window.confirm("Delete this NoodleR post along with its likes, reposts, and replies?")) return;
+    if (!window.confirm(localizeUi("ui.noodle.noodlerhome.deleteThisNoodlerPostAlongWithItsLikesReposts"))) return;
     deletePost.mutate({ id: post.id, accountId: post.authorAccountId }, {
-      onError: (error) => toast.error(errorMessage(error, "Could not delete this post.")),
+      onError: (error) => toast.error(errorMessage(error,localizeUi("ui.noodle.noodlerhome.couldNotDeleteThisPost"))),
     });
   };
   const postCardController = useNoodlePostCardController({
@@ -516,7 +518,7 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
       { enableNoodler: true },
       {
         onSuccess: () => onNavigate({ mode: "private", view: "hub" }),
-        onError: (error) => toast.error(errorMessage(error, "Could not enable NoodleR.")),
+        onError: (error) => toast.error(errorMessage(error,localizeUi("ui.noodle.noodlerhome.couldNotEnableNoodler"))),
       },
     );
   };
@@ -582,7 +584,7 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
   const generateDraft = () => {
     if (!draftPublicAccountId && !editingProfileId) return;
     if (connections.length === 0) {
-      toast.error("No connections configured. Add one in Settings → Connections.");
+      toast.error(localizeUi("ui.noodle.stageprofileform.noConnectionsConfiguredAddOneInSettingsConnections"));
       return;
     }
     generateProfileDraft.mutate(
@@ -599,7 +601,7 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
           setProfileDraft(draft);
           setCreationStep("draft");
         },
-        onError: (error) => toast.error(errorMessage(error, "Could not generate a stage profile draft.")),
+        onError: (error) => toast.error(errorMessage(error,localizeUi("ui.noodle.noodlerhome.couldNotGenerateAStageProfileDraft"))),
       },
     );
   };
@@ -617,7 +619,7 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
       setCreationStep(null);
       setPreviousDraft(null);
       onNavigate({ mode: "private", view: "profile", accountId: profile.id });
-      toast.success(editingProfileId ? "Stage profile updated." : "Stage profile created.");
+      toast.success(editingProfileId ?localizeUi("ui.noodle.noodlerhome.stageProfileUpdated") :localizeUi("ui.noodle.noodlerhome.stageProfileCreated"));
     };
     const onError = async (error: unknown) => {
       if (!editingProfileId && draftPublicAccountId && error instanceof ApiError && error.status === 409) {
@@ -627,11 +629,11 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
           setProfileDraft(null);
           setCreationStep(null);
           onNavigate({ mode: "private", view: "profile", accountId: existing.id });
-          toast.info("That stage profile already existed, so it was opened instead.");
+          toast.info(localizeUi("ui.noodle.noodlerhome.thatStageProfileAlreadyExistedSoItWasOpened"));
           return;
         }
       }
-      toast.error(errorMessage(error, "Could not save the stage profile."));
+      toast.error(errorMessage(error,localizeUi("ui.noodle.noodlerhome.couldNotSaveTheStageProfile")));
     };
     if (editingProfileId) {
       updateProfile.mutate({ accountId: editingProfileId, ...input }, { onSuccess, onError });
@@ -648,7 +650,7 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
       access,
       ...(access === "ppv" ? { ppvPrice } : {}),
     });
-    toast.success("Private post published.");
+    toast.success(localizeUi("ui.noodle.noodlerhome.privatePostPublished"));
   };
 
   const submitGuidedPost = async ({ profileId, title, body, access, ppvPrice }: PrivatePostSubmission) => {
@@ -662,17 +664,17 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
     });
     if (result.imagePromptReview) {
       setImagePromptReview({ accountId: profileId, items: [result.imagePromptReview] });
-      toast.success("Private post generated. Review the image prompt to render it.");
+      toast.success(localizeUi("ui.noodle.noodlerhome.privatePostGeneratedReviewTheImagePromptToRender"));
       return;
     }
-    toast.success("Private post generated.");
+    toast.success(localizeUi("ui.noodle.noodlerhome.privatePostGenerated"));
   };
 
   const submitRunNow = (accountId: string) => {
     runAutoPostNow.mutate(accountId, {
       // Run-now never requests prompt review, so it only ever yields a plain generated post.
-      onSuccess: () => toast.success("Automatic post generated."),
-      onError: (error) => toast.error(errorMessage(error, "Could not run an automatic post now.")),
+      onSuccess: () => toast.success(localizeUi("ui.noodle.noodlerhome.automaticPostGenerated")),
+      onError: (error) => toast.error(errorMessage(error,localizeUi("ui.noodle.noodlerhome.couldNotRunAnAutomaticPostNow"))),
     });
   };
 
@@ -684,12 +686,12 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
         onSuccess: ({ finalized }) => {
           setImagePromptReview(null);
           if (finalized === 0) {
-            toast.error("No image was generated for that prompt.");
+            toast.error(localizeUi("ui.noodle.noodlerhome.noImageWasGeneratedForThatPrompt"));
             return;
           }
-          toast.success("NoodleR image generated.");
+          toast.success(localizeUi("ui.noodle.noodlerhome.noodlerImageGenerated"));
         },
-        onError: (error) => toast.error(errorMessage(error, "Could not generate the reviewed image.")),
+        onError: (error) => toast.error(errorMessage(error,localizeUi("ui.noodle.noodlerhome.couldNotGenerateTheReviewedImage"))),
       },
     );
   };
@@ -698,7 +700,7 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
     if (!viewerPersonaId) return;
     toggleSubscription.mutate(
       { creatorAccountId, personaId: viewerPersonaId, subscribed },
-      { onError: (error) => toast.error(errorMessage(error, "Could not update your subscription.")) },
+      { onError: (error) => toast.error(errorMessage(error,localizeUi("ui.noodle.noodlerhome.couldNotUpdateYourSubscription"))) },
     );
   };
 
@@ -765,7 +767,7 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
   if (!data && !isError) {
     return (
       <NoodleShell {...shellProps} rightRail={emptyRightRail}>
-        <NoodlerFrame onBack={exitToPublic} title="NoodleR">
+        <NoodlerFrame onBack={exitToPublic} title={localizeUi("ui.noodle.noodlemodetoggle.noodler")}>
           <div className="flex justify-center py-16">
             <Loader2 size={24} className="animate-spin text-[var(--noodle-blue)]" />
           </div>
@@ -777,8 +779,8 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
   if (!data && isError) {
     return (
       <NoodleShell {...shellProps} rightRail={emptyRightRail}>
-        <NoodlerFrame onBack={exitToPublic} title="NoodleR">
-          <EmptyState title="NoodleR could not be loaded." action="Try again" onAction={() => void refetch()} />
+        <NoodlerFrame onBack={exitToPublic} title={localizeUi("ui.noodle.noodlemodetoggle.noodler")}>
+          <EmptyState title={localizeUi("ui.noodle.noodlerhome.noodlerCouldNotBeLoaded")} action={localizeUi("capabilities.actions.tryAgain")} onAction={() => void refetch()} />
         </NoodlerFrame>
       </NoodleShell>
     );
@@ -787,16 +789,13 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
   if (navigation.mode === "verification" || (data && !enabled)) {
     return (
       <NoodleShell {...shellProps} rightRail={emptyRightRail}>
-      <NoodlerFrame onBack={exitToPublic} title="About NoodleR">
+      <NoodlerFrame onBack={exitToPublic} title={localizeUi("ui.noodle.noodlerhome.aboutNoodler")}>
         <div className="mx-auto flex max-w-xl flex-col items-center px-6 py-16 text-center">
           <span className="flex h-14 w-14 items-center justify-center rounded-full bg-[var(--noodle-blue)]/15 text-[var(--noodle-blue)]">
             <Lock size={28} />
           </span>
-          <h2 className="mt-5 text-2xl font-black">NoodleR is an optional private space.</h2>
-          <p className="mt-3 text-sm leading-6 text-[var(--muted-foreground)]">
-            NoodleR is intended for adults. Private creator accounts stay isolated from the public Noodle timeline.
-            Enable access only if you are 18 or older and want to create stage profiles.
-          </p>
+          <h2 className="mt-5 text-2xl font-black">{localizeUi("ui.noodle.noodlerhome.noodlerIsAnOptionalPrivateSpace")}</h2>
+          <p className="mt-3 text-sm leading-6 text-[var(--muted-foreground)]">{localizeUi("ui.noodle.noodlerhome.noodlerIsIntendedForAdultsPrivateCreatorAccountsStay")}</p>
           <button
             type="button"
             onClick={enableNoodler}
@@ -804,7 +803,7 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
             className="mt-6 inline-flex h-11 items-center justify-center gap-2 rounded-md bg-[var(--noodle-blue)] px-6 text-sm font-bold text-zinc-950 [&_svg]:!text-zinc-950 hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {updateSettings.isPending ? <Loader2 size={17} className="animate-spin" /> : <Check size={17} />}
-            {updateSettings.isPending ? "Enabling..." : "I am 18+ and want to enable NoodleR"}
+            {updateSettings.isPending ?localizeUi("ui.noodle.noodlerhome.enabling") :localizeUi("ui.noodle.noodlerhome.iAm18AndWantToEnableNoodler")}
           </button>
         </div>
       </NoodlerFrame>
@@ -815,7 +814,7 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
   if (creationStep === "source") {
     return (
       <NoodleShell {...shellProps} rightRail={emptyRightRail}>
-      <NoodlerFrame onBack={() => setCreationStep(null)} title="Create stage profile" hideBack>
+      <NoodlerFrame onBack={() => setCreationStep(null)} title={localizeUi("ui.noodle.noodlehome.createStageProfile")} hideBack>
         <StageProfileSourcePicker
           accounts={eligiblePublicAccounts}
           search={sourceSearch}
@@ -841,7 +840,7 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
   if (creationStep === "disclosure") {
     return (
       <NoodleShell {...shellProps} rightRail={emptyRightRail}>
-      <NoodlerFrame onBack={cancelCreateProfile} title="Set identity disclosure" hideBack>
+      <NoodlerFrame onBack={cancelCreateProfile} title={localizeUi("ui.noodle.noodlerhome.setIdentityDisclosure")} hideBack>
         <DisclosureStep
           source={selectedSource}
           value={creationDisclosure}
@@ -863,7 +862,7 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
       <NoodleShell {...shellProps} rightRail={emptyRightRail}>
       <NoodlerFrame
         onBack={editingProfileId ? closeProfileEditor : () => setCreationStep("disclosure")}
-        title={editingProfileId ? "Edit stage profile" : "Create stage profile"}
+        title={editingProfileId ?localizeUi("ui.noodle.noodlerhome.editStageProfile") :localizeUi("ui.noodle.noodlehome.createStageProfile")}
         hideBack={!editingProfileId}
       >
         <StageProfileForm
@@ -924,16 +923,22 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
           onRetry={() => void postsQuery.refetch()}
           onEdit={() => beginEdit(selectedProfile)}
           onDelete={() => {
-            if (!window.confirm(`Delete ${selectedProfile.displayName} and all of this NoodleR profile's posts?`)) {
+            if (
+              !window.confirm(
+                localizeUi("ui.noodle.stageProfile.deleteConfirmation", {
+                  name: selectedProfile.displayName,
+                }),
+              )
+            ) {
               return;
             }
             deleteProfile.mutate(selectedProfile.id, {
               onSuccess: () => {
                 clearPrivatePostDraft(selectedProfile.id);
                 onNavigate({ mode: "private", view: "profiles" });
-                toast.success("Stage profile deleted.");
+                toast.success(localizeUi("ui.noodle.noodlerhome.stageProfileDeleted"));
               },
-              onError: (error) => toast.error(errorMessage(error, "Could not delete the stage profile.")),
+              onError: (error) => toast.error(errorMessage(error,localizeUi("ui.noodle.noodlerhome.couldNotDeleteTheStageProfile"))),
             });
           }}
           onManualPost={submitManualPost}
@@ -946,7 +951,7 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
             if (!viewerPersonaId) return;
             unlockPost.mutate(
               { postId, personaId: viewerPersonaId },
-              { onError: (error) => toast.error(errorMessage(error, "Could not unlock this post.")) },
+              { onError: (error) => toast.error(errorMessage(error,localizeUi("ui.noodle.noodlerhome.couldNotUnlockThisPost"))) },
             );
           }}
           unlockPending={unlockPost.isPending}
@@ -958,8 +963,8 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
             updateAccess.mutate(
               { accountId: selectedProfile.id, ...access },
               {
-                onSuccess: () => toast.success("Access settings updated."),
-                onError: (error) => toast.error(errorMessage(error, "Could not update access settings.")),
+                onSuccess: () => toast.success(localizeUi("ui.noodle.noodlerhome.accessSettingsUpdated")),
+                onError: (error) => toast.error(errorMessage(error,localizeUi("ui.noodle.noodlerhome.couldNotUpdateAccessSettings"))),
               },
             )
           }
@@ -980,7 +985,7 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
           <input
             value={feedSearch}
             onChange={(event) => setFeedSearch(event.target.value)}
-            placeholder="Search posts or @creators"
+            placeholder={localizeUi("ui.noodle.noodlerhome.searchPostsOrCreators")}
             className="min-w-0 flex-1 border-0 bg-transparent text-sm text-[var(--foreground)] outline-none placeholder:text-[var(--muted-foreground)]"
           />
           {feedSearch.trim() && (
@@ -988,7 +993,7 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
               type="button"
               onClick={() => setFeedSearch("")}
               className="flex h-6 w-6 items-center justify-center rounded-full text-[var(--noodle-blue)] hover:bg-[var(--noodle-blue)]/10"
-              title="Clear search"
+              title={localizeUi("ui.noodle.noodlehome.clearSearch")}
             >
               <X size={13} />
             </button>
@@ -1013,8 +1018,8 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
           <main className="min-h-0 flex-1 overflow-y-auto">
           <div className="flex min-h-14 items-center gap-3 border-b border-[var(--noodle-divider)] px-4 py-3">
             <div className="min-w-0 flex-1">
-              <p className="text-sm font-bold">Stage profiles</p>
-              <p className="text-xs text-[var(--muted-foreground)]">Private identities and guided posts</p>
+              <p className="text-sm font-bold">{localizeUi("ui.noodle.noodlerhome.stageProfiles")}</p>
+              <p className="text-xs text-[var(--muted-foreground)]">{localizeUi("ui.noodle.noodlerhome.privateIdentitiesAndGuidedPosts")}</p>
             </div>
             <button
               type="button"
@@ -1025,43 +1030,46 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
                     const skipped = outcomes.filter((o) => o.status === "skipped").length;
                     const failed = outcomes.length - generated - skipped;
                     if (outcomes.length === 0) {
-                      toast.success("No creators have automatic posting enabled.");
+                      toast.success(localizeUi("ui.noodle.noodlerhome.noCreatorsHaveAutomaticPostingEnabled"));
                     } else if (failed === 0) {
-                      toast.success(`Generated ${generated} post${generated === 1 ? "" : "s"}.`);
+                      toast.success(localizeUi("ui.noodle.refresh.generatedPosts", { count: generated }));
                     } else if (generated === 0) {
-                      toast.error(`All ${failed} creator${failed === 1 ? "" : "s"} failed to post (connection or provider error).`);
+                      toast.error(localizeUi("ui.noodle.refresh.allCreatorsFailed", { count: failed }));
                     } else {
-                      toast.error(`Generated ${generated}, ${failed} failed${skipped ? `, ${skipped} skipped` : ""}.`);
+                      toast.error(
+                        localizeUi(
+                          skipped
+                            ? "ui.noodle.refresh.partialFailureWithSkipped"
+                            : "ui.noodle.refresh.partialFailure",
+                          { generated, failed, skipped },
+                        ),
+                      );
                     }
                   },
-                  onError: (error) => toast.error(errorMessage(error, "Could not refresh NoodleR creators.")),
+                  onError: (error) => toast.error(errorMessage(error,localizeUi("ui.noodle.noodlerhome.couldNotRefreshNoodlerCreators"))),
                 })
               }
               disabled={refreshAllNow.isPending}
-              title="Runs an automatic-style post now for every creator with automatic posting enabled."
+              title={localizeUi("ui.noodle.noodlerhome.runsAnAutomaticStylePostNowForEveryCreator")}
               className="inline-flex min-h-11 items-center gap-2 rounded-md border border-[var(--noodle-divider)] px-3 text-xs font-bold hover:bg-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {refreshAllNow.isPending ? <Loader2 size={15} className="animate-spin" /> : <RefreshCw size={15} />}
-              Refresh NoodleR now
-            </button>
+              {refreshAllNow.isPending ? <Loader2 size={15} className="animate-spin" /> : <RefreshCw size={15} />}{localizeUi("ui.noodle.noodlerhome.refreshNoodlerNow")}</button>
             <button
               type="button"
               onClick={beginCreate}
               disabled={sourcePickerLoading || eligibleAccountsQuery.isError || eligiblePublicAccounts.length === 0}
               title={
                 sourcePickerLoading
-                  ? "Loading eligible sources"
+                  ?localizeUi("ui.noodle.noodlerhome.loadingEligibleSources")
                   : eligibleAccountsQuery.isError
-                    ? "Sources unavailable"
+                    ?localizeUi("ui.noodle.noodlerhome.sourcesUnavailable")
                     : eligiblePublicAccounts.length === 0
-                      ? "Every eligible account already has a stage profile"
+                      ?localizeUi("ui.noodle.noodlerhome.everyEligibleAccountAlreadyHasAStageProfile")
                       : undefined
               }
               className="inline-flex min-h-11 items-center gap-2 rounded-md bg-[var(--noodle-blue)] px-3 text-xs font-bold text-zinc-950 [&_svg]:!text-zinc-950 hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              <Plus size={15} />
-              New profile
-            </button>
+              <Plus size={15} />{localizeUi("ui.noodle.noodlerhome.newProfile")}</button>
           </div>
           {accountsQuery.isLoading ? (
             <div className="flex justify-center py-16">
@@ -1069,8 +1077,8 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
             </div>
           ) : accountsQuery.isError ? (
             <EmptyState
-              title="Stage profiles could not be loaded."
-              action="Try again"
+              title={localizeUi("ui.noodle.noodlerhome.stageProfilesCouldNotBeLoaded")}
+              action={localizeUi("capabilities.actions.tryAgain")}
               onAction={() => void accountsQuery.refetch()}
             />
           ) : accountsQuery.data && accountsQuery.data.length > 0 ? (
@@ -1089,7 +1097,7 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
                       <DisclosureBadge mode={profile.disclosureMode} />
                     </div>
                     <p className="truncate text-xs text-[var(--muted-foreground)]">
-                      {profile.disclosureMode ? `@${profile.handle}` : "Complete this legacy stage profile"}
+                      {profile.disclosureMode ?localizeUi("ui.noodle.noodlehome.value1_0a5edda", { value1: profile.handle }) :localizeUi("ui.noodle.noodlerhome.completeThisLegacyStageProfile")}
                     </p>
                   </div>
                   <ChevronRight size={17} className="shrink-0 text-[var(--muted-foreground)]" />
@@ -1098,9 +1106,9 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
             </div>
           ) : (
             <EmptyState
-              title="No stage profiles yet."
+              title={localizeUi("ui.noodle.noodlerhome.noStageProfilesYet")}
               detail="Create a separate private identity for an eligible persona or character."
-              action={eligiblePublicAccounts.length > 0 ? "Create stage profile" : undefined}
+              action={eligiblePublicAccounts.length > 0 ?localizeUi("ui.noodle.noodlehome.createStageProfile") : undefined}
               onAction={eligiblePublicAccounts.length > 0 ? beginCreate : undefined}
             />
           )}
@@ -1126,7 +1134,7 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
           if (!viewerPersonaId) return;
           unlockPost.mutate(
             { postId, personaId: viewerPersonaId },
-            { onError: (error) => toast.error(errorMessage(error, "Could not unlock this post.")) },
+            { onError: (error) => toast.error(errorMessage(error,localizeUi("ui.noodle.noodlerhome.couldNotUnlockThisPost"))) },
           );
         }}
         search={feedSearch}
@@ -1215,6 +1223,7 @@ function StageProfileForm({
   onCancel: () => void;
   onSave: () => void;
 }) {
+  const { t: localizeUi } = useUiTranslation();
   const [connectionPickerOpen, setConnectionPickerOpen] = useState(false);
   const [relationshipPickerOpen, setRelationshipPickerOpen] = useState(false);
   const [relationshipPickerPosition, setRelationshipPickerPosition] = useState<{
@@ -1281,7 +1290,7 @@ function StageProfileForm({
           <div
             ref={relationshipPickerMenuRef}
             role="listbox"
-            aria-label="Identity relationship"
+            aria-label={localizeUi("ui.noodle.stageprofileform.identityRelationship")}
             onPointerDown={(event) => event.stopPropagation()}
             onKeyDown={(event) => {
               if (event.key === "Escape") {
@@ -1315,9 +1324,11 @@ function StageProfileForm({
                   )}
                 >
                   <span className="min-w-0 flex-1">
-                    <span className="block text-xs font-semibold text-[var(--foreground)]">{option.label}</span>
+                    <span className="block text-xs font-semibold text-[var(--foreground)]">
+                      {localizeUi(`ui.noodle.disclosure.${option.value}.label`)}
+                    </span>
                     <span className="mt-0.5 block text-[0.6875rem] leading-4 text-[var(--muted-foreground)]">
-                      {option.detail}
+                      {localizeUi(`ui.noodle.disclosure.${option.value}.detail`)}
                     </span>
                   </span>
                   {isSelected && <Check size={14} className="mt-0.5 shrink-0 text-[var(--noodle-blue)]" />}
@@ -1339,15 +1350,15 @@ function StageProfileForm({
             </span>
             <div className="min-w-0">
               <p className="text-sm font-bold">
-                {isEditing ? "Refine this stage identity" : "Create the stage identity"}
+                {isEditing ?localizeUi("ui.noodle.stageprofileform.refineThisStageIdentity") :localizeUi("ui.noodle.stageprofileform.createTheStageIdentity")}
               </p>
               <div className="mt-1 flex flex-wrap items-center gap-x-1 text-xs leading-5 text-[var(--muted-foreground)]">
                 <span>
                   {source
-                    ? `Built from ${source.displayName} (@${source.handle}).`
-                    : "Your source identity is kept separate from this stage profile."}
+                    ?localizeUi("ui.noodle.stageprofileform.builtFromValue1Value2", { value1: source.displayName, value2: source.handle })
+                    :localizeUi("ui.noodle.stageprofileform.yourSourceIdentityIsKeptSeparateFromThisStage")}
                 </span>
-                <span>Relationship:</span>
+                <span>{localizeUi("ui.noodle.stageprofileform.relationship")}</span>
                 <div ref={relationshipPickerRef} className="relative">
                   <button
                     type="button"
@@ -1357,7 +1368,7 @@ function StageProfileForm({
                     aria-expanded={relationshipPickerOpen}
                     className="inline-flex items-center gap-1 rounded px-1 py-0.5 font-bold text-[var(--foreground)] transition-colors hover:bg-foreground/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-blue)] disabled:cursor-not-allowed disabled:opacity-50"
                   >
-                    {selectedDisclosure.label}
+                    {localizeUi(`ui.noodle.disclosure.${selectedDisclosure.value}.label`)}
                     <ChevronDown
                       size={13}
                       className={cn("transition-transform", relationshipPickerOpen && "rotate-180")}
@@ -1372,7 +1383,7 @@ function StageProfileForm({
         <div className="mt-5 space-y-4">
           <div className="grid gap-3 sm:grid-cols-2">
               <label className="block space-y-1">
-                <span className="text-xs font-semibold">Stage name</span>
+                <span className="text-xs font-semibold">{localizeUi("ui.noodle.stageprofileform.stageName")}</span>
                 <input
                   required
                   aria-required="true"
@@ -1384,7 +1395,7 @@ function StageProfileForm({
                 />
               </label>
               <label className="block space-y-1">
-                <span className="text-xs font-semibold">Stage handle</span>
+                <span className="text-xs font-semibold">{localizeUi("ui.noodle.stageprofileform.stageHandle")}</span>
                 <span className="relative block">
                   <span
                     aria-hidden="true"
@@ -1399,13 +1410,13 @@ function StageProfileForm({
                     value={draft.handle}
                     maxLength={40}
                     onChange={(event) => onChange({ handle: event.target.value })}
-                    placeholder="afterhours"
+                    placeholder={localizeUi("ui.noodle.stageprofileform.afterhours")}
                     className={`${fieldClass} !h-10 !pl-7`}
                   />
                 </span>
               </label>
             <label className="block space-y-1">
-              <span className="text-xs font-semibold">Bio</span>
+              <span className="text-xs font-semibold">{localizeUi("ui.noodle.noodleprofilesurface.bio")}</span>
               <textarea
                 rows={2}
                 disabled={isGenerating || isPending}
@@ -1416,14 +1427,14 @@ function StageProfileForm({
               />
             </label>
             <label className="block space-y-1">
-              <span className="text-xs font-semibold">Stage voice</span>
+              <span className="text-xs font-semibold">{localizeUi("ui.noodle.stageprofileform.stageVoice")}</span>
               <textarea
                 rows={2}
                 disabled={isGenerating || isPending}
                 value={draft.stagePersonality}
                 maxLength={1000}
                 onChange={(event) => onChange({ stagePersonality: event.target.value })}
-                placeholder="Voice, attitude, boundaries, and creator persona"
+                placeholder={localizeUi("ui.noodle.stageprofileform.voiceAttitudeBoundariesAndCreatorPersona")}
                 className={`${textareaClass} !min-h-0`}
               />
             </label>
@@ -1434,10 +1445,8 @@ function StageProfileForm({
                 <Sparkles size={16} />
               </span>
               <span className="min-w-0 flex-1">
-                <span className="block text-sm font-bold">AI guidance</span>
-                <span className="block text-xs leading-5 text-[var(--muted-foreground)]">
-                  Generate or rewrite an editable profile draft.
-                </span>
+                <span className="block text-sm font-bold">{localizeUi("ui.noodle.stageprofileform.aiGuidance")}</span>
+                <span className="block text-xs leading-5 text-[var(--muted-foreground)]">{localizeUi("ui.noodle.stageprofileform.generateOrRewriteAnEditableProfileDraft")}</span>
               </span>
               <ChevronDown
                 size={18}
@@ -1446,20 +1455,18 @@ function StageProfileForm({
             </summary>
             <div className="border-t border-[var(--noodle-divider)] p-4">
               <label className="block space-y-2">
-                <span className="text-xs font-semibold">Optional direction for AI</span>
+                <span className="text-xs font-semibold">{localizeUi("ui.noodle.stageprofileform.optionalDirectionForAi")}</span>
                 <textarea
                   value={guidance}
                   maxLength={2000}
                   disabled={isGenerating || isPending}
                   onChange={(event) => onGuidanceChange(event.target.value)}
-                  placeholder="A mysterious late-night photographer with a warm but guarded voice"
+                  placeholder={localizeUi("ui.noodle.stageprofileform.aMysteriousLateNightPhotographerWithAWarmBut")}
                   className={`${textareaClass} min-h-20`}
                 />
               </label>
               {connections.length === 0 && (
-                <p className="mt-3 rounded-md border border-[var(--destructive)]/30 bg-[var(--destructive)]/5 p-3 text-xs leading-5">
-                  No connections configured. Add one in Settings → Connections.
-                </p>
+                <p className="mt-3 rounded-md border border-[var(--destructive)]/30 bg-[var(--destructive)]/5 p-3 text-xs leading-5">{localizeUi("ui.noodle.stageprofileform.noConnectionsConfiguredAddOneInSettingsConnections")}</p>
               )}
               <div className="mt-3 flex items-center justify-end gap-2">
                 {connections.length > 0 && (
@@ -1468,10 +1475,18 @@ function StageProfileForm({
                       type="button"
                       disabled={isGenerating || isPending}
                       onClick={() => setConnectionPickerOpen((open) => !open)}
-                      aria-label={`Generation connection: ${selectedConnection?.name ?? "Default connection"}`}
+                      aria-label={localizeUi("ui.noodle.connection.generationLabel", {
+                        name:
+                          selectedConnection?.name ??
+                          localizeUi("ui.noodle.connection.default"),
+                      })}
                       aria-haspopup="listbox"
                       aria-expanded={connectionPickerOpen}
-                      title={`Connection: ${selectedConnection?.name ?? "Default connection"}`}
+                      title={localizeUi("ui.noodle.connection.title", {
+                        name:
+                          selectedConnection?.name ??
+                          localizeUi("ui.noodle.connection.default"),
+                      })}
                       className={cn(
                         "flex h-11 max-w-[calc(100%-10.5rem)] items-center justify-center gap-2 rounded-md border border-[var(--noodle-divider)] px-3 transition-colors hover:bg-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-blue)] sm:max-w-64",
                         connectionPickerOpen && "border-[var(--noodle-blue)] bg-[var(--noodle-blue)]/10",
@@ -1480,13 +1495,13 @@ function StageProfileForm({
                     >
                       <Link size={18} className="shrink-0 !text-[var(--noodle-blue)]" />
                       <span className="truncate text-xs font-semibold">
-                        {selectedConnection?.name ?? "Default connection"}
+                        {selectedConnection?.name ?? localizeUi("ui.noodle.connection.default")}
                       </span>
                     </button>
                     {connectionPickerOpen && (
                       <div
                         role="listbox"
-                        aria-label="Generation connections"
+                        aria-label={localizeUi("ui.noodle.stageprofileform.generationConnections")}
                         onKeyDown={(event) => {
                           if (event.key === "Escape") {
                             event.stopPropagation();
@@ -1495,9 +1510,7 @@ function StageProfileForm({
                         }}
                         className="absolute bottom-full left-0 z-50 mb-2 flex w-64 max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-xl border border-foreground/10 bg-[var(--card)] shadow-2xl"
                       >
-                        <div className="border-b border-foreground/10 px-3 py-2 text-[0.6875rem] font-semibold">
-                          Connections
-                        </div>
+                        <div className="border-b border-foreground/10 px-3 py-2 text-[0.6875rem] font-semibold">{localizeUi("navigation.topbar.connections")}</div>
                         <div className="max-h-60 overflow-y-auto p-1">
                           <button
                             type="button"
@@ -1512,7 +1525,7 @@ function StageProfileForm({
                               !connectionId && "bg-foreground/5 font-semibold",
                             )}
                           >
-                            <span className="flex-1 truncate">Default connection</span>
+                            <span className="flex-1 truncate">{localizeUi("ui.noodle.stageprofileform.defaultConnection")}</span>
                             {!connectionId && <Check size={14} />}
                           </button>
                           {connections.map((connection) => {
@@ -1557,10 +1570,10 @@ function StageProfileForm({
                 >
                   {isGenerating ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}{" "}
                   {isGenerating
-                    ? "Generating draft..."
+                    ?localizeUi("ui.noodle.stageprofileform.generatingDraft")
                     : previousDraft
-                      ? "Rewrite draft"
-                      : "Generate draft"}
+                      ?localizeUi("ui.noodle.stageprofileform.rewriteDraft")
+                      :localizeUi("ui.noodle.stageprofileform.generateDraft")}
                 </button>
               </div>
               {previousDraft && !isGenerating && (
@@ -1568,9 +1581,7 @@ function StageProfileForm({
                   type="button"
                   onClick={onUndoDraft}
                   className="mt-1 flex min-h-11 w-full items-center justify-center text-xs font-semibold text-[var(--noodle-blue)] hover:underline"
-                >
-                  Undo AI changes
-                </button>
+                >{localizeUi("ui.noodle.stageprofileform.undoAiChanges")}</button>
               )}
             </div>
           </details>
@@ -1590,7 +1601,7 @@ function StageProfileForm({
             className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-[var(--noodle-blue)] px-5 text-sm font-bold text-zinc-950 [&_svg]:!text-zinc-950 hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {isPending ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />}
-            {isPending ? "Saving..." : isEditing ? "Save changes" : "Create stage profile"}
+            {isPending ?localizeUi("ui.noodle.stageprofileform.saving") : isEditing ?localizeUi("ui.noodle.stageprofileform.saveChanges") :localizeUi("ui.noodle.noodlehome.createStageProfile")}
           </button>
         }
       />
@@ -1638,47 +1649,40 @@ function StageProfileSourcePicker({
   onBack: () => void;
   onContinue: () => void;
 }) {
+  const { t: localizeUi } = useUiTranslation();
   return (
     <div className="mx-auto flex w-full max-w-2xl flex-col">
       <div className="px-4 py-5 sm:px-6 lg:py-6">
-        <h2 className="text-xl font-black">Choose a source character or persona</h2>
-        <p className="mt-2 max-w-xl text-sm leading-6 text-[var(--muted-foreground)]">
-          NoodleR will create a separate stage identity from this character or persona. You will choose exactly how much
-          of the public identity can carry over next.
-        </p>
+        <h2 className="text-xl font-black">{localizeUi("ui.noodle.stageprofilesourcepicker.chooseASourceCharacterOrPersona")}</h2>
+        <p className="mt-2 max-w-xl text-sm leading-6 text-[var(--muted-foreground)]">{localizeUi("ui.noodle.stageprofilesourcepicker.noodlerWillCreateASeparateStageIdentityFromThis")}</p>
         <label className="relative mt-5 block">
           <Search size={16} className="absolute left-3 top-3 text-[var(--muted-foreground)]" />
           <input
             value={search}
             onChange={(event) => onSearch(event.target.value)}
-            placeholder="Search characters and personas"
+            placeholder={localizeUi("ui.noodle.stageprofilesourcepicker.searchCharactersAndPersonas")}
             className={`${fieldClass} pl-9`}
           />
         </label>
         {selectedId && !accounts.some((account) => account.id === selectedId) && (
-          <p className="mt-3 rounded-md border border-[var(--noodle-blue)]/40 bg-[var(--noodle-blue)]/10 p-3 text-xs leading-5 text-[var(--foreground)]">
-            A selected source is hidden by the current search or filter. Clear the search or switch to All to review it.
-          </p>
+          <p className="mt-3 rounded-md border border-[var(--noodle-blue)]/40 bg-[var(--noodle-blue)]/10 p-3 text-xs leading-5 text-[var(--foreground)]">{localizeUi("ui.noodle.stageprofilesourcepicker.aSelectedSourceIsHiddenByTheCurrentSearch")}</p>
         )}
         {isLoading ? (
           <div className="mt-4 flex items-center justify-center gap-2 rounded-lg border border-[var(--noodle-divider)] py-12 text-sm text-[var(--muted-foreground)]">
-            <Loader2 size={18} className="animate-spin" /> Loading sources...
-          </div>
+            <Loader2 size={18} className="animate-spin" /> {localizeUi("ui.noodle.stageprofilesourcepicker.loadingSources")}</div>
         ) : isError ? (
           <div className="mt-4 rounded-lg border border-[var(--destructive)]/30 bg-[var(--destructive)]/5 p-6 text-center">
-            <p className="text-sm font-semibold">Sources could not be loaded.</p>
+            <p className="text-sm font-semibold">{localizeUi("ui.noodle.stageprofilesourcepicker.sourcesCouldNotBeLoaded")}</p>
             <button
               type="button"
               onClick={onRetry}
               className="mt-3 min-h-11 rounded-md border border-[var(--noodle-divider)] px-4 text-sm font-semibold hover:bg-[var(--accent)]"
-            >
-              Try again
-            </button>
+            >{localizeUi("capabilities.actions.tryAgain")}</button>
           </div>
         ) : (
           <div
             className="mt-3 grid grid-cols-3 rounded-lg border border-[var(--noodle-divider)] p-1"
-            aria-label="Filter profile sources"
+            aria-label={localizeUi("ui.noodle.stageprofilesourcepicker.filterProfileSources")}
           >
             {(["all", "character", "persona"] as const).map((option) => (
               <button
@@ -1688,7 +1692,7 @@ function StageProfileSourcePicker({
                 onClick={() => onKindChange(option)}
                 className={`min-h-11 rounded-md px-2 text-xs font-semibold capitalize ${kind === option ? "bg-[var(--noodle-blue)] text-zinc-950" : "text-[var(--muted-foreground)] hover:bg-[var(--accent)] hover:text-[var(--foreground)]"}`}
               >
-                {option === "all" ? "All" : option === "character" ? "Characters" : "Personas"}
+                {option === "all" ?localizeUi("ui.noodle.stageprofilesourcepicker.all") : option === "character" ?localizeUi("navigation.topbar.characters") :localizeUi("navigation.topbar.personas")}
               </button>
             ))}
           </div>
@@ -1696,9 +1700,7 @@ function StageProfileSourcePicker({
         {!isLoading && !isError && (
           <div className="mt-4 max-h-[min(28rem,50vh)] divide-y divide-[var(--noodle-divider)] overflow-y-auto rounded-lg border border-[var(--noodle-divider)]">
             {accounts.length === 0 ? (
-              <p className="p-6 text-center text-sm text-[var(--muted-foreground)]">
-                No eligible source accounts match that search.
-              </p>
+              <p className="p-6 text-center text-sm text-[var(--muted-foreground)]">{localizeUi("ui.noodle.stageprofilesourcepicker.noEligibleSourceAccountsMatchThatSearch")}</p>
             ) : (
               accounts.map((account) => (
                 <button
@@ -1742,7 +1744,7 @@ function StageProfileSourcePicker({
             className="mt-3 flex min-h-11 w-full items-center justify-center gap-2 rounded-md border border-[var(--noodle-divider)] text-sm font-semibold hover:bg-[var(--accent)] disabled:opacity-50"
           >
             {isLoadingMore && <Loader2 size={15} className="animate-spin" />}
-            {isLoadingMore ? "Loading more..." : "Load more characters"}
+            {isLoadingMore ?localizeUi("ui.noodle.stageprofilesourcepicker.loadingMore") :localizeUi("ui.noodle.stageprofilesourcepicker.loadMoreCharacters")}
           </button>
         )}
       </div>
@@ -1769,17 +1771,14 @@ function DisclosureStep({
   onBack: () => void;
   onContinue: () => void;
 }) {
+  const { t: localizeUi } = useUiTranslation();
   return (
     <div className="mx-auto flex w-full max-w-2xl flex-col">
       <div className="px-4 py-5 sm:px-6 lg:py-6">
-        <h2 className="text-xl font-black">How connected should this feel?</h2>
-        <p className="mt-2 text-sm leading-6 text-[var(--muted-foreground)]">
-          Choose the relationship between this private stage identity and the character or persona you selected. This is
-          about identity disclosure, not access, subscriptions, or who can view posts.
-        </p>
+        <h2 className="text-xl font-black">{localizeUi("ui.noodle.disclosurestep.howConnectedShouldThisFeel")}</h2>
+        <p className="mt-2 text-sm leading-6 text-[var(--muted-foreground)]">{localizeUi("ui.noodle.disclosurestep.chooseTheRelationshipBetweenThisPrivateStageIdentityAnd")}</p>
         {source && (
-          <p className="mt-4 rounded-md bg-[var(--accent)] p-3 text-xs text-[var(--muted-foreground)]">
-            Source: <span className="font-bold text-[var(--foreground)]">{source.displayName}</span> (@{source.handle})
+          <p className="mt-4 rounded-md bg-[var(--accent)] p-3 text-xs text-[var(--muted-foreground)]">{localizeUi("ui.noodle.disclosurestep.source")} <span className="font-bold text-[var(--foreground)]">{source.displayName}</span> (@{source.handle})
           </p>
         )}
         <div className="mt-5 space-y-3">
@@ -1797,9 +1796,15 @@ function DisclosureStep({
                 {value === option.value && <Check size={13} className="!text-zinc-950" />}
               </span>
               <span>
-                <span className="block text-sm font-bold">{option.label}</span>
-                <span className="mt-1 block text-xs leading-5 text-[var(--muted-foreground)]">{option.detail}</span>
-                <span className="mt-2 block text-xs leading-5 text-[var(--muted-foreground)]">{option.guidance}</span>
+                <span className="block text-sm font-bold">
+                  {localizeUi(`ui.noodle.disclosure.${option.value}.label`)}
+                </span>
+                <span className="mt-1 block text-xs leading-5 text-[var(--muted-foreground)]">
+                  {localizeUi(`ui.noodle.disclosure.${option.value}.detail`)}
+                </span>
+                <span className="mt-2 block text-xs leading-5 text-[var(--muted-foreground)]">
+                  {localizeUi(`ui.noodle.disclosure.${option.value}.guidance`)}
+                </span>
               </span>
             </button>
           ))}
@@ -1829,24 +1834,40 @@ function WizardFooter({
   backLabel?: string;
   showProgress?: boolean;
 }) {
-  const labels = ["Source", "Disclosure", "Profile"];
+  const { t: localizeUi } = useUiTranslation();
+  const labels = [
+    localizeUi("ui.noodle.wizard.source"),
+    localizeUi("ui.noodle.wizard.disclosure"),
+    localizeUi("ui.noodle.wizard.profile"),
+  ];
   return (
     <div className="sticky bottom-0 z-[60] shrink-0 border-t border-[var(--noodle-divider)] bg-[var(--background)] px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 sm:px-6">
       {showProgress && (
         <div
           className="mb-3 flex items-center justify-center gap-1.5"
           role="status"
-          aria-label={`Step ${step + 1} of ${labels.length}: ${labels[step]}`}
+          aria-label={localizeUi("ui.noodle.wizard.progressLabel", {
+            current: step + 1,
+            total: labels.length,
+            label: labels[step],
+          })}
         >
           {labels.map((label, index) => (
             <span key={label} className="flex items-center gap-1.5">
               <span
                 aria-current={index === step ? "step" : undefined}
-                aria-label={`Step ${index + 1}: ${label}${index === step ? ", current" : index < step ? ", complete" : ""}`}
+                aria-label={localizeUi(
+                  index === step
+                    ? "ui.noodle.wizard.stepCurrent"
+                    : index < step
+                      ? "ui.noodle.wizard.stepComplete"
+                      : "ui.noodle.wizard.step",
+                  { number: index + 1, label },
+                )}
                 title={label}
                 className={`h-1.5 rounded-full transition-all ${index === step ? "w-6 bg-[var(--noodle-blue)]" : index < step ? "w-4 bg-[var(--noodle-blue)]/45" : "w-2 bg-[var(--muted-foreground)]/25"}`}
               />
-              {index < labels.length - 1 && <span className="sr-only">to</span>}
+              {index < labels.length - 1 && <span className="sr-only">{localizeUi("ui.noodle.wizardfooter.to")}</span>}
             </span>
           ))}
         </div>
@@ -1866,8 +1887,7 @@ function WizardFooter({
             onClick={onNext}
             disabled={nextDisabled || disabled}
             className="inline-flex min-h-11 items-center gap-2 rounded-md bg-[var(--noodle-blue)] px-5 text-sm font-bold text-zinc-950 [&_svg]:!text-zinc-950 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            Continue <ArrowRight size={16} />
+          >{localizeUi("ui.noodle.wizardfooter.continue")} <ArrowRight size={16} />
           </button>
         )}
       </div>
@@ -1938,6 +1958,7 @@ function StageProfileView({
   deletePending: boolean;
   onAccessChange: (access: NoodlerManagedStageProfile["access"]) => void;
 }) {
+  const { t: localizeUi } = useUiTranslation();
   const [accessSettingsOpen, setAccessSettingsOpen] = useState(false);
   const [automationOpen, setAutomationOpen] = useState(false);
   const [rescheduleDraft, setRescheduleDraft] = useState("");
@@ -1978,13 +1999,13 @@ function StageProfileView({
     <>
       {activeTab === "subscribers" ? (
         subscribersQuery.isLoading ? (
-          <div className="flex justify-center py-12" role="status" aria-label="Loading subscribers">
+          <div className="flex justify-center py-12" role="status" aria-label={localizeUi("ui.noodle.stageprofileview.loadingSubscribers")}>
             <Loader2 size={22} className="animate-spin text-[var(--noodle-blue)]" />
           </div>
         ) : subscribersQuery.isError ? (
           <EmptyState
-            title="Subscribers could not be loaded."
-            action="Try again"
+            title={localizeUi("ui.noodle.stageprofileview.subscribersCouldNotBeLoaded")}
+            action={localizeUi("capabilities.actions.tryAgain")}
             onAction={() => void subscribersQuery.refetch()}
           />
         ) : (subscribersQuery.data ?? []).length > 0 ? (
@@ -2010,7 +2031,7 @@ function StageProfileView({
           </div>
         ) : (
           <EmptyState
-            title="No subscribers yet."
+            title={localizeUi("ui.noodle.stageprofileview.noSubscribersYet")}
             detail="When a viewer subscribes to this creator, they will appear here."
           />
         )
@@ -2018,14 +2039,14 @@ function StageProfileView({
         <div className="flex justify-center py-12"><Loader2 size={22} className="animate-spin text-[var(--noodle-blue)]" /></div>
       ) : viewerIsError ? (
         <EmptyState
-          title="Viewer access could not be loaded."
-          action="Try again"
+          title={localizeUi("ui.noodle.stageprofileview.viewerAccessCouldNotBeLoaded")}
+          action={localizeUi("capabilities.actions.tryAgain")}
           onAction={onRetryViewer}
         />
       ) : isError ? (
         <EmptyState
-          title="Private posts could not be loaded."
-          action="Try again"
+          title={localizeUi("ui.noodle.stageprofileview.privatePostsCouldNotBeLoaded")}
+          action={localizeUi("capabilities.actions.tryAgain")}
           onAction={onRetry}
         />
       ) : visiblePosts.length > 0 ? visiblePosts.map((item) =>
@@ -2051,8 +2072,7 @@ function StageProfileView({
           ) : item.kind === "managed-reveal" ? (
             <div key={item.model.id}>
               <div className="flex min-h-11 items-center justify-between gap-3 border-b border-[var(--noodle-divider)] bg-[var(--noodle-blue)]/5 px-4">
-                <span className="text-xs font-semibold text-[var(--muted-foreground)]">
-                  Controller view · hidden from {viewerAccount?.displayName ?? "this viewer"}
+                <span className="text-xs font-semibold text-[var(--muted-foreground)]">{localizeUi("ui.noodle.stageprofileview.controllerViewHiddenFrom")} {viewerAccount?.displayName ?? "this viewer"}
                 </span>
                 <button
                   type="button"
@@ -2064,9 +2084,7 @@ function StageProfileView({
                     })
                   }
                   className="min-h-11 shrink-0 px-2 text-xs font-bold text-[var(--noodle-blue)]"
-                >
-                  Hide
-                </button>
+                >{localizeUi("ui.noodle.stageprofileview.hide")}</button>
               </div>
               <NoodlePostCard
                 post={item.model}
@@ -2085,7 +2103,7 @@ function StageProfileView({
             />
           ),
         ) : (
-          <EmptyState title={activeTab === "posts" ? "No private posts yet." : `No ${activeTab} posts yet.`} />
+          <EmptyState title={activeTab === "posts" ?localizeUi("ui.noodle.stageprofileview.noPrivatePostsYet") :localizeUi("ui.noodle.stageprofileview.noValue1PostsYet", { value1: activeTab })} />
         )}
     </>
   );
@@ -2098,12 +2116,12 @@ function StageProfileView({
         handleMeta={<>
           {profile.disclosureMode === "hinted" && profile.publicIdentity ? (
             <HelpTooltip
-              label="Hinted"
+              label={localizeUi("ui.noodle.stageprofileview.hinted")}
               side="bottom"
               buttonClassName="border border-[var(--noodle-divider)] px-2 py-0.5 text-[0.68rem] font-bold text-[var(--muted-foreground)] opacity-100 [&_svg]:hidden"
               text={
                 <span>
-                  <span className="block font-bold text-[var(--popover-foreground)]">Linked identity</span>
+                  <span className="block font-bold text-[var(--popover-foreground)]">{localizeUi("ui.noodle.stageprofileview.linkedIdentity")}</span>
                   <span className="mt-1 block">
                     {profile.publicIdentity.displayName} (@{profile.publicIdentity.handle})
                   </span>
@@ -2114,17 +2132,14 @@ function StageProfileView({
             <DisclosureBadge mode={profile.disclosureMode} />
           )}
           {profile.disclosureMode === "open" && profile.publicIdentity && (
-            <span className="text-xs text-[var(--muted-foreground)]">
-              Openly linked to {profile.publicIdentity.displayName} (@{profile.publicIdentity.handle})
+            <span className="text-xs text-[var(--muted-foreground)]">{localizeUi("ui.noodle.stageprofileview.openlyLinkedTo")} {profile.publicIdentity.displayName} (@{profile.publicIdentity.handle})
             </span>
           )}
         </>}
         decorativeBanner
         leadingActions={
           viewingOwnCreator ? (
-            <span className="inline-flex h-9 items-center rounded-full border border-[var(--noodle-divider)] px-4 text-xs font-bold text-[var(--muted-foreground)]">
-              Your Profile
-            </span>
+            <span className="inline-flex h-9 items-center rounded-full border border-[var(--noodle-divider)] px-4 text-xs font-bold text-[var(--muted-foreground)]">{localizeUi("ui.noodle.stageprofileview.yourProfile")}</span>
           ) : viewerCreator ? (
             <button
               type="button"
@@ -2137,7 +2152,7 @@ function StageProfileView({
                   : "bg-[var(--foreground)] text-[var(--background)]",
               )}
             >
-              {viewerCreator.subscribed ? "Subscribed" : "Subscribe"}
+              {viewerCreator.subscribed ?localizeUi("ui.noodle.stageprofileview.subscribed") :localizeUi("ui.noodle.lockedprivatepostcard.subscribe")}
             </button>
           ) : undefined
         }
@@ -2148,28 +2163,26 @@ function StageProfileView({
               type="button"
               onClick={onEdit}
               className="h-9 rounded-full bg-[var(--noodle-blue)] px-4 text-xs font-bold text-zinc-950 transition-opacity hover:opacity-90"
-            >
-              Edit Profile
-            </button>
+            >{localizeUi("ui.noodle.stageprofileview.editProfile")}</button>
             <button
               type="button"
               onClick={() => setAccessSettingsOpen(true)}
               className="h-9 rounded-full border border-[var(--noodle-divider)] px-4 text-xs font-bold hover:bg-[var(--accent)]"
-            >
-              Access
-            </button>
+            >{localizeUi("ui.noodle.stageprofileview.access")}</button>
             <button
               type="button"
               onClick={() => setAutomationOpen(true)}
               className="h-9 rounded-full border border-[var(--noodle-divider)] px-4 text-xs font-bold hover:bg-[var(--accent)]"
             >
-              {autoPosting.enabled ? "Automation · On" : "Automation"}
+              {autoPosting.enabled ?localizeUi("ui.noodle.stageprofileview.automationOn") :localizeUi("ui.noodle.stageprofileview.automation")}
             </button>
             <button
               type="button"
               onClick={onDelete}
               disabled={deletePending}
-              aria-label={`Delete ${profile.displayName} profile`}
+              aria-label={localizeUi("ui.noodle.stageProfile.deleteLabel", {
+                name: profile.displayName,
+              })}
               className="flex h-9 w-9 items-center justify-center rounded-full border border-[var(--destructive)]/45 text-[var(--destructive)] hover:bg-[var(--destructive)]/10 disabled:cursor-wait disabled:opacity-50"
             >
               {deletePending ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
@@ -2177,12 +2190,18 @@ function StageProfileView({
           </div>
         }
         tabs={[
-          { id: "posts", label: "Posts" },
-          { id: "media", label: "Media" },
+          { id: "posts", label: localizeUi("ui.noodle.profile.tabs.posts") },
+          { id: "media", label: localizeUi("ui.noodle.profile.tabs.media") },
           {
             id: "subscribers",
-            label: `Subscribers (${subscribersQuery.data?.length ?? "…"})`,
-            ariaLabel: `Subscribers, ${subscribersQuery.data?.length ?? "loading"} total`,
+            label: localizeUi("ui.noodle.stageProfile.tabs.subscribers", {
+              count: subscribersQuery.data?.length ?? "…",
+            }),
+            ariaLabel: localizeUi("ui.noodle.stageProfile.tabs.subscribersAria", {
+              count:
+                subscribersQuery.data?.length ??
+                localizeUi("ui.noodle.stageProfile.tabs.loading"),
+            }),
           },
         ]}
         activeTab={activeTab}
@@ -2205,23 +2224,19 @@ function StageProfileView({
       <Modal
         open={accessSettingsOpen}
         onClose={() => setAccessSettingsOpen(false)}
-        title="Subscriber access"
+        title={localizeUi("ui.noodle.stageprofileview.subscriberAccess")}
         width="max-w-md"
         panelStyle={{ "--noodle-blue": accent } as React.CSSProperties}
       >
         <div className="space-y-4">
           <div className="flex items-start justify-between gap-4">
-            <p className="text-xs leading-5 text-[var(--muted-foreground)]">
-              These rules apply only to this stage profile.
-            </p>
+            <p className="text-xs leading-5 text-[var(--muted-foreground)]">{localizeUi("ui.noodle.stageprofileview.theseRulesApplyOnlyToThisStageProfile")}</p>
             {accessPending && <Loader2 size={16} className="shrink-0 animate-spin text-[var(--noodle-blue)]" />}
           </div>
           <label className="flex min-h-11 items-center justify-between gap-4 rounded-md border border-[var(--noodle-divider)] px-3 py-2">
             <span>
-              <span className="block text-xs font-bold">Subscriptions include PPV</span>
-              <span className="block text-xs text-[var(--muted-foreground)]">
-                Subscribers skip individual PPV unlocks.
-              </span>
+              <span className="block text-xs font-bold">{localizeUi("ui.noodle.stageprofileview.subscriptionsIncludePpv")}</span>
+              <span className="block text-xs text-[var(--muted-foreground)]">{localizeUi("ui.noodle.stageprofileview.subscribersSkipIndividualPpvUnlocks")}</span>
             </span>
             <input
               type="checkbox"
@@ -2233,7 +2248,7 @@ function StageProfileView({
           </label>
           {viewerAccounts.length > 0 && (
             <fieldset>
-              <legend className="text-xs font-bold">Hidden from personas</legend>
+              <legend className="text-xs font-bold">{localizeUi("ui.noodle.stageprofileview.hiddenFromPersonas")}</legend>
               <div className="mt-2 divide-y divide-[var(--noodle-divider)] rounded-md border border-[var(--noodle-divider)]">
                 {viewerAccounts.map((account) => {
                   const owningAccount = profile.publicAccountId === account.id;
@@ -2266,15 +2281,12 @@ function StageProfileView({
       <Modal
         open={automationOpen}
         onClose={() => setAutomationOpen(false)}
-        title="Automatic posting"
+        title={localizeUi("ui.noodle.stageprofileview.automaticPosting")}
         width="max-w-md"
         panelStyle={{ "--noodle-blue": accent } as React.CSSProperties}
       >
         <div className="space-y-4">
-          <p className="text-xs leading-5 text-[var(--muted-foreground)]">
-            When on, this creator posts on its own while Marinara runs, guided by its Bio and
-            Stage voice below. Automatic posts are subscriber-only.
-          </p>
+          <p className="text-xs leading-5 text-[var(--muted-foreground)]">{localizeUi("ui.noodle.stageprofileview.whenOnThisCreatorPostsOnItsOwnWhile")}</p>
           <button
             type="button"
             onClick={() => {
@@ -2282,11 +2294,9 @@ function StageProfileView({
               onEdit();
             }}
             className="h-9 w-full rounded-full border border-[var(--noodle-divider)] px-3 text-xs font-bold hover:bg-[var(--accent)]"
-          >
-            Edit Bio &amp; Stage voice
-          </button>
+          >{localizeUi("ui.noodle.stageprofileview.editBioStageVoice")}</button>
           <label className="flex min-h-11 items-center justify-between gap-4 rounded-md border border-[var(--noodle-divider)] px-3 py-2">
-            <span className="text-xs font-bold">Automatic posting enabled</span>
+            <span className="text-xs font-bold">{localizeUi("ui.noodle.stageprofileview.automaticPostingEnabled")}</span>
             <input
               type="checkbox"
               checked={autoPosting.enabled}
@@ -2294,23 +2304,23 @@ function StageProfileView({
               onChange={(event) =>
                 updateAutoPosting.mutate(
                   { accountId: profile.id, enabled: event.target.checked },
-                  { onError: (error) => toast.error(errorMessage(error, "Could not update automatic posting.")) },
+                  { onError: (error) => toast.error(errorMessage(error,localizeUi("ui.noodle.stageprofileview.couldNotUpdateAutomaticPosting"))) },
                 )
               }
               className="h-5 w-5 accent-[var(--noodle-blue)]"
             />
           </label>
           <fieldset disabled={!autoPosting.enabled || updateAutoPosting.isPending} className="disabled:opacity-50">
-            <legend className="text-xs font-bold">Cadence</legend>
+            <legend className="text-xs font-bold">{localizeUi("ui.noodle.stageprofileview.cadence")}</legend>
             <div className="mt-2 flex gap-2">
-              {AUTO_POST_INTENSITIES.map(({ label, value }) => (
+              {AUTO_POST_INTENSITIES.map(({ labelKey, value }) => (
                 <button
                   key={value}
                   type="button"
                   onClick={() =>
                     updateAutoPosting.mutate(
                       { accountId: profile.id, intensity: value },
-                      { onError: (error) => toast.error(errorMessage(error, "Could not update cadence.")) },
+                      { onError: (error) => toast.error(errorMessage(error,localizeUi("ui.noodle.stageprofileview.couldNotUpdateCadence"))) },
                     )
                   }
                   className={cn(
@@ -2320,24 +2330,26 @@ function StageProfileView({
                       : "border-[var(--noodle-divider)] hover:bg-[var(--accent)]",
                   )}
                 >
-                  {label}
+                  {localizeUi(labelKey)}
                 </button>
               ))}
             </div>
             <p className="mt-1 text-[0.68rem] text-[var(--muted-foreground)]">
-              About {autoPosting.intensity} automatic post{autoPosting.intensity === 1 ? "" : "s"} per day.
+              {localizeUi("ui.noodle.automation.postsPerDay", {
+                count: autoPosting.intensity,
+              })}
             </p>
           </fieldset>
           <fieldset disabled={updateAutoPosting.isPending} className="space-y-2 disabled:opacity-50">
             <label className="flex min-h-11 items-center justify-between gap-4 rounded-md border border-[var(--noodle-divider)] px-3 py-2">
-              <span className="text-xs font-bold">Generate an image with posts</span>
+              <span className="text-xs font-bold">{localizeUi("ui.noodle.stageprofileview.generateAnImageWithPosts")}</span>
               <input
                 type="checkbox"
                 checked={autoPosting.imagesEnabled}
                 onChange={(event) =>
                   updateAutoPosting.mutate(
                     { accountId: profile.id, imagesEnabled: event.target.checked },
-                    { onError: (error) => toast.error(errorMessage(error, "Could not update image generation.")) },
+                    { onError: (error) => toast.error(errorMessage(error,localizeUi("ui.noodle.stageprofileview.couldNotUpdateImageGeneration"))) },
                   )
                 }
                 className="h-5 w-5 accent-[var(--noodle-blue)]"
@@ -2351,20 +2363,17 @@ function StageProfileView({
               onClick={() => onRunNow(profile.id)}
               className="h-9 w-full rounded-full border border-[var(--noodle-divider)] px-3 text-xs font-bold hover:bg-[var(--accent)] disabled:opacity-50"
             >
-              {runNowPending ? "Running…" : "Run now"}
+              {runNowPending ?localizeUi("ui.noodle.stageprofileview.running") :localizeUi("ui.noodle.stageprofileview.runNow")}
             </button>
-            <p className="text-[0.68rem] text-[var(--muted-foreground)]">
-              Generates one automatic-style post immediately (subscriber access), the same way a
-              scheduled run would. Useful for testing without waiting for the next slot.
-            </p>
+            <p className="text-[0.68rem] text-[var(--muted-foreground)]">{localizeUi("ui.noodle.stageprofileview.generatesOneAutomaticStylePostImmediatelySubscriberAccessThe")}</p>
           </div>
           {autoPosting.enabled && (
             <div className="space-y-2 rounded-md border border-[var(--noodle-divider)] px-3 py-2">
-              <p className="text-xs font-bold">Next automatic post</p>
+              <p className="text-xs font-bold">{localizeUi("ui.noodle.stageprofileview.nextAutomaticPost")}</p>
               <p className="text-xs text-[var(--muted-foreground)]">
                 {autoPosting.nextRunAt
                   ? new Date(autoPosting.nextRunAt).toLocaleString()
-                  : "Scheduling the first run…"}
+                  :localizeUi("ui.noodle.stageprofileview.schedulingTheFirstRun")}
               </p>
               <div className="flex items-center gap-2">
                 <input
@@ -2379,21 +2388,19 @@ function StageProfileView({
                   onClick={() => {
                     const next = new Date(rescheduleDraft);
                     if (Number.isNaN(next.getTime()) || next.getTime() <= Date.now()) {
-                      toast.error("Pick a future date and time to reschedule.");
+                      toast.error(localizeUi("ui.noodle.stageprofileview.pickAFutureDateAndTimeToReschedule"));
                       return;
                     }
                     rescheduleAutoPost.mutate(
                       { accountId: profile.id, nextRunAt: next.toISOString() },
                       {
                         onSuccess: () => setRescheduleDraft(""),
-                        onError: (error) => toast.error(errorMessage(error, "Could not reschedule the next post.")),
+                        onError: (error) => toast.error(errorMessage(error,localizeUi("ui.noodle.stageprofileview.couldNotRescheduleTheNextPost"))),
                       },
                     );
                   }}
                   className="h-9 rounded-full border border-[var(--noodle-divider)] px-3 text-xs font-bold hover:bg-[var(--accent)] disabled:opacity-50"
-                >
-                  Reschedule
-                </button>
+                >{localizeUi("ui.noodle.stageprofileview.reschedule")}</button>
               </div>
             </div>
           )}
@@ -2403,10 +2410,10 @@ function StageProfileView({
   );
 }
 
-const AUTO_POST_INTENSITIES: { label: string; value: NoodleAutoPostingIntensity }[] = [
-  { label: "Low", value: 1 },
-  { label: "Medium", value: 3 },
-  { label: "High", value: 6 },
+const AUTO_POST_INTENSITIES: { labelKey: string; value: NoodleAutoPostingIntensity }[] = [
+  { labelKey: "ui.noodle.automation.intensity.low", value: 1 },
+  { labelKey: "ui.noodle.automation.intensity.medium", value: 3 },
+  { labelKey: "ui.noodle.automation.intensity.high", value: 6 },
 ];
 
 function ViewerHub({
@@ -2468,10 +2475,11 @@ function ViewerHub({
   onToggleSubscription: (creatorAccountId: string, subscribed: boolean) => void;
   togglePending: boolean;
 }) {
+  const { t: localizeUi } = useUiTranslation();
   if (personas.length === 0) {
     return (
       <EmptyState
-        title="Create a persona to browse NoodleR."
+        title={localizeUi("ui.noodle.viewerhub.createAPersonaToBrowseNoodler")}
         detail="Subscriptions and unlocks belong to one viewer persona."
       />
     );
@@ -2508,7 +2516,7 @@ function ViewerHub({
             )}
             aria-pressed={tab === option.id}
           >
-            {option.label}
+            {localizeUi(`ui.noodle.viewer.tabs.${option.id}`)}
             {tab === option.id && (
               <span className="absolute bottom-0 left-1/2 h-1 w-14 -translate-x-1/2 rounded-full bg-[var(--noodle-blue)]" />
             )}
@@ -2536,26 +2544,22 @@ function ViewerHub({
           guidePending={guidePending}
         />
       ) : authorLoading ? (
-        <div className="border-b border-[var(--noodle-divider)] px-4 py-4 text-xs text-[var(--muted-foreground)]">
-          Resolving your linked NoodleR profile…
-        </div>
+        <div className="border-b border-[var(--noodle-divider)] px-4 py-4 text-xs text-[var(--muted-foreground)]">{localizeUi("ui.noodle.viewerhub.resolvingYourLinkedNoodlerProfile")}</div>
       ) : authorError ? (
         <div className="border-b border-[var(--noodle-divider)] px-4 py-4">
-          <p className="text-sm font-semibold">Your linked NoodleR profile could not be loaded.</p>
-          <button type="button" onClick={onRetryAuthor} className="mt-3 min-h-10 rounded-md border border-[var(--noodle-divider)] px-3 text-xs font-bold hover:bg-[var(--accent)]">Try again</button>
+          <p className="text-sm font-semibold">{localizeUi("ui.noodle.viewerhub.yourLinkedNoodlerProfileCouldNotBeLoaded")}</p>
+          <button type="button" onClick={onRetryAuthor} className="mt-3 min-h-10 rounded-md border border-[var(--noodle-divider)] px-3 text-xs font-bold hover:bg-[var(--accent)]">{localizeUi("capabilities.actions.tryAgain")}</button>
         </div>
       ) : (
         <div className="border-b border-[var(--noodle-divider)] px-4 py-4">
-          <p className="text-sm font-semibold">This persona has no linked NoodleR profile.</p>
-          <p className="mt-1 text-xs text-[var(--muted-foreground)]">Create one to author from this timeline.</p>
+          <p className="text-sm font-semibold">{localizeUi("ui.noodle.viewerhub.thisPersonaHasNoLinkedNoodlerProfile")}</p>
+          <p className="mt-1 text-xs text-[var(--muted-foreground)]">{localizeUi("ui.noodle.viewerhub.createOneToAuthorFromThisTimeline")}</p>
           {onCreateAuthorProfile && (
             <button
               type="button"
               onClick={onCreateAuthorProfile}
               className="mt-3 min-h-10 rounded-md border border-[var(--noodle-divider)] px-3 text-xs font-bold hover:bg-[var(--accent)]"
-            >
-              Create stage profile
-            </button>
+            >{localizeUi("ui.noodle.noodlehome.createStageProfile")}</button>
           )}
         </div>
       )}
@@ -2565,15 +2569,15 @@ function ViewerHub({
           onClick={onRefresh}
           disabled={isRefreshing}
           className="flex h-9 w-full items-center justify-center gap-2 rounded-full text-sm font-bold text-[var(--noodle-blue)] transition-colors hover:bg-[var(--noodle-blue)]/10 disabled:cursor-not-allowed disabled:opacity-50"
-          title="Refresh timeline"
-          aria-label="Refresh timeline"
+          title={localizeUi("ui.noodle.noodlehome.refreshTimeline")}
+          aria-label={localizeUi("ui.noodle.noodlehome.refreshTimeline")}
         >
           {isRefreshing ? (
             <Loader2 size={17} className="!text-[var(--noodle-blue)] animate-spin" />
           ) : (
             <RefreshCw size={17} className="!text-[var(--noodle-blue)]" />
           )}
-          {isRefreshing ? "Refreshing" : "Refresh timeline"}
+          {isRefreshing ?localizeUi("ui.noodle.noodlehome.refreshing") :localizeUi("ui.noodle.noodlehome.refreshTimeline")}
         </button>
       </div>
       {isLoading ? (
@@ -2581,11 +2585,11 @@ function ViewerHub({
           <Loader2 size={24} className="animate-spin text-[var(--noodle-blue)]" />
         </div>
       ) : isError ? (
-        <EmptyState title="NoodleR could not be loaded for this persona." action="Try again" onAction={onRetry} />
+        <EmptyState title={localizeUi("ui.noodle.viewerhub.noodlerCouldNotBeLoadedForThisPersona")} action={localizeUi("capabilities.actions.tryAgain")} onAction={onRetry} />
       ) : scope && scope.creators.length > 0 ? (
         <>
           {feed.length === 0 ? (
-            <p className="px-4 py-8 text-xs text-[var(--muted-foreground)]">No posts yet.</p>
+            <p className="px-4 py-8 text-xs text-[var(--muted-foreground)]">{localizeUi("ui.noodle.viewerhub.noPostsYet")}</p>
           ) : (
             <div>
               {feed.map(({ post, creator }) =>
@@ -2616,9 +2620,13 @@ function ViewerHub({
         </>
       ) : (
         <EmptyState
-          title={authorProfile ? "No other stage profiles are visible to this persona." : "No stage profiles are visible to this persona."}
-          detail={authorProfile ? "Your own stage profile and its posts are still available." : undefined}
-          action={authorProfile && onOpenAuthorProfile ? `View ${authorProfile.displayName}` : undefined}
+          title={authorProfile ?localizeUi("ui.noodle.viewerhub.noOtherStageProfilesAreVisibleToThisPersona") :localizeUi("ui.noodle.viewerhub.noStageProfilesAreVisibleToThisPersona")}
+          detail={
+            authorProfile
+              ? localizeUi("ui.noodle.viewerhub.ownStageProfileStillAvailable")
+              : undefined
+          }
+          action={authorProfile && onOpenAuthorProfile ?localizeUi("ui.noodle.viewerhub.viewValue1", { value1: authorProfile.displayName }) : undefined}
           onAction={authorProfile ? onOpenAuthorProfile : undefined}
         />
       )}
@@ -2647,6 +2655,7 @@ function LockedPrivatePostCard({
   onToggleSubscription: (creatorAccountId: string, subscribed: boolean) => void;
   onManage?: () => void;
 }) {
+  const { t: localizeUi } = useUiTranslation();
   return (
     <article className="flex gap-3 border-b border-[var(--noodle-divider)] px-4 py-4">
       <ProfileInitial profile={profile} />
@@ -2660,17 +2669,17 @@ function LockedPrivatePostCard({
           <div className="min-w-40 flex-1">
             <p className="text-xs font-bold">
               {controllerOnly
-                ? "Not visible to this viewer"
+                ?localizeUi("ui.noodle.lockedprivatepostcard.notVisibleToThisViewer")
                 : post.access === "ppv"
-                  ? "PPV post"
-                  : "Subscriber-only post"}
+                  ?localizeUi("ui.noodle.lockedprivatepostcard.ppvPost")
+                  :localizeUi("ui.noodle.lockedprivatepostcard.subscriberOnlyPost")}
             </p>
             <p className="mt-1 text-xs text-[var(--muted-foreground)]">
               {controllerOnly
-                ? "Open the controller tools to manage this post."
+                ?localizeUi("ui.noodle.lockedprivatepostcard.openTheControllerToolsToManageThisPost")
                 : post.access === "ppv"
-                  ? `${post.ppvPrice ?? 0} credits to unlock`
-                  : "Subscribe to reveal this post."}
+                  ?localizeUi("ui.noodle.lockedprivatepostcard.value1CreditsToUnlock", { value1: post.ppvPrice ?? 0 })
+                  :localizeUi("ui.noodle.lockedprivatepostcard.subscribeToRevealThisPost")}
             </p>
           </div>
           {!controllerOnly &&
@@ -2681,17 +2690,14 @@ function LockedPrivatePostCard({
                 onClick={() => onUnlock(post.id)}
                 className="inline-flex min-h-10 items-center gap-2 rounded-md bg-[var(--noodle-blue)] px-3 text-xs font-bold text-zinc-950 disabled:cursor-not-allowed disabled:opacity-50 [&_svg]:!text-zinc-950"
               >
-                <Eye size={14} /> Unlock
-              </button>
+                <Eye size={14} /> {localizeUi("ui.noodle.lockedprivatepostcard.unlock")}</button>
             ) : (
               <button
                 type="button"
                 disabled={subscriptionPending}
                 onClick={() => onToggleSubscription(profile.id, subscribed)}
                 className="min-h-10 rounded-md bg-[var(--noodle-blue)] px-3 text-xs font-bold text-zinc-950 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                Subscribe
-              </button>
+              >{localizeUi("ui.noodle.lockedprivatepostcard.subscribe")}</button>
             ))}
           {onManage && (
             <button
@@ -2699,9 +2705,7 @@ function LockedPrivatePostCard({
               onClick={onManage}
               className="inline-flex min-h-11 items-center gap-2 rounded-md border border-[var(--noodle-divider)] px-3 text-xs font-bold hover:bg-[var(--accent)]"
             >
-              <Pencil size={14} />
-              Manage post
-            </button>
+              <Pencil size={14} />{localizeUi("ui.noodle.lockedprivatepostcard.managePost")}</button>
           )}
         </div>
       </div>
@@ -2732,6 +2736,7 @@ function PrivatePostComposer({
   manualPending: boolean;
   guidePending: boolean;
 }) {
+  const { t: localizeUi } = useUiTranslation();
   const [expanded, setExpanded] = useState(false);
   const [postError, setPostError] = useState<string | null>(null);
   const [guideError, setGuideError] = useState<string | null>(null);
@@ -2778,7 +2783,7 @@ function PrivatePostComposer({
       await onManualPost(submission());
       clearDraft();
     } catch (error) {
-      setPostError(errorMessage(error, "Could not publish this post."));
+      setPostError(errorMessage(error,localizeUi("ui.noodle.privatepostcomposer.couldNotPublishThisPost")));
     }
   };
 
@@ -2798,7 +2803,7 @@ function PrivatePostComposer({
       await onGuidedPost(submission());
       clearDraft();
     } catch (error) {
-      setGuideError(errorMessage(error, "Could not generate this post."));
+      setGuideError(errorMessage(error,localizeUi("ui.noodle.privatepostcomposer.couldNotGenerateThisPost")));
     }
   };
 
@@ -2812,9 +2817,9 @@ function PrivatePostComposer({
           aria-expanded="false"
         >
           <span className="min-w-0 flex-1">
-            <span className="block truncate text-sm font-semibold">Post as {profile.displayName}</span>
+            <span className="block truncate text-sm font-semibold">{localizeUi("ui.noodle.privatepostcomposer.postAs")} {profile.displayName}</span>
             <span className="block text-xs text-[var(--muted-foreground)]">
-              {hasDraft ? "Draft saved" : "Write directly or guide the AI"}
+              {hasDraft ?localizeUi("ui.noodle.privatepostcomposer.draftSaved") :localizeUi("ui.noodle.privatepostcomposer.writeDirectlyOrGuideTheAi")}
             </span>
           </span>
           <Pencil size={16} />
@@ -2837,8 +2842,7 @@ function PrivatePostComposer({
           aria-expanded="true"
           className="inline-flex min-h-8 items-center gap-1.5 rounded-md px-1 text-xs font-bold text-[var(--noodle-blue)] hover:bg-[var(--accent)] disabled:opacity-50"
         >
-          <ChevronDown size={14} />
-          Post as {profile.displayName}
+          <ChevronDown size={14} />{localizeUi("ui.noodle.privatepostcomposer.postAs")} {profile.displayName}
         </button>
       ) : undefined}
       avatar={<ProfileInitial profile={profile} />}
@@ -2855,7 +2859,7 @@ function PrivatePostComposer({
           trailing={
             <div ref={coinToolRef} className="relative">
               <NoodleToolButton
-                title="Post visibility and price"
+                title={localizeUi("ui.noodle.privatepostcomposer.postVisibilityAndPrice")}
                 active={activeTool === "coin" || access !== "public"}
                 disabled={pending}
                 onClick={() => toggleTool("coin")}
@@ -2875,7 +2879,7 @@ function PrivatePostComposer({
             className="inline-flex h-8 items-center gap-1.5 rounded-full border border-[var(--noodle-divider)] px-3 text-xs font-bold hover:bg-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-50"
           >
             {guidePending ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
-            {guidePending ? "Guiding…" : "Guide"}
+            {guidePending ?localizeUi("ui.noodle.privatepostcomposer.guiding") :localizeUi("ui.noodle.privatepostcomposer.guide_bf073fa")}
           </button>
           <button
             type="button"
@@ -2886,7 +2890,7 @@ function PrivatePostComposer({
             {manualPending
               ? <Loader2 size={13} className="animate-spin" />
               : <Send size={13} />}
-            {manualPending ? "Posting…" : "Post"}
+            {manualPending ?localizeUi("ui.noodle.privatepostcomposer.posting") :localizeUi("ui.noodle.noodlehome.post")}
           </button>
         </div>
       }
@@ -2909,7 +2913,7 @@ function PrivatePostComposer({
           {activeTool === "coin" && (
             <NoodleAnchoredPopover anchorRef={coinToolRef}>
               <div className="marinara-chat-popover space-y-3 rounded-xl border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)] p-3 text-[var(--foreground)] shadow-2xl shadow-black/35">
-                <p className="text-xs font-bold">Who can see this post</p>
+                <p className="text-xs font-bold">{localizeUi("ui.noodle.privatepostcomposer.whoCanSeeThisPost")}</p>
                 <div className="grid grid-cols-3 gap-1 rounded-md bg-[var(--accent)] p-1">
                   {(["public", "subscriber", "ppv"] as const).map((option) => (
                     <button
@@ -2924,15 +2928,13 @@ function PrivatePostComposer({
                           : "text-[var(--muted-foreground)] hover:text-[var(--foreground)]",
                       )}
                     >
-                      {option === "subscriber" ? "Subscribers" : option.toUpperCase()}
+                      {option === "subscriber" ?localizeUi("ui.noodle.privatepostcomposer.subscribers") : option.toUpperCase()}
                     </button>
                   ))}
                 </div>
                 {access === "ppv" && (
                   <label className="block space-y-1">
-                    <span className="text-[0.68rem] font-semibold uppercase tracking-normal text-[var(--marinara-chat-chrome-panel-muted)]">
-                      Unlock price (credits)
-                    </span>
+                    <span className="text-[0.68rem] font-semibold uppercase tracking-normal text-[var(--marinara-chat-chrome-panel-muted)]">{localizeUi("ui.noodle.privatepostcomposer.unlockPriceCredits")}</span>
                     <input
                       type="number"
                       min="0"
@@ -2940,7 +2942,7 @@ function PrivatePostComposer({
                       step="0.01"
                       value={ppvPrice}
                       onChange={(event) => onDraftChange({ ppvPrice: event.target.value })}
-                      aria-label="PPV price"
+                      aria-label={localizeUi("ui.noodle.privatepostcomposer.ppvPrice")}
                       className="mari-chrome-field h-9 w-full rounded-md border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)] px-3 text-sm text-[var(--foreground)] outline-none focus:border-[var(--noodle-blue)]"
                     />
                   </label>
@@ -2952,19 +2954,19 @@ function PrivatePostComposer({
       }
       footer={(postError || guideError) && (
         <div className="mt-2 space-y-1 pl-14 text-xs text-[var(--destructive)]" role="alert">
-          {postError && <p>Post: {postError}</p>}
-          {guideError && <p>Guide: {guideError}</p>}
+          {postError && <p>{localizeUi("ui.noodle.privatepostcomposer.post")} {postError}</p>}
+          {guideError && <p>{localizeUi("ui.noodle.privatepostcomposer.guide")} {guideError}</p>}
         </div>
       )}
     >
       <label className="block space-y-1">
-        <span className="sr-only">Post title (optional)</span>
+        <span className="sr-only">{localizeUi("ui.noodle.privatepostcomposer.postTitleOptional")}</span>
         <input
           value={title}
           onChange={(event) => onDraftChange({ title: event.target.value })}
           maxLength={NOODLE_PRIVATE_POST_TITLE_MAX_LENGTH}
           disabled={pending}
-          placeholder="Title (optional)"
+          placeholder={localizeUi("ui.noodle.noodlepostcard.titleOptional")}
           className="h-9 w-full border-0 bg-transparent text-base font-bold text-[var(--foreground)] outline-none placeholder:text-[var(--muted-foreground)]"
         />
       </label>
@@ -2973,8 +2975,8 @@ function PrivatePostComposer({
         onChange={(event) => onDraftChange({ body: event.target.value })}
         maxLength={NOODLE_PRIVATE_POST_CONTENT_MAX_LENGTH}
         disabled={pending}
-        aria-label="Post body"
-        placeholder="What's simmering, privately?"
+        aria-label={localizeUi("ui.noodle.privatepostcomposer.postBody")}
+        placeholder={localizeUi("ui.noodle.privatepostcomposer.whatSSimmeringPrivately")}
         className="min-h-20 w-full resize-none border-0 bg-transparent py-2 text-[1rem] leading-6 text-[var(--foreground)] outline-none placeholder:text-[var(--muted-foreground)]"
       />
     </NoodleComposerShell>
@@ -2991,10 +2993,11 @@ function SubscriptionSections({
   onToggleSubscription: (creatorAccountId: string, subscribed: boolean) => void;
   togglePending: boolean;
 }) {
+  const { t: localizeUi } = useUiTranslation();
   return (
     <section className="overflow-hidden rounded-2xl border border-[var(--noodle-divider)] bg-[var(--background)]">
       <div className="border-b border-[var(--noodle-divider)] px-4 py-3">
-        <h3 className="text-lg font-bold">Creators</h3>
+        <h3 className="text-lg font-bold">{localizeUi("ui.noodle.subscriptionsections.creators")}</h3>
       </div>
       {creators.length > 0 ? (
         <div className="divide-y divide-[var(--noodle-divider)]">
@@ -3017,13 +3020,13 @@ function SubscriptionSections({
                 )}
               >
                 {creator.subscribed ? <Minus size={14} /> : <Plus size={14} />}
-                {creator.subscribed ? "Unsubscribe" : "Subscribe"}
+                {creator.subscribed ?localizeUi("ui.noodle.subscriptionsections.unsubscribe") :localizeUi("ui.noodle.lockedprivatepostcard.subscribe")}
               </button>
             </div>
           ))}
         </div>
       ) : (
-        <p className="px-4 py-5 text-sm text-[var(--muted-foreground)]">No creators are visible to this persona yet.</p>
+        <p className="px-4 py-5 text-sm text-[var(--muted-foreground)]">{localizeUi("ui.noodle.subscriptionsections.noCreatorsAreVisibleToThisPersonaYet")}</p>
       )}
     </section>
   );
@@ -3046,7 +3049,10 @@ function ProfileInitial({
 }
 
 function DisclosureBadge({ mode }: { mode: NoodleIdentityDisclosure | null }) {
-  const label = mode ? DISCLOSURE_OPTIONS.find((option) => option.value === mode)?.shortLabel : "Setup needed";
+  const { t: localizeUi } = useUiTranslation();
+  const label = mode
+    ? localizeUi(`ui.noodle.disclosure.${mode}.shortLabel`)
+    : localizeUi("ui.noodle.disclosure.setupNeeded");
   return (
     <span className="rounded-full border border-[var(--noodle-divider)] px-2 py-0.5 text-[0.68rem] font-bold capitalize text-[var(--muted-foreground)]">
       {label}
@@ -3096,6 +3102,7 @@ function NoodlerFrame({
   hideBack?: boolean;
   action?: ReactNode;
 }) {
+  const { t: localizeUi } = useUiTranslation();
   return (
     <div className="flex h-full min-h-0 flex-col">
       <header className="flex h-14 shrink-0 items-center gap-2 border-b border-[var(--noodle-divider)] px-2">
@@ -3104,16 +3111,14 @@ function NoodlerFrame({
             type="button"
             onClick={onBack}
             className="flex h-11 w-11 items-center justify-center rounded-full text-[var(--noodle-blue)] hover:bg-[var(--noodle-blue)]/10"
-            aria-label="Back"
+            aria-label={localizeUi("ui.noodle.noodlerframe.back")}
           >
             <ArrowLeft size={18} />
           </button>
         )}
         <p className="min-w-0 flex-1 truncate text-sm font-semibold">{title}</p>
         {action}
-        <span className="rounded-full bg-[var(--noodle-blue)]/10 px-2.5 py-1 text-[0.65rem] font-bold text-[var(--noodle-blue)]">
-          Private
-        </span>
+        <span className="rounded-full bg-[var(--noodle-blue)]/10 px-2.5 py-1 text-[0.65rem] font-bold text-[var(--noodle-blue)]">{localizeUi("ui.noodle.noodlerframe.private")}</span>
       </header>
       <main className="min-h-0 flex-1 overflow-y-auto">{children}</main>
     </div>

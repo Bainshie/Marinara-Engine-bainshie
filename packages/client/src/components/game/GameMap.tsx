@@ -28,6 +28,7 @@ import { cn } from "../../lib/utils";
 import { PanelLockButton, useDraggablePanel } from "./DraggablePanel";
 import { CHAT_TOOLBAR_OVERFLOW_BUTTON_SIZE_CLASS, getChatToolbarButtonClass } from "../chat/ChatToolbarControls";
 import { NEUTRAL_SURFACE_VARIABLES } from "../ui/neutral-surface-styles";
+import { useTranslation as useUiTranslation } from "react-i18next";
 
 const STATE_CONFIG: Record<GameActiveState, { icon: typeof Compass; label: string; color: string }> = {
   exploration: { icon: Compass, label: "Exploration", color: "text-emerald-300" },
@@ -178,6 +179,7 @@ interface TimeOfDayIndicatorProps {
 }
 
 function TimeOfDayIndicator({ timeOfDay, size = "desktop", className }: TimeOfDayIndicatorProps) {
+  const { t: localizeUi } = useUiTranslation();
   const phase = normalizeTimePhase(timeOfDay);
   if (!phase) {
     return (
@@ -187,8 +189,8 @@ function TimeOfDayIndicator({ timeOfDay, size = "desktop", className }: TimeOfDa
           size === "mobile" ? "h-3.5 w-6" : "h-4 w-7",
           className,
         )}
-        aria-label="Time of day unknown"
-        title="Time of day unknown"
+        aria-label={localizeUi("ui.game.timeofdayindicator.timeOfDayUnknown")}
+        title={localizeUi("ui.game.timeofdayindicator.timeOfDayUnknown")}
       >
         ?
       </span>
@@ -206,8 +208,8 @@ function TimeOfDayIndicator({ timeOfDay, size = "desktop", className }: TimeOfDa
         getSkyClasses(phase),
         className,
       )}
-      aria-label={`Time of day: ${label}`}
-      title={`Time of day: ${label}`}
+      aria-label={localizeUi("ui.game.timeofdayindicator.timeOfDayValue1", { value1: label })}
+      title={localizeUi("ui.game.timeofdayindicator.timeOfDayValue1", { value1: label })}
     >
       {!nightPhase && <span className="absolute inset-x-[12%] bottom-[2px] h-px bg-white/45" />}
       {nightPhase && (
@@ -262,6 +264,7 @@ function DayTimeIndicator({
   size = "desktop",
   className,
 }: DayTimeIndicatorProps) {
+  const { t: localizeUi } = useUiTranslation();
   const safeDay = Math.max(1, Math.floor(day ?? 1));
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(String(safeDay));
@@ -324,8 +327,8 @@ function DayTimeIndicator({
         onClick={(event) => event.stopPropagation()}
         onPointerDown={(event) => event.stopPropagation()}
         onBlur={handleEditorBlur}
-        title={`Day ${safeDay}. ${timeLabel}.`}
-        aria-label={`Day ${safeDay}. ${timeLabel}.`}
+        title={localizeUi("ui.game.daytimeindicator.dayValue1Value2", { value1: safeDay, value2: timeLabel })}
+        aria-label={localizeUi("ui.game.daytimeindicator.dayValue1Value2", { value1: safeDay, value2: timeLabel })}
       >
         <input
           autoFocus
@@ -349,7 +352,7 @@ function DayTimeIndicator({
             "h-full bg-transparent text-center font-semibold text-[var(--marinara-chat-chrome-panel-title)] outline-none",
             size === "mobile" ? "w-14 px-2.5 text-[0.6875rem]" : "w-11 px-1.5 text-[0.625rem]",
           )}
-          aria-label="Edit game day"
+          aria-label={localizeUi("ui.game.daytimeindicator.editGameDay")}
         />
         <span className={dividerClassName} aria-hidden="true" />
         <select
@@ -365,11 +368,9 @@ function DayTimeIndicator({
             "h-full rounded-r-lg border-0 bg-transparent px-1 text-[0.625rem] font-semibold capitalize text-[var(--marinara-chat-chrome-panel-title)] outline-none",
             size === "mobile" ? "w-[5.4rem]" : "w-[4.8rem]",
           )}
-          aria-label="Edit game time of day"
+          aria-label={localizeUi("ui.game.daytimeindicator.editGameTimeOfDay")}
         >
-          <option value="" disabled>
-            Time
-          </option>
+          <option value="" disabled>{localizeUi("ui.game.daytimeindicator.time")}</option>
           {EDITABLE_TIME_PHASES.map((phase) => (
             <option key={phase} value={phase}>
               {getTimePhaseLabel(phase)}
@@ -392,10 +393,10 @@ function DayTimeIndicator({
         rootClassName,
         "transition-colors hover:border-[var(--marinara-chat-chrome-button-border-hover)] hover:bg-[var(--marinara-chat-chrome-button-bg-hover)] hover:text-[var(--marinara-chat-chrome-button-text-hover)] focus:outline-none focus:ring-2 focus:ring-[var(--marinara-chat-chrome-focus-ring)]",
       )}
-      title={`Day ${safeDay}. ${timeLabel}. Tap to edit day and time.`}
-      aria-label={`Day ${safeDay}. ${timeLabel}. Tap to edit day and time.`}
+      title={localizeUi("ui.game.daytimeindicator.dayValue1Value2TapToEditDayAndTime", { value1: safeDay, value2: timeLabel })}
+      aria-label={localizeUi("ui.game.daytimeindicator.dayValue1Value2TapToEditDayAndTime", { value1: safeDay, value2: timeLabel })}
     >
-      <span className={dayClassName}>Day {safeDay}</span>
+      <span className={dayClassName}>{localizeUi("ui.game.daytimeindicator.day")} {safeDay}</span>
       <span className={dividerClassName} aria-hidden="true" />
       <TimeOfDayIndicator timeOfDay={timeOfDay} size={size} className={timeClassName} />
     </button>
@@ -440,6 +441,7 @@ interface MapZoomControlsProps {
 }
 
 function MapZoomControls({ zoom, onZoomOut, onZoomIn }: MapZoomControlsProps) {
+  const { t: localizeUi } = useUiTranslation();
   const atMin = zoom <= MAP_ZOOM_MIN;
   const atMax = zoom >= MAP_ZOOM_MAX;
 
@@ -451,7 +453,7 @@ function MapZoomControls({ zoom, onZoomOut, onZoomIn }: MapZoomControlsProps) {
     <div
       className="absolute right-1.5 top-1.5 z-20 flex h-6 overflow-hidden rounded-md border border-[var(--marinara-chat-chrome-button-border)] bg-[var(--marinara-chat-chrome-button-bg)] shadow-lg shadow-black/35 backdrop-blur-md"
       onPointerDown={stopPointer}
-      title={`Map zoom: ${Math.round(zoom * 100)}%`}
+      title={localizeUi("ui.game.mapzoomcontrols.mapZoomValue1", { value1: Math.round(zoom * 100) })}
     >
       <button
         type="button"
@@ -461,8 +463,8 @@ function MapZoomControls({ zoom, onZoomOut, onZoomIn }: MapZoomControlsProps) {
         }}
         disabled={atMin}
         className={cn("flex h-full w-5 items-center justify-center", GAME_MAP_ACTION_ITEM_CLASS)}
-        title="Zoom out"
-        aria-label="Zoom out map"
+        title={localizeUi("ui.game.mapzoomcontrols.zoomOut")}
+        aria-label={localizeUi("ui.game.mapzoomcontrols.zoomOutMap")}
       >
         <Minus size={11} />
       </button>
@@ -475,8 +477,8 @@ function MapZoomControls({ zoom, onZoomOut, onZoomIn }: MapZoomControlsProps) {
         }}
         disabled={atMax}
         className={cn("flex h-full w-5 items-center justify-center", GAME_MAP_ACTION_ITEM_CLASS)}
-        title="Zoom in"
-        aria-label="Zoom in map"
+        title={localizeUi("ui.game.mapzoomcontrols.zoomIn")}
+        aria-label={localizeUi("ui.game.mapzoomcontrols.zoomInMap")}
       >
         <Plus size={11} />
       </button>
@@ -519,10 +521,11 @@ interface GameMapViewTabsProps {
 }
 
 function GameMapViewTabs({ value, onChange }: GameMapViewTabsProps) {
+  const { t: localizeUi } = useUiTranslation();
   return (
     <div
       role="group"
-      aria-label="Map view"
+      aria-label={localizeUi("ui.game.gamemapviewtabs.mapView")}
       className="grid grid-cols-2 rounded-lg border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--marinara-chat-chrome-input-bg)] p-0.5"
     >
       <button
@@ -536,8 +539,7 @@ function GameMapViewTabs({ value, onChange }: GameMapViewTabsProps) {
             : "text-[var(--marinara-chat-chrome-panel-muted)] hover:text-[var(--marinara-chat-chrome-panel-title)]",
         )}
       >
-        <Globe2 size="0.8125rem" /> World
-      </button>
+        <Globe2 size="0.8125rem" /> {localizeUi("ui.game.gamemapviewtabs.world")}</button>
       <button
         type="button"
         onClick={() => onChange("local")}
@@ -549,8 +551,7 @@ function GameMapViewTabs({ value, onChange }: GameMapViewTabsProps) {
             : "text-[var(--marinara-chat-chrome-panel-muted)] hover:text-[var(--marinara-chat-chrome-panel-title)]",
         )}
       >
-        <MapIcon size="0.8125rem" /> Local
-      </button>
+        <MapIcon size="0.8125rem" /> {localizeUi("ui.game.gamemapviewtabs.local")}</button>
     </div>
   );
 }
@@ -562,6 +563,7 @@ interface MapGenerateButtonProps {
 }
 
 function MapGenerateButton({ onGenerateMap, disabled, onAfterGenerate }: MapGenerateButtonProps) {
+  const { t: localizeUi } = useUiTranslation();
   return (
     <button
       type="button"
@@ -578,8 +580,8 @@ function MapGenerateButton({ onGenerateMap, disabled, onAfterGenerate }: MapGene
         className:
           "absolute left-1.5 top-1.5 z-20 shadow-lg shadow-black/35 disabled:cursor-not-allowed disabled:opacity-45",
       })}
-      title="Generate another map"
-      aria-label="Generate another map"
+      title={localizeUi("ui.game.mapgeneratebutton.generateAnotherMap")}
+      aria-label={localizeUi("ui.game.mapgeneratebutton.generateAnotherMap")}
     >
       <Wand2 size={11} />
     </button>
@@ -615,6 +617,7 @@ export function GameMapPanel({
   chatId,
   constraintsRef,
 }: GameMapPanelProps) {
+  const { t: localizeUi } = useUiTranslation();
   const [collapsed, setCollapsed] = useState(false);
   const [stateHovered, setStateHovered] = useState(false);
   const [mapZoom, setMapZoom] = useState(1);
@@ -643,7 +646,7 @@ export function GameMapPanel({
         className={cn(GAME_MAP_PANEL_CLASS, "flex w-52 flex-col items-center justify-center gap-2 p-3")}
       >
         <span className="text-[0.625rem] text-[var(--marinara-chat-chrome-panel-muted)]">
-          {spatialContextLoading ? "Loading maps…" : "No map yet"}
+          {spatialContextLoading ?localizeUi("ui.game.gamemappanel.loadingMaps") :localizeUi("ui.game.gamemappanel.noMapYet")}
         </span>
         {onGenerateMap && (
           <button
@@ -652,9 +655,7 @@ export function GameMapPanel({
             disabled={disabled}
             className="flex items-center gap-1 rounded-md border border-[var(--marinara-chat-chrome-button-border)] bg-[var(--marinara-chat-chrome-button-bg)] px-2 py-1 text-[0.625rem] font-medium text-[var(--marinara-chat-chrome-button-text-hover)] transition-colors hover:border-[var(--marinara-chat-chrome-button-border-hover)] hover:bg-[var(--marinara-chat-chrome-button-bg-hover)] disabled:cursor-not-allowed disabled:opacity-50"
           >
-            <Wand2 size={10} />
-            Generate
-          </button>
+            <Wand2 size={10} />{localizeUi("ui.characters.characterclipcard.generate")}</button>
         )}
       </div>
     );
@@ -738,8 +739,8 @@ export function GameMapPanel({
               openFullMapEditor();
             }}
             className={getChatToolbarButtonClass({ compact: true, sizeClassName: "h-6 w-6 shrink-0" })}
-            aria-label="Open full map editor"
-            title="Open full map editor"
+            aria-label={localizeUi("ui.game.gamemappanel.openFullMapEditor")}
+            title={localizeUi("ui.game.gamemappanel.openFullMapEditor")}
           >
             <ExternalLink size={11} />
           </button>
@@ -758,14 +759,14 @@ export function GameMapPanel({
             value={selectedMapId ?? ""}
             onChange={(event) => onViewedMapChange?.(event.target.value)}
             className={cn(GAME_MAP_FIELD_CLASS, "min-w-0 flex-1 px-1.5 py-1 text-[0.625rem]")}
-            title="View map"
+            title={localizeUi("ui.game.gamemappanel.viewMap")}
           >
             {mapOptions.map((option, index) => {
               const id = getMapId(option, index) ?? `map-${index + 1}`;
               return (
                 <option key={id} value={id}>
                   {option.name || `Map ${index + 1}`}
-                  {id === activeMapId ? " (Current)" : ""}
+                  {id === activeMapId ?localizeUi("ui.game.gamemappanel.current") : ""}
                 </option>
               );
             })}
@@ -789,7 +790,7 @@ export function GameMapPanel({
         ) : !map ? (
           <div className="flex flex-col items-center justify-center gap-2 py-3">
             <span className="text-[0.625rem] text-[var(--marinara-chat-chrome-panel-muted)]">
-              {spatialContextLoading ? "Loading maps…" : "No local map yet"}
+              {spatialContextLoading ?localizeUi("ui.game.gamemappanel.loadingMaps") :localizeUi("ui.game.gamemappanel.noLocalMapYet")}
             </span>
             {onGenerateMap && (
               <button
@@ -798,9 +799,7 @@ export function GameMapPanel({
                 disabled={generateMapDisabled || disabled}
                 className="flex items-center gap-1 rounded-md border border-[var(--marinara-chat-chrome-button-border)] bg-[var(--marinara-chat-chrome-button-bg)] px-2 py-1 text-[0.625rem] font-medium text-[var(--marinara-chat-chrome-button-text-hover)] transition-colors hover:border-[var(--marinara-chat-chrome-button-border-hover)] hover:bg-[var(--marinara-chat-chrome-button-bg-hover)] disabled:cursor-not-allowed disabled:opacity-50"
               >
-                <Wand2 size={10} />
-                Generate
-              </button>
+                <Wand2 size={10} />{localizeUi("ui.characters.characterclipcard.generate")}</button>
             )}
           </div>
         ) : map.type === "grid" ? (
@@ -878,6 +877,7 @@ export function MobileMapButton({
   spatialContext,
   spatialContextLoading,
 }: MobileMapButtonProps) {
+  const { t: localizeUi } = useUiTranslation();
   const [open, setOpen] = useState(false);
   const [selectedNode, setSelectedNode] = useState<string | null>(null);
   const [mapZoom, setMapZoom] = useState(1);
@@ -978,8 +978,8 @@ export function MobileMapButton({
             sizeClassName: CHAT_TOOLBAR_OVERFLOW_BUTTON_SIZE_CLASS,
           })}
           aria-expanded={open}
-          aria-label={open ? "Close map" : "Open map"}
-          title={open ? "Close map" : "Open map"}
+          aria-label={open ?localizeUi("ui.game.mobilemapbutton.closeMap") :localizeUi("ui.game.mobilemapbutton.openMap")}
+          title={open ?localizeUi("ui.game.mobilemapbutton.closeMap") :localizeUi("ui.game.mobilemapbutton.openMap")}
         >
           <MapIcon size={14} />
         </button>
@@ -1012,19 +1012,18 @@ export function MobileMapButton({
                 <p className="block overflow-hidden whitespace-nowrap text-xs font-bold text-[var(--marinara-chat-chrome-panel-title)]">
                   {(effectiveMapView === "world" ? "World map" : (map?.name || "Local map")).length > 18 ? (
                     <span className="game-map-marquee-track inline-flex whitespace-nowrap">
-                      <span className="pr-8">{effectiveMapView === "world" ? "World map" : (map?.name || "Local map")}</span>
-                      <span className="pr-8">{effectiveMapView === "world" ? "World map" : (map?.name || "Local map")}</span>
+                      <span className="pr-8">{effectiveMapView === "world" ?localizeUi("ui.game.mobilemapbutton.worldMap") : (map?.name || "Local map")}</span>
+                      <span className="pr-8">{effectiveMapView === "world" ?localizeUi("ui.game.mobilemapbutton.worldMap") : (map?.name || "Local map")}</span>
                     </span>
                   ) : (
-                    <span className="block truncate">{effectiveMapView === "world" ? "World map" : (map?.name || "Local map")}</span>
+                    <span className="block truncate">{effectiveMapView === "world" ?localizeUi("ui.game.mobilemapbutton.worldMap") : (map?.name || "Local map")}</span>
                   )}
                 </p>
                 {effectiveMapView === "world" && spatialContext?.breadcrumb.length ? (
                   <p
                     className="block truncate text-[0.625rem] text-[var(--marinara-chat-chrome-panel-muted)]"
                     title={spatialContext.breadcrumb.map((crumb) => crumb.name).join(" › ")}
-                  >
-                    Story location: {spatialContext.breadcrumb.map((crumb) => crumb.name).join(" › ")}
+                  >{localizeUi("ui.game.mobilemapbutton.storyLocation")} {spatialContext.breadcrumb.map((crumb) => crumb.name).join(" › ")}
                   </p>
                 ) : currentNode ? (
                   <p className="block overflow-hidden whitespace-nowrap text-[0.625rem] text-[var(--marinara-chat-chrome-panel-muted)]">
@@ -1046,14 +1045,14 @@ export function MobileMapButton({
                       setSelectedNode(null);
                     }}
                     className={cn(GAME_MAP_FIELD_CLASS, "mt-1 w-full px-1.5 py-1 text-[0.625rem]")}
-                    title="View map"
+                    title={localizeUi("ui.game.gamemappanel.viewMap")}
                   >
                     {mapOptions.map((option, index) => {
                       const id = getMapId(option, index) ?? `map-${index + 1}`;
                       return (
                         <option key={id} value={id}>
                           {option.name || `Map ${index + 1}`}
-                          {id === activeMapId ? " (Current)" : ""}
+                          {id === activeMapId ?localizeUi("ui.game.gamemappanel.current") : ""}
                         </option>
                       );
                     })}
@@ -1065,8 +1064,8 @@ export function MobileMapButton({
                   type="button"
                   onClick={openFullMapEditor}
                   className={getChatToolbarButtonClass({ compact: true, sizeClassName: "h-7 w-7 shrink-0" })}
-                  aria-label="Open full map editor"
-                  title="Open full map editor"
+                  aria-label={localizeUi("ui.game.gamemappanel.openFullMapEditor")}
+                  title={localizeUi("ui.game.gamemappanel.openFullMapEditor")}
                 >
                   <ExternalLink size={13} />
                 </button>
@@ -1078,8 +1077,8 @@ export function MobileMapButton({
                   setSelectedNode(null);
                 }}
                 className={getChatToolbarButtonClass({ compact: true, sizeClassName: "h-7 w-7 shrink-0" })}
-                aria-label="Close map"
-                title="Close map"
+                aria-label={localizeUi("ui.game.mobilemapbutton.closeMap")}
+                title={localizeUi("ui.game.mobilemapbutton.closeMap")}
               >
                 <X size={14} />
               </button>
@@ -1112,7 +1111,7 @@ export function MobileMapButton({
                 />
               ) : !map ? (
                 <div className="flex flex-col items-center justify-center gap-3 py-8 text-[var(--muted-foreground)]">
-                  <span className="text-xs">{spatialContextLoading ? "Loading maps…" : "No local map yet"}</span>
+                  <span className="text-xs">{spatialContextLoading ?localizeUi("ui.game.gamemappanel.loadingMaps") :localizeUi("ui.game.gamemappanel.noLocalMapYet")}</span>
                   {onGenerateMap && (
                     <button
                       type="button"
@@ -1123,9 +1122,7 @@ export function MobileMapButton({
                       disabled={disabled}
                       className="flex items-center gap-1 rounded-md border border-[var(--marinara-chat-chrome-button-border)] bg-[var(--marinara-chat-chrome-button-bg)] px-3 py-1.5 text-xs font-medium text-[var(--marinara-chat-chrome-button-text-hover)] transition-colors hover:border-[var(--marinara-chat-chrome-button-border-hover)] hover:bg-[var(--marinara-chat-chrome-button-bg-hover)] disabled:cursor-not-allowed disabled:opacity-50"
                     >
-                      <Wand2 size={12} />
-                      Generate
-                    </button>
+                      <Wand2 size={12} />{localizeUi("ui.characters.characterclipcard.generate")}</button>
                   )}
                 </div>
               ) : map.type === "grid" ? (
@@ -1185,19 +1182,17 @@ export function MobileMapButton({
               <div className={cn("flex items-center gap-2 border-t px-2.5 py-2", GAME_MAP_DIVIDER_CLASS)}>
                 <span className="text-sm">{selectedNodeData.discovered ? selectedNodeData.emoji : "❓"}</span>
                 <span className="min-w-0 flex-1 truncate text-xs font-medium text-[var(--foreground)]">
-                  {selectedNodeData.discovered ? selectedNodeData.label : "Unknown location"}
+                  {selectedNodeData.discovered ? selectedNodeData.label :localizeUi("ui.game.mobilemapbutton.unknownLocation")}
                 </span>
                 {canTravel && selectedNode !== currentNode?.id && (
                   <button
                     type="button"
                     onClick={handleTravel}
                     className="shrink-0 rounded-lg border border-[var(--marinara-chat-chrome-button-border)] bg-[var(--marinara-chat-chrome-button-bg)] px-3 py-1.5 text-[0.6875rem] font-semibold text-[var(--marinara-chat-chrome-button-text-hover)] transition-colors hover:border-[var(--marinara-chat-chrome-button-border-hover)] hover:bg-[var(--marinara-chat-chrome-button-bg-hover)] active:opacity-80"
-                  >
-                    Set destination
-                  </button>
+                  >{localizeUi("ui.game.mobilemapbutton.setDestination")}</button>
                 )}
                 {selectedNode === currentNode?.id && (
-                  <span className="shrink-0 text-[0.625rem] text-emerald-400/70">You are here</span>
+                  <span className="shrink-0 text-[0.625rem] text-emerald-400/70">{localizeUi("ui.game.mobilemapbutton.youAreHere")}</span>
                 )}
               </div>
             )}

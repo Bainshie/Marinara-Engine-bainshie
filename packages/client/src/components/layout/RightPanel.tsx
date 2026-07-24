@@ -7,6 +7,7 @@ import { useUIStore } from "../../stores/ui.store";
 import { cn } from "../../lib/utils";
 import { usePersonalExtensionContributions } from "../../lib/personal-extension-contributions";
 import { PersonalExtensionContributionIcon } from "../extensions/PersonalExtensionContributionIcon";
+import { useTranslation as useUiTranslation } from "react-i18next";
 
 const CharactersPanel = lazy(() =>
   import("../panels/CharactersPanel").then((module) => ({ default: module.CharactersPanel })),
@@ -72,10 +73,12 @@ const PANELS: Record<string, LazyExoticComponent<ComponentType>> = {
 const mountedPanels = new Set<string>();
 
 function PanelFallback() {
-  return <div className="mari-chrome-text-muted flex h-full items-center justify-center text-sm">Loading...</div>;
+  const { t: localizeUi } = useUiTranslation();
+  return <div className="mari-chrome-text-muted flex h-full items-center justify-center text-sm">{localizeUi("ui.characters.characterlibraryview.loading")}</div>;
 }
 
 export function RightPanel() {
+  const { t: localizeUi } = useUiTranslation();
   const panel = useUIStore((s) => s.rightPanel);
   const close = useUIStore((s) => s.closeRightPanel);
   const { contributions, activePanelKey } = usePersonalExtensionContributions();
@@ -119,7 +122,7 @@ export function RightPanel() {
         </div>
         <button
           onClick={close}
-          aria-label="Close panel"
+          aria-label={localizeUi("ui.layout.rightpanel.closePanel")}
           className="mari-chrome-control mari-chrome-control--small mari-accent-animated p-1.5 active:scale-90"
         >
           <X size="0.875rem" />

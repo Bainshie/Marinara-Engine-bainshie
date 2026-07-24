@@ -7,6 +7,7 @@ import { Modal } from "../ui/Modal";
 import { cn } from "../../lib/utils";
 import { renderMarkdownBlocks, applyInlineMarkdown } from "../../lib/markdown";
 import { useDocContent, useDocsIndex, useDocsSearch, type DocSummary } from "../../hooks/use-docs";
+import { useTranslation as useUiTranslation } from "react-i18next";
 
 const DIR_LABELS: Record<string, string> = {
   "": "Guides",
@@ -157,6 +158,7 @@ export function DocsViewerModal({
   onClose: () => void;
   initialDoc?: string | null;
 }) {
+  const { t: localizeUi } = useUiTranslation();
   const savedPlaceRef = useRef(readSavedPlace());
   const [selected, setSelectedState] = useState<string | null>(initialDoc ?? savedPlaceRef.current.doc);
   const [searchQuery, setSearchQuery] = useState("");
@@ -394,7 +396,7 @@ export function DocsViewerModal({
   const searchResults = search?.results ?? [];
 
   return (
-    <Modal open={open} onClose={onClose} title="Documentation" width="max-w-6xl" mobileFullscreen>
+    <Modal open={open} onClose={onClose} title={localizeUi("home.actions.documentation")} width="max-w-6xl" mobileFullscreen>
       <div className="flex h-full min-h-0 gap-3 sm:h-[min(46rem,calc(90dvh-6.5rem))]">
         {/* Guide list / search */}
         <aside
@@ -406,8 +408,8 @@ export function DocsViewerModal({
               type="search"
               value={searchQuery}
               onChange={(event) => setSearchQuery(event.target.value)}
-              placeholder="Search all guides"
-              aria-label="Search documentation"
+              placeholder={localizeUi("ui.modals.docsviewermodal.searchAllGuides")}
+              aria-label={localizeUi("ui.modals.docsviewermodal.searchDocumentation")}
               className="min-w-0 flex-1 bg-transparent text-xs text-[var(--foreground)] outline-none placeholder:text-[var(--muted-foreground)]/65 [&::-webkit-search-cancel-button]:hidden [&::-webkit-search-cancel-button]:appearance-none"
             />
             {searchQuery ? (
@@ -415,7 +417,7 @@ export function DocsViewerModal({
                 type="button"
                 onClick={() => setSearchQuery("")}
                 className="flex h-5 w-5 items-center justify-center rounded-md text-[var(--muted-foreground)] transition-colors hover:bg-[var(--accent)] hover:text-[var(--foreground)]"
-                aria-label="Clear documentation search"
+                aria-label={localizeUi("ui.modals.docsviewermodal.clearDocumentationSearch")}
               >
                 <X size="0.6875rem" />
               </button>
@@ -424,15 +426,13 @@ export function DocsViewerModal({
 
           <div className="min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
             {indexLoading ? (
-              <p className="px-1 py-2 text-xs text-[var(--muted-foreground)]">Loading guides…</p>
+              <p className="px-1 py-2 text-xs text-[var(--muted-foreground)]">{localizeUi("ui.modals.docsviewermodal.loadingGuides")}</p>
             ) : indexError || !index ? (
-              <p className="px-1 py-2 text-xs text-[var(--muted-foreground)]">
-                Could not load the documentation list. The docs folder may be missing from this install.
-              </p>
+              <p className="px-1 py-2 text-xs text-[var(--muted-foreground)]">{localizeUi("ui.modals.docsviewermodal.couldNotLoadTheDocumentationListTheDocsFolder")}</p>
             ) : searching ? (
               searchResults.length === 0 ? (
                 <p className="px-1 py-2 text-xs text-[var(--muted-foreground)]">
-                  {searchFetching ? "Searching…" : `No matches for "${trimmedQuery}".`}
+                  {searchFetching ?localizeUi("ui.modals.docsviewermodal.searching") :localizeUi("ui.modals.docsviewermodal.noMatchesForValue1", { value1: trimmedQuery })}
                 </p>
               ) : (
                 <div className={cn("space-y-1.5", searchFetching && "opacity-60")}>
@@ -470,7 +470,7 @@ export function DocsViewerModal({
                 </div>
               )
             ) : groups.length === 0 ? (
-              <p className="px-1 py-2 text-xs text-[var(--muted-foreground)]">No guides found in the docs folder.</p>
+              <p className="px-1 py-2 text-xs text-[var(--muted-foreground)]">{localizeUi("ui.modals.docsviewermodal.noGuidesFoundInTheDocsFolder")}</p>
             ) : (
               groups.map((group) => (
                 <div key={group.dir || "root"}>
@@ -483,7 +483,7 @@ export function DocsViewerModal({
                         key={entry.path}
                         type="button"
                         onClick={() => selectDoc(entry.path)}
-                        title={entry.updatedAt ? `Last updated ${formatUpdatedAt(entry.updatedAt)}` : undefined}
+                        title={entry.updatedAt ?localizeUi("ui.modals.docsviewermodal.lastUpdatedValue1", { value1: formatUpdatedAt(entry.updatedAt) }) : undefined}
                         className={cn(
                           "flex w-full items-start gap-2 rounded-lg border px-2.5 py-2 text-left transition-colors",
                           selected === entry.path
@@ -507,7 +507,7 @@ export function DocsViewerModal({
           </div>
           {index ? (
             <div className="mt-2 shrink-0 border-t border-[var(--border)]/60 pt-2">
-              <p className="text-[0.625rem] text-[var(--muted-foreground)]/70">Also on disk at:</p>
+              <p className="text-[0.625rem] text-[var(--muted-foreground)]/70">{localizeUi("ui.modals.docsviewermodal.alsoOnDiskAt")}</p>
               <code className="block break-all text-[0.625rem] text-[var(--muted-foreground)]" title={index.root}>
                 {index.root}
               </code>
@@ -525,7 +525,7 @@ export function DocsViewerModal({
           {selected === null ? (
             <div className="flex flex-1 flex-col items-center justify-center gap-2 text-[var(--muted-foreground)]">
               <BookOpen size="1.5rem" className="opacity-60" />
-              <p className="text-xs">Pick a guide from the list to start reading.</p>
+              <p className="text-xs">{localizeUi("ui.modals.docsviewermodal.pickAGuideFromTheListToStartReading")}</p>
             </div>
           ) : (
             <>
@@ -537,13 +537,12 @@ export function DocsViewerModal({
                     setSelectedState(null);
                   }}
                   className="flex h-7 w-7 items-center justify-center rounded-lg text-[var(--muted-foreground)] transition-colors hover:bg-[var(--accent)] hover:text-[var(--foreground)] sm:hidden"
-                  aria-label="Back to guide list"
+                  aria-label={localizeUi("ui.modals.docsviewermodal.backToGuideList")}
                 >
                   <ArrowLeft size="0.875rem" />
                 </button>
-                <p className="min-w-0 truncate text-[0.625rem] text-[var(--muted-foreground)]/70">
-                  docs/{selected}
-                  {doc?.updatedAt ? ` · Last updated ${formatUpdatedAt(doc.updatedAt)}` : ""}
+                <p className="min-w-0 truncate text-[0.625rem] text-[var(--muted-foreground)]/70">{localizeUi("ui.modals.docsviewermodal.docs")}{selected}
+                  {doc?.updatedAt ?localizeUi("ui.modals.docsviewermodal.lastUpdatedValue1_f97aff7", { value1: formatUpdatedAt(doc.updatedAt) }) : ""}
                 </p>
               </div>
               <div
@@ -555,9 +554,9 @@ export function DocsViewerModal({
                 className="min-h-0 flex-1 overflow-y-auto pr-1"
               >
                 {docLoading ? (
-                  <p className="py-2 text-xs text-[var(--muted-foreground)]">Loading…</p>
+                  <p className="py-2 text-xs text-[var(--muted-foreground)]">{localizeUi("ui.panels.ttsconfigcard.loading")}</p>
                 ) : docError || !doc ? (
-                  <p className="py-2 text-xs text-[var(--muted-foreground)]">Could not load this guide.</p>
+                  <p className="py-2 text-xs text-[var(--muted-foreground)]">{localizeUi("ui.modals.docsviewermodal.couldNotLoadThisGuide")}</p>
                 ) : (
                   <div
                     // Keyed on the rendered tree's identity so React remounts

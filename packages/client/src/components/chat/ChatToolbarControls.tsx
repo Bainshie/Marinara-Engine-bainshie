@@ -9,7 +9,9 @@ import {
 } from "react";
 import { MoreHorizontal } from "lucide-react";
 import { cn } from "../../lib/utils";
+import { useLocalizedUiText } from "../../localization/use-localized-ui-text";
 import { ROLEPLAY_POPOVER_SHELL } from "./roleplay-popover-styles";
+import { useTranslation as useUiTranslation } from "react-i18next";
 
 type ChatToolbarButtonClassInput = {
   active?: boolean;
@@ -139,6 +141,9 @@ export function ChatToolbarButton({
   panelAction?: ChatToolbarPanelAction;
   size?: "sm";
 }) {
+  const localize = useLocalizedUiText();
+  const localizedTitle = localize(title);
+
   return (
     <button
       type="button"
@@ -148,8 +153,8 @@ export function ChatToolbarButton({
       }}
       data-chat-toolbar-panel-action={panelAction}
       className={getChatToolbarButtonClass({ className, compact: size === "sm" })}
-      title={title}
-      aria-label={title}
+      title={localizedTitle}
+      aria-label={localizedTitle}
     >
       {icon}
     </button>
@@ -167,6 +172,7 @@ export function ChatToolbarMenu({
   desktopChildren?: ReactNode;
   mobileChildren?: ReactNode;
 }) {
+  const { t: localizeUi } = useUiTranslation();
   const [open, setOpen] = useState(false);
   const [overflowCollapsed, setOverflowCollapsed] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -267,8 +273,8 @@ export function ChatToolbarMenu({
           type="button"
           onClick={() => setOpen(!open)}
           className={getChatToolbarButtonClass({ className: CHAT_TOOLBAR_OVERFLOW_BUTTON_SIZE_CLASS, open })}
-          title="More options"
-          aria-label="More options"
+          title={localizeUi("ui.chat.chattoolbarmenu.moreOptions")}
+          aria-label={localizeUi("ui.chat.chattoolbarmenu.moreOptions")}
           aria-haspopup="menu"
           aria-expanded={open}
         >

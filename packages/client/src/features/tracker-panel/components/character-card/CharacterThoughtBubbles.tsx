@@ -6,6 +6,7 @@ import { cn } from "../../../../lib/utils";
 import { visibleText } from "../../lib/tracker-display";
 import { InlineEdit } from "../controls/InlineControls";
 import { useTrackerFieldLock } from "../TrackerLockContext";
+import { useTranslation as useUiTranslation } from "react-i18next";
 
 type ThoughtBubbleSize = "short" | "medium" | "long";
 
@@ -152,6 +153,7 @@ function ThoughtBubble({
   hideMode?: boolean;
   onToggleHidden?: () => void;
 }) {
+  const { t: localizeUi } = useUiTranslation();
   const lock = useTrackerFieldLock(lockKey);
   const hiddenToggleActive = hideMode && !!onToggleHidden;
   if (hidden && !hideMode) return null;
@@ -224,8 +226,8 @@ function ThoughtBubble({
             <button
               type="button"
               onClick={onToggleHidden}
-              title={hidden ? "Show thoughts" : "Hide thoughts"}
-              aria-label={hidden ? "Show thoughts" : "Hide thoughts"}
+              title={hidden ?localizeUi("ui.trackerPanel.thoughtbubble.showThoughts") :localizeUi("ui.trackerPanel.thoughtbubble.hideThoughts")}
+              aria-label={hidden ?localizeUi("ui.trackerPanel.thoughtbubble.showThoughts") :localizeUi("ui.trackerPanel.thoughtbubble.hideThoughts")}
               aria-pressed={hidden}
               className={cn(
                 "px-0 py-0 text-left font-medium italic text-[color-mix(in_srgb,var(--foreground)_86%,transparent)] transition-colors hover:bg-[var(--foreground)]/8",
@@ -235,14 +237,14 @@ function ThoughtBubble({
               style={thoughtTextStyle}
             >
               <span className={cn("break-words", thoughtTextFit.previewClassName)}>
-                {hidden ? "Hidden" : thoughtText}
+                {hidden ?localizeUi("ui.trackerPanel.thoughtbubble.hidden") : thoughtText}
               </span>
             </button>
           ) : onSave ? (
             <InlineEdit
               value={value ?? ""}
               onSave={onSave}
-              placeholder="Thoughts"
+              placeholder={localizeUi("ui.trackerPanel.thoughtbubble.thoughts")}
               className={cn(
                 "px-0 py-0 font-medium italic [--foreground:color-mix(in_srgb,var(--foreground)_96%,var(--muted-foreground)_4%)] [--muted-foreground:color-mix(in_srgb,var(--muted-foreground)_82%,var(--foreground)_18%)] hover:bg-[var(--foreground)]/8",
                 compactThoughtBubble && "w-fit max-w-full",
@@ -301,6 +303,7 @@ export function InlineThoughtBubble({
   hideMode?: boolean;
   onToggleHidden?: () => void;
 }) {
+  const { t: localizeUi } = useUiTranslation();
   const lock = useTrackerFieldLock(lockKey);
   const hiddenToggleActive = hideMode && !!onToggleHidden;
   const reducedMotion = useReducedMotion();
@@ -370,8 +373,8 @@ export function InlineThoughtBubble({
             <button
               type="button"
               onClick={onToggleHidden}
-              title={hidden ? "Show thoughts" : "Hide thoughts"}
-              aria-label={hidden ? "Show thoughts" : "Hide thoughts"}
+              title={hidden ?localizeUi("ui.trackerPanel.thoughtbubble.showThoughts") :localizeUi("ui.trackerPanel.thoughtbubble.hideThoughts")}
+              aria-label={hidden ?localizeUi("ui.trackerPanel.thoughtbubble.showThoughts") :localizeUi("ui.trackerPanel.thoughtbubble.hideThoughts")}
               aria-pressed={hidden}
               className={cn(
                 "w-full px-0 py-0 text-left font-medium italic text-[color-mix(in_srgb,var(--foreground)_86%,transparent)] transition-colors hover:bg-[var(--foreground)]/8",
@@ -382,14 +385,14 @@ export function InlineThoughtBubble({
               style={thoughtTextStyle}
             >
               <span className={cn("break-words", getThoughtPreviewClampClass(previewLineCount))}>
-                {hidden ? "Hidden" : thoughtText}
+                {hidden ?localizeUi("ui.trackerPanel.thoughtbubble.hidden") : thoughtText}
               </span>
             </button>
           ) : onSave ? (
             <InlineEdit
               value={value ?? ""}
               onSave={onSave}
-              placeholder="Thoughts"
+              placeholder={localizeUi("ui.trackerPanel.thoughtbubble.thoughts")}
               className={cn(
                 "w-full px-0 py-0 font-medium italic [--foreground:color-mix(in_srgb,var(--foreground)_96%,var(--muted-foreground)_4%)] [--muted-foreground:color-mix(in_srgb,var(--muted-foreground)_82%,var(--foreground)_18%)] hover:bg-[var(--foreground)]/8",
                 isFeaturedVariant &&

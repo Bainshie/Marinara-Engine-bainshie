@@ -1,7 +1,7 @@
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type UIEvent } from "react";
 import { ArrowLeft, ArrowUpDown, Check, Download, Hash, Pencil, Plus, Search, Star, User } from "lucide-react";
 import { includesTextForMatch, normalizeTextForMatch, type CharacterData } from "@marinara-engine/shared";
-import { useTranslation } from "react-i18next";
+import { useTranslation, useTranslation as useUiTranslation } from "react-i18next";
 import {
   flattenCharacterPages,
   flattenPersonaPages,
@@ -267,6 +267,7 @@ function CardLibraryDetailCard({
   kind: CardLibraryKind;
   onEdit: (id: string) => void;
 }) {
+  const { t: localizeUi } = useUiTranslation();
   const copy = LIBRARY_COPY[kind];
   const placeholderClass =
     kind === "characters" ? "mari-avatar-placeholder--character" : "mari-avatar-placeholder--persona";
@@ -310,20 +311,18 @@ function CardLibraryDetailCard({
               <div className="flex shrink-0 flex-col items-end gap-1.5">
                 <span
                   className="mari-chrome-muted-badge gap-1 px-2.5 py-1 text-[0.6875rem]"
-                  title={`Estimated from ${copy.singular} card text fields; actual tokenizer counts vary by model.`}
+                  title={localizeUi("ui.characters.cardlibrarydetailcard.estimatedFromValue1CardTextFieldsActualTokenizerCounts", { value1: copy.singular })}
                 >
                   <Hash size="0.75rem" />
                   {formatEstimatedTokens(card.tokenEstimate)}
                 </span>
                 {card.favorite && (
                   <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/10 px-2.5 py-1 text-[0.6875rem] font-medium text-amber-300">
-                    <Star size="0.75rem" className="fill-current" /> Favorite
-                  </span>
+                    <Star size="0.75rem" className="fill-current" /> {localizeUi("ui.characters.cardlibrarydetailcard.favorite")}</span>
                 )}
                 {card.active && (
                   <span className="mari-chrome-muted-badge mari-chrome-accent-surface gap-1 px-2.5 py-1 text-[0.6875rem]">
-                    <Check size="0.75rem" /> Active
-                  </span>
+                    <Check size="0.75rem" /> {localizeUi("ui.characters.lorebooktab.active")}</span>
                 )}
               </div>
             </div>
@@ -339,8 +338,7 @@ function CardLibraryDetailCard({
                 onClick={() => onEdit(card.id)}
                 className="mari-chrome-control mari-chrome-control--primary px-4 py-2.5 text-sm"
               >
-                <Pencil size="0.875rem" />
-                Edit {copy.singular === "character" ? "Character" : "Persona"}
+                <Pencil size="0.875rem" />{localizeUi("ui.noodle.noodlepostcard.edit")} {copy.singular === "character" ?localizeUi("ui.characters.cardlibrarydetailcard.character") :localizeUi("ui.characters.cardlibrarydetailcard.persona")}
               </button>
             </div>
           </div>
@@ -369,6 +367,7 @@ function CardLibraryDetailCard({
 }
 
 export function CharacterLibraryView() {
+  const { t: localizeUi } = useUiTranslation();
   const { t } = useTranslation();
   const localize = useLocalizedUiText();
   const kind = useUIStore((s) => s.cardLibraryKind);
@@ -567,7 +566,7 @@ export function CharacterLibraryView() {
             <button
               onClick={closeLibrary}
               className="mari-chrome-control h-9 w-9 rounded-2xl p-0 md:h-10 md:w-10"
-              title="Close library"
+              title={localizeUi("ui.characters.characterlibraryview.closeLibrary")}
             >
               <ArrowLeft size="0.95rem" />
             </button>
@@ -579,7 +578,7 @@ export function CharacterLibraryView() {
                 {copy.heading}
               </h1>
               <p className="text-xs text-[var(--marinara-chat-chrome-panel-muted)] md:text-sm">
-                {filteredCards.length} out of {cards.length} card{cards.length === 1 ? "" : "s"}
+                {filteredCards.length} {localizeUi("ui.characters.characterlibraryview.outOf")} {cards.length} {localizeUi("ui.characters.characterlibraryview.card")}{cards.length === 1 ? "" :localizeUi("ui.noodle.stageprofileview.s")}
               </p>
             </div>
           </div>
@@ -588,16 +587,16 @@ export function CharacterLibraryView() {
             <button
               onClick={() => openModal(isPersonaLibrary ? "create-persona" : "create-character")}
               className={newCardButtonClass}
-              title={`New ${copy.singular}`}
-              aria-label={`New ${copy.singular}`}
+              title={localizeUi("ui.characters.characterlibraryview.newValue1", { value1: copy.singular })}
+              aria-label={localizeUi("ui.characters.characterlibraryview.newValue1", { value1: copy.singular })}
             >
               <Plus size="0.75rem" />
             </button>
             <button
               onClick={() => openModal(isPersonaLibrary ? "import-persona" : "import-character")}
               className={libraryToolbarButtonClass}
-              title={`Import ${copy.singular}`}
-              aria-label={`Import ${copy.singular}`}
+              title={localizeUi("ui.characters.characterlibraryview.importValue1", { value1: copy.singular })}
+              aria-label={localizeUi("ui.characters.characterlibraryview.importValue1", { value1: copy.singular })}
             >
               <Download size="0.75rem" />
             </button>
@@ -628,11 +627,11 @@ export function CharacterLibraryView() {
                   "mari-chrome-sort-field mari-accent-animated appearance-none pl-2.5 pr-7",
                 )}
               >
-                <option value="name-asc">Name A-Z</option>
-                <option value="name-desc">Name Z-A</option>
-                <option value="newest">Newest</option>
-                <option value="oldest">Oldest</option>
-                {!isPersonaLibrary && <option value="favorites">Favorites first</option>}
+                <option value="name-asc">{localizeUi("ui.characters.characterlibraryview.nameAZ")}</option>
+                <option value="name-desc">{localizeUi("ui.characters.characterlibraryview.nameZA")}</option>
+                <option value="newest">{localizeUi("ui.characters.characterlibraryview.newest")}</option>
+                <option value="oldest">{localizeUi("ui.characters.characterlibraryview.oldest")}</option>
+                {!isPersonaLibrary && <option value="favorites">{localizeUi("ui.characters.characterlibraryview.favoritesFirst")}</option>}
               </select>
               <ArrowUpDown
                 size="0.6875rem"
@@ -668,12 +667,9 @@ export function CharacterLibraryView() {
                 <User size="1.5rem" />
               </div>
               <div>
-                <h2 className="text-lg font-semibold text-[var(--marinara-chat-chrome-panel-title)]">
-                  No matching {copy.plural}
+                <h2 className="text-lg font-semibold text-[var(--marinara-chat-chrome-panel-title)]">{localizeUi("ui.characters.characterlibraryview.noMatching")} {copy.plural}
                 </h2>
-                <p className="mt-1 max-w-md text-sm text-[var(--marinara-chat-chrome-panel-muted)]">
-                  Try a different search, adjust sorting, or import a new card into the library.
-                </p>
+                <p className="mt-1 max-w-md text-sm text-[var(--marinara-chat-chrome-panel-muted)]">{localizeUi("ui.characters.characterlibraryview.tryADifferentSearchAdjustSortingOrImportA")}</p>
               </div>
             </div>
           )}
@@ -716,13 +712,11 @@ export function CharacterLibraryView() {
                         )}
                         {card.favorite && (
                           <div className="absolute right-2 top-2 inline-flex items-center gap-1 rounded-full bg-black/55 px-2 py-1 text-[0.5625rem] font-medium text-amber-200 backdrop-blur-sm sm:right-3 sm:top-3 sm:text-[0.625rem]">
-                            <Star size="0.625rem" className="fill-current sm:h-[0.6875rem] sm:w-[0.6875rem]" /> Favorite
-                          </div>
+                            <Star size="0.625rem" className="fill-current sm:h-[0.6875rem] sm:w-[0.6875rem]" /> {localizeUi("ui.characters.cardlibrarydetailcard.favorite")}</div>
                         )}
                         {card.active && (
                           <div className="mari-chrome-accent-surface absolute right-2 top-2 inline-flex items-center gap-1 rounded-full px-2 py-1 text-[0.5625rem] font-medium backdrop-blur-sm sm:right-3 sm:top-3 sm:text-[0.625rem]">
-                            <Check size="0.625rem" /> Active
-                          </div>
+                            <Check size="0.625rem" /> {localizeUi("ui.characters.lorebooktab.active")}</div>
                         )}
                       </div>
 
@@ -748,7 +742,7 @@ export function CharacterLibraryView() {
                         <div className="mt-auto flex flex-wrap gap-1 sm:gap-1.5">
                           <span
                             className="mari-chrome-muted-badge gap-1 px-1.5 py-0.5 text-[0.5625rem] sm:px-2 sm:py-1 sm:text-[0.625rem]"
-                            title={`Estimated from ${copy.singular} card text fields; actual tokenizer counts vary by model.`}
+                            title={localizeUi("ui.characters.cardlibrarydetailcard.estimatedFromValue1CardTextFieldsActualTokenizerCounts", { value1: copy.singular })}
                           >
                             <Hash size="0.5625rem" /> {formatEstimatedTokens(card.tokenEstimate)}
                           </span>
@@ -788,7 +782,7 @@ export function CharacterLibraryView() {
                 disabled={isFetchingNextPage}
                 className="mari-chrome-control mari-chrome-control--primary px-5 py-2 text-sm"
               >
-                {isFetchingNextPage ? "Loading..." : `Load more (${cards.length} loaded)`}
+                {isFetchingNextPage ?localizeUi("ui.characters.characterlibraryview.loading") :localizeUi("ui.characters.characterlibraryview.loadMoreValue1Loaded", { value1: cards.length })}
               </button>
             </div>
           )}
@@ -809,12 +803,8 @@ export function CharacterLibraryView() {
                   <User size="1.5rem" />
                 </div>
                 <div>
-                  <h2 className="text-lg font-semibold text-[var(--marinara-chat-chrome-panel-title)]">
-                    Select a card
-                  </h2>
-                  <p className="mt-1 text-sm text-[var(--marinara-chat-chrome-panel-muted)]">
-                    Pick a {copy.singular} from the grid to see a larger overview before editing.
-                  </p>
+                  <h2 className="text-lg font-semibold text-[var(--marinara-chat-chrome-panel-title)]">{localizeUi("ui.characters.characterlibraryview.selectACard")}</h2>
+                  <p className="mt-1 text-sm text-[var(--marinara-chat-chrome-panel-muted)]">{localizeUi("ui.characters.characterlibraryview.pickA")} {copy.singular} {localizeUi("ui.characters.characterlibraryview.fromTheGridToSeeALargerOverviewBefore")}</p>
                 </div>
               </div>
             )}
