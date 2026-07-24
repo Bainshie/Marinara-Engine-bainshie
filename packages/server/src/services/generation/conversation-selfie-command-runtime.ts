@@ -5,7 +5,11 @@ import {
   suppressesReferencePromptLine,
   resolveIllustratorCharacterReferences,
 } from "../image/illustrator-references.js";
-import { compileImagePrompt } from "../image/image-prompt-compiler.js";
+import {
+  compileImagePrompt,
+  formatImageStylePromptGuidance,
+  resolveImageStyleGuidanceText,
+} from "../image/image-prompt-compiler.js";
 import { persistGeneratedImageToEntityGalleries } from "../image/generated-image-entity-gallery.js";
 import { resolveConnectionImageDefaults } from "../image/image-generation-defaults.js";
 import { generateImage, saveImageToDisk } from "../image/image-generation.js";
@@ -149,12 +153,29 @@ async function generateSelfie(
     resolveBaseUrl,
     onFallback: reportFallback,
   });
-  const selfieSystemPrompt = await resolveConversationSelfieSystemPrompt({
+  const imageDefaults = resolveConnectionImageDefaults(imgConnFull);
+  const imageSettings = await loadImageGenerationUserSettings(args.db);
+  const configuredStyleProfileId =
+    readNestedString(args.chatMeta.gameSetupConfig, "imageStyleProfileId") ??
+    (typeof args.chatMeta.imageStyleProfileId === "string" ? args.chatMeta.imageStyleProfileId : null);
+  const styleProfileId =
+    (typeof configuredStyleProfileId === "string" && configuredStyleProfileId.trim()
+      ? configuredStyleProfileId.trim()
+      : undefined) ??
+    imageDefaults?.styleProfileId ??
+    imageSettings.styleProfiles.defaultProfileId;
+  // Style is fed to the prompt-building model as guidance so it shapes the
+  // generated prompt, instead of being pasted verbatim into the image prompt.
+  const styleGuidance = resolveImageStyleGuidanceText(imageSettings.styleProfiles, styleProfileId);
+  const baseSelfieSystemPrompt = await resolveConversationSelfieSystemPrompt({
     promptOverridesStorage: createPromptOverridesStorage(args.db),
     chatPromptTemplate: selfiePromptTemplate,
     appearance,
     charName: args.charName,
   });
+  const selfieSystemPrompt = styleGuidance
+    ? `${baseSelfieSystemPrompt}${formatImageStylePromptGuidance(styleGuidance)}`
+    : baseSelfieSystemPrompt;
   const userPrompt = args.command.context
     ? `Context for the selfie: ${args.command.context}`
     : `Generate a casual selfie of ${args.charName} based on the current conversation context.`;
@@ -239,15 +260,6 @@ async function generateSelfie(
   const imgBaseUrl = imgConnFull.baseUrl || "https://image.pollinations.ai";
   const imgApiKey = imgConnFull.apiKey || "";
   const imgSource = imgConnFull.imageGenerationSource || imgModel;
-  const imageDefaults = resolveConnectionImageDefaults(imgConnFull);
-  const imageSettings = await loadImageGenerationUserSettings(args.db);
-  const configuredStyleProfileId =
-    readNestedString(args.chatMeta.gameSetupConfig, "imageStyleProfileId") ??
-    (typeof args.chatMeta.imageStyleProfileId === "string" ? args.chatMeta.imageStyleProfileId : null);
-  const styleProfileId =
-    typeof configuredStyleProfileId === "string" && configuredStyleProfileId.trim()
-      ? configuredStyleProfileId.trim()
-      : imageSettings.styleProfiles.defaultProfileId;
 
   const selfieRes = typeof args.chatMeta.selfieResolution === "string" ? args.chatMeta.selfieResolution : "";
   const [selfieW, selfieH] = selfieRes.split("x").map(Number) as [number, number];
@@ -259,6 +271,7 @@ async function generateSelfie(
     styleProfiles: imageSettings.styleProfiles,
     styleProfileId,
     imageDefaults,
+    omitProfileStyleText: true,
   });
   const imageResults = await generateIllustratorImageVariants({
     count: args.chatMeta.illustratorImagesPerGeneration,
