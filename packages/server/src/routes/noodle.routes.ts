@@ -3,7 +3,8 @@
 // ──────────────────────────────────────────────
 import { existsSync } from "fs";
 import { basename, dirname } from "path";
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
+import { extname } from "node:path";
 import { z } from "zod";
 import {
   createNoodlePoll,
@@ -22,6 +23,8 @@ import {
   noodleInteractionUpdateSchema,
   noodlePostUpdateSchema,
   noodlePrivatePostCreateSchema,
+  noodlePrivatePostCreateWithMediaSchema,
+  noodlePrivateGenerationRequestSchema,
   noodlePrivatePostUpdateSchema,
   noodlePrivateAccountCreateSchema,
   noodlerCreateInteractionSchema,
@@ -52,16 +55,16 @@ import { isFileUniqueConstraintError } from "../db/file-schema.js";
 import { resolveImageCaptioningRuntime } from "./generate/image-captioning-runtime.js";
 import { normalizePromptTimeZone } from "../services/conversation/timezone.js";
 import { resolveNoodleAvatarCropAfterProfileUpdate } from "../services/noodle/noodle-profile-avatar.js";
+import { isAllowedImageBuffer, safeFetch } from "../utils/security.js";
 
 import { createPublicNoodleGenerationService } from "../services/noodle/noodle-public-generation.service.js";
 import { createPublicNoodleImagesService } from "../services/noodle/noodle-public-images.service.js";
-import {
-  stageProfileContainsPublicIdentity,
-} from "../services/noodle/noodle-private-generation.service.js";
+import { stageProfileContainsPublicIdentity } from "../services/noodle/noodle-private-generation.service.js";
 import {
   createNoodlePrivatePost,
   generateNoodlePrivatePost,
   refreshAllNoodlerCreatorsNow,
+  updateNoodlePrivatePostWithMedia,
 } from "../services/noodle/noodle-private-post.operation.js";
 import { tryNoodlePrivateAccountOperation } from "../services/noodle/noodle-private-account-operation-lock.js";
 import { generateNoodlerStageProfileDraft } from "../services/noodle/noodle-stage-profile-draft.service.js";
@@ -71,6 +74,7 @@ import {
   readPrivateMediaPath,
   removePrivateAccountMedia,
   resolvePrivateMediaAbsolutePath,
+  type NoodlerPrivatePostMediaUpload,
   unlinkPrivateMedia,
 } from "../services/noodle/noodle-private-media.js";
 import {
@@ -99,6 +103,165 @@ const noodleImagePromptConfirmationSchema = z.object({
     .max(20),
   debugMode: z.boolean().optional(),
 });
+
+const NOODLER_PRIVATE_MEDIA_MAX_BYTES = 20 * 1024 * 1024;
+const NOODLER_PRIVATE_MEDIA_EXTENSIONS = new Set([".jpg", ".jpeg", ".png", ".gif", ".webp", ".avif"]);
+
+class NoodlerMediaRequestError extends Error {
+  constructor(
+    message: string,
+    readonly statusCode: number,
+  ) {
+    super(message);
+  }
+}
+
+async function readNoodlerMultipart(
+  req: FastifyRequest,
+): Promise<{ payload: unknown; media: NoodlerPrivatePostMediaUpload }> {
+  let payload: unknown;
+  let media: NoodlerPrivatePostMediaUpload | null = null;
+  for await (const part of req.parts({ limits: { fileSize: NOODLER_PRIVATE_MEDIA_MAX_BYTES, files: 1 } })) {
+    if (part.type === "field") {
+      if (part.fieldname === "payload") {
+        try {
+          payload = JSON.parse(String(part.value));
+        } catch {
+          throw new NoodlerMediaRequestError("The image request payload is invalid.", 400);
+        }
+      }
+      continue;
+    }
+    if (part.fieldname !== "file" || media) {
+      part.file.resume();
+      throw new NoodlerMediaRequestError("Upload one image in the file field.", 400);
+    }
+    const extension = extname(part.filename).toLowerCase();
+    if (!NOODLER_PRIVATE_MEDIA_EXTENSIONS.has(extension)) {
+      part.file.resume();
+      throw new NoodlerMediaRequestError("Unsupported image file type.", 400);
+    }
+    let buffer: Buffer;
+    try {
+      buffer = await part.toBuffer();
+    } catch (error) {
+      const truncated = (part.file as typeof part.file & { truncated?: boolean }).truncated === true;
+      const tooLarge = truncated || (error as { code?: string }).code === "FST_REQ_FILE_TOO_LARGE";
+      throw new NoodlerMediaRequestError(
+        tooLarge ? "NoodleR image is too large." : "Failed to read the uploaded image.",
+        tooLarge ? 413 : 400,
+      );
+    }
+    const detected = isAllowedImageBuffer(buffer, extension);
+    if (!detected || (extension === ".jpeg" ? "jpg" : extension.slice(1)) !== detected.ext) {
+      throw new NoodlerMediaRequestError("Unsupported or invalid image file.", 400);
+    }
+    media = { buffer, extension: detected.ext };
+  }
+  if (payload === undefined) {
+    throw new NoodlerMediaRequestError("The image request payload is required.", 400);
+  }
+  if (!media) throw new NoodlerMediaRequestError("Upload one image in the file field.", 400);
+  return { payload, media };
+}
+
+async function importNoodlerMedia(imageUrl: string): Promise<NoodlerPrivatePostMediaUpload> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15_000);
+  try {
+    const response = await safeFetch(imageUrl, {
+      signal: controller.signal,
+      policy: {
+        allowLocal: false,
+        allowLoopback: false,
+        allowedProtocols: ["http:", "https:"],
+        maxRedirects: 3,
+      },
+      maxResponseBytes: NOODLER_PRIVATE_MEDIA_MAX_BYTES,
+      allowedContentTypes: ["image/"],
+      allowMissingContentType: true,
+      headers: { Accept: "image/*" },
+    });
+    if (!response.ok) {
+      throw new NoodlerMediaRequestError(`Image URL returned HTTP ${response.status}.`, 400);
+    }
+    const buffer = Buffer.from(await response.arrayBuffer());
+    const detected = isAllowedImageBuffer(buffer);
+    if (!detected) {
+      throw new NoodlerMediaRequestError("The URL did not return a supported image.", 415);
+    }
+    return { buffer, extension: detected.ext };
+  } catch (error) {
+    if (error instanceof NoodlerMediaRequestError) throw error;
+    logger.warn(error, "[noodler] Could not import image URL");
+    const tooLarge = error instanceof Error && /exceeded \d+ bytes/iu.test(error.message);
+    throw new NoodlerMediaRequestError(
+      tooLarge
+        ? "NoodleR image is too large."
+        : "Could not download that image URL. Check that it is public and points directly to an image.",
+      tooLarge ? 413 : 400,
+    );
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+type DecodedNoodlerMediaRequest<T> =
+  | { success: true; data: T; media: NoodlerPrivatePostMediaUpload | undefined }
+  | { success: false; error: z.ZodError };
+
+async function decodeNoodlerMediaRequest<
+  WithMediaSchema extends z.ZodTypeAny,
+  WithoutMediaSchema extends z.ZodTypeAny,
+>(
+  req: FastifyRequest,
+  schemas: { withMedia: WithMediaSchema; withoutMedia: WithoutMediaSchema },
+): Promise<DecodedNoodlerMediaRequest<z.output<WithMediaSchema> | z.output<WithoutMediaSchema>>> {
+  let payload: unknown = req.body;
+  let media: NoodlerPrivatePostMediaUpload | undefined;
+  if (req.headers["content-type"]?.startsWith("multipart/form-data")) {
+    const multipart = await readNoodlerMultipart(req);
+    payload = multipart.payload;
+    media = multipart.media;
+  }
+
+  const parsedForUrl = schemas.withMedia.safeParse(payload);
+  const uploadedImageUrl =
+    parsedForUrl.success &&
+    typeof (parsedForUrl.data as { uploadedImageUrl?: unknown }).uploadedImageUrl === "string"
+      ? (parsedForUrl.data as { uploadedImageUrl: string }).uploadedImageUrl
+      : undefined;
+  if (uploadedImageUrl) {
+    if (media) {
+      throw new NoodlerMediaRequestError("Choose either an uploaded file or an image URL.", 400);
+    }
+    media = await importNoodlerMedia(uploadedImageUrl);
+  }
+
+  const parsed = (media ? schemas.withMedia : schemas.withoutMedia).safeParse(payload);
+  return parsed.success
+    ? { success: true, data: parsed.data, media }
+    : { success: false, error: parsed.error };
+}
+
+function sendNoodlerMediaError(reply: FastifyReply, error: unknown) {
+  const tooLarge = (error as { code?: string }).code === "FST_REQ_FILE_TOO_LARGE";
+  const statusCode =
+    tooLarge
+      ? 413
+      : error instanceof NoodlerMediaRequestError
+        ? error.statusCode
+        : 500;
+  if (statusCode === 500) logger.error(error, "[noodler] Image request failed");
+  return reply.code(statusCode).send({
+    error:
+      statusCode === 500
+        ? "Image request failed."
+        : tooLarge
+          ? "NoodleR image is too large."
+          : (error as Error).message,
+  });
+}
 
 export async function noodleRoutes(app: FastifyInstance) {
   const noodle = createNoodleStorage(app.db);
@@ -155,9 +318,7 @@ export async function noodleRoutes(app: FastifyInstance) {
       ]),
     );
     const visibleAccounts = accounts.filter(
-      (account) =>
-        account.publicAccountId === viewer.id ||
-        !isNoodlerHiddenFromViewer(account, viewer.id),
+      (account) => account.publicAccountId === viewer.id || !isNoodlerHiddenFromViewer(account, viewer.id),
     );
     const postsByAccount = await noodle.listPrivatePostsByAccounts(
       visibleAccounts.map((account) => account.id),
@@ -215,20 +376,12 @@ export async function noodleRoutes(app: FastifyInstance) {
     return { viewer, creators };
   });
 
-  async function resolveGatedPrivatePost(personaId: string, postId: string) {
+  async function resolveReadablePrivatePost(personaId: string, postId: string) {
     const viewer = await resolveViewerPersona(personaId);
     const post = viewer ? await noodle.getPrivatePostById(postId) : null;
     const creator = post ? await noodle.getPrivateAccountById(post.authorAccountId) : null;
-    // A viewer persona linked to the creator's own public account may read its posts, but
-    // is not an audience member and must not persist self-interactions.
-    if (
-      !viewer ||
-      !post ||
-      !creator ||
-      creator.publicAccountId === viewer.id ||
-      isNoodlerHiddenFromViewer(creator, viewer.id)
-    )
-      return null;
+    if (!viewer || !post || !creator || isNoodlerHiddenFromViewer(creator, viewer.id)) return null;
+    if (creator.publicAccountId === viewer.id) return { viewer, post, creator };
     const [subscriptions, unlocks] = await Promise.all([
       noodle.listSubscriptionsForViewer(viewer.id),
       noodle.listPostUnlocksForViewer(viewer.id),
@@ -241,7 +394,15 @@ export async function noodleRoutes(app: FastifyInstance) {
       subscriptionIncludesPpv: creator.settings.privacy.access.subscriptionIncludesPpv,
     });
     if (locked) return null;
-    return { viewer, post };
+    return { viewer, post, creator };
+  }
+
+  async function resolveGatedPrivatePost(personaId: string, postId: string) {
+    const readable = await resolveReadablePrivatePost(personaId, postId);
+    // A viewer persona linked to the creator's own public account may read its posts, but
+    // is not an audience member and must not persist self-interactions.
+    if (!readable || readable.creator.publicAccountId === readable.viewer.id) return null;
+    return readable;
   }
 
   // Access-checked serving for NoodleR-owned private media. A persona query gates as a fan
@@ -260,7 +421,7 @@ export async function noodleRoutes(app: FastifyInstance) {
     const mediaPath = readPrivateMediaPath(post);
     const absolute = mediaPath ? resolvePrivateMediaAbsolutePath(mediaPath) : null;
     if (!absolute || !existsSync(absolute)) return reply.code(404).send({ error: "Not Found" });
-    return reply.sendFile(basename(absolute), dirname(absolute), { maxAge: "1y", immutable: true });
+    return reply.header("Cache-Control", "private, no-store").sendFile(basename(absolute), dirname(absolute));
   });
 
   app.post("/noodler/posts/:id/interactions", async (req, reply) => {
@@ -271,6 +432,13 @@ export async function noodleRoutes(app: FastifyInstance) {
     const { id } = req.params as { id: string };
     const gated = await resolveGatedPrivatePost(parsed.data.personaId, id);
     if (!gated) return reply.code(404).send({ error: "NoodleR post not found" });
+    if (parsed.data.type === "vote") {
+      const poll = readNoodlePollFromMetadata(gated.post.metadata);
+      const optionId = parsed.data.content?.trim() ?? "";
+      if (!poll?.options.some((option) => option.id === optionId)) {
+        return reply.code(400).send({ error: "Choose a valid poll option." });
+      }
+    }
     const interaction = await noodle.createPrivateInteraction(id, {
       actorAccountId: gated.viewer.id,
       type: parsed.data.type,
@@ -307,17 +475,46 @@ export async function noodleRoutes(app: FastifyInstance) {
     const parsed = noodlePrivatePostUpdateSchema.safeParse(req.body);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
     const { id } = req.params as { id: string };
-    const post = await noodle.updatePrivatePost(id, parsed.data);
-    if (!post) return reply.code(404).send({ error: "NoodleR post not found" });
-    return post;
+    const existing = await noodle.getPrivatePostById(id);
+    if (!existing) return reply.code(404).send({ error: "NoodleR post not found" });
+    const nextContent = parsed.data.content === undefined ? existing.content : parsed.data.content;
+    const nextPoll =
+      parsed.data.poll === undefined
+        ? readNoodlePollFromMetadata(existing.metadata)
+        : parsed.data.poll
+          ? createNoodlePoll(parsed.data.poll)
+          : null;
+    const nextHasImage = parsed.data.removeImage ? false : Boolean(existing.imageUrl);
+    if (!nextContent.trim() && !nextPoll && !nextHasImage) {
+      return reply.code(400).send({ error: "Posts need a body, image, or poll." });
+    }
+    const locked = await tryNoodlePrivateAccountOperation(existing.authorAccountId, () =>
+      noodle.updatePrivatePost(id, parsed.data),
+    );
+    if (!locked.acquired) {
+      return reply.code(409).send({ error: "Another operation for this NoodleR account is already running." });
+    }
+    if (!locked.value) return reply.code(404).send({ error: "NoodleR post not found" });
+    if (parsed.data.removeImage) unlinkPrivateMedia(readPrivateMediaPath(existing));
+    return locked.value;
   });
 
   app.post("/noodler/posts", async (req, reply) => {
     const settings = await noodle.getSettings();
     if (!settings.enableNoodler) return reply.code(404).send({ error: "Not Found" });
-    const parsed = noodlePrivatePostCreateSchema.safeParse(req.body);
-    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
-    const result = await createNoodlePrivatePost(app.db, parsed.data);
+    let decoded: DecodedNoodlerMediaRequest<
+      z.output<typeof noodlePrivatePostCreateWithMediaSchema> | z.output<typeof noodlePrivatePostCreateSchema>
+    >;
+    try {
+      decoded = await decodeNoodlerMediaRequest(req, {
+        withMedia: noodlePrivatePostCreateWithMediaSchema,
+        withoutMedia: noodlePrivatePostCreateSchema,
+      });
+    } catch (error) {
+      return sendNoodlerMediaError(reply, error);
+    }
+    if (!decoded.success) return reply.code(400).send({ error: decoded.error.flatten() });
+    const result = await createNoodlePrivatePost(app.db, decoded.data, decoded.media);
     if (result.status === "created") return reply.code(201).send(result.post);
     if (result.status === "busy") {
       return reply.code(409).send({ error: "Another operation for this NoodleR account is already running." });
@@ -326,14 +523,43 @@ export async function noodleRoutes(app: FastifyInstance) {
     return reply.code(404).send({ error: "NoodleR stage profile not found" });
   });
 
+  app.post("/noodler/posts/:id/media", async (req, reply) => {
+    const settings = await noodle.getSettings();
+    if (!settings.enableNoodler) return reply.code(404).send({ error: "Not Found" });
+    const { id } = req.params as { id: string };
+    let multipart: Awaited<ReturnType<typeof readNoodlerMultipart>>;
+    try {
+      multipart = await readNoodlerMultipart(req);
+    } catch (error) {
+      return sendNoodlerMediaError(reply, error);
+    }
+    const parsed = noodlePrivatePostUpdateSchema.safeParse(multipart.payload);
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    if (parsed.data.removeImage) {
+      return reply.code(400).send({ error: "A replacement image cannot also remove the image." });
+    }
+    const result = await updateNoodlePrivatePostWithMedia(app.db, id, parsed.data, multipart.media);
+    if (result.status === "updated") return result.post;
+    if (result.status === "busy") {
+      return reply.code(409).send({ error: "Another operation for this NoodleR account is already running." });
+    }
+    if (result.status === "disabled") return reply.code(404).send({ error: "Not Found" });
+    return reply.code(404).send({ error: "NoodleR post not found" });
+  });
+
   app.delete("/noodler/posts/:id", async (req, reply) => {
     const settings = await noodle.getSettings();
     if (!settings.enableNoodler) return reply.code(404).send({ error: "Not Found" });
     const { id } = req.params as { id: string };
-    const deleted = await noodle.deletePrivatePost(id);
-    if (!deleted) return reply.code(404).send({ error: "NoodleR post not found" });
-    unlinkPrivateMedia(readPrivateMediaPath(deleted));
-    return deleted;
+    const existing = await noodle.getPrivatePostById(id);
+    if (!existing) return reply.code(404).send({ error: "NoodleR post not found" });
+    const locked = await tryNoodlePrivateAccountOperation(existing.authorAccountId, () => noodle.deletePrivatePost(id));
+    if (!locked.acquired) {
+      return reply.code(409).send({ error: "Another operation for this NoodleR account is already running." });
+    }
+    if (!locked.value) return reply.code(404).send({ error: "NoodleR post not found" });
+    unlinkPrivateMedia(readPrivateMediaPath(locked.value));
+    return locked.value;
   });
 
   app.post("/noodler/accounts/:id/subscribe", async (req, reply) => {
@@ -845,7 +1071,11 @@ export async function noodleRoutes(app: FastifyInstance) {
       parentPostId: parsed.data.parentPostId ?? null,
       quotePostId: parsed.data.quotePostId ?? null,
       source: "manual",
-      metadata: { ...mentionedAccountMetadata(mentionedAccounts), ...(poll ? { poll } : {}) },
+      metadata: {
+        ...mentionedAccountMetadata(mentionedAccounts),
+        ...(poll ? { poll } : {}),
+        ...(parsed.data.imageCrop ? { imageCrop: parsed.data.imageCrop } : {}),
+      },
     });
     if (!post) return reply.code(404).send({ error: "Noodle author not found" });
     const digest = await noodle.createDigest({
@@ -863,9 +1093,21 @@ export async function noodleRoutes(app: FastifyInstance) {
     }
     const parsed = noodlePostUpdateSchema.safeParse(req.body);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    const existing = await noodle.getPostById(id);
+    if (!existing) return reply.code(404).send({ error: "Noodle post not found" });
+    const nextContent = parsed.data.content === undefined ? existing.content : parsed.data.content;
+    const nextPoll =
+      parsed.data.poll === undefined
+        ? readNoodlePollFromMetadata(existing.metadata)
+        : parsed.data.poll
+          ? createNoodlePoll(parsed.data.poll)
+          : null;
+    if (!nextContent.trim() && !nextPoll) {
+      return reply.code(400).send({ error: "Posts need a body or poll." });
+    }
     let post = await noodle.updatePost(id, parsed.data);
     if (!post) return reply.code(404).send({ error: "Noodle post not found" });
-    if (parsed.data.content !== undefined) {
+    if (parsed.data.content !== undefined || parsed.data.poll !== undefined) {
       const mentionedAccounts = mentionedCharacterAccounts(await noodle.listAccounts(), post.content);
       post =
         (await noodle.updatePostMedia(post.id, {
@@ -873,10 +1115,12 @@ export async function noodleRoutes(app: FastifyInstance) {
         })) ?? post;
       const digestId = post.metadata.activityDigestId;
       const author = await noodle.getAccountById(post.authorAccountId);
+      const poll = readNoodlePollFromMetadata(post.metadata);
+      const digestContent = post.content.trim() || poll?.question || "Shared a poll.";
       if (typeof digestId === "string" && digestId && author) {
         await noodle.updateDigest(digestId, {
           accountIds: [author.id, ...mentionedAccounts.map((mentionedAccount) => mentionedAccount.id)],
-          content: `${noodleDigestAccountLabel(author)} posted on Noodle: ${post.content}`,
+          content: `${noodleDigestAccountLabel(author)} posted on Noodle: ${digestContent}`,
         });
       }
     }
@@ -1071,11 +1315,21 @@ export async function noodleRoutes(app: FastifyInstance) {
   });
 
   app.post("/refresh", async (req, reply) => {
-    const parsed = noodleGenerationRequestSchema.safeParse(req.body);
-    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
-    if (parsed.data.mode === "private") {
+    let decoded: DecodedNoodlerMediaRequest<
+      z.output<typeof noodlePrivateGenerationRequestSchema> | z.output<typeof noodleGenerationRequestSchema>
+    >;
+    try {
+      decoded = await decodeNoodlerMediaRequest(req, {
+        withMedia: noodlePrivateGenerationRequestSchema,
+        withoutMedia: noodleGenerationRequestSchema,
+      });
+    } catch (error) {
+      return sendNoodlerMediaError(reply, error);
+    }
+    if (!decoded.success) return reply.code(400).send({ error: decoded.error.flatten() });
+    if (decoded.data.mode === "private") {
       try {
-        const result = await generateNoodlePrivatePost(app.db, parsed.data);
+        const result = await generateNoodlePrivatePost(app.db, decoded.data, decoded.media);
         if (result.status === "generated") {
           return result.imagePromptReview
             ? { ...result.post, imagePromptReview: result.imagePromptReview }
@@ -1098,7 +1352,7 @@ export async function noodleRoutes(app: FastifyInstance) {
       }
     }
     const settings = await noodle.getSettings();
-    const connectionId = parsed.data.connectionId ?? settings.generationConnectionId;
+    const connectionId = decoded.data.connectionId ?? settings.generationConnectionId;
     if (!connectionId) return reply.code(400).send({ error: "Select a Noodle generation connection first." });
     const conn = await connections.getWithKey(connectionId);
     if (!conn) return reply.code(404).send({ error: "Noodle generation connection not found" });
@@ -1129,10 +1383,10 @@ export async function noodleRoutes(app: FastifyInstance) {
         imageConnection,
         imageCaptioning,
         settings,
-        personaId: parsed.data.personaId,
-        timeZone: normalizePromptTimeZone(parsed.data.timeZone),
-        debugMode: parsed.data.debugMode === true,
-        reviewImagePromptsBeforeSend: parsed.data.reviewImagePromptsBeforeSend === true,
+        personaId: decoded.data.personaId,
+        timeZone: normalizePromptTimeZone(decoded.data.timeZone),
+        debugMode: decoded.data.debugMode === true,
+        reviewImagePromptsBeforeSend: decoded.data.reviewImagePromptsBeforeSend === true,
       });
       if (!generated.ok) return reply.code(400).send({ error: generated.error });
       return generated.result;

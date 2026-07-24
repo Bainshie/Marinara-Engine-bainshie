@@ -4,6 +4,7 @@ import type { NoodlerManagedPost } from "@marinara-engine/shared";
 import { logger } from "../../lib/logger.js";
 import { DATA_DIR } from "../../utils/data-dir.js";
 import { assertInsideDir } from "../../utils/security.js";
+import { stageImageToDisk } from "../image/image-generation.js";
 
 // NoodleR-owned private media lives under the gallery data dir but in a namespace whose
 // path contains a slash, so the public gallery serve routes (which reject slashes in the
@@ -11,9 +12,43 @@ import { assertInsideDir } from "../../utils/security.js";
 const GALLERY_DIR = join(DATA_DIR, "gallery");
 const PRIVATE_MEDIA_PREFIX = "noodler-private/";
 
+export type NoodlerPrivatePostMediaUpload = {
+  buffer: Buffer;
+  extension: string;
+};
+
 /** Access-checked serving URL for a private post's generated image. */
 export function privatePostMediaUrl(postId: string): string {
   return `/api/noodle/noodler/posts/${encodeURIComponent(postId)}/media`;
+}
+
+/**
+ * Promote uploaded private media and persist its stable post-owned references as one
+ * compensating operation. A null result means the target disappeared before persistence.
+ */
+export async function persistPrivatePostWithUploadedMedia<T>(
+  accountId: string,
+  postId: string,
+  upload: NoodlerPrivatePostMediaUpload,
+  persist: (media: { imageUrl: string; privateMediaPath: string }) => Promise<T | null>,
+): Promise<T | null> {
+  const stagedMedia = stageImageToDisk(
+    `${PRIVATE_MEDIA_PREFIX}${accountId}`,
+    upload.buffer.toString("base64"),
+    upload.extension,
+  );
+  try {
+    stagedMedia.promote();
+    const result = await persist({
+      imageUrl: privatePostMediaUrl(postId),
+      privateMediaPath: stagedMedia.filePath,
+    });
+    if (result === null) stagedMedia.compensate();
+    return result;
+  } catch (error) {
+    stagedMedia.compensate();
+    throw error;
+  }
 }
 
 export function readPrivateMediaPath(post: Pick<NoodlerManagedPost, "metadata">): string | null {
