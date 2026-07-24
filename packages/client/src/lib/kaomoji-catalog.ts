@@ -10,12 +10,16 @@ export interface KaomojiEntry {
 }
 
 export interface KaomojiCategory {
+  /** Stable id used for the localization key (`chat.kaomoji.category.<id>`). */
+  id: string;
+  /** English fallback label. */
   label: string;
   items: KaomojiEntry[];
 }
 
 export const KAOMOJI_CATEGORIES: KaomojiCategory[] = [
   {
+    id: "happy",
     label: "Happy",
     items: [
       { value: "(◕‿◕)", keywords: "happy smile cute content" },
@@ -33,6 +37,7 @@ export const KAOMOJI_CATEGORIES: KaomojiCategory[] = [
     ],
   },
   {
+    id: "love",
     label: "Love",
     items: [
       { value: "(♡°▽°♡)", keywords: "love heart eyes adore" },
@@ -48,6 +53,7 @@ export const KAOMOJI_CATEGORIES: KaomojiCategory[] = [
     ],
   },
   {
+    id: "sad",
     label: "Sad",
     items: [
       { value: "(╥﹏╥)", keywords: "sad cry crying tears" },
@@ -63,6 +69,7 @@ export const KAOMOJI_CATEGORIES: KaomojiCategory[] = [
     ],
   },
   {
+    id: "angry",
     label: "Angry",
     items: [
       { value: "(╬ Ò﹏Ó)", keywords: "angry mad furious rage" },
@@ -78,6 +85,7 @@ export const KAOMOJI_CATEGORIES: KaomojiCategory[] = [
     ],
   },
   {
+    id: "surprised",
     label: "Surprised",
     items: [
       { value: "(⊙_⊙)", keywords: "surprised shocked wide eyes" },
@@ -91,6 +99,7 @@ export const KAOMOJI_CATEGORIES: KaomojiCategory[] = [
     ],
   },
   {
+    id: "shrug",
     label: "Shrug & Flip",
     items: [
       { value: "¯\\_(ツ)_/¯", keywords: "shrug whatever dunno idk meh" },
@@ -105,6 +114,7 @@ export const KAOMOJI_CATEGORIES: KaomojiCategory[] = [
     ],
   },
   {
+    id: "cute",
     label: "Cute & Misc",
     items: [
       { value: "(=^･ω･^=)", keywords: "cat kitty cute animal meow" },
@@ -131,8 +141,26 @@ export const KAOMOJI_CATEGORIES: KaomojiCategory[] = [
   },
 ];
 
-/** Flat list of every kaomoji for global search. */
-export const KAOMOJI_ALL: KaomojiEntry[] = KAOMOJI_CATEGORIES.flatMap((category) => category.items);
+/**
+ * Flat list of every kaomoji for global search, deduplicated by value. A
+ * kaomoji that fits more than one category (e.g. a hug in Love and Sad) appears
+ * once with its keywords merged, so search never returns duplicate entries.
+ */
+export const KAOMOJI_ALL: KaomojiEntry[] = (() => {
+  const byValue = new Map<string, KaomojiEntry>();
+  for (const category of KAOMOJI_CATEGORIES) {
+    for (const item of category.items) {
+      const existing = byValue.get(item.value);
+      if (existing) {
+        const merged = new Set([...existing.keywords.split(/\s+/u), ...item.keywords.split(/\s+/u)].filter(Boolean));
+        existing.keywords = [...merged].join(" ");
+      } else {
+        byValue.set(item.value, { value: item.value, keywords: item.keywords });
+      }
+    }
+  }
+  return [...byValue.values()];
+})();
 
 /**
  * Rank kaomoji against a query. Space-separated tokens must all match somewhere

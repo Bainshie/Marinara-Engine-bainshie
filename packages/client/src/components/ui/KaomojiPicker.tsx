@@ -3,6 +3,7 @@
 // ──────────────────────────────────────────────
 import { useState, useRef, useEffect, useCallback, useLayoutEffect, useMemo } from "react";
 import { createPortal } from "react-dom";
+import { useTranslation } from "react-i18next";
 import { Search } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { KAOMOJI_CATEGORIES, KAOMOJI_ALL, searchKaomoji } from "../../lib/kaomoji-catalog";
@@ -22,6 +23,7 @@ const PICKER_WIDTH = 320;
 const PICKER_HEIGHT = 360;
 
 export function KaomojiPicker({ open, onClose, onSelect, anchorRef, containerRef, embedded }: KaomojiPickerProps) {
+  const { t } = useTranslation();
   const [search, setSearch] = useState("");
   const [activeCategory, setActiveCategory] = useState(0);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -137,7 +139,7 @@ export function KaomojiPicker({ open, onClose, onSelect, anchorRef, containerRef
           ref={searchInputRef}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search kaomoji…"
+          placeholder={t("chat.kaomoji.search")}
           className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-[var(--muted-foreground)]"
         />
       </div>
@@ -146,7 +148,7 @@ export function KaomojiPicker({ open, onClose, onSelect, anchorRef, containerRef
         <div className="flex shrink-0 gap-1 overflow-x-auto border-b border-[var(--border)] px-1.5 py-1.5">
           {KAOMOJI_CATEGORIES.map((category, index) => (
             <button
-              key={category.label}
+              key={category.id}
               type="button"
               onClick={() => setActiveCategory(index)}
               className={cn(
@@ -156,7 +158,7 @@ export function KaomojiPicker({ open, onClose, onSelect, anchorRef, containerRef
                   : "text-[var(--muted-foreground)] hover:bg-[var(--secondary)]/50 hover:text-[var(--foreground)]",
               )}
             >
-              {category.label}
+              {t(`chat.kaomoji.category.${category.id}`, category.label)}
             </button>
           ))}
         </div>
@@ -164,7 +166,7 @@ export function KaomojiPicker({ open, onClose, onSelect, anchorRef, containerRef
 
       <div className="min-h-0 flex-1 overflow-y-auto p-1.5">
         {results.length === 0 ? (
-          <p className="px-2 py-6 text-center text-xs text-[var(--muted-foreground)]">No kaomoji found.</p>
+          <p className="px-2 py-6 text-center text-xs text-[var(--muted-foreground)]">{t("chat.kaomoji.empty")}</p>
         ) : (
           <div className="grid grid-cols-2 gap-1">
             {results.map((entry) => (
@@ -186,7 +188,7 @@ export function KaomojiPicker({ open, onClose, onSelect, anchorRef, containerRef
 
   if (embedded) {
     return (
-      <div ref={panelRef} role="dialog" aria-label="Kaomoji picker" className="flex h-full flex-col overflow-hidden">
+      <div ref={panelRef} role="dialog" aria-label={t("chat.kaomoji.title")} className="flex h-full flex-col overflow-hidden">
         {body}
       </div>
     );
@@ -196,7 +198,7 @@ export function KaomojiPicker({ open, onClose, onSelect, anchorRef, containerRef
     <div
       ref={panelRef}
       role="dialog"
-      aria-label="Kaomoji picker"
+      aria-label={t("chat.kaomoji.title")}
       className="fixed z-[60] flex w-80 max-w-[calc(100vw-1rem)] flex-col overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--card)] shadow-2xl"
       style={{ top: pos.top, left: pos.left, right: pos.right, maxHeight: pos.maxHeight, width: PICKER_WIDTH }}
     >
