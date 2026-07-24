@@ -222,7 +222,11 @@ export const ChatInput = memo(function ChatInput({
   const [isTranslatingDraft, setIsTranslatingDraft] = useState(false);
   const [emojiOpen, setEmojiOpen] = useState(false);
   const isMobileComposerViewport = useIsMobileComposerViewport();
-  const [pushStoryArmed, setPushStoryArmed] = useState(false);
+  // Push Story arms for the next response with an explicit mode picked from
+  // the selector that opens on click; null means disarmed.
+  const [pushStoryMode, setPushStoryMode] = useState<NarrativeDirectorMode | null>(null);
+  const [pushStoryMenuOpen, setPushStoryMenuOpen] = useState(false);
+  const pushStoryMenuRef = useRef<HTMLDivElement>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [charPickerOpen, setCharPickerOpen] = useState(false);
   const charPickerBtnRef = useRef<HTMLButtonElement>(null);
@@ -347,13 +351,11 @@ export const ChatInput = memo(function ChatInput({
   const combatActionActive =
     mode === "roleplay" && combatAgentEnabled === true && typeof onStartEncounter === "function";
   const showRoleplayAgentActions = narrativeDirectorActive || combatActionActive;
-  const narrativeDirectorMode: NarrativeDirectorMode =
-    chatMetadata.narrativeDirectorMode === "random" ? "random" : "natural";
   const consumeNarrativeDirectorMode = useCallback((): NarrativeDirectorMode | undefined => {
-    if (!pushStoryArmed || !narrativeDirectorActive) return undefined;
-    setPushStoryArmed(false);
-    return narrativeDirectorMode;
-  }, [narrativeDirectorActive, narrativeDirectorMode, pushStoryArmed]);
+    if (!pushStoryMode || !narrativeDirectorActive) return undefined;
+    setPushStoryMode(null);
+    return pushStoryMode;
+  }, [narrativeDirectorActive, pushStoryMode]);
   const generateWithNarrativeDirector = useCallback(
     (params: Parameters<typeof generate>[0]) => {
       const directorMode = consumeNarrativeDirectorMode();
@@ -785,22 +787,45 @@ export const ChatInput = memo(function ChatInput({
     qc,
   ]);
 
-  const handleTogglePushStory = useCallback(() => {
+  const handlePushStoryClick = useCallback(() => {
     if (!narrativeDirectorActive || isInputBusy) return;
-    setPushStoryArmed((current) => {
-      const next = !current;
-      if (next) {
-        toast.success(
-          `The next time a character responds, they will push the story forward ${
-            narrativeDirectorMode === "random" ? "randomly" : "naturally"
-          }!`,
-        );
-      } else {
-        toast.info("Push Story disarmed.");
-      }
-      return next;
-    });
-  }, [isInputBusy, narrativeDirectorActive, narrativeDirectorMode]);
+    if (pushStoryMode) {
+      setPushStoryMode(null);
+      setPushStoryMenuOpen(false);
+      toast.info("Push Story disarmed.");
+      return;
+    }
+    setPushStoryMenuOpen((open) => !open);
+  }, [isInputBusy, narrativeDirectorActive, pushStoryMode]);
+
+  const handleArmPushStory = useCallback((mode: NarrativeDirectorMode) => {
+    setPushStoryMode(mode);
+    setPushStoryMenuOpen(false);
+    toast.success(
+      `The next time a character responds, they will push the story forward ${
+        mode === "random" ? "randomly" : "naturally"
+      }!`,
+    );
+  }, []);
+
+  // Dismiss the Push Story mode selector on outside click or Escape.
+  useEffect(() => {
+    if (!pushStoryMenuOpen) return;
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target as Node | null;
+      if (target && pushStoryMenuRef.current?.contains(target)) return;
+      setPushStoryMenuOpen(false);
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setPushStoryMenuOpen(false);
+    };
+    window.addEventListener("pointerdown", handlePointerDown, true);
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("pointerdown", handlePointerDown, true);
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [pushStoryMenuOpen]);
 
   const handleSend = useCallback(async () => {
     const raw = getValue();
@@ -1696,26 +1721,57 @@ export const ChatInput = memo(function ChatInput({
       {showRoleplayAgentActions && (
         <div className="flex flex-wrap justify-center gap-2 py-1">
           {narrativeDirectorActive && (
-            <button
-              type="button"
-              onClick={handleTogglePushStory}
-              disabled={isInputBusy}
-              aria-pressed={pushStoryArmed}
-              className={cn(
-                ROLEPLAY_AGENT_ACTION_BUTTON_CLASS,
-                pushStoryArmed
-                  ? "bg-foreground/10 text-foreground ring-1 ring-foreground/25"
-                  : "text-foreground/50 hover:bg-foreground/10 hover:text-foreground/80",
+            <div ref={pushStoryMenuRef} className="relative">
+              <button
+                type="button"
+                onClick={handlePushStoryClick}
+                disabled={isInputBusy}
+                aria-pressed={pushStoryMode !== null}
+                aria-expanded={pushStoryMenuOpen}
+                aria-haspopup="menu"
+                className={cn(
+                  ROLEPLAY_AGENT_ACTION_BUTTON_CLASS,
+                  pushStoryMode
+                    ? "bg-foreground/10 text-foreground ring-1 ring-foreground/25"
+                    : "text-foreground/50 hover:bg-foreground/10 hover:text-foreground/80",
+                )}
+                title={
+                  pushStoryMode
+                    ? "Disarm the Narrative Director push"
+                    : "Choose how the Narrative Director pushes the story in the next response"
+                }
+              >
+                <WandSparkles size="0.875rem" />
+                <span>
+                  {pushStoryMode ? `Push Story: ${pushStoryMode === "random" ? "Randomly" : "Naturally"}` : "Push Story"}
+                </span>
+              </button>
+              {pushStoryMenuOpen && (
+                <div
+                  role="menu"
+                  className="absolute bottom-full left-1/2 z-50 mb-2 w-64 -translate-x-1/2 rounded-xl border border-[var(--border)] bg-[var(--card)] p-1 shadow-2xl"
+                >
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => handleArmPushStory("natural")}
+                    className="flex w-full flex-col items-start gap-0.5 rounded-lg px-3 py-2 text-left transition-colors hover:bg-foreground/10"
+                  >
+                    <span className="text-sm font-medium text-foreground">Naturally</span>
+                    <span className="text-xs text-foreground/60">Push the existing plot forward.</span>
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => handleArmPushStory("random")}
+                    className="flex w-full flex-col items-start gap-0.5 rounded-lg px-3 py-2 text-left transition-colors hover:bg-foreground/10"
+                  >
+                    <span className="text-sm font-medium text-foreground">Randomly</span>
+                    <span className="text-xs text-foreground/60">Add a plausible surprise to the scene.</span>
+                  </button>
+                </div>
               )}
-              title={
-                narrativeDirectorMode === "random"
-                  ? "Arm a random Narrative Director event for the next response"
-                  : "Arm a natural Narrative Director push for the next response"
-              }
-            >
-              <WandSparkles size="0.875rem" />
-              <span>Push Story</span>
-            </button>
+            </div>
           )}
           {combatActionActive && (
             <button

@@ -571,41 +571,6 @@ function SetupToggle({
   );
 }
 
-function SetupSegmentedControl<T extends string>({
-  value,
-  options,
-  disabled,
-  onChange,
-}: {
-  value: T;
-  options: Array<{ id: T; label: string; description?: string }>;
-  disabled?: boolean;
-  onChange: (value: T) => void;
-}) {
-  return (
-    <div className="grid grid-cols-2 gap-1 rounded-lg border border-[var(--border)] bg-[var(--background)]/75 p-1">
-      {options.map((option) => (
-        <button
-          key={option.id}
-          type="button"
-          disabled={disabled}
-          onClick={() => onChange(option.id)}
-          aria-pressed={value === option.id}
-          className={cn(
-            "rounded-md px-2.5 py-2 text-left transition-all disabled:cursor-not-allowed disabled:opacity-60",
-            value === option.id
-              ? "bg-[var(--primary)]/12 text-[var(--foreground)] ring-1 ring-[var(--primary)]/35"
-              : "text-[var(--muted-foreground)] hover:bg-[var(--accent)] hover:text-[var(--foreground)]",
-          )}
-        >
-          <span className="block text-[0.6875rem] font-semibold">{option.label}</span>
-          {option.description ? <span className="mt-0.5 block text-[0.625rem]">{option.description}</span> : null}
-        </button>
-      ))}
-    </div>
-  );
-}
-
 function PromptTemplateSelect({
   options,
   value,
@@ -1459,15 +1424,9 @@ export function AgentAddSetupFields({
 
       {agentId === "director" && (
         <div className="space-y-2">
-          <SetupSegmentedControl
-            value={value.directorMode}
-            disabled={disabled}
-            options={[
-              { id: "natural", label: "Natural", description: "Advance existing story threads." },
-              { id: "random", label: "Random Event", description: "Introduce a plausible surprise." },
-            ]}
-            onChange={(directorMode) => onChange({ directorMode })}
-          />
+          <p className="rounded-lg bg-[var(--background)]/65 px-3 py-2 text-[0.625rem] text-[var(--muted-foreground)] ring-1 ring-[var(--border)]">
+            Choose between a natural or random push each time from the Push Story button above the chat input.
+          </p>
           {allowSecretPlotControls && (
             <SetupToggle
               label="Secret Plot"
