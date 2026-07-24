@@ -4397,7 +4397,6 @@ export function ChatSettingsDrawer({
                 customPrompt={(metadata.customSystemPrompt as string) ?? ""}
                 promptPresetId={effectiveModePromptPresetId}
                 promptPresets={promptPresetOptions}
-                selectedPresetName={selectedModePromptPreset?.name ?? null}
                 selectedPresetPrompt={selectedModePromptPreset?.conversationPrompt ?? ""}
                 onCustomPromptChange={(id, customSystemPrompt) => updateMeta.mutate({ id, customSystemPrompt })}
                 onPromptPresetChange={handleModePromptPresetChange}
