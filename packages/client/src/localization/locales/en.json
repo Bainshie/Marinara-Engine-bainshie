@@ -31,6 +31,7 @@
   "chat.input.attachFiles": "Attach files",
   "chat.input.default": "Type here, / for commands.",
   "chat.input.emoji": "Emoji",
+  "chat.input.kaomoji": "Kaomoji",
   "chat.input.media": "Emoji, GIFs & stickers",
   "chat.input.mediaAndTools": "Emoji, GIFs, stickers & tools",
   "chat.input.message": "Message...",
