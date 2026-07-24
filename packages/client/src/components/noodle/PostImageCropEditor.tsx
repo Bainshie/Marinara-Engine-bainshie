@@ -152,11 +152,11 @@ export function PostImageCropEditor({
   };
 
   return (
-    <section className="mb-3 space-y-3 rounded-xl border border-[var(--noodle-divider)] bg-[var(--noodle-blue)]/5 p-3">
+    <section className="mb-3 space-y-3 rounded-xl border border-[var(--noodle-divider)] bg-[var(--noodle-accent)]/5 p-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <h3 className="flex items-center gap-2 text-sm font-bold">
-            <Crop size={15} className="text-[var(--noodle-blue)]" />
+            <Crop size={15} className="text-[var(--noodle-accent)]" />
             Frame image
           </h3>
           <p className="mt-0.5 text-xs text-[var(--muted-foreground)]">Drag the frame to position the image.</p>
@@ -252,7 +252,7 @@ export function PostImageCropEditor({
               className={cn(
                 "min-h-9 flex-1 rounded-md px-2 text-xs font-bold transition-colors disabled:opacity-50",
                 aspect === option.value
-                  ? "bg-[var(--noodle-blue)] text-zinc-950"
+                  ? "bg-[var(--noodle-accent)] text-zinc-950"
                   : "text-[var(--muted-foreground)] hover:text-[var(--foreground)]",
               )}
             >
@@ -270,7 +270,7 @@ export function PostImageCropEditor({
             value={zoom}
             disabled={busy}
             onChange={(event) => setZoom(Number(event.target.value))}
-            className="min-h-8 min-w-0 flex-1 accent-[var(--noodle-blue)]"
+            className="min-h-8 min-w-0 flex-1 accent-[var(--noodle-accent)]"
           />
         </label>
       </div>
@@ -294,7 +294,7 @@ export function PostImageCropEditor({
           type="button"
           onClick={apply}
           disabled={!crop || busy}
-          className="min-h-10 rounded-full bg-[var(--noodle-blue)] px-5 text-xs font-bold text-zinc-950 disabled:opacity-50"
+          className="min-h-10 rounded-full bg-[var(--noodle-accent)] px-5 text-xs font-bold text-zinc-950 disabled:opacity-50"
         >
           {applying ? "Applying…" : "Apply crop"}
         </button>

@@ -100,9 +100,9 @@ export function NoodlePollComposer({
             disabled={disabled}
             onChange={(event) => onChange({ question: event.target.value, options: poll.options })}
             placeholder="What question do you want to ask?"
-            className="mari-chrome-field h-14 w-full rounded-xl border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--noodle-blue)]/5 px-4 text-sm outline-none transition-colors placeholder:text-[var(--muted-foreground)] focus:border-[var(--noodle-blue)]"
+            className="mari-chrome-field h-14 w-full rounded-xl border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--noodle-accent)]/5 px-4 text-sm outline-none transition-colors placeholder:text-[var(--muted-foreground)] focus:border-[var(--noodle-accent)]"
           />
-          <span className="block text-right text-xs tabular-nums text-[var(--noodle-blue)]">
+          <span className="block text-right text-xs tabular-nums text-[var(--noodle-accent)]">
             {poll.question.length} / 240
           </span>
         </label>
@@ -113,7 +113,7 @@ export function NoodlePollComposer({
             return (
               <div
                 key={index}
-                className="flex h-12 items-center gap-2 rounded-xl border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--noodle-blue)]/5 px-3 transition-colors focus-within:border-[var(--noodle-blue)]"
+                className="flex h-12 items-center gap-2 rounded-xl border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--noodle-accent)]/5 px-3 transition-colors focus-within:border-[var(--noodle-accent)]"
               >
                 <button
                   type="button"
@@ -126,7 +126,7 @@ export function NoodlePollComposer({
                     emojiAnchorRef.current = event.currentTarget;
                     setEmojiOptionIndex((current) => (current === index ? null : index));
                   }}
-                  className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-[var(--muted-foreground)] transition-colors hover:bg-[var(--noodle-blue)]/10 hover:text-[var(--noodle-blue)]"
+                  className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-[var(--muted-foreground)] transition-colors hover:bg-[var(--noodle-accent)]/10 hover:text-[var(--noodle-accent)]"
                 >
                   {emoji ? <span className="text-base leading-none">{emoji}</span> : <Smile size={18} />}
                 </button>
@@ -144,7 +144,7 @@ export function NoodlePollComposer({
                       ),
                     })
                   }
-                  className="min-w-0 flex-1 border-0 bg-transparent text-sm text-[var(--noodle-blue)] outline-none placeholder:text-[var(--noodle-blue)]"
+                  className="min-w-0 flex-1 border-0 bg-transparent text-sm text-[var(--noodle-accent)] outline-none placeholder:text-[var(--noodle-accent)]"
                 />
                 <button
                   type="button"
@@ -166,7 +166,7 @@ export function NoodlePollComposer({
             type="button"
             disabled={disabled || poll.options.length >= 4}
             onClick={() => onChange({ question: poll.question, options: [...poll.options, ""] })}
-            className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-[var(--noodle-blue)]/15 px-3 text-xs font-bold text-[var(--noodle-blue)] transition-colors hover:bg-[var(--noodle-blue)]/20 disabled:cursor-not-allowed disabled:opacity-40"
+            className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-[var(--noodle-accent)]/15 px-3 text-xs font-bold text-[var(--noodle-accent)] transition-colors hover:bg-[var(--noodle-accent)]/20 disabled:cursor-not-allowed disabled:opacity-40"
           >
             <Plus size={15} />
             Add option
@@ -175,7 +175,7 @@ export function NoodlePollComposer({
             type="button"
             onClick={onSubmit}
             disabled={disabled || submitDisabled || !noodlePollInputSchema.safeParse(value).success}
-            className="inline-flex h-9 items-center gap-1.5 rounded-full bg-[var(--noodle-blue)] px-5 text-xs font-bold text-zinc-950 transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40 [&_svg]:!text-zinc-950"
+            className="inline-flex h-9 items-center gap-1.5 rounded-full bg-[var(--noodle-accent)] px-5 text-xs font-bold text-zinc-950 transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40 [&_svg]:!text-zinc-950"
           >
             <Send size={14} />
             {submitLabel}

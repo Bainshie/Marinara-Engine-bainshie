@@ -24,7 +24,6 @@ import {
   useRef,
   useState,
   type ChangeEvent,
-  type CSSProperties,
   type RefObject,
 } from "react";
 import { createPortal } from "react-dom";
@@ -52,18 +51,18 @@ import {
   type ConversationMediaPickerTabId,
 } from "../chat/ConversationMediaPickerPanel";
 import type { ChatImage } from "../../hooks/use-gallery";
-import { Avatar, NOODLE_ICON_SCOPE_CLASS, useNoodleAccent } from "./NoodleShell";
+import { Avatar, getNoodleAccentStyle, NOODLE_ICON_SCOPE_CLASS, useNoodleAccent } from "./NoodleShell";
 import { formatTime } from "./NoodleBrowserChrome";
 import { NoodleImageComposer } from "./NoodleImageComposer";
 import { NoodlePollComposer } from "./NoodlePollComposer";
 import { PostImageCropEditor, PostImageFrame } from "./PostImageCropEditor";
 
 const textareaClass =
-  "mari-chrome-field min-h-24 w-full min-w-0 resize-y rounded-md border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)] p-3 text-xs leading-relaxed text-[var(--foreground)] outline-none transition-colors focus:border-[var(--noodle-blue)]";
+  "mari-chrome-field min-h-24 w-full min-w-0 resize-y rounded-md border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)] p-3 text-xs leading-relaxed text-[var(--foreground)] outline-none transition-colors focus:border-[var(--noodle-accent)]";
 const labelClass =
   "text-[0.68rem] font-semibold uppercase tracking-normal text-[var(--marinara-chat-chrome-panel-muted)]";
 export const noodleIconButtonClass =
-  "inline-flex h-8 min-w-8 items-center justify-center gap-1 rounded-md px-2 text-xs font-medium !text-[var(--noodle-blue)] transition-colors hover:bg-[var(--noodle-blue)]/10 disabled:cursor-not-allowed disabled:opacity-50 [&_svg]:!text-[var(--noodle-blue)]";
+  "inline-flex h-8 min-w-8 items-center justify-center gap-1 rounded-md px-2 text-xs font-medium !text-[var(--noodle-accent)] transition-colors hover:bg-[var(--noodle-accent)]/10 disabled:cursor-not-allowed disabled:opacity-50 [&_svg]:!text-[var(--noodle-accent)]";
 const NOODLE_MEDIA_PICKER_TABS: ConversationMediaPickerTab[] = [
   { id: "emoji", label: "Emoji" },
   { id: "gifs", label: "GIFs" },
@@ -135,13 +134,13 @@ export function NoodleMentionSuggestions({
             onClick={() => onSelect(account)}
             className={cn(
               "flex min-h-11 w-full items-center gap-3 rounded-lg px-2 py-1.5 text-left transition-colors",
-              index === activeIndex ? "bg-[var(--noodle-blue)]/15" : "hover:bg-[var(--noodle-blue)]/10",
+              index === activeIndex ? "bg-[var(--noodle-accent)]/15" : "hover:bg-[var(--noodle-accent)]/10",
             )}
           >
             <Avatar account={account} size="sm" />
             <span className="min-w-0 flex-1">
               <span className="block truncate text-xs font-semibold">{account.displayName}</span>
-              <span className="block truncate text-[0.68rem] text-[var(--noodle-blue)]">@{account.handle}</span>
+              <span className="block truncate text-[0.68rem] text-[var(--noodle-accent)]">@{account.handle}</span>
             </span>
           </button>
         ))
@@ -182,7 +181,7 @@ function NoodleTextContent({
           key={`${mention.start}:${mention.handle}`}
           type="button"
           onClick={() => onOpenProfile(account)}
-          className="inline font-semibold text-[var(--noodle-blue)] hover:underline focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-blue)]/70"
+          className="inline font-semibold text-[var(--noodle-accent)] hover:underline focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]/70"
           aria-label={`View @${account.handle} profile`}
         >
           {label}
@@ -236,20 +235,20 @@ function NoodlePollCard({
                 aria-pressed={selected}
                 aria-label={`${option.label}, ${optionVotes} ${optionVotes === 1 ? "vote" : "votes"}, ${percentage}%`}
                 className={cn(
-                  "relative flex min-h-10 w-full items-center overflow-hidden rounded-lg border px-3 text-left text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-blue)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)] disabled:cursor-not-allowed",
+                  "relative flex min-h-10 w-full items-center overflow-hidden rounded-lg border px-3 text-left text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)] disabled:cursor-not-allowed",
                   selected
-                    ? "border-[var(--noodle-blue)] bg-[var(--noodle-blue)]/10"
-                    : "border-[var(--noodle-divider)] hover:border-[var(--noodle-blue)]/55 hover:bg-[var(--noodle-blue)]/5",
+                    ? "border-[var(--noodle-accent)] bg-[var(--noodle-accent)]/10"
+                    : "border-[var(--noodle-divider)] hover:border-[var(--noodle-accent)]/55 hover:bg-[var(--noodle-accent)]/5",
                 )}
                 data-noodle-poll-option={option.id}
               >
                 <span
                   aria-hidden="true"
-                  className="absolute inset-0 origin-left bg-[var(--noodle-blue)]/15 transition-transform duration-300 ease-out"
+                  className="absolute inset-0 origin-left bg-[var(--noodle-accent)]/15 transition-transform duration-300 ease-out"
                   style={{ transform: `scaleX(${percentage / 100})` }}
                 />
                 <span className="relative flex min-w-0 flex-1 items-center gap-2">
-                  {selected && <Check size={14} className="shrink-0 text-[var(--noodle-blue)]" />}
+                  {selected && <Check size={14} className="shrink-0 text-[var(--noodle-accent)]" />}
                   <span className="min-w-0 flex-1 break-words">{option.label}</span>
                   <span className="shrink-0 text-[var(--muted-foreground)]">{percentage}%</span>
                 </span>
@@ -267,7 +266,7 @@ function NoodlePollCard({
                           if (voterAccount) onOpenProfile(voterAccount);
                         }}
                         disabled={!voterAccount}
-                        className="inline-flex min-h-9 max-w-full items-center gap-1.5 rounded-full bg-[var(--noodle-blue)]/8 pr-2 text-[0.6875rem] font-medium text-[var(--muted-foreground)] transition-colors hover:bg-[var(--noodle-blue)]/15 hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-blue)]/70 disabled:cursor-default"
+                        className="inline-flex min-h-9 max-w-full items-center gap-1.5 rounded-full bg-[var(--noodle-accent)]/8 pr-2 text-[0.6875rem] font-medium text-[var(--muted-foreground)] transition-colors hover:bg-[var(--noodle-accent)]/15 hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]/70 disabled:cursor-default"
                       >
                         <Avatar account={voter} size="sm" />
                         <span className="max-w-32 truncate">@{voter.handle}</span>
@@ -284,7 +283,7 @@ function NoodlePollCard({
         type="button"
         onClick={() => setShowVoters((visible) => !visible)}
         aria-expanded={showVoters}
-        className="mt-2 rounded-sm text-[0.68rem] text-[var(--muted-foreground)] transition-colors hover:text-[var(--noodle-blue)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-blue)]/70"
+        className="mt-2 rounded-sm text-[0.68rem] text-[var(--muted-foreground)] transition-colors hover:text-[var(--noodle-accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]/70"
       >
         {totalVotes} {totalVotes === 1 ? "vote" : "votes"}
         {selectedOptionId ? " · You voted" : ""}
@@ -337,12 +336,12 @@ export function NoodleToolButton({
       aria-label={title}
       disabled={disabled}
       className={cn(
-        "flex h-8 w-8 shrink-0 items-center justify-center rounded-full p-0 !text-[var(--noodle-blue)] transition-colors active:scale-95 [&_svg]:!text-[var(--noodle-blue)]",
+        "flex h-8 w-8 shrink-0 items-center justify-center rounded-full p-0 !text-[var(--noodle-accent)] transition-colors active:scale-95 [&_svg]:!text-[var(--noodle-accent)]",
         disabled
           ? "cursor-not-allowed opacity-40"
           : active
-            ? "bg-[var(--noodle-blue)]/15 ring-1 ring-[var(--noodle-blue)]/25"
-            : "hover:bg-[var(--noodle-blue)]/10",
+            ? "bg-[var(--noodle-accent)]/15 ring-1 ring-[var(--noodle-accent)]/25"
+            : "hover:bg-[var(--noodle-accent)]/10",
       )}
     >
       {children}
@@ -455,15 +454,11 @@ export function NoodleAnchoredPopover({
         NOODLE_ICON_SCOPE_CLASS,
         wide ? "w-[18rem] sm:w-[24rem]" : "w-[19rem]",
       )}
-      style={
-        {
-          "--noodle-blue": accent,
-          "--noodle-divider": "var(--marinara-chat-chrome-panel-divider)",
-          left: position?.left ?? -9999,
-          top: position?.top ?? -9999,
-          opacity: position ? 1 : 0,
-        } as CSSProperties
-      }
+      style={getNoodleAccentStyle(accent, {
+        left: position?.left ?? -9999,
+        top: position?.top ?? -9999,
+        opacity: position ? 1 : 0,
+      })}
     >
       {children}
     </div>,
@@ -589,7 +584,7 @@ function PostImageEditControls({
         title={editing.loading ? "Loading image" : "Adjust crop"}
         aria-label={editing.loading ? "Loading image" : "Adjust crop"}
         aria-busy={editing.loading}
-        className="inline-flex h-8 w-8 items-center justify-center rounded-full text-[var(--noodle-blue)] transition-colors hover:bg-[var(--noodle-blue)]/10 disabled:opacity-50"
+        className="inline-flex h-8 w-8 items-center justify-center rounded-full text-[var(--noodle-accent)] transition-colors hover:bg-[var(--noodle-accent)]/10 disabled:opacity-50"
       >
         {editing.loading ? <Loader2 size={15} className="animate-spin" /> : <Crop size={15} />}
       </button>
@@ -607,7 +602,7 @@ function PostImageEditControls({
   ) : null;
 
   return (
-    <section className="space-y-2 rounded-xl border border-[var(--noodle-divider)] bg-[var(--noodle-blue)]/5 p-3">
+    <section className="space-y-2 rounded-xl border border-[var(--noodle-divider)] bg-[var(--noodle-accent)]/5 p-3">
       <input
         ref={editing.fileInputRef}
         type="file"
@@ -627,7 +622,7 @@ function PostImageEditControls({
                 disabled={disabled || editing.loading}
                 title="Attach replacement image"
                 aria-label="Attach replacement image"
-                className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[var(--noodle-divider)] text-[var(--noodle-blue)] transition-colors hover:bg-[var(--noodle-blue)]/10 disabled:opacity-50"
+                className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[var(--noodle-divider)] text-[var(--noodle-accent)] transition-colors hover:bg-[var(--noodle-accent)]/10 disabled:opacity-50"
               >
                 <ImagePlus size={15} />
               </button>
@@ -637,7 +632,7 @@ function PostImageEditControls({
                 disabled={disabled}
                 title="Undo image removal"
                 aria-label="Undo image removal"
-                className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[var(--noodle-divider)] text-[var(--noodle-blue)] transition-colors hover:bg-[var(--noodle-blue)]/10 disabled:opacity-50"
+                className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[var(--noodle-divider)] text-[var(--noodle-accent)] transition-colors hover:bg-[var(--noodle-accent)]/10 disabled:opacity-50"
               >
                 <RotateCcw size={15} />
               </button>
@@ -651,7 +646,7 @@ function PostImageEditControls({
                   disabled={disabled || editing.loading}
                   title="Add image"
                   aria-label="Add image"
-                  className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[var(--noodle-divider)] text-[var(--noodle-blue)] transition-colors hover:bg-[var(--noodle-blue)]/10 disabled:opacity-50"
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[var(--noodle-divider)] text-[var(--noodle-accent)] transition-colors hover:bg-[var(--noodle-accent)]/10 disabled:opacity-50"
                 >
                   <ImagePlus size={15} />
                 </button>
@@ -1201,7 +1196,7 @@ export function NoodlePostCard({
       >
         {replyParentInteractionId && replyTargetActor && (
           <p className="mb-2 text-xs text-[var(--muted-foreground)]">
-            Replying to <span className="font-semibold text-[var(--noodle-blue)]">@{replyTargetActor.handle}</span>
+            Replying to <span className="font-semibold text-[var(--noodle-accent)]">@{replyTargetActor.handle}</span>
           </p>
         )}
         <textarea
@@ -1285,7 +1280,7 @@ export function NoodlePostCard({
             </button>
             <button
               type="button"
-              className="h-8 rounded-full bg-[var(--noodle-blue)] px-4 text-xs font-bold text-zinc-950 transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+              className="h-8 rounded-full bg-[var(--noodle-accent)] px-4 text-xs font-bold text-zinc-950 transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
               disabled={(!replyHasText && !replyImageUrl.trim()) || postReplyPending}
               onClick={() => submitReply(post)}
             >
@@ -1352,7 +1347,7 @@ export function NoodlePostCard({
             imageEditing?.loading ||
             Boolean(imageEditing?.cropSource)
           }
-          className="h-8 rounded-full bg-[var(--noodle-blue)] px-4 text-xs font-bold text-zinc-950 transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+          className="h-8 rounded-full bg-[var(--noodle-accent)] px-4 text-xs font-bold text-zinc-950 transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {updatePostPending ? "Saving" : "Save"}
         </button>
@@ -1377,7 +1372,7 @@ export function NoodlePostCard({
               <Avatar account={author} />
             </button>
           ) : (
-            <AtSign size={28} className="text-[var(--noodle-blue)]" />
+            <AtSign size={28} className="text-[var(--noodle-accent)]" />
           )}
           <div className="min-w-0 flex-1">
             <div className="flex items-start gap-2">
@@ -1386,7 +1381,7 @@ export function NoodlePostCard({
                   type="button"
                   onClick={openPostAuthor}
                   disabled={!canOpenAuthorProfile}
-                  className="font-semibold transition-colors enabled:hover:text-[var(--noodle-blue)] disabled:cursor-default"
+                  className="font-semibold transition-colors enabled:hover:text-[var(--noodle-accent)] disabled:cursor-default"
                 >
                   {author?.displayName ?? "Noodle User"}
                 </button>
@@ -1397,7 +1392,7 @@ export function NoodlePostCard({
                 <button
                   type="button"
                   onClick={() => setPostMenuId((current) => (current === post.id ? null : post.id))}
-                  className="flex h-8 w-8 items-center justify-center rounded-full text-[var(--noodle-blue)] transition-colors hover:bg-[var(--noodle-blue)]/10"
+                  className="flex h-8 w-8 items-center justify-center rounded-full text-[var(--noodle-accent)] transition-colors hover:bg-[var(--noodle-accent)]/10"
                   title="Post actions"
                   aria-label="Post actions"
                 >
@@ -1410,7 +1405,7 @@ export function NoodlePostCard({
                       onClick={() => startEditingPost(post)}
                       className="flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-[var(--accent)]"
                     >
-                      <Pencil size={14} className="text-[var(--noodle-blue)]" />
+                      <Pencil size={14} className="text-[var(--noodle-accent)]" />
                       Edit
                     </button>
                     <button
@@ -1418,7 +1413,7 @@ export function NoodlePostCard({
                       onClick={() => deleteNoodlePost(post)}
                       className="flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-[var(--accent)]"
                     >
-                      <Trash2 size={14} className="text-[var(--noodle-blue)]" />
+                      <Trash2 size={14} className="text-[var(--noodle-accent)]" />
                       Delete
                     </button>
                   </div>
@@ -1434,7 +1429,7 @@ export function NoodlePostCard({
                       value={titleEditing.editingPostTitle}
                       onChange={(event) => titleEditing.setEditingPostTitle(event.target.value)}
                       maxLength={titleEditing.maxLength}
-                  className="h-9 w-full rounded-lg border-0 bg-[var(--noodle-blue)]/5 px-3 text-base font-bold text-[var(--foreground)] outline-none placeholder:text-[var(--muted-foreground)] focus:bg-[var(--noodle-blue)]/10"
+                  className="h-9 w-full rounded-lg border-0 bg-[var(--noodle-accent)]/5 px-3 text-base font-bold text-[var(--foreground)] outline-none placeholder:text-[var(--muted-foreground)] focus:bg-[var(--noodle-accent)]/10"
                       placeholder="Title (optional)"
                     />
                   </label>
@@ -1442,7 +1437,7 @@ export function NoodlePostCard({
                 <textarea
                   value={editingPostContent}
                   onChange={(event) => setEditingPostContent(event.target.value)}
-                className="min-h-20 w-full resize-none rounded-lg border-0 bg-[var(--noodle-blue)]/5 px-3 py-2 text-[1rem] leading-6 text-[var(--foreground)] outline-none placeholder:text-[var(--muted-foreground)] focus:bg-[var(--noodle-blue)]/10"
+                className="min-h-20 w-full resize-none rounded-lg border-0 bg-[var(--noodle-accent)]/5 px-3 py-2 text-[1rem] leading-6 text-[var(--foreground)] outline-none placeholder:text-[var(--muted-foreground)] focus:bg-[var(--noodle-accent)]/10"
                   placeholder="What's simmering, privately?"
                 />
                 {imageEditing && !poll && (
@@ -1510,7 +1505,7 @@ export function NoodlePostCard({
                 onClick={() =>
                   setImageLightbox(createNoodleLightboxImage(post.id, post.imageUrl!, post.imagePrompt ?? ""))
                 }
-                className="mt-3 block w-full overflow-hidden rounded-xl text-left ring-offset-[var(--background)] transition-opacity hover:opacity-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-blue)] focus-visible:ring-offset-2"
+                className="mt-3 block w-full overflow-hidden rounded-xl text-left ring-offset-[var(--background)] transition-opacity hover:opacity-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] focus-visible:ring-offset-2"
                 title="Open image"
                 aria-label="Open post image"
               >
@@ -1546,8 +1541,8 @@ export function NoodlePostCard({
                 </div>
               )
             ) : post.imagePrompt ? (
-              <div className="mt-3 rounded-xl border border-[var(--noodle-blue)]/35 bg-[var(--noodle-blue)]/10 p-3 text-xs leading-5">
-                <span className="mb-1 flex items-center gap-1.5 font-semibold text-[var(--noodle-blue)]">
+              <div className="mt-3 rounded-xl border border-[var(--noodle-accent)]/35 bg-[var(--noodle-accent)]/10 p-3 text-xs leading-5">
+                <span className="mb-1 flex items-center gap-1.5 font-semibold text-[var(--noodle-accent)]">
                   <ImageIcon size={13} />
                   Image prompt
                 </span>
@@ -1558,7 +1553,7 @@ export function NoodlePostCard({
             <div className="mt-3 flex max-w-md items-center justify-between gap-1">
               <button
                 type="button"
-                className={cn(noodleIconButtonClass, "rounded-full", likedByPersona && "bg-[var(--noodle-blue)]/10")}
+                className={cn(noodleIconButtonClass, "rounded-full", likedByPersona && "bg-[var(--noodle-accent)]/10")}
                 disabled={!personaAccount || postLikePending}
                 onClick={() => reactToPost(post, "like", likedByPersona)}
                 title={likedByPersona ? "Unlike" : "Like"}
@@ -1579,7 +1574,7 @@ export function NoodlePostCard({
               </button>
               <button
                 type="button"
-                className={cn(noodleIconButtonClass, "rounded-full", repostedByPersona && "bg-[var(--noodle-blue)]/10")}
+                className={cn(noodleIconButtonClass, "rounded-full", repostedByPersona && "bg-[var(--noodle-accent)]/10")}
                 disabled={!personaAccount || postRepostPending}
                 onClick={() => reactToPost(post, "repost", repostedByPersona)}
                 title={repostedByPersona ? "Undo repost" : "Repost"}
@@ -1591,7 +1586,7 @@ export function NoodlePostCard({
               </button>
               <button
                 type="button"
-                className={cn(noodleIconButtonClass, "rounded-full hover:text-[var(--noodle-blue)]")}
+                className={cn(noodleIconButtonClass, "rounded-full hover:text-[var(--noodle-accent)]")}
                 disabled={!personaAccount}
                 onClick={() => openReplyComposer(post.id)}
                 title="Reply"
@@ -1637,7 +1632,7 @@ export function NoodlePostCard({
                         className={cn(
                           "grid grid-cols-[2rem_minmax(0,1fr)] items-start gap-2 border-b border-[var(--noodle-divider)] bg-transparent py-3 text-xs outline-none transition-shadow duration-300 last:border-b-0",
                           highlightedInteractionId === reply.id &&
-                            "rounded-lg ring-1 ring-inset ring-[var(--noodle-blue)]/70",
+                            "rounded-lg ring-1 ring-inset ring-[var(--noodle-accent)]/70",
                         )}
                       >
                         <button
@@ -1655,7 +1650,7 @@ export function NoodlePostCard({
                               type="button"
                               onClick={() => openProfile(actorAccount)}
                               disabled={!actorAccount}
-                              className="max-w-full truncate font-semibold transition-colors enabled:hover:text-[var(--noodle-blue)] disabled:cursor-default"
+                              className="max-w-full truncate font-semibold transition-colors enabled:hover:text-[var(--noodle-accent)] disabled:cursor-default"
                             >
                               {actor?.displayName ?? "Noodle User"}
                             </button>
@@ -1671,13 +1666,13 @@ export function NoodlePostCard({
                                 <button
                                   type="button"
                                   onClick={() => openProfile(parentActorAccount)}
-                                  className="font-medium text-[var(--noodle-blue)] hover:underline focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-blue)]/70"
+                                  className="font-medium text-[var(--noodle-accent)] hover:underline focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]/70"
                                   aria-label={`View @${parentActorAccount.handle} profile`}
                                 >
                                   @{parentActorAccount.handle}
                                 </button>
                               ) : (
-                                <span className="text-[var(--noodle-blue)]">@{parentActor.handle}</span>
+                                <span className="text-[var(--noodle-accent)]">@{parentActor.handle}</span>
                               )}
                             </p>
                           )}
@@ -1705,7 +1700,7 @@ export function NoodlePostCard({
                                   disabled={
                                     (!editingReplyContent.trim() && !reply.imageUrl) || updateInteraction.isPending
                                   }
-                                  className="h-8 rounded-full bg-[var(--noodle-blue)] px-4 text-xs font-bold text-zinc-950 transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                                  className="h-8 rounded-full bg-[var(--noodle-accent)] px-4 text-xs font-bold text-zinc-950 transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
                                 >
                                   {updateInteraction.isPending ? "Saving" : "Save"}
                                 </button>
@@ -1727,7 +1722,7 @@ export function NoodlePostCard({
                                   createNoodleLightboxImage(reply.id, reply.imageUrl!, reply.content ?? ""),
                                 )
                               }
-                              className="mt-2 block w-full overflow-hidden rounded-xl text-left ring-offset-[var(--background)] transition-opacity hover:opacity-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-blue)] focus-visible:ring-offset-2"
+                              className="mt-2 block w-full overflow-hidden rounded-xl text-left ring-offset-[var(--background)] transition-opacity hover:opacity-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] focus-visible:ring-offset-2"
                               title="Open image"
                               aria-label="Open comment image"
                             >
@@ -1744,8 +1739,8 @@ export function NoodlePostCard({
                               onClick={() => reactToReply(post, reply, likedReplyByPersona)}
                               disabled={!personaAccount || reactionPendingFor(post.id, "like", reply.id)}
                               className={cn(
-                                "inline-flex h-7 items-center gap-1 rounded-full px-2 font-medium text-[var(--noodle-blue)] transition-colors hover:bg-[var(--noodle-blue)]/10 disabled:cursor-not-allowed disabled:opacity-50",
-                                likedReplyByPersona && "bg-[var(--noodle-blue)]/10",
+                                "inline-flex h-7 items-center gap-1 rounded-full px-2 font-medium text-[var(--noodle-accent)] transition-colors hover:bg-[var(--noodle-accent)]/10 disabled:cursor-not-allowed disabled:opacity-50",
+                                likedReplyByPersona && "bg-[var(--noodle-accent)]/10",
                               )}
                               title={likedReplyByPersona ? "Unlike comment" : "Like comment"}
                               aria-busy={reactionPendingFor(post.id, "like", reply.id)}
@@ -1765,7 +1760,7 @@ export function NoodlePostCard({
                               type="button"
                               onClick={() => openReplyComposer(post.id, reply.id)}
                               disabled={!personaAccount}
-                              className="inline-flex h-7 w-7 items-center justify-center rounded-full text-[var(--noodle-blue)] transition-colors hover:bg-[var(--noodle-blue)]/10 disabled:cursor-not-allowed disabled:opacity-50"
+                              className="inline-flex h-7 w-7 items-center justify-center rounded-full text-[var(--noodle-accent)] transition-colors hover:bg-[var(--noodle-accent)]/10 disabled:cursor-not-allowed disabled:opacity-50"
                               title="Reply"
                               aria-label="Reply"
                             >
@@ -1777,7 +1772,7 @@ export function NoodlePostCard({
                                   type="button"
                                   onClick={() => startEditingReply(reply)}
                                   disabled={updateInteraction.isPending || deleteInteraction.isPending}
-                                  className="inline-flex h-7 w-7 items-center justify-center rounded-full text-[var(--noodle-blue)] transition-colors hover:bg-[var(--noodle-blue)]/10 disabled:cursor-not-allowed disabled:opacity-50"
+                                  className="inline-flex h-7 w-7 items-center justify-center rounded-full text-[var(--noodle-accent)] transition-colors hover:bg-[var(--noodle-accent)]/10 disabled:cursor-not-allowed disabled:opacity-50"
                                   title="Edit comment"
                                   aria-label="Edit comment"
                                 >
@@ -1787,7 +1782,7 @@ export function NoodlePostCard({
                                   type="button"
                                   onClick={() => deleteNoodleReply(post, reply)}
                                   disabled={updateInteraction.isPending || deleteInteraction.isPending}
-                                  className="inline-flex h-7 w-7 items-center justify-center rounded-full text-[var(--noodle-blue)] transition-colors hover:bg-[var(--noodle-blue)]/10 disabled:cursor-not-allowed disabled:opacity-50"
+                                  className="inline-flex h-7 w-7 items-center justify-center rounded-full text-[var(--noodle-accent)] transition-colors hover:bg-[var(--noodle-accent)]/10 disabled:cursor-not-allowed disabled:opacity-50"
                                   title="Delete comment"
                                   aria-label="Delete comment"
                                 >

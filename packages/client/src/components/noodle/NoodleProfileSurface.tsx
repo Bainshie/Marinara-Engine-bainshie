@@ -6,7 +6,7 @@ import { Avatar, NoodleLogo } from "./NoodleShell";
 type NoodleProfileTab = "posts" | "likes" | "media";
 
 const fieldClass =
-  "mari-chrome-field h-9 w-full min-w-0 rounded-md border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)] px-3 text-xs text-[var(--foreground)] outline-none transition-colors focus:border-[var(--noodle-blue)]";
+  "mari-chrome-field h-9 w-full min-w-0 rounded-md border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)] px-3 text-xs text-[var(--foreground)] outline-none transition-colors focus:border-[var(--noodle-accent)]";
 const labelClass =
   "text-[0.68rem] font-semibold uppercase tracking-normal text-[var(--marinara-chat-chrome-panel-muted)]";
 
@@ -98,7 +98,7 @@ export function NoodleProfileSurface<TTab extends string = NoodleProfileTab>({
         }}
         disabled={!banner.canEdit || banner.uploadTarget === "banner"}
         className={cn(
-          "relative block h-40 w-full overflow-hidden bg-[var(--noodle-blue)]/15 text-left disabled:cursor-default",
+          "relative block h-40 w-full overflow-hidden bg-[var(--noodle-accent)]/15 text-left disabled:cursor-default",
           banner.uploadTarget === "banner" && "cursor-wait opacity-80",
         )}
         title={banner.canEdit ? "Upload banner" : undefined}
@@ -106,12 +106,12 @@ export function NoodleProfileSurface<TTab extends string = NoodleProfileTab>({
         {banner.url ? (
           <img src={banner.url} alt="" className="h-full w-full object-cover" />
         ) : (
-          <div className="flex h-full items-center justify-center bg-[var(--noodle-blue)]/10">
+          <div className="flex h-full items-center justify-center bg-[var(--noodle-accent)]/10">
             <NoodleLogo className="h-20 w-32 opacity-70" />
           </div>
         )}
         {banner.uploadTarget === "banner" && (
-          <span className="absolute bottom-3 right-3 rounded-full bg-[var(--marinara-chat-chrome-panel-bg)] px-3 py-1.5 text-xs font-semibold text-[var(--noodle-blue)] shadow-lg ring-1 ring-[var(--marinara-chat-chrome-panel-border)]">
+          <span className="absolute bottom-3 right-3 rounded-full bg-[var(--marinara-chat-chrome-panel-bg)] px-3 py-1.5 text-xs font-semibold text-[var(--noodle-accent)] shadow-lg ring-1 ring-[var(--marinara-chat-chrome-panel-border)]">
             Uploading...
           </span>
         )}
@@ -125,7 +125,7 @@ export function NoodleProfileSurface<TTab extends string = NoodleProfileTab>({
       /></>}
       {!banner && decorativeBanner && (
         <div
-          className="h-40 w-full bg-[var(--noodle-blue)]/10"
+          className="h-40 w-full bg-[var(--noodle-accent)]/10"
           aria-hidden="true"
         />
       )}
@@ -179,7 +179,7 @@ export function NoodleProfileSurface<TTab extends string = NoodleProfileTab>({
                 else editor.onStartEditing();
               }}
               disabled={editor.isEditing ? !editor.canSave || editor.isSaving : false}
-              className="h-9 rounded-full bg-[var(--noodle-blue)] px-5 text-xs font-bold text-zinc-950 transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+              className="h-9 rounded-full bg-[var(--noodle-accent)] px-5 text-xs font-bold text-zinc-950 transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {editor.isEditing ? (editor.isSaving ? "Saving" : "Save") : "Edit Profile"}
             </button>
@@ -244,15 +244,15 @@ export function NoodleProfileSurface<TTab extends string = NoodleProfileTab>({
             {contentActions}
             {location && (
               <p className="mt-3 flex items-center gap-1.5 text-sm text-[var(--muted-foreground)]">
-                <MapPin size={15} className="text-[var(--noodle-blue)]" />
+                <MapPin size={15} className="text-[var(--noodle-accent)]" />
                 {location}
               </p>
             )}
             {connections && <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-sm text-[var(--muted-foreground)]">
-              <button type="button" onClick={connections.onOpenFollowing} className="transition-colors hover:text-[var(--noodle-blue)]">
+              <button type="button" onClick={connections.onOpenFollowing} className="transition-colors hover:text-[var(--noodle-accent)]">
                 <span className="font-bold text-[var(--foreground)]">{connections.followingCount}</span> Following
               </button>
-              <button type="button" onClick={connections.onOpenFollowers} className="transition-colors hover:text-[var(--noodle-blue)]">
+              <button type="button" onClick={connections.onOpenFollowers} className="transition-colors hover:text-[var(--noodle-accent)]">
                 <span className="font-bold text-[var(--foreground)]">{connections.followerCount}</span> Followers
               </button>
             </div>}
@@ -275,7 +275,7 @@ export function NoodleProfileSurface<TTab extends string = NoodleProfileTab>({
             >
               <span className="truncate">{tab.label}</span>
               {activeTab === tab.id && (
-                <span className="absolute bottom-0 left-1/2 h-1 w-12 -translate-x-1/2 rounded-full bg-[var(--noodle-blue)]" />
+                <span className="absolute bottom-0 left-1/2 h-1 w-12 -translate-x-1/2 rounded-full bg-[var(--noodle-accent)]" />
               )}
             </button>
           ))}

@@ -12,15 +12,23 @@ import { useDialogFocusScope } from "../../hooks/use-dialog-focus-scope";
 
 export const NOODLE_BLUE = "#7EA7FF";
 
-// The accent hex that drives `--noodle-blue` for every reused Noodle surface.
+// The accent hex that drives `--noodle-accent` for every reused Noodle surface.
 // Provided at the shell root so descendants inherit via CSS var, and read here
 // so portaled popovers/modals (which escape the shell's CSS scope) can re-apply it.
 const NoodleAccentContext = createContext<string>(NOODLE_BLUE);
 export const useNoodleAccent = () => useContext(NoodleAccentContext);
-export const NOODLE_ICON_SCOPE_CLASS = "[&_:where(svg)]:text-[var(--noodle-blue)]";
+export const NOODLE_ICON_SCOPE_CLASS = "[&_:where(svg)]:text-[var(--noodle-accent)]";
 export const NOODLE_LOGO_SRC = "/noodle-klusek.png";
 const NOODLER_LOGO_SRC = "/noodler-klusek.png";
 export const NOODLE_PERSONA_SWITCHER_PAGE_SIZE = 5;
+
+export function getNoodleAccentStyle(accent: string, style: CSSProperties = {}): CSSProperties {
+  return {
+    "--noodle-accent": accent,
+    "--noodle-divider": "var(--marinara-chat-chrome-panel-divider)",
+    ...style,
+  } as CSSProperties;
+}
 
 const labelClass = "text-[0.68rem] font-semibold uppercase tracking-normal text-[var(--marinara-chat-chrome-panel-muted)]";
 
@@ -89,7 +97,7 @@ export function Avatar({
       <div
         className={cn(
           dimension,
-          "relative aspect-square flex-none overflow-hidden rounded-full border border-[var(--noodle-blue)]/30",
+          "relative aspect-square flex-none overflow-hidden rounded-full border border-[var(--noodle-accent)]/30",
         )}
       >
         <img
@@ -105,10 +113,10 @@ export function Avatar({
     <div
       className={cn(
         dimension,
-        "flex aspect-square flex-none items-center justify-center rounded-full text-xs font-bold text-[var(--noodle-blue)] ring-1 ring-[var(--noodle-blue)]/25",
+        "flex aspect-square flex-none items-center justify-center rounded-full text-xs font-bold text-[var(--noodle-accent)] ring-1 ring-[var(--noodle-accent)]/25",
         solid
-          ? "bg-[color-mix(in_srgb,var(--noodle-blue)_15%,var(--background))]"
-          : "bg-[var(--noodle-blue)]/15",
+          ? "bg-[color-mix(in_srgb,var(--noodle-accent)_15%,var(--background))]"
+          : "bg-[var(--noodle-accent)]/15",
       )}
     >
       {initials(account.displayName)}
@@ -159,7 +167,7 @@ export interface NoodleShellProps {
   rightRail?: ReactNode;
   /** Theme-dependent overlays (browser chrome strip, lightboxes, modals) that must render inside the token scope. */
   overlays?: ReactNode;
-  /** Accent color driving `--noodle-blue` for every reused surface. Defaults to Noodle blue. */
+  /** Accent color driving `--noodle-accent` for every reused surface. Defaults to Noodle blue. */
   accent?: string;
   children: ReactNode;
 }
@@ -217,12 +225,7 @@ export function NoodleShell({
         NOODLE_ICON_SCOPE_CLASS,
       )}
       data-component="NoodleView"
-      style={
-        {
-          "--noodle-blue": accent,
-          "--noodle-divider": "var(--marinara-chat-chrome-panel-divider)",
-        } as CSSProperties
-      }
+      style={getNoodleAccentStyle(accent)}
     >
       {overlays}
       <AnimatePresence>
@@ -249,8 +252,8 @@ export function NoodleShell({
                   {personaAccount ? (
                     <Avatar account={personaAccount} />
                   ) : (
-                    <span className="flex h-11 w-11 items-center justify-center rounded-full bg-[var(--noodle-blue)]/15 ring-1 ring-[var(--noodle-blue)]/25">
-                      <AtSign size={24} className="text-[var(--noodle-blue)]" />
+                    <span className="flex h-11 w-11 items-center justify-center rounded-full bg-[var(--noodle-accent)]/15 ring-1 ring-[var(--noodle-accent)]/25">
+                      <AtSign size={24} className="text-[var(--noodle-accent)]" />
                     </span>
                   )}
                   <p className="mt-3 truncate text-lg font-bold">{personaAccount?.displayName ?? "Noodle Account"}</p>
@@ -262,7 +265,7 @@ export function NoodleShell({
                   ref={mobileDrawerCloseRef}
                   type="button"
                   onClick={() => onMobileDrawerOpenChange(false)}
-                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[var(--noodle-blue)] transition-colors hover:bg-[var(--noodle-blue)]/10"
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[var(--noodle-accent)] transition-colors hover:bg-[var(--noodle-accent)]/10"
                   title="Close"
                   aria-label="Close Noodle account menu"
                 >
@@ -282,7 +285,7 @@ export function NoodleShell({
                   aria-current={homeActive ? "page" : undefined}
                   className={cn(
                     "flex min-h-12 w-full items-center gap-4 rounded-xl px-2 text-left text-base font-bold transition-colors hover:bg-[var(--accent)]",
-                    homeActive && "bg-[var(--noodle-blue)]/10",
+                    homeActive && "bg-[var(--noodle-accent)]/10",
                   )}
                 >
                   <Home size={23} />
@@ -332,7 +335,7 @@ export function NoodleShell({
                               onClick={() => onSwitchPersona(account, true)}
                               className={cn(
                                 "flex w-full items-center gap-3 rounded-xl px-2 py-2 text-left transition-colors hover:bg-[var(--accent)]",
-                                selected && "bg-[var(--noodle-blue)]/10",
+                                selected && "bg-[var(--noodle-accent)]/10",
                               )}
                             >
                               <Avatar account={account} size="sm" />
@@ -342,12 +345,12 @@ export function NoodleShell({
                                   @{account.handle}
                                 </span>
                                 {linkedPublicAccountIds?.has(account.id) && (
-                                  <span className="mt-0.5 block text-[0.65rem] font-semibold text-[var(--noodle-blue)]" aria-label="NoodleR profile linked">
+                                  <span className="mt-0.5 block text-[0.65rem] font-semibold text-[var(--noodle-accent)]" aria-label="NoodleR profile linked">
                                     NoodleR linked
                                   </span>
                                 )}
                               </span>
-                              {selected && <span className="h-2 w-2 rounded-full bg-[var(--noodle-blue)]" />}
+                              {selected && <span className="h-2 w-2 rounded-full bg-[var(--noodle-accent)]" />}
                             </button>
                           );
                         })}
@@ -367,7 +370,7 @@ export function NoodleShell({
                   {personaAccount ? (
                     <Avatar account={personaAccount} size="sm" />
                   ) : (
-                    <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--noodle-blue)]/15">
+                    <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--noodle-accent)]/15">
                       <AtSign size={18} />
                     </span>
                   )}
@@ -406,10 +409,10 @@ export function NoodleShell({
                   aria-current={homeActive ? "page" : undefined}
                   className={cn(
                     "flex min-h-11 w-full items-center gap-4 rounded-full px-3 text-left text-[0.95rem] font-semibold hover:bg-[var(--accent)]",
-                    homeActive && "bg-[var(--noodle-blue)]/10",
+                    homeActive && "bg-[var(--noodle-accent)]/10",
                   )}
                 >
-                  <Home size={22} className="!text-[var(--noodle-blue)]" />
+                  <Home size={22} className="!text-[var(--noodle-accent)]" />
                   {homeLabel}
                 </button>
                 <button
@@ -418,15 +421,15 @@ export function NoodleShell({
                   disabled={!onOpenNotifications}
                   className={cn(
                     "flex min-h-11 w-full items-center gap-4 rounded-full px-3 text-left text-[0.95rem] font-semibold hover:bg-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent",
-                    activeView === "notifications" && "bg-[var(--noodle-blue)]/10",
+                    activeView === "notifications" && "bg-[var(--noodle-accent)]/10",
                   )}
                 >
                   <span className="relative flex h-6 w-6 shrink-0 items-center justify-center">
-                    <Bell size={22} className="!text-[var(--noodle-blue)]" />
+                    <Bell size={22} className="!text-[var(--noodle-accent)]" />
                     {notificationCount > 0 && (
                       <span
                         data-component="NoodleView.NotificationBadge"
-                        className="absolute -right-2 -top-2 min-w-4 rounded-full bg-[var(--noodle-blue)] px-1 text-center text-[0.58rem] font-black leading-4 text-zinc-950 ring-2 ring-[var(--background)]"
+                        className="absolute -right-2 -top-2 min-w-4 rounded-full bg-[var(--noodle-accent)] px-1 text-center text-[0.58rem] font-black leading-4 text-zinc-950 ring-2 ring-[var(--background)]"
                       >
                         {notificationBadgeLabel}
                       </span>
@@ -440,10 +443,10 @@ export function NoodleShell({
                   disabled={!onOpenProfile}
                   className={cn(
                     "flex min-h-11 w-full items-center gap-4 rounded-full px-3 text-left text-[0.95rem] font-semibold hover:bg-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent",
-                    activeView === "profile" && "bg-[var(--noodle-blue)]/10",
+                    activeView === "profile" && "bg-[var(--noodle-accent)]/10",
                   )}
                 >
-                  <User size={22} className="!text-[var(--noodle-blue)]" />
+                  <User size={22} className="!text-[var(--noodle-accent)]" />
                   Profile
                 </button>
                 <button
@@ -451,10 +454,10 @@ export function NoodleShell({
                   onClick={onOpenSettings}
                   className={cn(
                     "flex min-h-11 w-full items-center gap-4 rounded-full px-3 text-left text-[0.95rem] font-semibold hover:bg-[var(--accent)]",
-                    activeView === "settings" && "bg-[var(--noodle-blue)]/10",
+                    activeView === "settings" && "bg-[var(--noodle-accent)]/10",
                   )}
                 >
-                  <Settings2 size={22} className="!text-[var(--noodle-blue)]" />
+                  <Settings2 size={22} className="!text-[var(--noodle-accent)]" />
                   Settings
                 </button>
               </nav>
@@ -462,7 +465,7 @@ export function NoodleShell({
                 type="button"
                 onClick={(event) => onCompose?.(event.currentTarget)}
                 disabled={!onCompose}
-                className="mt-5 h-12 rounded-full bg-[var(--noodle-blue)] px-6 text-sm font-bold text-zinc-950 transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+                className="mt-5 h-12 rounded-full bg-[var(--noodle-accent)] px-6 text-sm font-bold text-zinc-950 transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
               >
                 Post
               </button>
@@ -482,7 +485,7 @@ export function NoodleShell({
                               onClick={() => onSwitchPersona(account, false)}
                               className={cn(
                                 "flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left transition-colors hover:bg-[var(--accent)]",
-                                selected && "bg-[var(--noodle-blue)]/10",
+                                selected && "bg-[var(--noodle-accent)]/10",
                               )}
                             >
                               <Avatar account={account} size="sm" />
@@ -492,12 +495,12 @@ export function NoodleShell({
                                   @{account.handle}
                                 </span>
                                 {linkedPublicAccountIds?.has(account.id) && (
-                                  <span className="mt-0.5 block text-[0.62rem] font-semibold text-[var(--noodle-blue)]" aria-label="NoodleR profile linked">
+                                  <span className="mt-0.5 block text-[0.62rem] font-semibold text-[var(--noodle-accent)]" aria-label="NoodleR profile linked">
                                     NoodleR linked
                                   </span>
                                 )}
                               </span>
-                              {selected && <span className="h-2 w-2 rounded-full bg-[var(--noodle-blue)]" />}
+                              {selected && <span className="h-2 w-2 rounded-full bg-[var(--noodle-accent)]" />}
                             </button>
                           );
                         })}
@@ -505,7 +508,7 @@ export function NoodleShell({
                           <button
                             type="button"
                             onClick={onLoadMorePersonaAccounts}
-                            className="mt-1 h-9 w-full rounded-lg text-xs font-semibold text-[var(--noodle-blue)] transition-colors hover:bg-[var(--noodle-blue)]/10"
+                            className="mt-1 h-9 w-full rounded-lg text-xs font-semibold text-[var(--noodle-accent)] transition-colors hover:bg-[var(--noodle-accent)]/10"
                           >
                             Load more ({visiblePersonaAccounts.length} of {sortedPersonaAccounts.length})
                           </button>
@@ -526,7 +529,7 @@ export function NoodleShell({
                   {personaAccount ? (
                     <Avatar account={personaAccount} />
                   ) : (
-                    <AtSign size={28} className="!text-[var(--noodle-blue)]" />
+                    <AtSign size={28} className="!text-[var(--noodle-accent)]" />
                   )}
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-semibold">{personaAccount?.displayName ?? "Noodle Account"}</p>
@@ -534,7 +537,7 @@ export function NoodleShell({
                       {personaAccount ? `@${personaAccount.handle}` : "Pick a persona"}
                     </p>
                   </div>
-                  <MoreHorizontal size={18} className="!text-[var(--noodle-blue)] opacity-70" />
+                  <MoreHorizontal size={18} className="!text-[var(--noodle-accent)] opacity-70" />
                 </button>
               </div>
             </div>
@@ -562,7 +565,7 @@ export function NoodleShell({
             {personaAccount ? (
               <Avatar account={personaAccount} size="sm" />
             ) : (
-              <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--noodle-blue)]/15 ring-1 ring-[var(--noodle-blue)]/25">
+              <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--noodle-accent)]/15 ring-1 ring-[var(--noodle-accent)]/25">
                 <AtSign size={18} />
               </span>
             )}
@@ -575,7 +578,7 @@ export function NoodleShell({
             className="relative flex items-center justify-center transition-colors hover:bg-[var(--accent)]"
           >
             <Home size={22} strokeWidth={homeActive ? 2.8 : 2} />
-            {homeActive && <span className="absolute top-1 h-1 w-1 rounded-full bg-[var(--noodle-blue)]" />}
+            {homeActive && <span className="absolute top-1 h-1 w-1 rounded-full bg-[var(--noodle-accent)]" />}
           </button>
           <button
             type="button"
@@ -586,7 +589,7 @@ export function NoodleShell({
             className="relative flex items-center justify-center transition-colors hover:bg-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
           >
             <Search size={22} strokeWidth={activeView === "search" ? 2.8 : 2} />
-            {activeView === "search" && <span className="absolute top-1 h-1 w-1 rounded-full bg-[var(--noodle-blue)]" />}
+            {activeView === "search" && <span className="absolute top-1 h-1 w-1 rounded-full bg-[var(--noodle-accent)]" />}
           </button>
           <button
             type="button"
@@ -601,14 +604,14 @@ export function NoodleShell({
               {notificationCount > 0 && (
                 <span
                   data-component="NoodleView.NotificationBadge"
-                  className="absolute -right-2 -top-2 min-w-4 rounded-full bg-[var(--noodle-blue)] px-1 text-center text-[0.58rem] font-black leading-4 text-zinc-950 ring-2 ring-[var(--background)]"
+                  className="absolute -right-2 -top-2 min-w-4 rounded-full bg-[var(--noodle-accent)] px-1 text-center text-[0.58rem] font-black leading-4 text-zinc-950 ring-2 ring-[var(--background)]"
                 >
                   {notificationBadgeLabel}
                 </span>
               )}
             </span>
             {activeView === "notifications" && (
-              <span className="absolute top-1 h-1 w-1 rounded-full bg-[var(--noodle-blue)]" />
+              <span className="absolute top-1 h-1 w-1 rounded-full bg-[var(--noodle-accent)]" />
             )}
           </button>
         </div>
