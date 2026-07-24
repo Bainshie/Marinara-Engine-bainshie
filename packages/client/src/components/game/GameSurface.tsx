@@ -2597,7 +2597,7 @@ function GameSurfaceComponent({
   const [sessionPanelOpen, setSessionPanelOpen] = useState(false);
   const [sessionPanelTab, setSessionPanelTab] = useState<"history" | "journal">("history");
   const [galleryOpen, setGalleryOpen] = useState(false);
-  const [galleryAnchor, setGalleryAnchor] = useState<{ right: number; top: number } | null>(null);
+  const [galleryAnchor, setGalleryAnchor] = useState<ChatToolbarFloatingPanelAnchor>(null);
   const [mobileRetryMenuAnchor, setMobileRetryMenuAnchor] = useState<ChatToolbarFloatingPanelAnchor>(null);
   const [mobileSessionPanelAnchor, setMobileSessionPanelAnchor] = useState<ChatToolbarFloatingPanelAnchor>(null);
   const [mobileVolumePopoverAnchor, setMobileVolumePopoverAnchor] = useState<ChatToolbarFloatingPanelAnchor>(null);
@@ -2637,12 +2637,13 @@ function GameSurfaceComponent({
   }, [closeLocalFloatingWindows, onCloseSettings]);
   const handleOpenGalleryPanel = useCallback(
     (event?: ReactMouseEvent<HTMLElement>) => {
+      const nextOpen = !galleryOpen;
       closeLocalFloatingWindows();
       onCloseSettings();
-      setGalleryAnchor(readFloatingPanelAnchor(event));
-      setGalleryOpen(true);
+      setGalleryAnchor(nextOpen ? readFloatingPanelAnchor(event) : null);
+      setGalleryOpen(nextOpen);
     },
-    [closeLocalFloatingWindows, onCloseSettings, readFloatingPanelAnchor],
+    [closeLocalFloatingWindows, galleryOpen, onCloseSettings, readFloatingPanelAnchor],
   );
   const handleOpenSettingsPanel = useCallback(
     (event?: ReactMouseEvent<HTMLElement>) => {
@@ -10858,7 +10859,12 @@ function GameSurfaceComponent({
                     buttonClassName={GAME_TOP_ICON_BUTTON}
                     onOpen={dismissOtherFloatingWindows}
                   />
-                  <button onClick={handleOpenGalleryPanel} className={GAME_TOP_ICON_BUTTON} title="Gallery">
+                  <button
+                    data-chat-toolbar-panel-action="gallery"
+                    onClick={handleOpenGalleryPanel}
+                    className={GAME_TOP_ICON_BUTTON}
+                    title="Gallery"
+                  >
                     <Image size={14} />
                   </button>
                   {onSwitchChat ? (
@@ -10871,7 +10877,12 @@ function GameSurfaceComponent({
                       <ArrowRightLeft size={14} />
                     </button>
                   ) : null}
-                  <button onClick={handleOpenSettingsPanel} className={GAME_TOP_ICON_BUTTON} title="Chat Settings">
+                  <button
+                    data-chat-toolbar-panel-action="settings"
+                    onClick={handleOpenSettingsPanel}
+                    className={GAME_TOP_ICON_BUTTON}
+                    title="Chat Settings"
+                  >
                     <Settings2 size={14} />
                   </button>
                 </div>
@@ -11123,6 +11134,7 @@ function GameSurfaceComponent({
                           onOpen={dismissOtherFloatingWindows}
                         />
                         <button
+                          data-chat-toolbar-panel-action="gallery"
                           onClick={(event) => {
                             handleOpenGalleryPanel(event);
                           }}
@@ -11147,6 +11159,7 @@ function GameSurfaceComponent({
                           </button>
                         ) : null}
                         <button
+                          data-chat-toolbar-panel-action="settings"
                           onClick={(event) => {
                             handleOpenSettingsPanel(event);
                           }}

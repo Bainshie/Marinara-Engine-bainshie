@@ -93,6 +93,8 @@ export function ExpandedTextarea({
               <span className="text-[0.625rem] text-[var(--muted-foreground)]">{value.length} characters</span>
               <button
                 onClick={onClose}
+                aria-label={closeLabel}
+                title={closeLabel}
                 className={cn(
                   "flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs transition-colors",
                   isChatSurface

@@ -952,6 +952,7 @@ function createCharacterDataFromPersona(formData: PersonaFormData): CharacterDat
 
 export function PersonaEditor() {
   const personaId = useUIStore((s) => s.personaDetailId);
+  const personaInitialTab = useUIStore((s) => s.personaDetailInitialTab) as TabId | null;
   const closeDetail = useUIStore((s) => s.closePersonaDetail);
   const { data: allPersonas, isLoading } = usePersonas();
   const createCharacter = useCreateCharacter();
@@ -962,7 +963,10 @@ export function PersonaEditor() {
   const duplicatePersona = useDuplicatePersona();
   const { data: connectionsList } = useConnections();
 
-  const [activeTab, setActiveTab] = useState<TabId>("metadata");
+  const [activeTab, setActiveTab] = useState<TabId>(() => personaInitialTab ?? "metadata");
+  useEffect(() => {
+    setActiveTab(personaInitialTab ?? "metadata");
+  }, [personaId, personaInitialTab]);
   const [formData, setFormData] = useState<PersonaFormData | null>(null);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
   const [dirty, setDirty] = useState(false);
@@ -1375,7 +1379,7 @@ export function PersonaEditor() {
       />
 
       {/* ── Header ── */}
-      <div className="mari-editor-header items-start">
+      <div className="mari-editor-header">
         <div className="mari-editor-header-main max-md:min-w-full">
           <button type="button" onClick={handleClose} className="mari-editor-action inline-flex" title="Back">
             <ArrowLeft size="1.125rem" />
@@ -1413,15 +1417,17 @@ export function PersonaEditor() {
               className="mari-editor-title-input"
               placeholder="Persona name"
             />
-            <input
-              value={formData.comment}
-              onChange={(e) => updateField("comment", e.target.value)}
-              className="mari-editor-subtitle-input"
-              placeholder="Title / comment (e.g. 'Modern AU version')"
-            />
-            <p className="mari-editor-meta text-[0.625rem]">
-              {formData.creator ? `by ${formData.creator}` : "No creator"} · v{formData.personaVersion || "1.0"}
-            </p>
+            <div className="mari-editor-secondary-line">
+              <input
+                value={formData.comment}
+                onChange={(e) => updateField("comment", e.target.value)}
+                className="mari-editor-subtitle-input"
+                placeholder="Title / comment (e.g. 'Modern AU version')"
+              />
+              <p className="mari-editor-meta">
+                {formData.creator ? `by ${formData.creator}` : "No creator"} · v{formData.personaVersion || "1.0"}
+              </p>
+            </div>
           </div>
         </div>
 

@@ -413,6 +413,8 @@ export interface ChatMetadata {
   translationInputPrompt?: string | null;
   /** AI system prompt for incoming response translation. Supports {{targetLanguage}}. */
   translationOutputPrompt?: string | null;
+  /** Show only the translated text in place of the original message once a translation exists. */
+  translationDisplayOnly?: boolean;
   /** Allow roleplay characters to create direct-message conversation chats with hidden [dm] commands. */
   roleplayDmCommandsEnabled?: boolean;
   /** Chat-scoped Intiface Central WebSocket URL for haptic manual and auto-connect. */

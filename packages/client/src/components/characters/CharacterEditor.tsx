@@ -930,7 +930,7 @@ export function CharacterEditor() {
       />
 
       {/* ── Header ── */}
-      <div className="mari-editor-header items-start">
+      <div className="mari-editor-header">
         <div className="mari-editor-header-main max-md:min-w-full">
           <button type="button" onClick={handleClose} className="mari-editor-action inline-flex" title="Back">
             <ArrowLeft size="1.125rem" />
@@ -968,15 +968,17 @@ export function CharacterEditor() {
               className="mari-editor-title-input"
               placeholder="Character name"
             />
-            <input
-              value={characterComment}
-              onChange={(e) => updateCharacterComment(e.target.value)}
-              className="mari-editor-subtitle-input"
-              placeholder="Title / comment (e.g. 'Modern AU version')"
-            />
-            <p className="mari-editor-meta text-[0.625rem]">
-              {formData.creator ? `by ${formData.creator}` : "No creator"} · v{formData.character_version || "1.0"}
-            </p>
+            <div className="mari-editor-secondary-line">
+              <input
+                value={characterComment}
+                onChange={(e) => updateCharacterComment(e.target.value)}
+                className="mari-editor-subtitle-input"
+                placeholder="Title / comment (e.g. 'Modern AU version')"
+              />
+              <p className="mari-editor-meta">
+                {formData.creator ? `by ${formData.creator}` : "No creator"} · v{formData.character_version || "1.0"}
+              </p>
+            </div>
           </div>
         </div>
 

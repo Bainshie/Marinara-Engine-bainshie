@@ -19,6 +19,8 @@ type ChatToolbarButtonClassInput = {
   sizeClassName?: string;
 };
 
+export type ChatToolbarPanelAction = "gallery" | "settings" | "summary";
+
 export const CHAT_TOOLBAR_ICON_GAP_CLASS = "gap-0.5";
 export const CHAT_TOOLBAR_DEFAULT_BUTTON_SIZE_CLASS = "h-8 w-8";
 export const CHAT_TOOLBAR_IDENTITY_PILL_SIZE_CLASS = "h-8 w-auto max-md:h-9";
@@ -32,13 +34,46 @@ export const CHAT_TOOLBAR_OVERFLOW_MENU_CLASS = cn(
 export const CHAT_TOOLBAR_ACTION_EVENT = "mari-chat-toolbar-action";
 export const CHAT_TOOLBAR_OVERFLOW_MENU_SELECTOR = "[data-chat-toolbar-overflow-menu]";
 export const CHAT_FLOATING_PANEL_SELECTOR = "[data-chat-floating-panel]";
+const CHAT_TOOLBAR_PANEL_ACTION_ATTRIBUTE = "data-chat-toolbar-panel-action";
 const CHAT_FLOATING_PANEL_PADDING = 8;
 
-export type ChatToolbarFloatingPanelAnchor = { right: number; top: number } | null;
+export type ChatToolbarFloatingPanelAnchor = {
+  right: number;
+  rightInset: number;
+  top: number;
+} | null;
 
-export function announceChatToolbarAction() {
+function readCssPixelValue(element: HTMLElement, property: string) {
+  const parsed = Number.parseFloat(window.getComputedStyle(element).getPropertyValue(property));
+  return Number.isFinite(parsed) ? Math.max(0, parsed) : 0;
+}
+
+export function getChatFloatingPanelDesktopRight(anchor: ChatToolbarFloatingPanelAnchor) {
+  const triggerOffset = anchor ? Math.max(0, anchor.right - anchor.rightInset) : 12;
+  return `calc(var(--mari-chat-ui-inset-right, 0px) + var(--tracker-panel-hud-clear-right, 0px) + ${triggerOffset}px)`;
+}
+
+function readChatToolbarPanelAction(target: EventTarget | null): ChatToolbarPanelAction | null {
+  if (!(target instanceof Element)) return null;
+  const value = target.closest(`[${CHAT_TOOLBAR_PANEL_ACTION_ATTRIBUTE}]`)?.getAttribute(
+    CHAT_TOOLBAR_PANEL_ACTION_ATTRIBUTE,
+  );
+  return value === "gallery" || value === "settings" || value === "summary" ? value : null;
+}
+
+export function readAnnouncedChatToolbarPanelAction(event: Event): ChatToolbarPanelAction | null {
+  if (!(event instanceof CustomEvent)) return null;
+  const value = (event.detail as { panelAction?: unknown } | null)?.panelAction;
+  return value === "gallery" || value === "settings" || value === "summary" ? value : null;
+}
+
+export function isChatToolbarPanelTrigger(target: EventTarget | null, panelAction: ChatToolbarPanelAction) {
+  return readChatToolbarPanelAction(target) === panelAction;
+}
+
+export function announceChatToolbarAction(panelAction: ChatToolbarPanelAction | null = null) {
   if (typeof window === "undefined") return;
-  window.dispatchEvent(new Event(CHAT_TOOLBAR_ACTION_EVENT));
+  window.dispatchEvent(new CustomEvent(CHAT_TOOLBAR_ACTION_EVENT, { detail: { panelAction } }));
 }
 
 export function readChatToolbarFloatingPanelAnchor(trigger: HTMLElement | null): ChatToolbarFloatingPanelAnchor {
@@ -53,13 +88,18 @@ export function readChatToolbarFloatingPanelAnchor(trigger: HTMLElement | null):
     const rightEdge = Math.max(CHAT_FLOATING_PANEL_PADDING + minimumPanelWidth, menuRect.left - CHAT_FLOATING_PANEL_PADDING);
     return {
       right: Math.max(CHAT_FLOATING_PANEL_PADDING, window.innerWidth - rightEdge),
+      rightInset: 0,
       top: Math.max(CHAT_FLOATING_PANEL_PADDING, Math.round(menuRect.top)),
     };
   }
 
   const rect = trigger.getBoundingClientRect();
+  const rightInset =
+    readCssPixelValue(trigger, "--mari-chat-ui-inset-right") +
+    readCssPixelValue(trigger, "--tracker-panel-hud-clear-right");
   return {
     right: Math.max(0, window.innerWidth - rect.right),
+    rightInset,
     top: Math.max(56, Math.round(rect.bottom + 8)),
   };
 }
@@ -89,21 +129,24 @@ export function ChatToolbarButton({
   icon,
   title,
   onClick,
+  panelAction,
   size,
 }: {
   className?: string;
   icon: ReactNode;
   title: string;
   onClick: (event: ReactMouseEvent<HTMLButtonElement>) => void;
+  panelAction?: ChatToolbarPanelAction;
   size?: "sm";
 }) {
   return (
     <button
       type="button"
       onClick={(event) => {
-        announceChatToolbarAction();
+        announceChatToolbarAction(panelAction ?? null);
         onClick(event);
       }}
+      data-chat-toolbar-panel-action={panelAction}
       className={getChatToolbarButtonClass({ className, compact: size === "sm" })}
       title={title}
       aria-label={title}
@@ -212,7 +255,7 @@ export function ChatToolbarMenu({
     <div
       ref={rootRef}
       className={cn("relative flex min-w-0 items-center justify-end", className)}
-      onPointerDownCapture={announceChatToolbarAction}
+      onPointerDownCapture={(event) => announceChatToolbarAction(readChatToolbarPanelAction(event.target))}
     >
       {!overflowCollapsed && (
         <div ref={desktopRef} className={cn("flex items-center max-md:hidden", CHAT_TOOLBAR_ICON_GAP_CLASS)}>
@@ -238,7 +281,7 @@ export function ChatToolbarMenu({
               data-chat-toolbar-overflow-menu
               className={cn(CHAT_TOOLBAR_OVERFLOW_MENU_CLASS, "fixed z-[9999]")}
               style={{ top: pos.top, right: pos.right }}
-              onPointerDownCapture={announceChatToolbarAction}
+              onPointerDownCapture={(event) => announceChatToolbarAction(readChatToolbarPanelAction(event.target))}
             >
               {resolvedMobileChildren}
             </div>,

@@ -19,6 +19,7 @@ import {
   type TouchEvent as ReactTouchEvent,
 } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import {
   useLorebook,
@@ -75,6 +76,7 @@ import {
   FlaskConical,
   FolderPlus,
   RefreshCw,
+  Info,
 } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { HelpTooltip } from "../ui/HelpTooltip";
@@ -92,12 +94,14 @@ import {
   type LorebookEntry,
   type LorebookFolder,
   type LorebookCategory,
+  type BulkUpdateLorebookEntriesInput,
 } from "@marinara-engine/shared";
 import { LorebookEntryRow } from "./LorebookEntryRow";
 import { LorebookFolderRow } from "./LorebookFolderRow";
 import { ExpandableTextarea, estimateTokens } from "./LorebookFormFields";
 import { ExportFormatDialog, type ExportFormatChoice } from "../ui/ExportFormatDialog";
 import { EditorTabRail } from "../ui/EditorTabRail";
+import { Modal } from "../ui/Modal";
 
 // ──────────────────────────────────────────────
 // Folder collapse state lives in localStorage — purely a UI preference, not
@@ -322,20 +326,65 @@ const SORT_OPTIONS: Array<{ value: EntrySortKey; label: string }> = [
   { value: "oldest", label: "Oldest" },
 ];
 
-const BATCH_ENTRY_SETTING_OPTIONS = [
-  { value: "enabled", label: "Entry enabled" },
-  { value: "constant", label: "Always active" },
-  { value: "selective", label: "Selective matching" },
-  { value: "matchWholeWords", label: "Match whole words" },
-  { value: "caseSensitive", label: "Case sensitive" },
-  { value: "useRegex", label: "Use regex" },
-  { value: "preventRecursion", label: "Prevent recursion" },
-  { value: "excludeRecursion", label: "Exclude from recursion" },
-  { value: "delayUntilRecursion", label: "Delay until recursion" },
-  { value: "excludeFromVectorization", label: "Exclude from vectors" },
-  { value: "locked", label: "Locked" },
-] as const;
-type BatchEntrySetting = (typeof BATCH_ENTRY_SETTING_OPTIONS)[number]["value"];
+type BatchEntryChanges = BulkUpdateLorebookEntriesInput["changes"];
+
+const BATCH_EDITABLE_ENTRY_FIELDS = [
+  "enabled",
+  "constant",
+  "selective",
+  "selectiveLogic",
+  "probability",
+  "scanDepth",
+  "matchWholeWords",
+  "caseSensitive",
+  "useRegex",
+  "characterFilterMode",
+  "characterFilterIds",
+  "characterTagFilterMode",
+  "characterTagFilters",
+  "generationTriggerFilterMode",
+  "generationTriggerFilters",
+  "additionalMatchingSources",
+  "position",
+  "depth",
+  "order",
+  "role",
+  "sticky",
+  "cooldown",
+  "delay",
+  "ephemeral",
+  "group",
+  "groupWeight",
+  "folderId",
+  "preventRecursion",
+  "excludeRecursion",
+  "delayUntilRecursion",
+  "excludeFromVectorization",
+  "locked",
+  "tag",
+] as const satisfies ReadonlyArray<keyof BatchEntryChanges>;
+
+const BATCH_EDITABLE_ENTRY_FIELD_SET = new Set<keyof LorebookEntry>(BATCH_EDITABLE_ENTRY_FIELDS);
+
+function pickBatchEditableEntryChanges(changes: Partial<LorebookEntry>): BatchEntryChanges {
+  const picked: Record<string, unknown> = {};
+  for (const field of BATCH_EDITABLE_ENTRY_FIELDS) {
+    if (Object.prototype.hasOwnProperty.call(changes, field)) {
+      picked[field] = changes[field];
+    }
+  }
+  return picked as BatchEntryChanges;
+}
+
+function omitBatchEditableEntryChanges(changes: Partial<LorebookEntry>): Partial<LorebookEntry> {
+  const personalChanges: Partial<LorebookEntry> = {};
+  for (const [field, value] of Object.entries(changes)) {
+    if (!BATCH_EDITABLE_ENTRY_FIELD_SET.has(field as keyof LorebookEntry)) {
+      (personalChanges as Record<string, unknown>)[field] = value;
+    }
+  }
+  return personalChanges;
+}
 
 function entryStatusSortRank(entry: LorebookEntry): number {
   if (!entry.enabled) return 3;
@@ -345,11 +394,11 @@ function entryStatusSortRank(entry: LorebookEntry): number {
 }
 
 export function LorebookEditor() {
+  const { t } = useTranslation();
   const lorebookId = useUIStore((s) => s.lorebookDetailId);
   const closeDetail = useUIStore((s) => s.closeLorebookDetail);
   const activeChat = useChatStore((s) => s.activeChat);
-  const activeOwnerChatId =
-    activeChat?.mode === "roleplay" || activeChat?.mode === "game" ? activeChat.id : null;
+  const activeOwnerChatId = activeChat?.mode === "roleplay" || activeChat?.mode === "game" ? activeChat.id : null;
   const spatialBacklinksQuery = useSpatialContext(activeOwnerChatId);
   const { data: rawLorebook, isLoading, isError } = useLorebook(lorebookId);
   const { data: rawLorebooks } = useLorebooks();
@@ -363,6 +412,12 @@ export function LorebookEditor() {
   const deleteEntry = useDeleteLorebookEntry();
   const updateEntry = useUpdateLorebookEntry();
   const bulkUpdateEntries = useBulkUpdateLorebookEntries();
+  const updateEntryMutationRef = useRef(updateEntry);
+  const bulkUpdateEntriesMutationRef = useRef(bulkUpdateEntries);
+  useEffect(() => {
+    updateEntryMutationRef.current = updateEntry;
+    bulkUpdateEntriesMutationRef.current = bulkUpdateEntries;
+  }, [bulkUpdateEntries, updateEntry]);
   const reorderEntries = useReorderLorebookEntries();
   const createFolder = useCreateLorebookFolder();
   const updateFolder = useUpdateLorebookFolder();
@@ -427,7 +482,9 @@ export function LorebookEditor() {
     }
   }, [activeChat?.metadata]);
 
-  const [activeTab, setActiveTab] = useState<TabId>("overview");
+  const [activeTab, setActiveTab] = useState<TabId>(
+    () => (useUIStore.getState().lorebookDetailInitialTab as TabId | null) ?? "overview",
+  );
   const [expandedEntryId, setExpandedEntryId] = useState<string | null>(null);
   const [lorebookDirty, setLorebookDirty] = useState(false);
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
@@ -456,8 +513,11 @@ export function LorebookEditor() {
   const [entrySelectionMode, setEntrySelectionMode] = useState(false);
   const [selectedEntryIds, setSelectedEntryIds] = useState<Set<string>>(new Set());
   const [entryTransferTargetId, setEntryTransferTargetId] = useState("");
-  const [batchEntrySetting, setBatchEntrySetting] = useState<BatchEntrySetting | "">("");
-  const [batchEntryValue, setBatchEntryValue] = useState<"true" | "false">("true");
+  const [entryTransferOperation, setEntryTransferOperation] = useState<"copy" | "move" | null>(null);
+  const selectedEntryIdsRef = useRef(selectedEntryIds);
+  useEffect(() => {
+    selectedEntryIdsRef.current = selectedEntryIds;
+  }, [selectedEntryIds]);
 
   // ── Folder UI state ──
   // Collapse state: persisted in localStorage, keyed per-lorebook. Loaded
@@ -758,63 +818,90 @@ export function LorebookEditor() {
     });
   }, []);
 
-  const handleTransferEntries = useCallback(
-    async (operation: "copy" | "move") => {
-      if (!lorebookId || !entryTransferTargetId || selectedEntryIds.size === 0) return;
-      const targetLorebookName =
-        transferTargetLorebooks.find((book) => book.id === entryTransferTargetId)?.name ?? "the selected lorebook";
+  const openEntryTransferDialog = useCallback(
+    (operation: "copy" | "move") => {
+      if (selectedEntryIds.size === 0) return;
+      if (transferTargetLorebooks.length === 0) {
+        toast.error(t("lorebook.editor.batch.transfer.noDestination"));
+        return;
+      }
+      setEntryTransferTargetId((current) =>
+        transferTargetLorebooks.some((book) => book.id === current) ? current : transferTargetLorebooks[0]!.id,
+      );
+      setEntryTransferOperation(operation);
+    },
+    [selectedEntryIds.size, t, transferTargetLorebooks],
+  );
 
-      if (
-        operation === "move" &&
-        !(await showConfirmDialog({
-          title: "Move Lorebook Entries",
-          message: `Move ${selectedEntryIds.size} selected ${selectedEntryIds.size === 1 ? "entry" : "entries"} to "${targetLorebookName}"? They will be removed from this lorebook.`,
-          confirmLabel: "Move",
-        }))
-      ) {
+  const handleTransferEntries = useCallback(async () => {
+    const operation = entryTransferOperation;
+    if (!operation || !lorebookId || !entryTransferTargetId || selectedEntryIds.size === 0) return;
+    const targetLorebookName =
+      transferTargetLorebooks.find((book) => book.id === entryTransferTargetId)?.name ??
+      t("lorebook.editor.batch.transfer.selectedLorebook");
+
+    try {
+      const result = await transferEntries.mutateAsync({
+        sourceLorebookId: lorebookId,
+        targetLorebookId: entryTransferTargetId,
+        entryIds: Array.from(selectedEntryIds),
+        operation,
+      });
+      toast.success(
+        t(`lorebook.editor.batch.transfer.${operation}Success`, {
+          count: result.transferred,
+          name: targetLorebookName,
+        }),
+      );
+      setEntryTransferOperation(null);
+      exitEntrySelectionMode();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t(`lorebook.editor.batch.transfer.${operation}Failure`));
+    }
+  }, [
+    entryTransferOperation,
+    entryTransferTargetId,
+    exitEntrySelectionMode,
+    lorebookId,
+    selectedEntryIds,
+    t,
+    transferEntries,
+    transferTargetLorebooks,
+  ]);
+
+  const handleEntryUpdate = useCallback(
+    async (entryId: string, sourceChanges: Partial<LorebookEntry>, changedFields: Partial<LorebookEntry>) => {
+      if (!lorebookId) throw new Error(t("lorebook.editor.batch.updateFailure"));
+      const selectedIds = selectedEntryIdsRef.current;
+      const shouldBatch = selectedIds.size > 1 && selectedIds.has(entryId);
+      const batchChanges = shouldBatch ? pickBatchEditableEntryChanges(changedFields) : ({} as BatchEntryChanges);
+
+      if (!shouldBatch || Object.keys(batchChanges).length === 0) {
+        await updateEntryMutationRef.current.mutateAsync({ lorebookId, entryId, ...sourceChanges });
         return;
       }
 
+      const personalChanges = omitBatchEditableEntryChanges(sourceChanges);
+      const tasks: Array<Promise<unknown>> = [
+        bulkUpdateEntriesMutationRef.current.mutateAsync({
+          lorebookId,
+          entryIds: Array.from(selectedIds),
+          changes: batchChanges,
+        }),
+      ];
+      if (Object.keys(personalChanges).length > 0) {
+        tasks.push(updateEntryMutationRef.current.mutateAsync({ lorebookId, entryId, ...personalChanges }));
+      }
+
       try {
-        const result = await transferEntries.mutateAsync({
-          sourceLorebookId: lorebookId,
-          targetLorebookId: entryTransferTargetId,
-          entryIds: Array.from(selectedEntryIds),
-          operation,
-        });
-        toast.success(
-          `${operation === "move" ? "Moved" : "Copied"} ${result.transferred} ${result.transferred === 1 ? "entry" : "entries"} to "${targetLorebookName}".`,
-        );
-        exitEntrySelectionMode();
+        await Promise.all(tasks);
       } catch (error) {
-        toast.error(error instanceof Error ? error.message : `Failed to ${operation} entries.`);
+        toast.error(error instanceof Error ? error.message : t("lorebook.editor.batch.updateFailure"));
+        throw error;
       }
     },
-    [
-      entryTransferTargetId,
-      exitEntrySelectionMode,
-      lorebookId,
-      selectedEntryIds,
-      transferEntries,
-      transferTargetLorebooks,
-    ],
+    [lorebookId, t],
   );
-
-  const handleBatchUpdateEntries = useCallback(async () => {
-    if (!lorebookId || selectedEntryIds.size === 0 || !batchEntrySetting) return;
-    try {
-      const result = await bulkUpdateEntries.mutateAsync({
-        lorebookId,
-        entryIds: Array.from(selectedEntryIds),
-        changes: { [batchEntrySetting]: batchEntryValue === "true" },
-      });
-      const settingLabel =
-        BATCH_ENTRY_SETTING_OPTIONS.find((option) => option.value === batchEntrySetting)?.label ?? "Setting";
-      toast.success(`${settingLabel} updated for ${result.updated} ${result.updated === 1 ? "entry" : "entries"}.`);
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Failed to update selected entries.");
-    }
-  }, [batchEntrySetting, batchEntryValue, bulkUpdateEntries, lorebookId, selectedEntryIds]);
 
   const handleDeleteSelectedEntries = useCallback(async () => {
     if (!lorebookId || selectedEntryIds.size === 0) return;
@@ -1636,6 +1723,7 @@ export function LorebookEditor() {
                     onToggleSelected={() => toggleEntrySelection(entry.id)}
                     previewMatch={previewMatches.get(entry.id)}
                     mapBacklinks={mapBacklinksByEntryId.get(entry.id)}
+                    onUpdateEntry={handleEntryUpdate}
                   />
                   {showDropAfter && (
                     <div className="mari-chrome-accent-progress mari-accent-animated mx-2 mt-1 h-0.5 rounded-full" />
@@ -1667,6 +1755,70 @@ export function LorebookEditor() {
           void api.download(`/lorebooks/${lorebookId}/export?format=${format}`);
         }}
       />
+      <Modal
+        open={entryTransferOperation !== null}
+        onClose={() => {
+          if (!transferEntries.isPending) setEntryTransferOperation(null);
+        }}
+        title={t(
+          entryTransferOperation === "copy"
+            ? "lorebook.editor.batch.transfer.copyTitle"
+            : "lorebook.editor.batch.transfer.moveTitle",
+        )}
+        width="max-w-sm"
+        closeDisabled={transferEntries.isPending}
+      >
+        <div className="space-y-4">
+          <p className="text-sm leading-relaxed text-[var(--muted-foreground)]">
+            {t(
+              entryTransferOperation === "copy"
+                ? "lorebook.editor.batch.transfer.copyMessage"
+                : "lorebook.editor.batch.transfer.moveMessage",
+              { count: selectedEntryIds.size },
+            )}
+          </p>
+          <label className="block space-y-1.5">
+            <span className="text-xs font-medium text-[var(--foreground)]">
+              {t("lorebook.editor.batch.transfer.destination")}
+            </span>
+            <select
+              value={entryTransferTargetId}
+              onChange={(event) => setEntryTransferTargetId(event.target.value)}
+              aria-label={t("lorebook.editor.batch.transfer.destination")}
+              className="mari-editor-field w-full px-3 py-2 text-sm"
+            >
+              {transferTargetLorebooks.map((book) => (
+                <option key={book.id} value={book.id}>
+                  {book.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <div className="flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => setEntryTransferOperation(null)}
+              disabled={transferEntries.isPending}
+              className="rounded-lg px-3 py-2 text-sm font-medium text-[var(--muted-foreground)] transition-colors hover:bg-[var(--accent)] hover:text-[var(--foreground)] disabled:opacity-40"
+            >
+              {t("lorebook.editor.batch.transfer.cancel")}
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleTransferEntries()}
+              disabled={!entryTransferTargetId || transferEntries.isPending}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--primary)] px-3 py-2 text-sm font-medium text-[var(--primary-foreground)] transition-colors hover:bg-[var(--primary)]/85 disabled:opacity-40"
+            >
+              {transferEntries.isPending ? <Loader2 size="0.8125rem" className="animate-spin" /> : null}
+              {t(
+                entryTransferOperation === "copy"
+                  ? "lorebook.editor.batch.transfer.copyConfirm"
+                  : "lorebook.editor.batch.transfer.moveConfirm",
+              )}
+            </button>
+          </div>
+        </div>
+      </Modal>
 
       {/* Unsaved warning banner */}
       {showUnsavedWarning && (
@@ -1711,7 +1863,7 @@ export function LorebookEditor() {
           <BookOpen size="1.125rem" />
         </div>
         <div className="min-w-0 flex-1">
-          <h2 className="mari-editor-title truncate text-base">{lorebook.name}</h2>
+          <h2 className="mari-editor-title truncate">{lorebook.name}</h2>
           <p className="mari-editor-meta">
             {entries.length} entries • {lorebook.category}
           </p>
@@ -2274,7 +2426,7 @@ export function LorebookEditor() {
                       entrySelectionMode &&
                         "border-[var(--marinara-chat-chrome-button-border-active)] bg-[var(--marinara-chat-chrome-highlight-bg)] text-[var(--marinara-chat-chrome-button-text-active)]",
                     )}
-                    title="Select entries to copy or move"
+                    title={t("lorebook.editor.batch.selectTitle")}
                   >
                     <CheckSquare2 size="0.8125rem" />
                     Select
@@ -2298,84 +2450,40 @@ export function LorebookEditor() {
 
                 {entrySelectionMode && (
                   <div className="mari-editor-toolbar flex flex-wrap items-center gap-2 px-3 py-2">
+                    <div
+                      role="status"
+                      className="flex w-full items-start gap-2 rounded-lg border border-[var(--marinara-editor-border-strong)] bg-[var(--marinara-editor-control-bg-hover)] px-2.5 py-2"
+                    >
+                      <Info size="0.8125rem" className="mt-0.5 shrink-0 text-[var(--primary)]" />
+                      <p className="text-[0.6875rem] leading-relaxed text-[var(--foreground)]">
+                        {t("lorebook.editor.batch.info")}
+                        <span className="block text-[var(--muted-foreground)]">
+                          {t("lorebook.editor.batch.exclusions")}
+                        </span>
+                      </p>
+                    </div>
                     <span className="text-[0.6875rem] font-medium text-[var(--muted-foreground)]">
-                      {selectedEntryIds.size} selected
+                      {t("lorebook.editor.batch.selected", { count: selectedEntryIds.size })}
                     </span>
                     <button
                       onClick={() => setSelectedEntryIds(new Set(visibleEntryIds))}
                       disabled={visibleEntryIds.length === 0}
                       className="mari-editor-action mari-editor-action--compact px-2.5 py-1 text-[0.625rem] disabled:opacity-40"
                     >
-                      Select all
+                      {t("lorebook.editor.batch.selectAll")}
                     </button>
                     <button
                       onClick={() => setSelectedEntryIds(new Set())}
                       disabled={selectedEntryIds.size === 0}
                       className="rounded-lg px-2.5 py-1 text-[0.625rem] font-medium text-[var(--muted-foreground)] transition-colors hover:bg-[var(--accent)] hover:text-[var(--foreground)] disabled:opacity-40"
                     >
-                      Clear
+                      {t("lorebook.editor.batch.clear")}
                     </button>
-                    <select
-                      value={batchEntrySetting}
-                      onChange={(event) => setBatchEntrySetting(event.target.value as BatchEntrySetting | "")}
-                      className="mari-editor-field min-h-8 min-w-[10rem] px-2.5 py-1.5 text-xs"
-                      aria-label="Setting to apply to selected entries"
-                    >
-                      <option value="">Batch setting…</option>
-                      {BATCH_ENTRY_SETTING_OPTIONS.map((option) => (
-                        <option key={option.value} value={option.value}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </select>
-                    <select
-                      value={batchEntryValue}
-                      onChange={(event) => setBatchEntryValue(event.target.value as "true" | "false")}
-                      className="mari-editor-field min-h-8 px-2.5 py-1.5 text-xs"
-                      aria-label="Value to apply to selected entries"
-                    >
-                      <option value="true">On</option>
-                      <option value="false">Off</option>
-                    </select>
                     <button
-                      onClick={() => void handleBatchUpdateEntries()}
+                      onClick={() => openEntryTransferDialog("copy")}
                       disabled={
                         selectedEntryIds.size === 0 ||
-                        !batchEntrySetting ||
-                        bulkUpdateEntries.isPending ||
-                        transferEntries.isPending ||
-                        deleteEntry.isPending
-                      }
-                      className="mari-editor-action mari-editor-action--primary mari-editor-action--compact inline-flex items-center gap-1 px-2.5 py-1.5 text-[0.625rem] disabled:opacity-40"
-                    >
-                      {bulkUpdateEntries.isPending ? (
-                        <Loader2 size="0.6875rem" className="animate-spin" />
-                      ) : (
-                        <Check size="0.6875rem" />
-                      )}
-                      Apply
-                    </button>
-                    <select
-                      value={entryTransferTargetId}
-                      onChange={(e) => setEntryTransferTargetId(e.target.value)}
-                      disabled={transferTargetLorebooks.length === 0}
-                      className="mari-editor-field min-h-8 min-w-[12rem] flex-1 px-2.5 py-1.5 text-xs disabled:opacity-50"
-                    >
-                      {transferTargetLorebooks.length === 0 ? (
-                        <option value="">Create another lorebook first</option>
-                      ) : (
-                        transferTargetLorebooks.map((book) => (
-                          <option key={book.id} value={book.id}>
-                            {book.name}
-                          </option>
-                        ))
-                      )}
-                    </select>
-                    <button
-                      onClick={() => void handleTransferEntries("copy")}
-                      disabled={
-                        selectedEntryIds.size === 0 ||
-                        !entryTransferTargetId ||
+                        transferTargetLorebooks.length === 0 ||
                         transferEntries.isPending ||
                         bulkUpdateEntries.isPending ||
                         deleteEntry.isPending
@@ -2387,25 +2495,25 @@ export function LorebookEditor() {
                       ) : (
                         <Copy size="0.6875rem" />
                       )}
-                      Copy
+                      {t("lorebook.editor.batch.copy")}
                     </button>
                     <button
-                      onClick={() => void handleTransferEntries("move")}
+                      onClick={() => openEntryTransferDialog("move")}
                       disabled={
                         selectedEntryIds.size === 0 ||
-                        !entryTransferTargetId ||
+                        transferTargetLorebooks.length === 0 ||
                         transferEntries.isPending ||
                         bulkUpdateEntries.isPending ||
                         deleteEntry.isPending
                       }
-                      className="inline-flex items-center gap-1 rounded-lg bg-[var(--destructive)]/12 px-2.5 py-1.5 text-[0.625rem] font-medium text-[var(--destructive)] transition-all hover:bg-[var(--destructive)]/20 disabled:opacity-40"
+                      className="mari-editor-action mari-editor-action--compact inline-flex items-center gap-1 px-2.5 py-1.5 text-[0.625rem] disabled:opacity-40"
                     >
                       {transferEntries.isPending ? (
                         <Loader2 size="0.6875rem" className="animate-spin" />
                       ) : (
                         <MoveRight size="0.6875rem" />
                       )}
-                      Move
+                      {t("lorebook.editor.batch.move")}
                     </button>
                     <button
                       onClick={() => void handleDeleteSelectedEntries()}
@@ -2422,13 +2530,13 @@ export function LorebookEditor() {
                       ) : (
                         <Trash2 size="0.6875rem" />
                       )}
-                      Delete
+                      {t("lorebook.editor.batch.delete")}
                     </button>
                     <button
                       onClick={exitEntrySelectionMode}
                       className="rounded-lg px-2.5 py-1.5 text-[0.625rem] font-medium text-[var(--muted-foreground)] transition-colors hover:bg-[var(--accent)] hover:text-[var(--foreground)]"
                     >
-                      Done
+                      {t("lorebook.editor.batch.done")}
                     </button>
                   </div>
                 )}
@@ -2603,6 +2711,7 @@ export function LorebookEditor() {
                               onToggleSelected={() => toggleEntrySelection(entry.id)}
                               previewMatch={previewMatches.get(entry.id)}
                               mapBacklinks={mapBacklinksByEntryId.get(entry.id)}
+                              onUpdateEntry={handleEntryUpdate}
                             />
                             {showDropAfter && (
                               <div className="mari-chrome-accent-progress mari-accent-animated mx-2 mt-1 h-0.5 rounded-full" />
@@ -2641,6 +2750,7 @@ export function LorebookEditor() {
                         onToggleSelected={() => toggleEntrySelection(entry.id)}
                         previewMatch={previewMatches.get(entry.id)}
                         mapBacklinks={mapBacklinksByEntryId.get(entry.id)}
+                        onUpdateEntry={handleEntryUpdate}
                       />
                     ))}
                   </div>

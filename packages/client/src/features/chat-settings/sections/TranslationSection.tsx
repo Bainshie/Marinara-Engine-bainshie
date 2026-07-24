@@ -155,6 +155,12 @@ export function TranslationSection({ metadata, textConnections, onMetadataChange
           description="Add a translate button beside Send so you can translate and edit your message before sending it."
           onToggle={() => onMetadataChange({ showInputTranslateButton: !metadata.showInputTranslateButton })}
         />
+        <TranslationToggle
+          enabled={metadata.translationDisplayOnly === true}
+          title="Show Only Translation"
+          description="Once a message is translated, show just the translation in its place instead of both the original and the translation."
+          onToggle={() => onMetadataChange({ translationDisplayOnly: !metadata.translationDisplayOnly })}
+        />
       </div>
     </ChatSettingsSection>
   );

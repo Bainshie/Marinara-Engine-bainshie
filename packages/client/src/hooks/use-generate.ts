@@ -3046,7 +3046,7 @@ export function useGenerate() {
                       deeplxUrl: store.config.deeplxUrl,
                     })
                     .then((result) => {
-                      store.setTranslation(id, result.translatedText);
+                      store.setTranslation(id, result.translatedText, textToTranslate);
                       store.setTranslating(id, false);
                       // Persist to message extra
                       api

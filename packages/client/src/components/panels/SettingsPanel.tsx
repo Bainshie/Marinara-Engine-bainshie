@@ -2309,7 +2309,7 @@ export function SettingsPanel() {
 
   return (
     <div className="mari-settings-panel-chrome flex h-full flex-col overflow-hidden">
-      <div className="border-b border-[var(--border)]/70 p-2.5">
+      <div className="mari-editor-header mari-settings-search-header">
         <div className="flex items-center gap-2">
           <label className="relative min-w-0 flex-1">
             <Search
@@ -2652,6 +2652,75 @@ function QuickRepliesSetting() {
               </button>
             );
           })}
+          <CustomQuickRepliesManager />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CustomQuickRepliesManager() {
+  const localize = useLocalizedUiText();
+  const customQuickReplies = useUIStore((s) => s.customQuickReplies);
+  const addCustomQuickReply = useUIStore((s) => s.addCustomQuickReply);
+  const updateCustomQuickReply = useUIStore((s) => s.updateCustomQuickReply);
+  const removeCustomQuickReply = useUIStore((s) => s.removeCustomQuickReply);
+
+  return (
+    <div className="mt-1 border-t border-[var(--border)]/60 pt-2">
+      <div className="mb-1 flex items-center justify-between gap-2 px-1">
+        <span className="text-[0.65rem] font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
+          {localize("Custom quick replies")}
+        </span>
+        <button
+          type="button"
+          onClick={() => addCustomQuickReply("", "")}
+          className="flex items-center gap-1 rounded-md bg-[var(--secondary)]/50 px-2 py-1 text-[0.65rem] font-medium text-[var(--muted-foreground)] transition-colors hover:bg-[var(--secondary)] hover:text-[var(--foreground)] active:scale-[0.98]"
+          title={localize("Add a custom quick reply")}
+        >
+          <Plus size="0.75rem" aria-hidden="true" />
+          {localize("Add")}
+        </button>
+      </div>
+      {customQuickReplies.length === 0 ? (
+        <p className="px-1 pb-1 text-[0.65rem] leading-tight text-[var(--muted-foreground)]">
+          {localize(
+            "Add buttons that send a fixed message, macro, or slash command from the quick replies menu beside Send.",
+          )}
+        </p>
+      ) : (
+        <div className="grid gap-1.5">
+          {customQuickReplies.map((entry) => (
+            <div
+              key={entry.id}
+              className="grid gap-1 rounded-md border border-[var(--border)]/60 bg-[var(--background)]/30 p-1.5"
+            >
+              <div className="flex items-center gap-1.5">
+                <input
+                  value={entry.label}
+                  onChange={(event) => updateCustomQuickReply(entry.id, { label: event.target.value })}
+                  placeholder={localize("Button label")}
+                  className="min-w-0 flex-1 rounded bg-[var(--secondary)]/60 px-2 py-1 text-xs outline-none ring-1 ring-transparent focus:ring-[var(--primary)]/40"
+                />
+                <button
+                  type="button"
+                  onClick={() => removeCustomQuickReply(entry.id)}
+                  className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-[var(--destructive)] transition-colors hover:bg-[var(--destructive)]/10 active:scale-90"
+                  title={localize("Remove quick reply")}
+                  aria-label={localize("Remove quick reply")}
+                >
+                  <Trash2 size="0.75rem" aria-hidden="true" />
+                </button>
+              </div>
+              <textarea
+                value={entry.content}
+                onChange={(event) => updateCustomQuickReply(entry.id, { content: event.target.value })}
+                placeholder={localize("Message, macro, or /slash command to send")}
+                rows={2}
+                className="w-full resize-y rounded bg-[var(--secondary)]/60 px-2 py-1 text-xs outline-none ring-1 ring-transparent focus:ring-[var(--primary)]/40"
+              />
+            </div>
+          ))}
         </div>
       )}
     </div>
