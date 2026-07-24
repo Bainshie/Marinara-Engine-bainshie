@@ -87,7 +87,7 @@ export function NoodlerScheduleManagerModal({ open, onClose }: { open: boolean; 
       onClose={onClose}
       title="NoodleR schedules"
       width="max-w-2xl"
-      panelStyle={{ "--noodle-blue": NOODLE_PINK } as CSSProperties}
+      panelStyle={{ "--noodle-accent": NOODLE_PINK } as CSSProperties}
     >
       <div className="space-y-3">
         <details className="group rounded-lg bg-[var(--secondary)] ring-1 ring-[var(--border)]" open>
@@ -113,7 +113,7 @@ export function NoodlerScheduleManagerModal({ open, onClose }: { open: boolean; 
                 checked={scheduleEnabled}
                 disabled={updateSettings.isPending}
                 onChange={(event) => saveSettings({ autoPostingScheduleEnabled: event.target.checked })}
-                className="h-5 w-5 shrink-0 accent-[var(--noodle-blue)]"
+                className="h-5 w-5 shrink-0 accent-[var(--noodle-accent)]"
               />
             </label>
             <div className="flex flex-wrap items-center gap-2">
@@ -127,7 +127,7 @@ export function NoodlerScheduleManagerModal({ open, onClose }: { open: boolean; 
                   className={cn(
                     "h-8 rounded-full px-3 text-xs font-semibold ring-1 transition-colors disabled:opacity-40",
                     defaultIntensity === value
-                      ? "bg-[var(--noodle-blue)] text-zinc-950 ring-transparent"
+                      ? "bg-[var(--noodle-accent)] text-zinc-950 ring-transparent"
                       : "bg-[var(--background)] text-[var(--foreground)] ring-[var(--border)] hover:bg-[var(--accent)]",
                   )}
                 >
@@ -164,7 +164,7 @@ export function NoodlerScheduleManagerModal({ open, onClose }: { open: boolean; 
                 onChange={(event) =>
                   setSelectedIds(event.target.checked ? new Set(creators.map((profile) => profile.id)) : new Set())
                 }
-                className="h-4 w-4 accent-[var(--noodle-blue)]"
+                className="h-4 w-4 accent-[var(--noodle-accent)]"
               />
               {selectedCount > 0 ? `${selectedCount} selected` : "Select all"}
             </label>
@@ -220,7 +220,7 @@ export function NoodlerScheduleManagerModal({ open, onClose }: { open: boolean; 
                       checked={selected}
                       onChange={() => toggleSelection(profile.id)}
                       aria-label={`Select ${profile.displayName}`}
-                      className="h-4 w-4 shrink-0 accent-[var(--noodle-blue)]"
+                      className="h-4 w-4 shrink-0 accent-[var(--noodle-accent)]"
                     />
                     <button
                       type="button"
@@ -240,7 +240,7 @@ export function NoodlerScheduleManagerModal({ open, onClose }: { open: boolean; 
                       className={cn(
                         "shrink-0 rounded-full px-2 py-1 text-[0.625rem] font-medium ring-1 ring-[var(--border)]",
                         auto.enabled
-                          ? "bg-[var(--noodle-blue)]/12 text-[var(--noodle-blue)]"
+                          ? "bg-[var(--noodle-accent)]/12 text-[var(--noodle-accent)]"
                           : "bg-[var(--background)] text-[var(--muted-foreground)]",
                       )}
                     >
@@ -262,7 +262,7 @@ export function NoodlerScheduleManagerModal({ open, onClose }: { open: boolean; 
                             { onError: (error) => toast.error(errorMessage(error, "Could not update automatic posting.")) },
                           )
                         }
-                        className="h-5 w-5 accent-[var(--noodle-blue)]"
+                        className="h-5 w-5 accent-[var(--noodle-accent)]"
                       />
                     </label>
                     <button
@@ -297,7 +297,7 @@ export function NoodlerScheduleManagerModal({ open, onClose }: { open: boolean; 
                             className={cn(
                               "h-8 flex-1 rounded-full px-3 text-xs font-semibold ring-1 transition-colors",
                               auto.intensity === value
-                                ? "bg-[var(--noodle-blue)] text-zinc-950 ring-transparent"
+                                ? "bg-[var(--noodle-accent)] text-zinc-950 ring-transparent"
                                 : "bg-[var(--background)] text-[var(--foreground)] ring-[var(--border)] hover:bg-[var(--accent)]",
                             )}
                           >
@@ -316,7 +316,7 @@ export function NoodlerScheduleManagerModal({ open, onClose }: { open: boolean; 
                               { onError: (error) => toast.error(errorMessage(error, "Could not update image generation.")) },
                             )
                           }
-                          className="h-4 w-4 accent-[var(--noodle-blue)]"
+                          className="h-4 w-4 accent-[var(--noodle-accent)]"
                         />
                       </label>
                       <div className="flex items-center gap-2">
