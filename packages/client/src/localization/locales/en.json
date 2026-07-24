@@ -6460,6 +6460,7 @@
   "ui.personas.personaeditor.exportPersona": "Export persona",
   "ui.personas.personaeditor.exportPersona_ae29ab5": "Export Persona",
   "ui.personas.personaeditor.failedToAddPersonaAsCharacter": "Failed to add persona as character.",
+  "ui.personas.personaeditor.failedToSavePersona": "Failed to save persona.",
   "ui.personas.personaeditor.generatePersonaAvatar": "Generate Persona Avatar",
   "ui.personas.personaeditor.keepEditing": "Keep editing",
   "ui.personas.personaeditor.nativeKeepsMarinaraPersonaMetadataSpritesAndAttachedLorebooks": "Native keeps Marinara persona metadata, sprites, and attached lorebooks. Compatible exports simple persona JSON for other tools.",

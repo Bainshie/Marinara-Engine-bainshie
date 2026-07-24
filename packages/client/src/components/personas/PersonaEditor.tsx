@@ -65,6 +65,7 @@ import {
 } from "lucide-react";
 import { cn, generateClientId, getAvatarCropStyle, type AvatarCrop, type LegacyAvatarCrop } from "../../lib/utils";
 import { showConfirmDialog } from "../../lib/app-dialogs";
+import { formatCardVersionTimestamp, getCardVersionTitle } from "../../lib/card-version-history";
 import { extractColorsFromImage } from "../../lib/avatar-color-extraction";
 import { HelpTooltip } from "../ui/HelpTooltip";
 import { ColorPicker } from "../ui/ColorPicker";
@@ -1151,7 +1152,7 @@ export function PersonaEditor() {
   );
 
   const handleSave = async () => {
-    if (!personaId || !formData) return;
+    if (!personaId || !formData) return false;
     setSaving(true);
     try {
       const { tags, avatarCrop, convoBehavior, trackerCardColors, ...rest } = formData;
@@ -1170,6 +1171,13 @@ export function PersonaEditor() {
       });
       if (trackerCardColorsChanged) loadedTrackerCardColorsRef.current = serializedTrackerCardColors;
       setDirty(false);
+      return true;
+    } catch (error) {
+      console.error("[PersonaEditor] Save failed:", error);
+      toast.error(
+        error instanceof Error ? error.message : localizeUi("ui.personas.personaeditor.failedToSavePersona"),
+      );
+      return false;
     } finally {
       setSaving(false);
     }
@@ -1541,10 +1549,12 @@ export function PersonaEditor() {
           <button
             type="button"
             onClick={async () => {
-              await handleSave();
-              closeDetail();
+              if (await handleSave()) {
+                closeDetail();
+              }
             }}
-            className="mari-editor-action mari-editor-action--primary mari-editor-action--compact inline-flex rounded-lg px-3 py-1"
+            disabled={saving || uploadAvatar.isPending}
+            className="mari-editor-action mari-editor-action--primary mari-editor-action--compact inline-flex rounded-lg px-3 py-1 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {localizeUi("ui.personas.personaeditor.saveClose")}
           </button>
@@ -3200,19 +3210,6 @@ function buildCurrentPersonaSnapshot(formData: PersonaFormData): PersonaCardSnap
   };
 }
 
-function formatVersionTimestamp(value: string): string {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleString(undefined, {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  });
-}
-
 function formatPersonaVersionValue(data: PersonaCardSnapshot, key: keyof PersonaCardSnapshot): string {
   const value = data[key];
   if (typeof value !== "string") return "";
@@ -3242,20 +3239,7 @@ function PersonaVersionHistoryPanel({
   const deleteVersion = useDeletePersonaVersion();
   const [selectedVersion, setSelectedVersion] = useState<PersonaCardVersion | null>(null);
   const savedVersionCount = versions.filter((version) => !version.isCurrent).length;
-  const getPersonaVersionTitle = (version: PersonaCardVersion) => {
-    const cardVersion = version.version?.trim();
-    if (version.isCurrent) {
-      return cardVersion
-        ? localizeUi("ui.cardversionhistory.currentRevisionWithCardVersion", { version: cardVersion })
-        : localizeUi("ui.cardversionhistory.currentRevision");
-    }
-    return cardVersion
-      ? localizeUi("ui.cardversionhistory.revisionWithCardVersion", {
-          revision: version.revision,
-          version: cardVersion,
-        })
-      : localizeUi("ui.cardversionhistory.revision", { revision: version.revision });
-  };
+  const getPersonaVersionTitle = (version: PersonaCardVersion) => getCardVersionTitle(version, localizeUi);
 
   if (!personaId) return null;
 
@@ -3355,7 +3339,7 @@ function PersonaVersionHistoryPanel({
                   {getPersonaVersionTitle(version)}
                 </span>
                 <span className="block truncate text-[0.625rem] text-[var(--muted-foreground)]">
-                  {formatVersionTimestamp(version.createdAt)}
+                  {formatCardVersionTimestamp(version.createdAt)}
                   {!version.isCurrent && version.source
                     ? localizeUi("ui.personas.personaversionhistorypanel.value1", { value1: version.source })
                     : ""}
@@ -3427,7 +3411,7 @@ function PersonaVersionHistoryPanel({
               <div>
                 <p className="font-semibold text-[var(--foreground)]">{getPersonaVersionTitle(selectedVersion)}</p>
                 <p className="mt-1 text-[var(--muted-foreground)]">
-                  {formatVersionTimestamp(selectedVersion.createdAt)}
+                  {formatCardVersionTimestamp(selectedVersion.createdAt)}
                   {selectedVersion.reason
                     ? localizeUi("ui.personas.personaversionhistorypanel.value1", { value1: selectedVersion.reason })
                     : ""}

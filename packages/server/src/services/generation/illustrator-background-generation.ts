@@ -222,11 +222,13 @@ async function writeIllustratorBackgroundPlan(args: {
 async function resolveIllustratorImageConnection(
   connections: ConnectionsStorage,
   illustratorAgent: ResolvedAgent,
+  chatMode: "roleplay" | "visual_novel" | "game",
   chatMetadata: Record<string, unknown>,
 ) {
   const configuredId =
-    readTrimmedString(chatMetadata.illustratorImageConnectionId) ||
-    readTrimmedString(chatMetadata.gameImageConnectionId) ||
+    readTrimmedString(
+      chatMode === "game" ? chatMetadata.gameImageConnectionId : chatMetadata.illustratorImageConnectionId,
+    ) ||
     readTrimmedString(illustratorAgent.settings.imageConnectionId);
   let connection = configuredId ? await connections.getWithKey(configuredId) : null;
   if (configuredId && !connection) {
@@ -248,7 +250,7 @@ export async function generateIllustratorSceneBackground(args: {
   db: DB;
   chatId: string;
   chatName?: string | null;
-  chatMode: "roleplay" | "visual_novel";
+  chatMode: "roleplay" | "visual_novel" | "game";
   chatMetadata: Record<string, unknown>;
   currentBackground: string | null;
   illustratorAgent: ResolvedAgent;
@@ -263,6 +265,7 @@ export async function generateIllustratorSceneBackground(args: {
   const imageConnection = await resolveIllustratorImageConnection(
     connections,
     args.illustratorAgent,
+    args.chatMode,
     args.chatMetadata,
   );
   const imageSettings = await loadImageGenerationUserSettings(args.db);

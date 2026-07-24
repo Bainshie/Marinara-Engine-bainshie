@@ -8006,7 +8006,8 @@ export async function generateRoutes(app: FastifyInstance) {
                       db: app.db,
                       chatId: input.chatId,
                       chatName: chat.name,
-                      chatMode: chatMode === "visual_novel" ? "visual_novel" : "roleplay",
+                      chatMode:
+                        chatMode === "game" ? "game" : chatMode === "visual_novel" ? "visual_novel" : "roleplay",
                       chatMetadata: freshMeta,
                       currentBackground: backgroundBeforeGeneration ?? currentBackground,
                       illustratorAgent: illustratorBackgroundAgent,

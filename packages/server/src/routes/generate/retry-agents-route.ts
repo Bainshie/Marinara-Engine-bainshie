@@ -3474,7 +3474,12 @@ async function applyRetryResultEffects(args: {
         db: app.db,
         chatId,
         chatName: chat.name,
-        chatMode: (chat as { mode?: unknown }).mode === "visual_novel" ? "visual_novel" : "roleplay",
+        chatMode:
+          (chat as { mode?: unknown }).mode === "game"
+            ? "game"
+            : (chat as { mode?: unknown }).mode === "visual_novel"
+              ? "visual_novel"
+              : "roleplay",
         chatMetadata: freshMeta,
         currentBackground:
           backgroundBeforeGeneration ??

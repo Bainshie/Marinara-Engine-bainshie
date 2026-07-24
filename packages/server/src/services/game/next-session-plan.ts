@@ -1,5 +1,6 @@
 import { randomUUID } from "crypto";
 import type { GameCampaignPlan, GameNpc } from "@marinara-engine/shared";
+import { normalizeCharacterLookupName } from "./name-normalization.js";
 
 function normalizeText(value: unknown, fallback = ""): string {
   if (typeof value === "string") {
@@ -8,16 +9,6 @@ function normalizeText(value: unknown, fallback = ""): string {
   }
   if (typeof value === "number" || typeof value === "boolean") return String(value);
   return fallback;
-}
-
-function normalizeCharacterName(value: string): string {
-  return value
-    .normalize("NFKD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLocaleLowerCase()
-    .replace(/[^\p{L}\p{N}\p{M}]+/gu, " ")
-    .replace(/\s+/gu, " ")
-    .trim();
 }
 
 export function normalizeNextSessionCampaignPlan(raw: unknown, current: GameCampaignPlan): GameCampaignPlan {
@@ -88,12 +79,12 @@ export function normalizeNextSessionCampaignPlan(raw: unknown, current: GameCamp
 export function normalizeNextSessionNpcs(raw: unknown, current: GameNpc[]): GameNpc[] {
   if (!Array.isArray(raw)) return current;
   const next = [...current];
-  const knownNames = new Set(current.map((npc) => normalizeCharacterName(npc.name)));
+  const knownNames = new Set(current.map((npc) => normalizeCharacterLookupName(npc.name)));
   for (const item of raw.slice(0, 3)) {
     if (!item || typeof item !== "object" || Array.isArray(item)) continue;
     const source = item as Record<string, unknown>;
     const name = normalizeText(source.name).slice(0, 120);
-    const normalizedName = normalizeCharacterName(name);
+    const normalizedName = normalizeCharacterLookupName(name);
     if (!name || !normalizedName || knownNames.has(normalizedName)) continue;
     knownNames.add(normalizedName);
     const description = normalizeText(source.description).slice(0, 500);
