@@ -2243,6 +2243,7 @@ const cases: RegressionCase[] = [
       assert.equal(videoPreset?.promptTemplate, LTX_DIRECTOR_GAME_VIDEO_PROMPT_TEMPLATE);
       assert.doesNotMatch(LTX_DIRECTOR_GAME_VIDEO_PROMPT_TEMPLATE, /\$\{narrationSummary\}/);
       assert.doesNotMatch(LTX_DIRECTOR_GAME_VIDEO_PROMPT_TEMPLATE, /\$\{illustrationPrompt\}/);
+      assert.match(LTX_DIRECTOR_GAME_VIDEO_PROMPT_TEMPLATE, /unrequested readable text/);
 
       assert.deepEqual(sanitizeLtxDirectorStoryboardSegments(" first beat | | second beat | third beat "), [
         "first beat",

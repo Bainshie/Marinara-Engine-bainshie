@@ -81,7 +81,7 @@ export const LTX_DIRECTOR_GAME_VIDEO_PROMPT_TEMPLATE = [
   "Stable visual style: ${artStyleLine}",
   "Treat the reference image as authoritative for the exact visible characters, faces, hair, clothing, anatomy, equipment, composition, textures, weather, lighting, palette, and art style.",
   "Preserve those identities and scene conditions continuously while the separate local prompts control chronological action, camera movement, physical reactions, environmental changes, and audio.",
-  "Do not add subjects or props, change identity or costume, reset the pose or setting, introduce conflicting lighting, cut to another shot, add readable text, or drift from the supplied illustration.",
+  "Do not add subjects or props, change identity or costume, reset the pose or setting, introduce conflicting lighting, cut to another shot, add unrequested readable text, or drift from the supplied illustration.",
 ].join("\n");
 
 export const GAME_VIDEO_BUILT_IN_PROMPT_TEMPLATES: AgentPromptTemplateOption[] = [
