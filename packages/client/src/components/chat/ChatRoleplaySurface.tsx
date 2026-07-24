@@ -16,6 +16,7 @@ import {
 } from "react";
 import { isMessageShadowedByLiveStream } from "../../lib/generation-stream-policy";
 import {
+  normalizeChatSummaryEntries,
   type ChatSummaryEntry,
   type MarkerConfig,
   type PromptGroup,
@@ -705,12 +706,24 @@ function SummaryButton({
   totalMessageCount: number;
   promptPresetId?: string | null;
 }) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const [anchor, setAnchor] = useState<ComponentProps<typeof SummaryPopover>["anchor"]>(null);
   const compact = useUIStore((s) => s.centerCompact);
   const { data: presetFull } = usePresetFull(promptPresetId ?? null);
   const summaryInjectionHint = useMemo(() => resolveChatSummaryInjectionHint(presetFull), [presetFull]);
+  const enabledSummaryCount = useMemo(
+    () =>
+      normalizeChatSummaryEntries(summaryEntries, {
+        legacySummary: summary,
+      }).filter((entry) => entry.enabled).length,
+    [summary, summaryEntries],
+  );
+  const summaryButtonLabel =
+    enabledSummaryCount > 0
+      ? t("chat.summary.toolbarLabelWithCount", { count: enabledSummaryCount })
+      : t("chat.summary.toolbarLabel");
   const readSummaryAnchor = useCallback((): ComponentProps<typeof SummaryPopover>["anchor"] => {
     const button = buttonRef.current;
     if (!button || typeof window === "undefined") return null;
@@ -763,14 +776,25 @@ function SummaryButton({
     <div className="relative" onClick={(e) => e.stopPropagation()}>
       <button
         ref={buttonRef}
+        data-chat-toolbar-panel-action="summary"
         onClick={() => {
           setAnchor(readSummaryAnchor());
           setOpen(!open);
         }}
-        className={getChatToolbarButtonClass({ active: !!summary, compact, open })}
-        title="Chat Summary"
+        aria-label={summaryButtonLabel}
+        className={getChatToolbarButtonClass({
+          compact,
+          open,
+          sizeClassName: "relative h-8 w-8",
+        })}
+        title={summaryButtonLabel}
       >
         <ScrollText size="0.875rem" />
+        {enabledSummaryCount > 0 && (
+          <span className="absolute -right-1 -top-1 flex min-w-4 justify-center rounded-full bg-[var(--marinara-chat-chrome-highlight-bg)] px-1 text-[0.5625rem] font-semibold leading-4 text-[var(--marinara-chat-chrome-panel-muted)]">
+            {enabledSummaryCount}
+          </span>
+        )}
       </button>
       {open && (
         <Suspense fallback={null}>
@@ -1572,7 +1596,12 @@ export function ChatRoleplaySurface({
                       renderPanel={!compactToolbarOwnsAuthorNotes}
                       mobilePanel={false}
                     />
-                    <ChatToolbarButton icon={<Image size="0.875rem" />} title="Gallery" onClick={onOpenGallery} />
+                    <ChatToolbarButton
+                      icon={<Image size="0.875rem" />}
+                      title="Gallery"
+                      panelAction="gallery"
+                      onClick={onOpenGallery}
+                    />
                     {chat?.connectedChatId && (
                       <ChatToolbarButton
                         icon={<ArrowRightLeft size="0.875rem" />}
@@ -1583,6 +1612,7 @@ export function ChatRoleplaySurface({
                     <ChatToolbarButton
                       icon={<Settings2 size="0.875rem" />}
                       title="Chat Settings"
+                      panelAction="settings"
                       onClick={onOpenSettings}
                     />
                   </ChatToolbarMenu>
@@ -1674,7 +1704,12 @@ export function ChatRoleplaySurface({
                           renderPanel={compactToolbarOwnsAuthorNotes}
                           mobilePanel
                         />
-                        <ChatToolbarButton icon={<Image size="0.875rem" />} title="Gallery" onClick={onOpenGallery} />
+                        <ChatToolbarButton
+                          icon={<Image size="0.875rem" />}
+                          title="Gallery"
+                          panelAction="gallery"
+                          onClick={onOpenGallery}
+                        />
                         {chat?.connectedChatId && (
                           <ChatToolbarButton
                             icon={<ArrowRightLeft size="0.875rem" />}
@@ -1685,6 +1720,7 @@ export function ChatRoleplaySurface({
                         <ChatToolbarButton
                           icon={<Settings2 size="0.875rem" />}
                           title="Chat Settings"
+                          panelAction="settings"
                           onClick={onOpenSettings}
                         />
                       </ChatToolbarMenu>
@@ -1745,7 +1781,12 @@ export function ChatRoleplaySurface({
                         renderPanel={compactToolbarOwnsAuthorNotes}
                         mobilePanel
                       />
-                      <ChatToolbarButton icon={<Image size="0.875rem" />} title="Gallery" onClick={onOpenGallery} />
+                      <ChatToolbarButton
+                        icon={<Image size="0.875rem" />}
+                        title="Gallery"
+                        panelAction="gallery"
+                        onClick={onOpenGallery}
+                      />
                       {chat?.connectedChatId && (
                         <ChatToolbarButton
                           icon={<ArrowRightLeft size="0.875rem" />}
@@ -1756,6 +1797,7 @@ export function ChatRoleplaySurface({
                       <ChatToolbarButton
                         icon={<Settings2 size="0.875rem" />}
                         title="Chat Settings"
+                        panelAction="settings"
                         onClick={onOpenSettings}
                       />
                     </ChatToolbarMenu>

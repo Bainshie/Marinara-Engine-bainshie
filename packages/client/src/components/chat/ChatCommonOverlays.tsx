@@ -8,6 +8,10 @@ import type { ChatImage } from "../../hooks/use-gallery";
 import { cn } from "../../lib/utils";
 import { Modal } from "../ui/Modal";
 import { NEUTRAL_PANEL_SHELL } from "../ui/neutral-surface-styles";
+import {
+  getChatFloatingPanelDesktopRight,
+  type ChatToolbarFloatingPanelAnchor,
+} from "./ChatToolbarControls";
 
 const loadChatSettingsDrawer = async () => {
   const module = await import("./ChatSettingsDrawer");
@@ -39,7 +43,7 @@ const PeekPromptModal = lazy(async () => {
 });
 
 type ChatData = ComponentProps<typeof ChatSettingsDrawer>["chat"];
-export type ChatFloatingPanelAnchor = { right: number; top: number } | null;
+export type ChatFloatingPanelAnchor = ChatToolbarFloatingPanelAnchor;
 export type ChatSettingsInitialSection = ComponentProps<typeof ChatSettingsDrawer>["initialSection"];
 
 type SharedSceneSettingsProps = {
@@ -214,7 +218,7 @@ function ChatSettingsLoadingFallback({ anchor }: { anchor: ChatFloatingPanelAnch
           top: `${anchor.top}px`,
           width: `min(34rem, calc(100vw - ${anchor.right}px - 0.75rem))`,
         }
-      : { right: `${anchor.right}px`, top: `${anchor.top}px` }
+      : { right: getChatFloatingPanelDesktopRight(anchor), top: `${anchor.top}px` }
     : undefined;
 
   return (

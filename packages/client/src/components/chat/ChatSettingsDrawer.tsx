@@ -1,8 +1,9 @@
 // ──────────────────────────────────────────────
 // Chat: Settings Drawer — per-chat configuration
 // ──────────────────────────────────────────────
-import { useState, useRef, useEffect, useMemo, useCallback, type CSSProperties } from "react";
+import { Fragment, lazy, Suspense, useState, useRef, useEffect, useMemo, useCallback, type CSSProperties } from "react";
 import { useQuery, useQueryClient, useQueries } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import {
   X,
@@ -61,6 +62,11 @@ import {
   ROLEPLAY_POPOVER_SHELL,
   ROLEPLAY_POPOVER_TITLE,
 } from "./roleplay-popover-styles";
+import {
+  getChatFloatingPanelDesktopRight,
+  isChatToolbarPanelTrigger,
+  type ChatToolbarFloatingPanelAnchor,
+} from "./ChatToolbarControls";
 import { PickerDropdown } from "../../features/chat-settings/PickerDropdown";
 import { ChatSettingsSection as Section } from "../../features/chat-settings/ChatSettingsSection";
 import { AdvancedParametersSection } from "../../features/chat-settings/sections/AdvancedParametersSection";
@@ -118,10 +124,7 @@ import {
 import { useUpdateGameWidgets } from "../../hooks/use-game";
 import { useRegexScripts, useUpdateRegexScript, type RegexScriptRow } from "../../hooks/use-regex-scripts";
 import { api } from "../../lib/api-client";
-import {
-  trackChatMetadataSave,
-  waitForPendingChatMetadataSaves,
-} from "../../lib/chat-metadata-save-barrier";
+import { trackChatMetadataSave, waitForPendingChatMetadataSaves } from "../../lib/chat-metadata-save-barrier";
 import { appendLocalSidecarConnectionOption, filterLanguageGenerationConnections } from "../../lib/connection-filters";
 import {
   deriveActiveLorebookViews,
@@ -143,7 +146,7 @@ import { extractCreatorNotesCss } from "../../lib/creator-notes-css";
 import { isLorebookScopeActiveForChat } from "../../lib/lorebook-scope";
 import { addSilentGreetingSwipes } from "../../lib/message-swipes";
 import { useUIStore } from "../../stores/ui.store";
-import { isDesktopShellNavigationTarget } from "../../lib/chat-floating-ui-events";
+import { blurActiveChatFloatingUiControl, isDesktopShellNavigationTarget } from "../../lib/chat-floating-ui-events";
 import { useTouchFolderDrag } from "../../hooks/use-touch-folder-drag";
 import {
   useChatPresets,
@@ -279,11 +282,25 @@ import {
 } from "./AgentAddSetupFields";
 import { GameWidgetFileControls, GameWidgetSetupEditor, normalizeGameHudWidgets } from "../game/GameWidgetSetupEditor";
 
+const QuickPresetSectionsEditor = lazy(() =>
+  import("../presets/PresetEditor").then((module) => ({ default: module.QuickPresetSectionsEditor })),
+);
+const InlineChatCardEditor = lazy(() =>
+  import("../../features/chat-settings/inline-editors/InlineChatCardEditor").then((module) => ({
+    default: module.InlineChatCardEditor,
+  })),
+);
+const InlineLorebookEntriesEditor = lazy(() =>
+  import("../../features/chat-settings/inline-editors/InlineLorebookEntriesEditor").then((module) => ({
+    default: module.InlineLorebookEntriesEditor,
+  })),
+);
+
 interface ChatSettingsDrawerProps {
   chat: Chat;
   open: boolean;
   onClose: () => void;
-  anchor?: { right: number; top: number } | null;
+  anchor?: ChatToolbarFloatingPanelAnchor;
   initialSection?: "autonomous" | null;
   spriteArrangeMode?: boolean;
   onToggleSpriteArrange?: () => void;
@@ -908,6 +925,7 @@ export function ChatSettingsDrawer({
   onSpriteVisualSettingsChange,
   onOpenScheduleEditor,
 }: ChatSettingsDrawerProps) {
+  const { t } = useTranslation();
   const qc = useQueryClient();
   const panelRef = useRef<HTMLDivElement | null>(null);
   const scheduleControlsRef = useRef<HTMLDivElement | null>(null);
@@ -1293,16 +1311,13 @@ export function ChatSettingsDrawer({
     [deletedBuiltInAgentTypes, metadata.activeAgentIds],
   );
   const mapsPackage = installedCapabilities.find(
-    (item) =>
-      item.status === "active" && item.manifest.kind.includes("maps") && item.manifest.entrypoints.client,
+    (item) => item.status === "active" && item.manifest.kind.includes("maps") && item.manifest.entrypoints.client,
   );
   const mapsPackageEnabledForChat =
     metadata.enableAgents === true && Boolean(mapsPackage && activeAgentIds.includes(mapsPackage.id));
   const callsPackage = installedCapabilities.find(
     (item) =>
-      item.status === "active" &&
-      item.manifest.kind.includes("conversation-calls") &&
-      item.manifest.entrypoints.client,
+      item.status === "active" && item.manifest.kind.includes("conversation-calls") && item.manifest.entrypoints.client,
   );
   const availableConversationCommandOptions = useMemo(() => {
     return CONVERSATION_COMMAND_TOGGLE_OPTIONS.filter((command) => {
@@ -2171,19 +2186,17 @@ export function ChatSettingsDrawer({
       illustratorAutoBackgroundsEnabled: !illustratorAutoBackgroundsEnabled,
     });
   }, [chat.id, illustratorAutoBackgroundsEnabled, updateMeta]);
-  const renderIllustratorImageStyleSelect = (
-    options: { emptyOptionLabel?: string; description?: string } = {},
-  ) => (
+  const renderIllustratorImageStyleSelect = (options: { emptyOptionLabel?: string; description?: string } = {}) => (
     <label className="flex flex-col gap-1">
       <span className="text-[0.625rem] font-medium text-[var(--foreground)]">Image Style</span>
       <select
         value={(metadata.imageStyleProfileId as string) ?? ""}
-        onChange={(event) =>
-          updateMeta.mutate({ id: chat.id, imageStyleProfileId: event.target.value || null })
-        }
+        onChange={(event) => updateMeta.mutate({ id: chat.id, imageStyleProfileId: event.target.value || null })}
         className="w-full rounded-lg border border-[var(--border)] bg-[var(--background)] px-2.5 py-2 text-xs text-[var(--foreground)] outline-none transition-colors focus:border-[var(--primary)]/50"
       >
-        <option value="">{options.emptyOptionLabel ?? "Use default style from Style Profiles in Advanced settings"}</option>
+        <option value="">
+          {options.emptyOptionLabel ?? "Use default style from Style Profiles in Advanced settings"}
+        </option>
         {imageStyleProfiles.profiles.map((profile) => (
           <option key={profile.id} value={profile.id}>
             {profile.name}
@@ -2544,6 +2557,29 @@ export function ChatSettingsDrawer({
     (c: { id?: string; data: string; comment?: string | null }) => getCharacterTitle(getCharacterInfo(c)),
     [getCharacterInfo],
   );
+
+  const renderInlineCardEditor = (kind: "character" | "persona", id: string, displayName: string) => {
+    if (inlineResourceEditor?.kind !== kind || inlineResourceEditor.id !== id) return null;
+    return (
+      <Suspense
+        fallback={
+          <div className="mari-chat-settings-inline-editor mt-2 space-y-1.5 rounded-lg border border-[var(--marinara-chat-chrome-button-border)] bg-[var(--marinara-chat-chrome-button-bg)] p-2.5">
+            <div className="shimmer h-7 rounded-lg" />
+            <div className="shimmer h-14 rounded-lg" />
+            <div className="shimmer h-14 rounded-lg" />
+          </div>
+        }
+      >
+        <InlineChatCardEditor
+          key={`${kind}:${id}`}
+          entityKind={kind}
+          entityId={id}
+          displayName={displayName}
+          onClose={() => setInlineResourceEditor(null)}
+        />
+      </Suspense>
+    );
+  };
 
   const agentAddSpriteSubjects = useMemo<AgentAddSpriteSubject[]>(
     () =>
@@ -3161,11 +3197,23 @@ export function ChatSettingsDrawer({
   const [showSummariesModal, setShowSummariesModal] = useState(false);
   const [showAgentSuiteModal, setShowAgentSuiteModal] = useState(false);
   const [showMemoriesModal, setShowMemoriesModal] = useState(false);
+  const [quickPresetEditorOpen, setQuickPresetEditorOpen] = useState(false);
+  const [inlineResourceEditor, setInlineResourceEditor] = useState<{
+    kind: "character" | "persona" | "lorebook";
+    id: string;
+  } | null>(null);
+  const toggleInlineResourceEditor = useCallback((kind: "character" | "persona" | "lorebook", id: string) => {
+    setInlineResourceEditor((current) => (current?.kind === kind && current.id === id ? null : { kind, id }));
+  }, []);
+  useEffect(() => {
+    setInlineResourceEditor(null);
+  }, [chat.id]);
   const handleAgentSuiteCloseGuardChange = useCallback((guard: (() => Promise<boolean>) | null) => {
     agentSuiteCloseGuardRef.current = guard;
   }, []);
   const requestClose = useCallback(() => {
     if (drawerClosingRef.current) return;
+    blurActiveChatFloatingUiControl();
     drawerClosingRef.current = true;
     void (async () => {
       try {
@@ -4083,6 +4131,7 @@ export function ChatSettingsDrawer({
     const handlePointerDown = (event: PointerEvent) => {
       const target = event.target;
       if (isDesktopShellNavigationTarget(target)) return;
+      if (isChatToolbarPanelTrigger(target, "settings")) return;
       if (!(target instanceof Node)) return;
       if (panelRef.current?.contains(target)) return;
       if (target instanceof Element && target.closest("[data-chat-floating-panel]")) return;
@@ -4106,7 +4155,7 @@ export function ChatSettingsDrawer({
           width: `min(34rem, calc(100vw - ${anchor.right}px - 0.75rem))`,
         }
       : {
-          right: `max(${anchor.right}px, calc(var(--mari-chat-ui-inset-right, 0px) + 0.75rem))`,
+          right: getChatFloatingPanelDesktopRight(anchor),
           top: `${anchor.top}px`,
         }
     : undefined;
@@ -4330,10 +4379,28 @@ export function ChatSettingsDrawer({
                 promptPresetId={chat.promptPresetId ?? null}
                 presets={promptPresetOptions}
                 hasVariables={currentPromptPresetHasVariables}
+                quickEditor={
+                  chat.promptPresetId ? (
+                    <Suspense
+                      fallback={
+                        <div className="mari-editor-empty flex min-h-24 items-center justify-center px-3 py-6 text-xs">
+                          {t("chat.settings.promptPreset.quickEdit.loading")}
+                        </div>
+                      }
+                    >
+                      <QuickPresetSectionsEditor
+                        presetId={chat.promptPresetId}
+                        parentChatHasLorebook={activeLorebooks.length > 0}
+                      />
+                    </Suspense>
+                  ) : null
+                }
+                quickEditorOpen={quickPresetEditorOpen}
                 showLorebookMarkerWarning={showLorebookMarkerWarning}
                 onEditVariables={() => {
                   if (chat.promptPresetId) setChoiceModalPresetId(chat.promptPresetId);
                 }}
+                onQuickEditorToggle={() => setQuickPresetEditorOpen((current) => !current)}
                 onPromptPresetChange={setPreset}
               />
             </div>
@@ -4416,44 +4483,65 @@ export function ChatSettingsDrawer({
               <div className="space-y-1.5">
                 <label className="text-[0.6875rem] font-medium text-[var(--muted-foreground)]">Persona</label>
                 {chat.personaId ? (
-                  <div className="flex items-center gap-2.5 rounded-lg bg-[var(--primary)]/10 px-2.5 py-2 ring-1 ring-[var(--primary)]/30">
-                    {(() => {
-                      const p = personas.find((persona) => persona.id === chat.personaId);
-                      return p ? (
-                        <>
-                          {p.avatarPath ? (
-                            <img
-                              src={p.avatarPath}
-                              alt={p.name}
-                              loading="lazy"
-                              className="h-7 w-7 shrink-0 rounded-full object-cover"
-                            />
-                          ) : (
-                            <div className="mari-avatar-placeholder mari-avatar-placeholder--persona flex h-7 w-7 shrink-0 items-center justify-center rounded-full">
-                              <User size="0.75rem" />
-                            </div>
-                          )}
-                          <div className="min-w-0 flex-1">
-                            <span className="block truncate text-xs">{p.name}</span>
-                            {p.comment && (
-                              <span className="block truncate text-[0.625rem] italic text-[var(--muted-foreground)]">
-                                {p.comment}
-                              </span>
+                  <>
+                    <div className="flex items-center gap-2.5 rounded-lg bg-[var(--primary)]/10 px-2.5 py-2 ring-1 ring-[var(--primary)]/30">
+                      {(() => {
+                        const p = personas.find((persona) => persona.id === chat.personaId);
+                        return p ? (
+                          <>
+                            {p.avatarPath ? (
+                              <img
+                                src={p.avatarPath}
+                                alt={p.name}
+                                loading="lazy"
+                                className="h-7 w-7 shrink-0 rounded-full object-cover"
+                              />
+                            ) : (
+                              <div className="mari-avatar-placeholder mari-avatar-placeholder--persona flex h-7 w-7 shrink-0 items-center justify-center rounded-full">
+                                <User size="0.75rem" />
+                              </div>
                             )}
-                          </div>
-                        </>
-                      ) : (
-                        <span className="flex-1 truncate text-xs text-[var(--muted-foreground)]">Unknown persona</span>
-                      );
-                    })()}
-                    <button
-                      onClick={() => updateChat.mutate({ id: chat.id, personaId: null })}
-                      className="ml-auto shrink-0 rounded p-0.5 text-[var(--muted-foreground)] transition-colors hover:text-[var(--foreground)]"
-                      title="Remove persona"
-                    >
-                      <X size="0.75rem" />
-                    </button>
-                  </div>
+                            <div className="min-w-0 flex-1">
+                              <span className="block truncate text-xs">{p.name}</span>
+                              {p.comment && (
+                                <span className="block truncate text-[0.625rem] italic text-[var(--muted-foreground)]">
+                                  {p.comment}
+                                </span>
+                              )}
+                            </div>
+                          </>
+                        ) : (
+                          <span className="flex-1 truncate text-xs text-[var(--muted-foreground)]">
+                            Unknown persona
+                          </span>
+                        );
+                      })()}
+                      <div className="ml-auto flex shrink-0 items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => toggleInlineResourceEditor("persona", chat.personaId!)}
+                          className="flex h-5 w-5 items-center justify-center rounded-md text-[var(--muted-foreground)] transition-colors hover:bg-[var(--accent)] hover:text-[var(--foreground)]"
+                          title={t("chat.settings.actions.editPersonaCard")}
+                          aria-label={t("chat.settings.actions.editPersonaCard")}
+                        >
+                          <Pencil size="0.6875rem" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => updateChat.mutate({ id: chat.id, personaId: null })}
+                          className="flex h-5 w-5 items-center justify-center rounded-md text-[var(--muted-foreground)] transition-colors hover:bg-[var(--destructive)]/15 hover:text-[var(--destructive)]"
+                          title="Remove persona"
+                        >
+                          <X size="0.75rem" />
+                        </button>
+                      </div>
+                    </div>
+                    {renderInlineCardEditor(
+                      "persona",
+                      chat.personaId,
+                      personas.find((persona) => persona.id === chat.personaId)?.name ?? "Unknown persona",
+                    )}
+                  </>
                 ) : (
                   <p className="text-[0.6875rem] text-[var(--muted-foreground)]">No persona selected.</p>
                 )}
@@ -4559,50 +4647,59 @@ export function ChatSettingsDrawer({
                       const name = charName(c);
                       const title = charTitle(c);
                       return (
-                        <div
-                          key={c.id}
-                          className="flex items-center gap-2.5 rounded-lg bg-[var(--primary)]/10 px-3 py-2 ring-1 ring-[var(--primary)]/30"
-                        >
-                          <button
-                            onClick={() => {
-                              onClose();
-                              useUIStore.getState().openCharacterDetail(c.id);
-                            }}
-                            className="flex min-w-0 flex-1 items-center gap-2.5 text-left transition-colors hover:opacity-80"
-                            title="Open character card"
-                          >
-                            {c.avatarPath ? (
-                              <span className="relative block h-7 w-7 shrink-0 overflow-hidden rounded-full">
-                                <img
-                                  src={c.avatarPath}
-                                  alt={name}
-                                  loading="lazy"
-                                  className="h-full w-full object-cover"
-                                  style={getAvatarCropStyle(charAvatarCrop(c))}
-                                />
-                              </span>
-                            ) : (
-                              <div className="mari-avatar-placeholder mari-avatar-placeholder--character flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[0.625rem] font-bold">
-                                {name[0]}
-                              </div>
-                            )}
-                            <div className="min-w-0 flex-1">
-                              <span className="block truncate text-xs">{name}</span>
-                              {title && (
-                                <span className="block truncate text-[0.625rem] italic text-[var(--muted-foreground)]">
-                                  {title}
+                        <Fragment key={c.id}>
+                          <div className="flex items-center gap-2.5 rounded-lg bg-[var(--primary)]/10 px-3 py-2 ring-1 ring-[var(--primary)]/30">
+                            <button
+                              onClick={() => {
+                                onClose();
+                                useUIStore.getState().openCharacterDetail(c.id, { initialTab: "card" });
+                              }}
+                              className="flex min-w-0 flex-1 items-center gap-2.5 text-left transition-colors hover:opacity-80"
+                              title="Open character card"
+                            >
+                              {c.avatarPath ? (
+                                <span className="relative block h-7 w-7 shrink-0 overflow-hidden rounded-full">
+                                  <img
+                                    src={c.avatarPath}
+                                    alt={name}
+                                    loading="lazy"
+                                    className="h-full w-full object-cover"
+                                    style={getAvatarCropStyle(charAvatarCrop(c))}
+                                  />
                                 </span>
+                              ) : (
+                                <div className="mari-avatar-placeholder mari-avatar-placeholder--character flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[0.625rem] font-bold">
+                                  {name[0]}
+                                </div>
                               )}
-                            </div>
-                          </button>
-                          <button
-                            onClick={() => toggleCharacter(c.id)}
-                            className="flex h-5 w-5 items-center justify-center rounded-md text-[var(--muted-foreground)] transition-colors hover:bg-[var(--destructive)]/15 hover:text-[var(--destructive)]"
-                            title="Remove from party"
-                          >
-                            <Trash2 size="0.6875rem" />
-                          </button>
-                        </div>
+                              <div className="min-w-0 flex-1">
+                                <span className="block truncate text-xs">{name}</span>
+                                {title && (
+                                  <span className="block truncate text-[0.625rem] italic text-[var(--muted-foreground)]">
+                                    {title}
+                                  </span>
+                                )}
+                              </div>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => toggleInlineResourceEditor("character", c.id)}
+                              className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md text-[var(--muted-foreground)] transition-colors hover:bg-[var(--accent)] hover:text-[var(--foreground)]"
+                              title={t("chat.settings.actions.editCharacterCard")}
+                              aria-label={t("chat.settings.actions.editCharacterCard")}
+                            >
+                              <Pencil size="0.6875rem" />
+                            </button>
+                            <button
+                              onClick={() => toggleCharacter(c.id)}
+                              className="flex h-5 w-5 items-center justify-center rounded-md text-[var(--muted-foreground)] transition-colors hover:bg-[var(--destructive)]/15 hover:text-[var(--destructive)]"
+                              title="Remove from party"
+                            >
+                              <Trash2 size="0.6875rem" />
+                            </button>
+                          </div>
+                          {renderInlineCardEditor("character", c.id, name)}
+                        </Fragment>
                       );
                     })}
                   </div>
@@ -4668,44 +4765,63 @@ export function ChatSettingsDrawer({
             >
               {/* Currently selected persona */}
               {chat.personaId ? (
-                <div className="flex items-center gap-2.5 rounded-lg bg-[var(--primary)]/10 px-2.5 py-2">
-                  {(() => {
-                    const p = personas.find((p) => p.id === chat.personaId);
-                    return p ? (
-                      <>
-                        {p.avatarPath ? (
-                          <img
-                            src={p.avatarPath}
-                            alt={p.name}
-                            loading="lazy"
-                            className="h-7 w-7 shrink-0 rounded-full object-cover"
-                          />
-                        ) : (
-                          <div className="mari-avatar-placeholder mari-avatar-placeholder--persona flex h-7 w-7 shrink-0 items-center justify-center rounded-full">
-                            <User size="0.75rem" />
-                          </div>
-                        )}
-                        <div className="min-w-0 flex-1">
-                          <span className="block truncate text-xs">{p.name}</span>
-                          {p.comment && (
-                            <span className="block truncate text-[0.625rem] italic text-[var(--muted-foreground)]">
-                              {p.comment}
-                            </span>
+                <>
+                  <div className="flex items-center gap-2.5 rounded-lg bg-[var(--primary)]/10 px-2.5 py-2">
+                    {(() => {
+                      const p = personas.find((p) => p.id === chat.personaId);
+                      return p ? (
+                        <>
+                          {p.avatarPath ? (
+                            <img
+                              src={p.avatarPath}
+                              alt={p.name}
+                              loading="lazy"
+                              className="h-7 w-7 shrink-0 rounded-full object-cover"
+                            />
+                          ) : (
+                            <div className="mari-avatar-placeholder mari-avatar-placeholder--persona flex h-7 w-7 shrink-0 items-center justify-center rounded-full">
+                              <User size="0.75rem" />
+                            </div>
                           )}
-                        </div>
-                      </>
-                    ) : (
-                      <span className="flex-1 truncate text-xs text-[var(--muted-foreground)]">Unknown persona</span>
-                    );
-                  })()}
-                  <button
-                    onClick={() => updateChat.mutate({ id: chat.id, personaId: null })}
-                    className="ml-auto shrink-0 rounded p-0.5 text-[var(--muted-foreground)] transition-colors hover:text-[var(--foreground)]"
-                    title="Remove persona"
-                  >
-                    <X size="0.75rem" />
-                  </button>
-                </div>
+                          <div className="min-w-0 flex-1">
+                            <span className="block truncate text-xs">{p.name}</span>
+                            {p.comment && (
+                              <span className="block truncate text-[0.625rem] italic text-[var(--muted-foreground)]">
+                                {p.comment}
+                              </span>
+                            )}
+                          </div>
+                        </>
+                      ) : (
+                        <span className="flex-1 truncate text-xs text-[var(--muted-foreground)]">Unknown persona</span>
+                      );
+                    })()}
+                    <div className="ml-auto flex shrink-0 items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => toggleInlineResourceEditor("persona", chat.personaId!)}
+                        className="flex h-5 w-5 items-center justify-center rounded-md text-[var(--muted-foreground)] transition-colors hover:bg-[var(--accent)] hover:text-[var(--foreground)]"
+                        title={t("chat.settings.actions.editPersonaCard")}
+                        aria-label={t("chat.settings.actions.editPersonaCard")}
+                      >
+                        <Pencil size="0.6875rem" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => updateChat.mutate({ id: chat.id, personaId: null })}
+                        className="flex h-5 w-5 items-center justify-center rounded-md text-[var(--muted-foreground)] transition-colors hover:bg-[var(--destructive)]/15 hover:text-[var(--destructive)]"
+                        title="Remove persona"
+                      >
+                        <X size="0.75rem" />
+                      </button>
+                    </div>
+                  </div>
+                  {renderInlineCardEditor(
+                    "persona",
+                    chat.personaId,
+                    personas.find((persona) => persona.id === chat.personaId)?.name ?? "Unknown persona",
+                  )}
+                </>
               ) : (
                 <p className="text-[0.6875rem] text-[var(--muted-foreground)]">No persona selected.</p>
               )}
@@ -4869,7 +4985,7 @@ export function ChatSettingsDrawer({
                           <button
                             onClick={() => {
                               onClose();
-                              useUIStore.getState().openCharacterDetail(c.id);
+                              useUIStore.getState().openCharacterDetail(c.id, { initialTab: "card" });
                             }}
                             className="flex items-center gap-2.5 min-w-0 flex-1 text-left transition-colors hover:opacity-80"
                             title="Open character card"
@@ -4915,6 +5031,15 @@ export function ChatSettingsDrawer({
                             </button>
                           )}
                           <button
+                            type="button"
+                            onClick={() => toggleInlineResourceEditor("character", c.id)}
+                            className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md text-[var(--muted-foreground)] transition-colors hover:bg-[var(--accent)] hover:text-[var(--foreground)]"
+                            title={t("chat.settings.actions.editCharacterCard")}
+                            aria-label={t("chat.settings.actions.editCharacterCard")}
+                          >
+                            <Pencil size="0.6875rem" />
+                          </button>
+                          <button
                             onClick={() => toggleCharacter(c.id)}
                             className="flex h-5 w-5 items-center justify-center rounded-md text-[var(--muted-foreground)] transition-colors hover:bg-[var(--destructive)]/15 hover:text-[var(--destructive)]"
                             title="Remove from chat"
@@ -4922,6 +5047,7 @@ export function ChatSettingsDrawer({
                             <Trash2 size="0.6875rem" />
                           </button>
                         </div>
+                        {renderInlineCardEditor("character", c.id, name)}
                       </div>
                     );
                   })}
@@ -6024,9 +6150,7 @@ export function ChatSettingsDrawer({
                   <div
                     className={cn(
                       "h-5 w-9 shrink-0 rounded-full p-0.5 transition-colors",
-                      metadata.crossChatAwareness !== false
-                        ? "bg-[var(--primary)]"
-                        : "bg-[var(--muted-foreground)]/50",
+                      metadata.crossChatAwareness !== false ? "bg-[var(--primary)]" : "bg-[var(--muted-foreground)]/50",
                     )}
                   >
                     <div
@@ -6315,6 +6439,31 @@ export function ChatSettingsDrawer({
                 updateMeta.mutate({ id: chat.id, lorebookTokenBudget })
               }
               onShowLorebookPickerChange={setShowLbPicker}
+              onEditLorebook={(lorebookId) => toggleInlineResourceEditor("lorebook", lorebookId)}
+              editingLorebookId={inlineResourceEditor?.kind === "lorebook" ? inlineResourceEditor.id : null}
+              inlineLorebookEditor={
+                inlineResourceEditor?.kind === "lorebook" ? (
+                  <Suspense
+                    fallback={
+                      <div className="mari-chat-settings-inline-editor mt-2 space-y-1.5 rounded-lg border border-[var(--marinara-chat-chrome-button-border)] bg-[var(--marinara-chat-chrome-button-bg)] p-2.5">
+                        <div className="shimmer h-8 rounded-lg" />
+                        <div className="shimmer h-9 rounded-lg" />
+                        <div className="shimmer h-9 rounded-lg" />
+                      </div>
+                    }
+                  >
+                    <InlineLorebookEntriesEditor
+                      key={inlineResourceEditor.id}
+                      lorebookId={inlineResourceEditor.id}
+                      lorebookName={
+                        activeLorebooks.find((lorebook) => lorebook.id === inlineResourceEditor.id)?.name ?? "Lorebook"
+                      }
+                      characterRows={characters}
+                      onClose={() => setInlineResourceEditor(null)}
+                    />
+                  </Suspense>
+                ) : null
+              }
               onToggleLorebook={toggleLorebook}
               onSetLorebookExcluded={setLorebookExcluded}
             />
@@ -6362,22 +6511,24 @@ export function ChatSettingsDrawer({
                             ? "Run scene analysis and any attached custom agents during generation."
                             : "Run AI agents during generation (world state, expressions, etc.)"}
                         </span>
-                        {isGame && metadata.enableAgents && (() => {
-                          const setupCfg = metadata.gameSetupConfig as Record<string, unknown> | undefined;
-                          const sceneConnId =
-                            (metadata.gameSceneConnectionId as string) ||
-                            (setupCfg?.sceneConnectionId as string) ||
-                            null;
-                          const sceneConn = sceneConnId
-                            ? ((connections ?? []) as Array<{ id: string; name: string; model?: string }>).find(
-                                (connection) => connection.id === sceneConnId,
-                              )
-                            : null;
-                          const connectionLabel = sceneConn
-                            ? `${sceneConn.name}${sceneConn.model ? ` — ${sceneConn.model}` : ""}`
-                            : "Local sidecar (Gemma)";
-                          return <span className="mt-0.5 block text-[var(--primary)]/70">{connectionLabel}</span>;
-                        })()}
+                        {isGame &&
+                          metadata.enableAgents &&
+                          (() => {
+                            const setupCfg = metadata.gameSetupConfig as Record<string, unknown> | undefined;
+                            const sceneConnId =
+                              (metadata.gameSceneConnectionId as string) ||
+                              (setupCfg?.sceneConnectionId as string) ||
+                              null;
+                            const sceneConn = sceneConnId
+                              ? ((connections ?? []) as Array<{ id: string; name: string; model?: string }>).find(
+                                  (connection) => connection.id === sceneConnId,
+                                )
+                              : null;
+                            const connectionLabel = sceneConn
+                              ? `${sceneConn.name}${sceneConn.model ? ` — ${sceneConn.model}` : ""}`
+                              : "Local sidecar (Gemma)";
+                            return <span className="mt-0.5 block text-[var(--primary)]/70">{connectionLabel}</span>;
+                          })()}
                       </>
                     }
                     checked={metadata.enableAgents === true}
@@ -8888,7 +9039,8 @@ export function ChatSettingsDrawer({
             {agentAddIsFeature ? (
               <div className="rounded-xl bg-[var(--secondary)]/70 px-3 py-2.5 text-[0.6875rem] leading-5 text-[var(--muted-foreground)] ring-1 ring-[var(--border)]">
                 This lets characters initiate the downloaded feature in this chat. Manual controls supplied by the
-                installed package remain available independently, and no separate agent model call or connection is used.
+                installed package remain available independently, and no separate agent model call or connection is
+                used.
               </div>
             ) : agentAddIsRuntimeDisabled ? (
               <div className="rounded-xl bg-[var(--secondary)]/70 px-3 py-2.5 text-[0.6875rem] leading-5 text-[var(--muted-foreground)] ring-1 ring-[var(--border)]">

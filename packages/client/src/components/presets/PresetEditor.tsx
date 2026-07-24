@@ -4,6 +4,7 @@
 // ──────────────────────────────────────────────
 import { useState, useCallback, useEffect, useLayoutEffect, useMemo, useRef, type FC, type ReactNode } from "react";
 import { createPortal } from "react-dom";
+import { useTranslation } from "react-i18next";
 import { useUIStore } from "../../stores/ui.store";
 import { toast } from "sonner";
 import { showConfirmDialog } from "../../lib/app-dialogs";
@@ -62,7 +63,7 @@ import { MacroTextarea } from "../ui/MacroTextarea";
 import { applyTextareaQuoteFormat } from "../../lib/textarea-quotes";
 import { api } from "../../lib/api-client";
 import { useAgentConfigs, type AgentConfigRow } from "../../hooks/use-agents";
-import { type WrapFormat, type MarkerType } from "@marinara-engine/shared";
+import { type MarkerType, type PromptSection, type WrapFormat } from "@marinara-engine/shared";
 import { useQuoteFormatter } from "../../hooks/use-quote-formatter";
 import { EditorTabRail } from "../ui/EditorTabRail";
 import { useTouchFolderDrag } from "../../hooks/use-touch-folder-drag";
@@ -613,6 +614,101 @@ export function PresetEditor() {
   );
 }
 
+export function QuickPresetSectionsEditor({
+  presetId,
+  parentChatHasLorebook = false,
+}: {
+  presetId: string;
+  parentChatHasLorebook?: boolean;
+}) {
+  const { t } = useTranslation();
+  const { data, isLoading } = usePresetFull(presetId);
+  const createSection = useCreateSection();
+  const updateSection = useUpdateSection();
+  const deleteSection = useDeleteSection();
+  const reorderSections = useReorderSections();
+  const createGroup = useCreateGroup();
+  const updateGroup = useUpdateGroup();
+  const deleteGroup = useDeleteGroup();
+  const createVariable = useCreateVariable();
+  const updateVariable = useUpdateVariable();
+  const deleteVariable = useDeleteVariable();
+  const reorderVariables = useReorderVariables();
+
+  const sectionOrder = useMemo<string[]>(() => {
+    const rawOrder = data?.preset?.sectionOrder;
+    try {
+      const parsed: unknown = typeof rawOrder === "string" ? JSON.parse(rawOrder) : (rawOrder ?? []);
+      return Array.isArray(parsed) ? parsed.filter((id): id is string => typeof id === "string") : [];
+    } catch {
+      return [];
+    }
+  }, [data?.preset?.sectionOrder]);
+
+  const orderedSections = useMemo(() => {
+    const sections = data?.sections ?? [];
+    const byId = new Map(sections.map((section) => [section.id, section]));
+    return sectionOrder
+      .map((id: string) => byId.get(id))
+      .filter((section): section is PromptSection => section !== undefined);
+  }, [data?.sections, sectionOrder]);
+
+  const groupMap = useMemo(() => new Map((data?.groups ?? []).map((group) => [group.id, group])), [data?.groups]);
+  const hasLorebookMarker = useMemo(
+    () =>
+      orderedSections.some((section) => {
+        if (!readBoolFlag(section.enabled) || !readBoolFlag(section.isMarker)) return false;
+        const marker = readMarkerConfig(section.markerConfig);
+        return (
+          marker?.type === "lorebook" || marker?.type === "world_info_before" || marker?.type === "world_info_after"
+        );
+      }),
+    [orderedSections],
+  );
+
+  if (isLoading) {
+    return (
+      <div className="mari-editor-empty flex min-h-24 items-center justify-center px-3 py-6 text-xs">
+        {t("chat.settings.promptPreset.quickEdit.loading")}
+      </div>
+    );
+  }
+
+  if (!data) {
+    return (
+      <div className="mari-editor-empty flex min-h-24 items-center justify-center px-3 py-6 text-xs">
+        {t("chat.settings.promptPreset.quickEdit.missing")}
+      </div>
+    );
+  }
+
+  return (
+    <div className="mari-editor-legacy-bridge mari-quick-preset-editor">
+      <SectionsTab
+        presetId={presetId}
+        sections={orderedSections}
+        groupMap={groupMap}
+        choiceBlocks={data.choiceBlocks ?? []}
+        wrapFormat={(data.preset.wrapFormat ?? "xml") as WrapFormat}
+        onCreateSection={createSection}
+        onUpdateSection={updateSection}
+        onDeleteSection={deleteSection}
+        onReorderSections={reorderSections}
+        onCreateGroup={createGroup}
+        onUpdateGroup={updateGroup}
+        onDeleteGroup={deleteGroup}
+        onCreateVariable={createVariable}
+        onUpdateVariable={updateVariable}
+        onDeleteVariable={deleteVariable}
+        onReorderVariables={reorderVariables}
+        hasLorebookMarker={hasLorebookMarker}
+        parentChatHasLorebook={parentChatHasLorebook}
+        compact
+      />
+    </div>
+  );
+}
+
 // ═══════════════════════════════════════════════
 //  Overview Tab
 // ═══════════════════════════════════════════════
@@ -803,6 +899,7 @@ function SectionsTab({
   onReorderVariables,
   hasLorebookMarker,
   parentChatHasLorebook,
+  compact = false,
 }: {
   presetId: string;
   sections: any[];
@@ -822,6 +919,7 @@ function SectionsTab({
   onReorderVariables: any;
   hasLorebookMarker: boolean;
   parentChatHasLorebook: boolean;
+  compact?: boolean;
 }) {
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set());
   const [showAddMenu, setShowAddMenu] = useState(false);
@@ -1074,10 +1172,16 @@ function SectionsTab({
   return (
     <>
       {/* ── Toolbar ── */}
-      <div className="mari-editor-toolbar flex flex-wrap items-center gap-2 p-2">
+      <div
+        className={cn(
+          "mari-editor-toolbar flex flex-wrap items-center",
+          compact ? "gap-1.5 px-1 pb-2 pt-1.5" : "gap-2 p-2",
+        )}
+      >
         <HelpTooltip
           text="Everything we send to a model is just text. A prompt is a formatted, written instruction we send to the model. Each section below becomes part of the final prompt."
           side="right"
+          buttonClassName={compact ? "p-1" : undefined}
         />
         <div ref={addMenuRef} className="relative">
           <button
@@ -1272,6 +1376,7 @@ function SectionsTab({
                 <div
                   data-touch-reorder-item="preset-section"
                   data-touch-reorder-index={idx}
+                  data-preset-marker-section={compact && isMarker ? "true" : undefined}
                   draggable={dragReady === idx}
                   onDragStart={(e) => handleDragStart(idx, e)}
                   onDragOver={(e) => {
@@ -1295,7 +1400,7 @@ function SectionsTab({
                   )}
                 >
                   {/* Section header */}
-                  <div className="flex min-w-0 items-center gap-2 px-3 py-2.5">
+                  <div className={cn("flex min-w-0 items-center", compact ? "gap-1.5 px-2 py-2" : "gap-2 px-3 py-2.5")}>
                     <div className="flex shrink-0 items-center gap-0.5">
                       <div
                         className="cursor-grab rounded p-0.5 hover:bg-[var(--accent)] active:cursor-grabbing"
@@ -1336,6 +1441,7 @@ function SectionsTab({
                       </button>
                     </div>
                     <button
+                      data-preset-section-toggle
                       onClick={() => toggleExpanded(section.id)}
                       className="shrink-0 rounded p-0.5 hover:bg-[var(--accent)]"
                     >
@@ -1347,19 +1453,34 @@ function SectionsTab({
                     </button>
                     <RoleIcon size="0.875rem" className={cn("shrink-0", ROLE_COLORS[role])} />
                     <span
-                      className="min-w-0 flex-1 cursor-pointer truncate text-sm font-medium"
+                      className={cn(
+                        "min-w-0 flex-1 cursor-pointer truncate font-medium",
+                        compact ? "text-xs" : "text-sm",
+                      )}
                       onClick={() => toggleExpanded(section.id)}
                     >
                       {section.name}
                     </span>
 
                     {isMarker && (
-                      <span className="mari-chrome-accent-surface mari-accent-animated shrink-0 rounded px-1.5 py-0.5 text-[0.5625rem] font-medium">
+                      <span
+                        data-preset-marker-badge
+                        className={cn(
+                          "mari-chrome-accent-surface mari-accent-animated shrink-0 rounded px-1.5 py-0.5 text-[0.5625rem] font-medium",
+                          compact && "max-sm:hidden",
+                        )}
+                      >
                         MARKER
                       </span>
                     )}
                     {group && (
-                      <span className="mari-editor-chip shrink-0 whitespace-nowrap px-1.5 py-0.5 text-[0.5625rem]">
+                      <span
+                        data-preset-section-group-badge
+                        className={cn(
+                          "mari-editor-chip shrink-0 whitespace-nowrap px-1.5 py-0.5 text-[0.5625rem]",
+                          compact && "max-sm:hidden",
+                        )}
+                      >
                         {group.name}
                       </span>
                     )}
@@ -1407,9 +1528,14 @@ function SectionsTab({
 
                   {/* Expanded content */}
                   {isExpanded && (
-                    <div className="space-y-3 border-t border-[var(--marinara-editor-divider)] px-3 py-3">
+                    <div
+                      className={cn(
+                        "space-y-3 border-t border-[var(--marinara-editor-divider)] px-3 py-3",
+                        compact && "max-sm:space-y-2 max-sm:px-2 max-sm:py-2",
+                      )}
+                    >
                       {/* Name & Role */}
-                      <div className="flex gap-2">
+                      <div className={cn("flex gap-2", compact && "flex-col max-sm:gap-1.5")}>
                         <SectionNameInput
                           value={section.name}
                           onCommit={(name) =>
@@ -1429,7 +1555,12 @@ function SectionsTab({
                               role: e.target.value,
                             })
                           }
-                          className="mari-editor-field px-2 py-1.5 text-xs"
+                          data-preset-section-role
+                          className={cn(
+                            "mari-editor-field px-2 py-1.5 text-xs",
+                            compact &&
+                              "max-sm:h-7 max-sm:w-fit max-sm:max-w-full max-sm:self-start max-sm:px-1.5 max-sm:py-1 max-sm:text-[0.6875rem]",
+                          )}
                         >
                           <option value="system">System</option>
                           <option value="user">User</option>
@@ -1463,7 +1594,12 @@ function SectionsTab({
                           const isAgentMarker = mc.type === "agent_data";
                           return isAgentMarker ? (
                             <div className="space-y-2">
-                              <div className="mari-editor-panel mari-editor-panel--soft p-3 text-xs text-[var(--marinara-editor-text)]">
+                              <div
+                                className={cn(
+                                  "mari-editor-panel mari-editor-panel--soft p-3 text-xs text-[var(--marinara-editor-text)]",
+                                  compact && "max-sm:p-2 max-sm:text-[0.6875rem]",
+                                )}
+                              >
                                 Agent section: <strong>{section.name}</strong>
                                 <p className="mt-1 text-[var(--muted-foreground)]">
                                   The{" "}
@@ -1487,7 +1623,12 @@ function SectionsTab({
                               />
                             </div>
                           ) : (
-                            <div className="mari-editor-panel mari-editor-panel--soft p-3 text-xs text-[var(--marinara-editor-text)]">
+                            <div
+                              className={cn(
+                                "mari-editor-panel mari-editor-panel--soft p-3 text-xs text-[var(--marinara-editor-text)]",
+                                compact && "max-sm:p-2 max-sm:text-[0.6875rem]",
+                              )}
+                            >
                               Marker type: <strong>{MARKER_LABELS[mc.type as MarkerType] ?? "Unknown"}</strong>
                               <p className="mt-1 text-[var(--muted-foreground)]">
                                 {mc.type === "chat_summary"
@@ -1504,8 +1645,15 @@ function SectionsTab({
                         })()}
 
                       {/* Position & Depth */}
-                      <div className="flex flex-wrap items-center gap-3 text-xs">
-                        <label className="text-[var(--muted-foreground)]">Position:</label>
+                      <div
+                        className={cn(
+                          "flex flex-wrap items-center gap-3 text-xs",
+                          compact && "max-sm:gap-x-1.5 max-sm:gap-y-1 max-sm:text-[0.6875rem]",
+                        )}
+                      >
+                        <label className={cn("text-[var(--muted-foreground)]", compact && "max-sm:text-[0.625rem]")}>
+                          Position:
+                        </label>
                         <select
                           value={section.injectionPosition ?? "ordered"}
                           onChange={(e) =>
@@ -1515,14 +1663,23 @@ function SectionsTab({
                               injectionPosition: e.target.value,
                             })
                           }
-                          className="mari-editor-field px-2 py-1 text-xs"
+                          data-preset-section-position
+                          className={cn(
+                            "mari-editor-field px-2 py-1 text-xs",
+                            compact &&
+                              "max-sm:h-7 max-sm:min-w-0 max-sm:max-w-[12rem] max-sm:px-1.5 max-sm:py-1 max-sm:text-[0.6875rem]",
+                          )}
                         >
                           <option value="ordered">Ordered (in sequence)</option>
                           <option value="depth">Depth (from end of chat)</option>
                         </select>
                         {section.injectionPosition === "depth" && (
                           <>
-                            <label className="text-[var(--muted-foreground)]">Depth:</label>
+                            <label
+                              className={cn("text-[var(--muted-foreground)]", compact && "max-sm:text-[0.625rem]")}
+                            >
+                              Depth:
+                            </label>
                             <DraftNumberInput
                               value={section.injectionDepth ?? 0}
                               min={0}
@@ -1534,16 +1691,33 @@ function SectionsTab({
                                   injectionDepth: nextValue,
                                 })
                               }
-                              className="mari-editor-field w-16 px-2 py-1 text-xs"
+                              className={cn(
+                                "mari-editor-field w-16 px-2 py-1 text-xs",
+                                compact && "max-sm:h-7 max-sm:w-12 max-sm:px-1.5 max-sm:text-[0.6875rem]",
+                              )}
                             />
-                            <span className="text-[var(--muted-foreground)]">(0 = after last message)</span>
+                            <span
+                              className={cn(
+                                "text-[var(--muted-foreground)]",
+                                compact && "max-sm:basis-full max-sm:text-[0.5625rem]",
+                              )}
+                            >
+                              (0 = after last message)
+                            </span>
                           </>
                         )}
                       </div>
 
                       {/* Group assignment */}
-                      <div className="flex items-center gap-3 text-xs">
-                        <label className="text-[var(--muted-foreground)]">Group:</label>
+                      <div
+                        className={cn(
+                          "flex items-center gap-3 text-xs",
+                          compact && "max-sm:flex-wrap max-sm:gap-1.5 max-sm:text-[0.6875rem]",
+                        )}
+                      >
+                        <label className={cn("text-[var(--muted-foreground)]", compact && "max-sm:text-[0.625rem]")}>
+                          Group:
+                        </label>
                         <select
                           value={section.groupId ?? ""}
                           onChange={(e) =>
@@ -1553,7 +1727,12 @@ function SectionsTab({
                               groupId: e.target.value || null,
                             })
                           }
-                          className="mari-editor-field px-2 py-1 text-xs"
+                          data-preset-section-group
+                          className={cn(
+                            "mari-editor-field px-2 py-1 text-xs",
+                            compact &&
+                              "max-sm:h-7 max-sm:min-w-0 max-sm:max-w-[12rem] max-sm:px-1.5 max-sm:py-1 max-sm:text-[0.6875rem]",
+                          )}
                         >
                           <option value="">No group</option>
                           {[...groupMap.values()].map((g: any) => (
@@ -1563,7 +1742,12 @@ function SectionsTab({
                           ))}
                         </select>
                         {groupMap.size === 0 && (
-                          <span className="text-[0.625rem] text-[var(--muted-foreground)]">
+                          <span
+                            className={cn(
+                              "text-[0.625rem] text-[var(--muted-foreground)]",
+                              compact && "max-sm:basis-full max-sm:text-[0.5625rem]",
+                            )}
+                          >
                             (open Groups panel to create one)
                           </span>
                         )}
@@ -1594,6 +1778,7 @@ function SectionsTab({
         onUpdateVariable={onUpdateVariable}
         onDeleteVariable={onDeleteVariable}
         onReorderVariables={onReorderVariables}
+        compact={compact}
       />
     </>
   );
@@ -1608,6 +1793,7 @@ function PresetVariablesEditor({
   onUpdateVariable,
   onDeleteVariable,
   onReorderVariables,
+  compact = false,
 }: {
   presetId: string;
   variables: any[];
@@ -1615,6 +1801,7 @@ function PresetVariablesEditor({
   onUpdateVariable: any;
   onDeleteVariable: any;
   onReorderVariables: any;
+  compact?: boolean;
 }) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [draggingIdx, setDraggingIdx] = useState<number | null>(null);
@@ -1705,12 +1892,21 @@ function PresetVariablesEditor({
   });
 
   return (
-    <div className="mari-editor-panel mt-6 space-y-3 p-3">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
+    <div className={cn("mari-editor-panel space-y-3", compact ? "mt-3 p-2" : "mt-6 p-3")}>
+      <div
+        data-preset-variables-header
+        className={cn(
+          "flex items-center justify-between gap-3",
+          compact && "max-sm:flex-wrap max-sm:gap-x-3 max-sm:gap-y-2",
+        )}
+      >
+        <div className="flex min-w-0 items-center gap-2">
           <Hash size="0.875rem" className="mari-chrome-accent-icon mari-accent-animated" />
           <span className="text-sm font-semibold">Preset Variables</span>
-          <span className="mari-editor-chip mari-editor-chip--accent px-1.5 py-0.5 text-[0.5625rem]">
+          <span
+            data-preset-variable-count
+            className="mari-editor-chip mari-editor-chip--accent px-1.5 py-0.5 text-[0.5625rem]"
+          >
             {variables.length}
           </span>
         </div>
@@ -1726,7 +1922,10 @@ function PresetVariablesEditor({
               ],
             })
           }
-          className="mari-editor-action mari-editor-action--primary mari-editor-action--compact flex items-center gap-1.5 px-2.5 py-1.5 text-[0.6875rem]"
+          className={cn(
+            "mari-editor-action mari-editor-action--primary mari-editor-action--compact flex items-center gap-1.5 px-2.5 py-1.5 text-[0.6875rem]",
+            compact && "max-sm:ml-auto",
+          )}
         >
           <Plus size="0.6875rem" /> Add Variable
         </button>
@@ -2185,7 +2384,9 @@ function VariableCard({
               </div>
               <SettingsSwitch
                 ariaLabel={
-                  optionOrderIsAlphabetical ? "Use manual option display order" : "Use alphabetical option display order"
+                  optionOrderIsAlphabetical
+                    ? "Use manual option display order"
+                    : "Use alphabetical option display order"
                 }
                 checked={optionOrderIsAlphabetical}
                 onChange={(checked) => update({ optionSort: checked ? "alphabetical" : "manual" })}
@@ -2657,7 +2858,10 @@ function ExpandedEditorModal({
 
   return (
     <PresetModalPortal>
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-[max(0.75rem,env(safe-area-inset-top))] sm:p-6">
+      <div
+        data-chat-floating-panel
+        className="fixed inset-0 z-50 flex items-center justify-center p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-[max(0.75rem,env(safe-area-inset-top))] sm:p-6"
+      >
         <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={handleClose} />
         <div className="mari-editor-shell mari-editor-legacy-bridge relative flex h-[80vh] max-h-[calc(100vh-1.5rem)] w-full max-w-3xl flex-col rounded-2xl border border-[var(--marinara-editor-border)] bg-[var(--marinara-editor-surface-bg)] shadow-2xl shadow-black/50 supports-[height:100dvh]:h-[80dvh] supports-[height:100dvh]:max-h-[calc(100dvh-1.5rem)]">
           {/* Header */}
@@ -2673,6 +2877,13 @@ function ExpandedEditorModal({
               ref={textareaRef}
               value={local}
               onChange={handleChange}
+              onBlur={() => {
+                if (timeoutRef.current) {
+                  clearTimeout(timeoutRef.current);
+                  timeoutRef.current = null;
+                }
+                if (local !== value) onChange(local);
+              }}
               onKeyDown={handleTextareaTab}
               className="mari-editor-field h-full w-full resize-none p-4 font-mono text-sm"
               placeholder="Prompt content… (supports macros like {{user}}, {{char}}, etc.)"

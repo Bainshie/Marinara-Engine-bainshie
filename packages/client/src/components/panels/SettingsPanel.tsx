@@ -2309,7 +2309,7 @@ export function SettingsPanel() {
 
   return (
     <div className="mari-settings-panel-chrome flex h-full flex-col overflow-hidden">
-      <div className="border-b border-[var(--border)]/70 p-2.5">
+      <div className="mari-editor-header mari-settings-search-header">
         <div className="flex items-center gap-2">
           <label className="relative min-w-0 flex-1">
             <Search

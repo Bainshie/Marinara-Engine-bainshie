@@ -65,6 +65,7 @@ import {
 } from "@marinara-engine/shared";
 import { showConfirmDialog } from "../../lib/app-dialogs";
 import { DraftNumberInput } from "../ui/DraftNumberInput";
+import { isChatToolbarPanelTrigger } from "./ChatToolbarControls";
 
 interface SummaryPopoverProps {
   chatId: string;
@@ -363,6 +364,7 @@ export function SummaryPopover({
   useEffect(() => {
     const handler = (e: globalThis.PointerEvent) => {
       if (eventTargetsPanel(e)) return;
+      if (isChatToolbarPanelTrigger(e.target, "summary")) return;
       const activeElement = document.activeElement;
       if (activeElement instanceof Node && panelRef.current?.contains(activeElement)) return;
       if (rangeInputFocused.current || sizeInputFocused.current || automaticIntervalFocused.current) return;
@@ -1410,7 +1412,7 @@ export function SummaryPopover({
               )}
 
               {tokenWarning && (
-                <div className="rounded-lg border border-amber-400/30 bg-amber-500/10 px-2.5 py-2 text-[0.6875rem] leading-relaxed text-amber-200">
+                <div className="rounded-lg border border-[var(--primary)]/30 bg-[var(--primary)]/10 px-2.5 py-2 text-[0.6875rem] leading-relaxed text-[var(--primary)]">
                   Enabled summaries are around {formatTokenCount(enabledTokenEstimate)} tokens. Consider disabling older
                   entries if prompt context feels crowded.
                 </div>
