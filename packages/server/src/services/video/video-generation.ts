@@ -342,6 +342,10 @@ export function resolveLtxDirectorPromptInput(
   };
 }
 
+function resolveComfyUiVideoFrameLength(durationSeconds: number): number {
+  return Math.max(1, Math.round(durationSeconds * 16));
+}
+
 export function resolveComfyUiVideoWorkflowPlaceholders(
   workflow: unknown,
   request: Pick<VideoGenerationRequest, "prompt" | "model" | "durationSeconds" | "ltxDirectorPrompt">,
@@ -353,7 +357,7 @@ export function resolveComfyUiVideoWorkflowPlaceholders(
     "%width%": runtime.width,
     "%height%": runtime.height,
     "%seed%": runtime.seed,
-    "%length%": Math.max(1, Math.round(request.durationSeconds * 16)),
+    "%length%": resolveComfyUiVideoFrameLength(request.durationSeconds),
     "%duration_seconds%": request.durationSeconds,
     "%global_prompt%": ltxDirectorPrompt.globalPrompt,
     "%local_prompts%": ltxDirectorPrompt.localPrompts,
@@ -471,7 +475,7 @@ async function generateComfyUiVideo(baseUrl: string, request: VideoGenerationReq
       request.debugMode === true || isDebugAgentsEnabled(),
       "[video-gen/comfyui] LTX Director duration_seconds=%d duration_frames=%d reference_image=%s\nglobal_prompt:\n%s\nlocal_prompts:\n%s\nsegment_lengths=%s",
       request.durationSeconds,
-      Math.max(1, Math.round(request.durationSeconds * 16)),
+      resolveComfyUiVideoFrameLength(request.durationSeconds),
       referenceImageName ?? "(none)",
       ltxDirectorPrompt.globalPrompt,
       ltxDirectorPrompt.localPrompts,
