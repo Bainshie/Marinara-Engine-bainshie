@@ -34,6 +34,7 @@ export function TranslationSection({ metadata, textConnections, onMetadataChange
 
   return (
     <ChatSettingsSection
+      id="translation"
       label="Translation"
       icon={<Languages size="0.875rem" />}
       help="Configure translation for this chat here, including provider, target language, and automatic response translation for Game mode."

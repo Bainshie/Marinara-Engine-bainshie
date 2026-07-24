@@ -101,6 +101,7 @@
   "chat.settings.promptPreset.quickEdit.loading": "Loading preset editor…",
   "chat.settings.promptPreset.quickEdit.missing": "This preset could not be loaded.",
   "chat.settings.promptPreset.quickEdit.show": "Edit preset sections",
+  "chat.settings.promptPreset.quickEdit.title": "Preset sections",
   "chat.summary.toolbarLabel": "Chat Summary",
   "chat.summary.toolbarLabelWithCount_one": "Chat Summary ({{count}} active summary)",
   "chat.summary.toolbarLabelWithCount_other": "Chat Summary ({{count}} active summaries)",

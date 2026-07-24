@@ -1,7 +1,6 @@
 import type { ReactNode } from "react";
 import { AlertTriangle, ChevronDown, Layers, Pencil, Sliders } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { cn } from "../../../lib/utils";
 import { ChatSettingsSection } from "../ChatSettingsSection";
 
 interface PromptPresetOption {
@@ -17,10 +16,8 @@ interface PromptPresetSectionProps {
   presets: PromptPresetOption[];
   hasVariables: boolean;
   quickEditor: ReactNode;
-  quickEditorOpen: boolean;
   showLorebookMarkerWarning: boolean;
   onEditVariables: () => void;
-  onQuickEditorToggle: () => void;
   onPromptPresetChange: (presetId: string | null) => void;
 }
 
@@ -29,10 +26,8 @@ export function PromptPresetSection({
   presets,
   hasVariables,
   quickEditor,
-  quickEditorOpen,
   showLorebookMarkerWarning,
   onEditVariables,
-  onQuickEditorToggle,
   onPromptPresetChange,
 }: PromptPresetSectionProps) {
   const { t } = useTranslation();
@@ -40,6 +35,7 @@ export function PromptPresetSection({
 
   return (
     <ChatSettingsSection
+      id="prompt-preset"
       label="Prompt Preset"
       icon={<Sliders size="0.875rem" />}
       help="Presets control how the system prompt is structured and what generation parameters are used. Different presets produce different AI behaviors."
@@ -85,38 +81,16 @@ export function PromptPresetSection({
       )}
       {promptPresetId && (
         <div className="mt-2">
-          <div className="flex items-center gap-1.5">
-            <button
-              type="button"
-              onClick={onQuickEditorToggle}
-              aria-expanded={quickEditorOpen}
-              className="relative flex min-w-0 flex-1 items-center gap-2 rounded-lg bg-[var(--secondary)] px-3 py-2 pr-8 text-left text-xs font-medium text-[var(--foreground)] ring-1 ring-[var(--border)] transition-colors hover:bg-[var(--accent)]"
-            >
-              <Layers size="0.75rem" className="shrink-0 text-[var(--primary)]" />
-              <span className="min-w-0 flex-1 truncate">
-                {t(
-                  quickEditorOpen
-                    ? "chat.settings.promptPreset.quickEdit.hide"
-                    : "chat.settings.promptPreset.quickEdit.show",
-                )}
-              </span>
-              <ChevronDown
-                data-prompt-preset-chevron="quick-editor"
-                aria-hidden
-                size="0.75rem"
-                className={cn(PROMPT_PRESET_CHEVRON_CLASS, "transition-transform", quickEditorOpen && "rotate-180")}
-              />
-            </button>
-            {showVariableEditor && <span aria-hidden className="h-7 w-7 shrink-0" />}
+          <div className="mb-2 flex items-center gap-2 px-0.5 text-xs font-medium text-[var(--foreground)]">
+            <Layers size="0.75rem" className="shrink-0 text-[var(--primary)]" />
+            <span className="min-w-0 flex-1 truncate">{t("chat.settings.promptPreset.quickEdit.title")}</span>
           </div>
-          {quickEditorOpen && (
-            <div className="mt-2 rounded-lg border border-[var(--border)] bg-transparent p-2">
-              <p className="mb-2 px-1 text-[0.625rem] leading-relaxed text-[var(--muted-foreground)]">
-                {t("chat.settings.promptPreset.quickEdit.autoSave")}
-              </p>
-              {quickEditor}
-            </div>
-          )}
+          <div className="rounded-lg border border-[var(--border)] bg-transparent p-2">
+            <p className="mb-2 px-1 text-[0.625rem] leading-relaxed text-[var(--muted-foreground)]">
+              {t("chat.settings.promptPreset.quickEdit.autoSave")}
+            </p>
+            {quickEditor}
+          </div>
         </div>
       )}
     </ChatSettingsSection>

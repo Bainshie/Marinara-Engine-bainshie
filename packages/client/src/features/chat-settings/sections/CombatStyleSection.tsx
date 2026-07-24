@@ -12,6 +12,7 @@ interface CombatStyleSectionProps {
 export function CombatStyleSection({ style, combatStyle, onCombatStyleChange }: CombatStyleSectionProps) {
   return (
     <ChatSettingsSection
+      id="combat-style"
       style={style}
       label="Combat Style"
       icon={<Swords size="0.875rem" />}

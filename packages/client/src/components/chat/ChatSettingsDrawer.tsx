@@ -956,7 +956,6 @@ export function ChatSettingsDrawer({
   const musicPlayerSource = useUIStore((s) => s.musicPlayerSource);
   const setMusicPlayerSource = useUIStore((s) => s.setMusicPlayerSource);
   const openToolDetail = useUIStore((s) => s.openToolDetail);
-  const openPresetDetail = useUIStore((s) => s.openPresetDetail);
   const debugMode = useUIStore((s) => s.debugMode);
   const setEditorDirty = useUIStore((s) => s.setEditorDirty);
   const openLorebookDetail = useUIStore((s) => s.openLorebookDetail);
@@ -3197,7 +3196,6 @@ export function ChatSettingsDrawer({
   const [showSummariesModal, setShowSummariesModal] = useState(false);
   const [showAgentSuiteModal, setShowAgentSuiteModal] = useState(false);
   const [showMemoriesModal, setShowMemoriesModal] = useState(false);
-  const [quickPresetEditorOpen, setQuickPresetEditorOpen] = useState(false);
   const [inlineResourceEditor, setInlineResourceEditor] = useState<{
     kind: "character" | "persona" | "lorebook";
     id: string;
@@ -3207,7 +3205,6 @@ export function ChatSettingsDrawer({
   }, []);
   useEffect(() => {
     setInlineResourceEditor(null);
-    setQuickPresetEditorOpen(false);
   }, [chat.id]);
   const handleAgentSuiteCloseGuardChange = useCallback((guard: (() => Promise<boolean>) | null) => {
     agentSuiteCloseGuardRef.current = guard;
@@ -3342,8 +3339,6 @@ export function ChatSettingsDrawer({
       ),
     [availableAgents],
   );
-  const [gamePromptDraft, setGamePromptDraft] = useState((metadata.gameSystemPrompt as string) ?? "");
-  const [gamePromptExpanded, setGamePromptExpanded] = useState(false);
   const [gameSpecialInstructionsDraft, setGameSpecialInstructionsDraft] = useState(
     (metadata.gameSpecialInstructions as string) ?? "",
   );
@@ -3404,10 +3399,6 @@ export function ChatSettingsDrawer({
   }, [campaignArtStyle, chat.id]);
 
   useEffect(() => {
-    setGamePromptDraft((metadata.gameSystemPrompt as string) ?? "");
-  }, [chat.id, metadata.gameSystemPrompt]);
-
-  useEffect(() => {
     modePromptDefaultAppliedRef.current = null;
   }, [chat.id]);
 
@@ -3441,18 +3432,11 @@ export function ChatSettingsDrawer({
         updateMeta.mutate({ id: chat.id, customSystemPrompt: null });
       }
       if (isGame) {
-        setGamePromptDraft("");
         updateMeta.mutate({ id: chat.id, gameSystemPrompt: null });
       }
     },
     [chat.id, fallbackPromptPreset?.id, isConversation, isGame, setPreset, updateMeta],
   );
-
-  const openSelectedModePromptPreset = useCallback(() => {
-    if (!effectiveModePromptPresetId) return;
-    onClose();
-    openPresetDetail(effectiveModePromptPresetId);
-  }, [effectiveModePromptPresetId, onClose, openPresetDetail]);
 
   const openAgentAddModal = (agent: AvailableAgent) => {
     setAgentAddCadenceInputFocused(false);
@@ -4396,12 +4380,10 @@ export function ChatSettingsDrawer({
                     </Suspense>
                   ) : null
                 }
-                quickEditorOpen={quickPresetEditorOpen}
                 showLorebookMarkerWarning={showLorebookMarkerWarning}
                 onEditVariables={() => {
                   if (chat.promptPresetId) setChoiceModalPresetId(chat.promptPresetId);
                 }}
-                onQuickEditorToggle={() => setQuickPresetEditorOpen((current) => !current)}
                 onPromptPresetChange={setPreset}
               />
             </div>
@@ -4419,7 +4401,6 @@ export function ChatSettingsDrawer({
                 selectedPresetPrompt={selectedModePromptPreset?.conversationPrompt ?? ""}
                 onCustomPromptChange={(id, customSystemPrompt) => updateMeta.mutate({ id, customSystemPrompt })}
                 onPromptPresetChange={handleModePromptPresetChange}
-                onOpenPromptPreset={openSelectedModePromptPreset}
               />
             </div>
           )}
@@ -4427,13 +4408,10 @@ export function ChatSettingsDrawer({
           {isGame && (
             <div style={{ order: CHAT_SETTINGS_ORDER.promptPreset }}>
               <GameExtraPromptSection
-                expanded={gamePromptExpanded}
                 storedValue={(metadata.gameSystemPrompt as string) ?? ""}
-                value={gamePromptDraft}
                 specialInstructionsValue={gameSpecialInstructionsDraft}
                 promptPresetId={effectiveModePromptPresetId}
                 promptPresets={promptPresetOptions}
-                selectedPresetName={selectedModePromptPreset?.name ?? null}
                 selectedPresetPrompt={selectedModePromptPreset?.gamePrompt ?? ""}
                 gmPromptTemplateId={selectedGameGmPromptTemplateId}
                 gmPromptTemplates={GAME_GM_BUILT_IN_PROMPT_TEMPLATES}
@@ -4441,12 +4419,9 @@ export function ChatSettingsDrawer({
                 onSpecialInstructionsCommit={(gameSpecialInstructions) =>
                   updateMeta.mutate({ id: chat.id, gameSpecialInstructions })
                 }
-                onExpandedChange={setGamePromptExpanded}
-                onValueChange={setGamePromptDraft}
                 onSpecialInstructionsChange={setGameSpecialInstructionsDraft}
                 onPromptPresetChange={handleModePromptPresetChange}
                 onGmPromptTemplateChange={updateGameGmPromptTemplateSelection}
-                onOpenPromptPreset={openSelectedModePromptPreset}
               />
             </div>
           )}

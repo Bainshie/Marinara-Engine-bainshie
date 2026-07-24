@@ -20,6 +20,7 @@ export function ChatNameSection({
 }: ChatNameSectionProps) {
   return (
     <ChatSettingsSection
+      id="chat-name"
       label="Chat Name"
       icon={<LetterText size="0.875rem" />}
       help="This name is only visible to you — it won't be sent to the AI or affect the conversation in any way."
