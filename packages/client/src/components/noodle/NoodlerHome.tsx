@@ -2724,7 +2724,7 @@ function LockedPrivatePostCard({
   onManage,
 }: {
   post: Pick<NoodlerPostView, "id" | "access" | "ppvPrice" | "createdAt" | "title" | "imageUrl"> &
-    Partial<Pick<NoodlerPostView, "interactions">>;
+    Partial<Pick<NoodlerPostView, "interactions">>; // controller-locked managed posts carry no interactions
   profile: NoodlerStageProfile;
   controllerOnly?: boolean;
   subscribed: boolean;
@@ -2755,25 +2755,25 @@ function LockedPrivatePostCard({
             </span>
           </div>
 
-          {/* Blurred media with Locked badge */}
-          <div className="relative mt-3 h-72 w-full overflow-hidden rounded-xl bg-[var(--muted)]">
-            {post.imageUrl && (
+          {/* Blurred media with Locked badge — only when the post has an image */}
+          {post.imageUrl && (
+            <div className="relative mt-3 h-72 w-full overflow-hidden rounded-xl bg-[var(--muted)]">
               <img src={post.imageUrl} alt="" className="h-full w-full scale-110 object-cover blur-xl" />
-            )}
-            <div className="absolute inset-0 bg-black/30" />
-            <span className="absolute bottom-3 left-3 flex items-center gap-1.5 rounded-full bg-black/60 px-3 py-1 text-xs font-semibold text-white">
-              <Lock size={12} /> {localizeUi("ui.noodle.lockedprivatepostcard.locked")}
-            </span>
-          </div>
+              <div className="absolute inset-0 bg-black/30" />
+              <span className="absolute bottom-3 left-3 flex items-center gap-1.5 rounded-full bg-black/60 px-3 py-1 text-xs font-semibold text-white">
+                <Lock size={12} /> {localizeUi("ui.noodle.lockedprivatepostcard.locked")}
+              </span>
+            </div>
+          )}
 
           {/* Title */}
           {post.title && <h3 className="mt-3 text-lg font-bold leading-snug">{post.title}</h3>}
 
-          {/* Blurred content placeholder */}
+          {/* Blurred (unreadable) body teaser */}
           {!controllerOnly && (
-            <div className="mt-3 space-y-2">
-              <div className="h-3 w-full rounded bg-[var(--muted)]" />
-              <div className="h-3 w-4/5 rounded bg-[var(--muted)]" />
+            <div className="mt-3 space-y-2 select-none blur-[3px]" aria-hidden="true">
+              <div className="h-3 w-full rounded bg-[var(--muted-foreground)]/40" />
+              <div className="h-3 w-4/5 rounded bg-[var(--muted-foreground)]/40" />
             </div>
           )}
 

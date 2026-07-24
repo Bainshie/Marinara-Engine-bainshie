@@ -201,13 +201,15 @@ export async function noodleRoutes(app: FastifyInstance) {
             access: post.access,
             ppvPrice: post.ppvPrice,
             locked,
-            title: locked ? null : post.title,
+            // Locked posts still surface title, image, and engagement counts (Patreon-style
+            // teaser); only the body text and image prompt stay hidden until unlocked.
+            title: post.title,
             content: locked ? null : post.content,
-            imageUrl: locked ? null : post.imageUrl,
+            imageUrl: post.imageUrl,
             imagePrompt: locked ? null : post.imagePrompt,
             metadata: locked ? null : post.metadata,
             createdAt: post.createdAt,
-            interactions: locked ? [] : (interactionsByPostId.get(post.id) ?? []),
+            interactions: interactionsByPostId.get(post.id) ?? [],
           };
         }),
       };
