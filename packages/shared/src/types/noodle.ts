@@ -119,6 +119,12 @@ export interface NoodleSettings {
   theme: NoodleTheme;
   generationConnectionId: string | null;
   enableNoodler: boolean;
+  /** Editable creative guidance injected into every NoodleR private-post generation. */
+  privateGenerationGuidance: string;
+  /** Master switch for automatic posting; pauses the scheduler without disabling NoodleR. */
+  autoPostingScheduleEnabled: boolean;
+  /** Cadence applied when a creator's automatic posting is first turned on. */
+  autoPostingDefaultIntensity: NoodleAutoPostingIntensity;
 }
 
 export interface NoodleAccount {

@@ -409,9 +409,12 @@ const privatePostMessages = buildPrivatePostMessages({
     privateProjectWork: "Advance the current beat.",
   },
   allowImagePrompt: false,
+  generationGuidance: "Adults only; NSFW allowed when it fits.",
 });
 assert.match(privatePostMessages[0]?.content ?? "", /exactly one post for one private NoodleR creator page/u);
 assert.match(privatePostMessages[0]?.content ?? "", /Disclosure is secret/u);
+// Editable generation guidance is injected into the system prompt.
+assert.match(privatePostMessages[0]?.content ?? "", /NSFW allowed when it fits/u);
 // With images disabled the model is told not to emit an image prompt.
 assert.match(privatePostMessages[0]?.content ?? "", /Do not create a poll or image prompt/u);
 // With images enabled it may return an optional imagePrompt.
@@ -424,6 +427,7 @@ assert.match(
     recentPosts: [],
     request: {},
     allowImagePrompt: true,
+    generationGuidance: "",
   })[0]?.content ?? "",
   /optional imagePrompt/u,
 );
@@ -561,6 +565,8 @@ const openMessages = buildPrivatePostMessages({
   publicIdentity: knownPublicIdentity,
   recentPosts: [],
   request: { privatePostGuide: "Mention Known Public Name and @known_public." },
+  allowImagePrompt: false,
+  generationGuidance: "",
 });
 assert.match(openMessages.map((message) => message.content).join("\n"), /Known Public Name/u);
 assert.match(openMessages.map((message) => message.content).join("\n"), /known_public/u);
@@ -572,6 +578,8 @@ for (const mode of ["hinted", "secret"] as const) {
     publicIdentity: knownPublicIdentity,
     recentPosts: [],
     request: { privatePostGuide: "Write about Known Public Name (@known_public)." },
+    allowImagePrompt: false,
+    generationGuidance: "",
   });
   assert.doesNotMatch(
     protectedMessages.map((message) => message.content).join("\n"),

@@ -49,6 +49,10 @@ export const DEFAULT_NOODLE_SETTINGS = {
   theme: "system",
   generationConnectionId: null,
   enableNoodler: false,
+  privateGenerationGuidance:
+    "All NoodleR creators and viewers are adults (18+). NSFW and explicit content are allowed when appropriate to the creator's personality and current context. Do not force it: stay true to each creator's voice rather than making every post sexual.",
+  autoPostingScheduleEnabled: true,
+  autoPostingDefaultIntensity: 1,
 } as const;
 
 export const noodleSettingsSchema = z.object({
@@ -99,6 +103,11 @@ export const noodleSettingsSchema = z.object({
   theme: noodleThemeSchema.default(DEFAULT_NOODLE_SETTINGS.theme),
   generationConnectionId: z.string().min(1).nullable().default(DEFAULT_NOODLE_SETTINGS.generationConnectionId),
   enableNoodler: z.boolean().default(DEFAULT_NOODLE_SETTINGS.enableNoodler),
+  privateGenerationGuidance: z.string().max(4000).default(DEFAULT_NOODLE_SETTINGS.privateGenerationGuidance),
+  autoPostingScheduleEnabled: z.boolean().default(DEFAULT_NOODLE_SETTINGS.autoPostingScheduleEnabled),
+  autoPostingDefaultIntensity: z
+    .union([z.literal(1), z.literal(3), z.literal(6)])
+    .default(DEFAULT_NOODLE_SETTINGS.autoPostingDefaultIntensity),
 });
 
 export const noodleSettingsUpdateSchema = noodleSettingsSchema.partial();

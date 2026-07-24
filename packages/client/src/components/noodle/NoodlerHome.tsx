@@ -358,6 +358,7 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
   const generatePost = useGeneratePrivateNoodlePost();
   const confirmImagePrompts = useConfirmNoodlerImagePrompts();
   const runAutoPostNow = useRunNoodlerAutoPostNow();
+  const setupAutoPosting = useUpdateNoodlerAutoPosting();
   const refreshAllNow = useRefreshAllNoodlerCreatorsNow();
   const createPost = useCreateNoodlerPost();
   const generateProfileDraft = useGenerateNoodlerStageProfileDraft();
@@ -369,7 +370,9 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
     accountId: string;
     items: ImagePromptReviewItem[];
   } | null>(null);
-  const [creationStep, setCreationStep] = useState<"source" | "disclosure" | "draft" | null>(null);
+  const [creationStep, setCreationStep] = useState<"source" | "disclosure" | "draft" | "automatic" | null>(null);
+  const [autoPostSetupId, setAutoPostSetupId] = useState<string | null>(null);
+  const [autoPostSetupIntensity, setAutoPostSetupIntensity] = useState<NoodleAutoPostingIntensity>(3);
   const [creationDisclosure, setCreationDisclosure] = useState<NoodleIdentityDisclosure>("hinted");
   const [draftGuidance, setDraftGuidance] = useState("");
   const [draftConnectionId, setDraftConnectionId] = useState("");
@@ -610,14 +613,22 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
       ...profileDraft,
       handle: profileDraft.handle.replace(/^@+/u, ""),
     };
+    const wasEditing = Boolean(editingProfileId);
     const onSuccess = (profile: NoodlerStageProfile) => {
       setProfileDraft(null);
       setEditingProfileId(null);
       setDraftPublicAccountId(null);
-      setCreationStep(null);
       setPreviousDraft(null);
-      onNavigate({ mode: "private", view: "profile", accountId: profile.id });
-      toast.success(editingProfileId ? "Stage profile updated." : "Stage profile created.");
+      toast.success(wasEditing ? "Stage profile updated." : "Stage profile created.");
+      if (wasEditing) {
+        setCreationStep(null);
+        onNavigate({ mode: "private", view: "profile", accountId: profile.id });
+        return;
+      }
+      // New creator: offer a one-step automatic-posting setup before landing on the profile.
+      setAutoPostSetupId(profile.id);
+      setAutoPostSetupIntensity(data?.settings.autoPostingDefaultIntensity ?? 1);
+      setCreationStep("automatic");
     };
     const onError = async (error: unknown) => {
       if (!editingProfileId && draftPublicAccountId && error instanceof ApiError && error.status === 409) {
@@ -854,6 +865,79 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
           onContinue={() => setCreationStep("draft")}
         />
       </NoodlerFrame>
+      </NoodleShell>
+    );
+  }
+
+  if (creationStep === "automatic" && autoPostSetupId) {
+    const accountId = autoPostSetupId;
+    const finishSetup = () => {
+      setAutoPostSetupId(null);
+      setCreationStep(null);
+      onNavigate({ mode: "private", view: "profile", accountId });
+    };
+    return (
+      <NoodleShell {...shellProps} rightRail={emptyRightRail}>
+        <NoodlerFrame onBack={finishSetup} title="Automatic posting" hideBack>
+          <div className="mx-auto max-w-md space-y-5 p-4">
+            <div className="space-y-1">
+              <p className="text-sm font-bold">Should this creator post automatically?</p>
+              <p className="text-xs text-[var(--muted-foreground)]">
+                Automatic posts publish as subscriber-access on a schedule. You can change or turn
+                this off anytime from the creator&apos;s profile or NoodleR settings.
+              </p>
+            </div>
+            <fieldset className="space-y-2">
+              <legend className="text-xs font-bold">Cadence</legend>
+              <div className="flex gap-2">
+                {AUTO_POST_INTENSITIES.map(({ label, value }) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => setAutoPostSetupIntensity(value)}
+                    className={cn(
+                      "h-9 flex-1 rounded-full border px-3 text-xs font-bold",
+                      autoPostSetupIntensity === value
+                        ? "border-transparent bg-[var(--noodle-blue)] text-zinc-950"
+                        : "border-[var(--noodle-divider)] hover:bg-[var(--accent)]",
+                    )}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <p className="text-[0.68rem] text-[var(--muted-foreground)]">
+                About {autoPostSetupIntensity} automatic post{autoPostSetupIntensity === 1 ? "" : "s"} per day.
+              </p>
+            </fieldset>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={finishSetup}
+                className="h-10 flex-1 rounded-full border border-[var(--noodle-divider)] px-3 text-xs font-bold hover:bg-[var(--accent)]"
+              >
+                Not now
+              </button>
+              <button
+                type="button"
+                disabled={setupAutoPosting.isPending}
+                onClick={() =>
+                  setupAutoPosting.mutate(
+                    { accountId, enabled: true, intensity: autoPostSetupIntensity },
+                    {
+                      onSuccess: finishSetup,
+                      onError: (error) =>
+                        toast.error(errorMessage(error, "Could not enable automatic posting.")),
+                    },
+                  )
+                }
+                className="h-10 flex-1 rounded-full border border-transparent bg-[var(--noodle-blue)] px-3 text-xs font-bold text-zinc-950 disabled:opacity-50"
+              >
+                {setupAutoPosting.isPending ? "Enabling…" : "Turn on"}
+              </button>
+            </div>
+          </div>
+        </NoodlerFrame>
       </NoodleShell>
     );
   }

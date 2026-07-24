@@ -132,13 +132,16 @@ export function buildPrivatePostMessages(input: {
   recentPosts: NoodlerManagedPost[];
   request: Pick<NoodlePrivateGenerationRequest, "privatePostGuide" | "privateProjectWork">;
   allowImagePrompt: boolean;
+  generationGuidance: string;
 }): ChatMessage[] {
   const protect = (value: string) =>
     protectPrivateGeneratedIdentity(value, input.disclosureMode, input.publicIdentity) ?? "";
+  const guidance = input.generationGuidance.trim();
   const system = [
     "You write exactly one post for one private NoodleR creator page in Marinara Engine.",
     "Write only as the supplied private account. Do not create other accounts, interactions, follows, or public timeline activity.",
     "Use the private stage profile as supplied.",
+    ...(guidance ? [guidance] : []),
     identityInstruction(input.disclosureMode, input.publicIdentity),
     "Write a concise title and a body for the post.",
     input.allowImagePrompt
@@ -213,6 +216,7 @@ export async function generatePrivatePost(
     recentPosts,
     request: input.request,
     allowImagePrompt: imagesEnabled,
+    generationGuidance: settings.privateGenerationGuidance,
   });
   const debugMode = input.request.debugMode === true || isDebugAgentsEnabled();
   logDebugOverride(debugMode, "[debug/noodler] Prompt sent to model:\n%s", formatNoodleMessagesForLog(messages));
