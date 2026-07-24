@@ -3200,6 +3200,55 @@ test("UI language selection loads locale files and persists across reloads", asy
   expect(errors).toEqual([]);
 });
 
+test("incomplete synced settings preserve disabled Game text effects and repair the server blob", async ({ page }) => {
+  let rewrittenValue: string | null = null;
+  await page.addInitScript(() => {
+    localStorage.setItem(
+      "marinara-engine-ui",
+      JSON.stringify({
+        state: { gameTextEffectsEnabled: false },
+        version: 82,
+      }),
+    );
+    localStorage.setItem("marinara-engine-ui-updated-at", "100");
+  });
+  await page.route("**/api/app-settings/ui", async (route) => {
+    if (route.request().method() === "GET") {
+      await route.fulfill({
+        json: {
+          value: JSON.stringify({
+            theme: "dark",
+            __updatedAt: 200,
+          }),
+        },
+      });
+      return;
+    }
+    const body = route.request().postDataJSON() as { value?: unknown } | null;
+    rewrittenValue = typeof body?.value === "string" ? body.value : null;
+    await route.fulfill({ json: { value: rewrittenValue } });
+  });
+
+  await page.goto("/");
+  await expect.poll(() => rewrittenValue).not.toBeNull();
+  const rewritten = JSON.parse(rewrittenValue!) as {
+    gameTextEffectsEnabled?: unknown;
+    __updatedAt?: unknown;
+  };
+  expect(rewritten.gameTextEffectsEnabled).toBe(false);
+  expect(typeof rewritten.__updatedAt).toBe("number");
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const persisted = JSON.parse(localStorage.getItem("marinara-engine-ui") ?? '{"state":{}}') as {
+          state?: { gameTextEffectsEnabled?: unknown };
+        };
+        return persisted.state?.gameTextEffectsEnabled;
+      }),
+    )
+    .toBe(false);
+});
+
 test("Card Browser labels and the Persona full library stay available across viewports", async ({ page }) => {
   const errors = collectUnexpectedErrors(page);
   await page.route("**/api/bot-browser/chub/search?*", async (route) => {

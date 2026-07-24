@@ -133,11 +133,14 @@ import {
 import { shouldAutomaticallyRetryAgentResult } from "../../packages/server/src/routes/generate/agent-result-capabilities.js";
 import { runImageGenerationRequest } from "../../packages/server/src/services/image/image-generation-queue.js";
 import {
+  buildOpenRouterImagesRequest,
   detectNovelAiSubjectCount,
+  openRouterImagesUrl,
   openRouterModalities,
   resolveNovelAiDefaults,
   resolveNovelAiRequestSize,
   resolveNovelAiSize,
+  usesOpenRouterImagesApi,
 } from "../../packages/server/src/services/image/image-generation.js";
 import {
   COMFYUI_PLACEHOLDER_REFERENCE_BASE64,
@@ -1906,6 +1909,10 @@ const retryAgentsPromptReviewSource = readFileSync(
   "utf8",
 );
 const uiStoreSource = readFileSync(new URL("../../packages/client/src/stores/ui.store.ts", import.meta.url), "utf8");
+const settingsSyncSource = readFileSync(
+  new URL("../../packages/client/src/hooks/use-settings-sync.ts", import.meta.url),
+  "utf8",
+);
 const syncedSettingsSource = uiStoreSource.slice(
   uiStoreSource.indexOf("export function pickSyncedSettings"),
   uiStoreSource.indexOf("export const useUIStore"),
@@ -1928,6 +1935,27 @@ assert.equal(
 assert.deepEqual(openRouterModalities("krea/krea-2-large"), ["image"]);
 assert.deepEqual(openRouterModalities(" KREA/krea-2-medium-turbo "), ["image"]);
 assert.deepEqual(openRouterModalities("google/gemini-3.1-flash-image-preview"), ["image", "text"]);
+assert.equal(usesOpenRouterImagesApi(" krea/krea-2-medium "), true);
+assert.equal(usesOpenRouterImagesApi("google/gemini-3.1-flash-image-preview"), false);
+assert.equal(
+  openRouterImagesUrl("https://openrouter.ai/api/v1/chat/completions"),
+  "https://openrouter.ai/api/v1/images",
+);
+assert.deepEqual(
+  buildOpenRouterImagesRequest({
+    prompt: "plate of spaghetti",
+    negativePrompt: "burnt pasta",
+    model: "krea/krea-2-large",
+    width: 512,
+    height: 512,
+  }),
+  {
+    model: "krea/krea-2-large",
+    prompt: "plate of spaghetti\n\nAvoid in the image: burnt pasta",
+    resolution: "1K",
+    aspect_ratio: "1:1",
+  },
+);
 assert.deepEqual(
   filterCustomEmojisByName(
     [
@@ -1942,6 +1970,11 @@ assert.match(
   syncedSettingsSource,
   /gameTextEffectsEnabled: state\.gameTextEffectsEnabled/,
   "Game text effects must remain off after synced settings are restored",
+);
+assert.match(
+  settingsSyncSource,
+  /hadMissingSyncedSettings[\s\S]*pickSyncedSettings\(useUIStore\.getState\(\)\)/u,
+  "Incomplete server settings blobs must be rewritten with newly synced preferences",
 );
 assert.match(chatAreaPromptReviewSource, /MEDIA_PROMPT_PREVIEW_TIMEOUT_MS/);
 assert.match(chatAreaPromptReviewSource, /confirmRoleplayVideoPromptReview/);
