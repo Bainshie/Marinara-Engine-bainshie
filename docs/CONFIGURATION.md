@@ -193,6 +193,7 @@ A timeout is the longest time the server waits for a slow job before giving up. 
 | Variable | Default | What it does |
 | --- | --- | --- |
 | `CHAT_GENERATION_TIMEOUT_MS` | `300000` (5 minutes) | Provider headers/time-to-first-token and inter-chunk timeout for ordinary Conversation, Roleplay, and Game generations. Valid range: `10000`-`3600000`. It does not change Agent, media, embedding, tool, or background-job timeouts. |
+| `AGENT_CALL_TIMEOUT_MS` | `300000` (5 minutes) | Total-duration cap for one agent LLM call (trackers, HTML reformatter, and other agents), applied even while the response is still streaming. Raise it for slow local models that need longer than 5 minutes per agent pass. Valid range: `10000`-`3600000`. The Illustrator keeps at least its built-in 30-minute budget. |
 | `EMBEDDING_TIMEOUT_MS` | `300000` (5 minutes) | Time allowed for one embedding request. Higher helps slow local embedding servers. |
 | `IMAGE_GEN_TIMEOUT_MS` | `1800000` (30 minutes) | Time allowed for one image generation request. |
 | `VIDEO_GEN_TIMEOUT_MS` | `1800000` (30 minutes) | Time allowed for one scene video generation request, including local ComfyUI video workflows. |

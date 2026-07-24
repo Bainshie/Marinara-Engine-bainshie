@@ -27,7 +27,7 @@ import {
   normalizeRpgStatPools,
   resolveMacros,
 } from "@marinara-engine/shared";
-import { getMaxToolRounds, isDebugAgentsEnabled } from "../../config/runtime-config.js";
+import { getAgentCallTimeoutMs, getMaxToolRounds, isDebugAgentsEnabled } from "../../config/runtime-config.js";
 import { logger, logDebugOverride } from "../../lib/logger.js";
 import { wrapContent } from "../prompt/format-engine.js";
 import { sanitizePromptLeaf } from "../prompt/prompt-escaping.js";
@@ -41,7 +41,6 @@ const EXPRESSION_AGENT_RESPONSE_CHAR_LIMIT = 6000;
 const CHARACTER_LORE_DESCRIPTION_LIMIT = 2000;
 const CHARACTER_LORE_FIELD_LIMIT = 1200;
 const DEFAULT_AGENT_TEMPERATURE = 0.3;
-const DEFAULT_AGENT_CALL_TIMEOUT_MS = 5 * 60_000;
 const ILLUSTRATOR_AGENT_CALL_TIMEOUT_MS = 30 * 60_000;
 const AGENT_BATCH_FALLBACK_MAX_CONCURRENT = 4;
 
@@ -515,7 +514,11 @@ function combineAbortSignals(signals: AbortSignal[]): AbortSignal {
 }
 
 function agentCallSignal(parentSignal?: AbortSignal, agentType?: "illustrator"): AbortSignal {
-  const timeoutMs = agentType === "illustrator" ? ILLUSTRATOR_AGENT_CALL_TIMEOUT_MS : DEFAULT_AGENT_CALL_TIMEOUT_MS;
+  // AGENT_CALL_TIMEOUT_MS caps the TOTAL duration of one agent LLM call, even
+  // while streaming; slow local models need a raised value (#3958). The
+  // illustrator keeps at least its generous image-generation budget.
+  const configuredMs = getAgentCallTimeoutMs();
+  const timeoutMs = agentType === "illustrator" ? Math.max(ILLUSTRATOR_AGENT_CALL_TIMEOUT_MS, configuredMs) : configuredMs;
   const timeoutSignal = AbortSignal.timeout(timeoutMs);
   return parentSignal ? combineAbortSignals([parentSignal, timeoutSignal]) : timeoutSignal;
 }

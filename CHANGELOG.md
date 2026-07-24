@@ -6,6 +6,8 @@ This file is the release-notes source of truth for Marinara Engine. Reuse these 
 
 ### Added
 
+- Added an `AGENT_CALL_TIMEOUT_MS` override for agent LLM calls (trackers, HTML reformatter, and other agents). The previous fixed 5-minute cap cancelled slow local models mid-stream and then burned a second 5 minutes on the automatic invalid-JSON retry; the cap is now configurable from 10 seconds to 1 hour and documented next to `CHAT_GENERATION_TIMEOUT_MS` (#3958).
+
 - Added safe host-rendered contribution slots to Browser Personal Extensions. `marinara.ui.registerContribution(...)` can add themed top-bar buttons, Extensions menu items, and right-side panels containing bounded text, actions, inputs, selects, toggles, sliders, and color controls. Marinara validates and renders every descriptor while activation and form events return only to the exact-hash-approved sandbox Worker; extensions never receive host DOM, markup, styling, React, network, or direct API authority. The existing constrained `marinara.ui.showWindow(...)` window supports the expanded controls as well.
 - Added Atlas Cloud as an image and video generation service, including curated starter models, text/reference image requests, asynchronous job polling, connection tests, and Game/scene-video routing (#3989).
 - Added an Android-only **Show Android status bar** control under **Settings > General > App Behavior**, preserving fullscreen as the default while allowing the Android app to remember and restore the time, battery level, and notification icons across restarts (#3985).
