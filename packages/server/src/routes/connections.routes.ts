@@ -927,13 +927,54 @@ export async function connectionsRoutes(app: FastifyInstance) {
         return { models };
       }
 
-      let modelsUrl =
+      // Google's ListModels endpoint is paginated (small default page size),
+      // so a single request silently drops most of the catalog. Follow
+      // nextPageToken until the list is complete.
+      if (conn.provider === "google") {
+        const collected: unknown[] = [];
+        let pageToken = "";
+        for (let page = 0; page < 20; page++) {
+          const pageUrl =
+            `${baseUrl}${provider?.modelsEndpoint ?? "/models"}?key=${encodeURIComponent(conn.apiKey)}&pageSize=1000` +
+            (pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : "");
+          const pageRes = await safeFetch(pageUrl, {
+            headers,
+            policy: {
+              allowLocal: isProviderLocalUrlsEnabled(),
+              allowLoopback: true,
+              allowMdns: true,
+              allowedProtocols: ["https:", "http:"],
+              flagName: "PROVIDER_LOCAL_URLS_ENABLED",
+            },
+            maxResponseBytes: 5 * 1024 * 1024,
+            decodeCompressedResponse: true,
+          });
+          if (!pageRes.ok) {
+            const body = await pageRes.text();
+            return reply.status(502).send({
+              error: `Provider returned ${pageRes.status}: ${sanitizeProviderBody(body)}`,
+            });
+          }
+          const pageText = await pageRes.text();
+          let pageJson: { models?: unknown[]; nextPageToken?: string };
+          try {
+            pageJson = JSON.parse(pageText) as { models?: unknown[]; nextPageToken?: string };
+          } catch {
+            return reply.status(502).send({
+              error: `Failed to fetch models: ${sanitizeProviderBody(pageText)}`,
+            });
+          }
+          if (Array.isArray(pageJson.models)) collected.push(...pageJson.models);
+          pageToken = typeof pageJson.nextPageToken === "string" ? pageJson.nextPageToken : "";
+          if (!pageToken) break;
+        }
+        return { models: normalizeModelsResponse("google", { models: collected }) };
+      }
+
+      const modelsUrl =
         conn.provider === "google_vertex"
           ? buildGoogleVertexModelUrl(baseUrl, conn.model, "models")
           : `${baseUrl}${provider?.modelsEndpoint ?? "/models"}`;
-      if (conn.provider === "google") {
-        modelsUrl += `?key=${conn.apiKey}`;
-      }
 
       const res = await safeFetch(modelsUrl, {
         headers,
@@ -1377,7 +1418,14 @@ function normalizeModelsResponse(provider: string, json: Record<string, unknown>
         outputTokenLimit?: number;
       }>;
       return models
-        .filter((m) => m.supportedGenerationMethods?.includes("generateContent"))
+        .filter(
+          // Keep chat-capable models. Some catalog entries only advertise the
+          // streaming method, and a missing field should not hide a model.
+          (m) =>
+            !m.supportedGenerationMethods ||
+            m.supportedGenerationMethods.includes("generateContent") ||
+            m.supportedGenerationMethods.includes("streamGenerateContent"),
+        )
         .map((m) => ({
           id: (m.name ?? "").replace(/^models\//, ""),
           name: m.displayName ?? (m.name ?? "").replace(/^models\//, ""),
