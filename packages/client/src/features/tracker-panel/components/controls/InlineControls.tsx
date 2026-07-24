@@ -4,6 +4,7 @@ import { cn } from "../../../../lib/utils";
 import { TRACKER_TEXT_MICRO } from "../../lib/tracker-panel.constants";
 import { getNumberValueWidth } from "../../lib/tracker-display";
 import { coerceStatNumber } from "../../lib/tracker-stat-layout";
+import { useTranslation as useUiTranslation } from "react-i18next";
 
 export function FittedText({
   children,
@@ -123,6 +124,7 @@ export function InlineEdit({
   lockMode?: boolean;
   onToggleLock?: () => void;
 }) {
+  const { t: localizeUi } = useUiTranslation();
   const currentValue = value === null || value === undefined ? "" : String(value);
   const previewText = currentValue || placeholder;
   const multilinePreviewLineCount = previewLineCount ?? (threeLinePreview ? 3 : twoLinePreview ? 2 : undefined);
@@ -212,10 +214,10 @@ export function InlineEdit({
       onFocus={measureScrollOverflow}
       onMouseLeave={resetScrollOverflow}
       onBlur={resetScrollOverflow}
-      title={lockToggleActive ? (locked ? "Unlock field" : "Lock field") : (title ?? currentValue)}
+      title={lockToggleActive ? (locked ?localizeUi("ui.trackerPanel.inlinenumber.unlockField") :localizeUi("ui.trackerPanel.inlinenumber.lockField")) : (title ?? currentValue)}
       aria-label={
         lockToggleActive
-          ? `${locked ? "Unlock" : "Lock"} ${(ariaLabel ?? title ?? currentValue) || placeholder}`
+          ?localizeUi("ui.trackerPanel.inlineedit.value1Value2", { value1: locked ?localizeUi("ui.noodle.lockedprivatepostcard.unlock") :localizeUi("ui.trackerPanel.inlineedit.lock"), value2: (ariaLabel ?? title ?? currentValue) || placeholder })
           : ariaLabel
       }
       aria-pressed={lockToggleActive ? locked : undefined}
@@ -319,6 +321,7 @@ export function InlineNumber({
   lockMode?: boolean;
   onToggleLock?: () => void;
 }) {
+  const { t: localizeUi } = useUiTranslation();
   const numericValue = coerceStatNumber(value);
   const [draft, setDraft] = useState(String(numericValue));
   const [focused, setFocused] = useState(false);
@@ -373,8 +376,8 @@ export function InlineNumber({
       <button
         type="button"
         onClick={onToggleLock}
-        title={locked ? "Unlock field" : "Lock field"}
-        aria-label={`${locked ? "Unlock" : "Lock"} ${title?.toLowerCase() ?? "field"}`}
+        title={locked ?localizeUi("ui.trackerPanel.inlinenumber.unlockField") :localizeUi("ui.trackerPanel.inlinenumber.lockField")}
+        aria-label={localizeUi("ui.trackerPanel.inlineedit.value1Value2", { value1: locked ?localizeUi("ui.noodle.lockedprivatepostcard.unlock") :localizeUi("ui.trackerPanel.inlineedit.lock"), value2: title?.toLowerCase() ??localizeUi("ui.trackerPanel.inlinenumber.field") })}
         aria-pressed={locked}
         style={{ width }}
         className={cn(

@@ -44,6 +44,7 @@ import {
 import type { ChatImage } from "../../hooks/use-gallery";
 import { Avatar, NOODLE_ICON_SCOPE_CLASS, useNoodleAccent } from "./NoodleShell";
 import { formatTime } from "./NoodleBrowserChrome";
+import { useTranslation as useUiTranslation } from "react-i18next";
 
 const fieldClass =
   "mari-chrome-field h-9 w-full min-w-0 rounded-md border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)] px-3 text-xs text-[var(--foreground)] outline-none transition-colors focus:border-[var(--noodle-blue)]";
@@ -104,12 +105,13 @@ export function NoodleMentionSuggestions({
   listboxId: string;
   onSelect: (account: NoodleAccount) => void;
 }) {
+  const { t: localizeUi } = useUiTranslation();
   if (!activeMention) return null;
   return (
     <div
       id={listboxId}
       role="listbox"
-      aria-label="Tag a character"
+      aria-label={localizeUi("ui.noodle.noodlementionsuggestions.tagACharacter")}
       className="relative z-40 mt-1 max-h-56 overflow-y-auto rounded-xl border border-[var(--noodle-divider)] bg-[var(--background)] p-1 shadow-xl shadow-black/25"
     >
       {accounts.length > 0 ? (
@@ -135,8 +137,7 @@ export function NoodleMentionSuggestions({
           </button>
         ))
       ) : (
-        <p className="px-3 py-2 text-xs text-[var(--muted-foreground)]">
-          No invited character matches @{activeMention.query}.
+        <p className="px-3 py-2 text-xs text-[var(--muted-foreground)]">{localizeUi("ui.noodle.noodlementionsuggestions.noInvitedCharacterMatches")}{activeMention.query}.
         </p>
       )}
     </div>
@@ -154,6 +155,7 @@ function NoodleTextContent({
   onOpenProfile: (account: NoodleAccount) => void;
   className?: string;
 }) {
+  const { t: localizeUi } = useUiTranslation();
   const mentions = findNoodleTextMentions(content);
   if (mentions.length === 0) {
     return <p className={cn("whitespace-pre-wrap text-sm", className)}>{content}</p>;
@@ -172,7 +174,9 @@ function NoodleTextContent({
           type="button"
           onClick={() => onOpenProfile(account)}
           className="inline font-semibold text-[var(--noodle-blue)] hover:underline focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-blue)]/70"
-          aria-label={`View @${account.handle} profile`}
+          aria-label={localizeUi("ui.noodle.profile.viewHandleProfile", {
+            handle: account.handle,
+          })}
         >
           {label}
         </button>
@@ -205,10 +209,15 @@ function NoodlePollCard({
   onVote: (optionId: string) => void;
   onOpenProfile: (account: NoodleAccount) => void;
 }) {
+  const { t: localizeUi } = useUiTranslation();
   const totalVotes = votes.length;
   const [showVoters, setShowVoters] = useState(false);
   return (
-    <section className="mt-3" aria-label={`Poll: ${poll.question}`} data-noodle-poll>
+    <section
+      className="mt-3"
+      aria-label={localizeUi("ui.noodle.poll.label", { question: poll.question })}
+      data-noodle-poll
+    >
       <h3 className="text-sm font-bold leading-5">{poll.question}</h3>
       <div className="mt-2 space-y-2">
         {poll.options.map((option) => {
@@ -223,7 +232,11 @@ function NoodlePollCard({
               onClick={() => onVote(option.id)}
               disabled={disabled || pending}
               aria-pressed={selected}
-              aria-label={`${option.label}, ${optionVotes} ${optionVotes === 1 ? "vote" : "votes"}, ${percentage}%`}
+              aria-label={localizeUi("ui.noodle.poll.optionResult", {
+                count: optionVotes,
+                label: option.label,
+                percentage,
+              })}
               className={cn(
                 "relative flex min-h-10 w-full items-center overflow-hidden rounded-lg border px-3 text-left text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-blue)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)] disabled:cursor-not-allowed",
                 selected
@@ -244,7 +257,10 @@ function NoodlePollCard({
               </span>
               </button>
               {showVoters && optionVotes > 0 && (
-                <div className="flex flex-wrap gap-1 px-1" aria-label={`Voters for ${option.label}`}>
+                <div
+                  className="flex flex-wrap gap-1 px-1"
+                  aria-label={localizeUi("ui.noodle.poll.votersFor", { option: option.label })}
+                >
                   {matchingVotes.map((vote) => {
                     const voterAccount = accountById.get(vote.actorAccountId) ?? null;
                     const voter = voterAccount ?? vote.actorSnapshot;
@@ -275,10 +291,16 @@ function NoodlePollCard({
         aria-expanded={showVoters}
         className="mt-2 rounded-sm text-[0.68rem] text-[var(--muted-foreground)] transition-colors hover:text-[var(--noodle-blue)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-blue)]/70"
       >
-        {totalVotes} {totalVotes === 1 ? "vote" : "votes"}
-        {selectedOptionId ? " · You voted" : ""}
-        {pending ? " · Saving…" : ""}
-        {totalVotes > 0 ? (showVoters ? " · Hide voters" : " · View voters") : ""}
+        {localizeUi(
+          selectedOptionId ? "ui.noodle.poll.selectedVoteCount" : "ui.noodle.poll.voteCount",
+          { count: totalVotes },
+        )}
+        {pending ? localizeUi("ui.noodle.poll.savingSuffix") : ""}
+        {totalVotes > 0
+          ? localizeUi(
+              showVoters ? "ui.noodle.poll.hideVotersSuffix" : "ui.noodle.poll.viewVotersSuffix",
+            )
+          : ""}
       </button>
     </section>
   );
@@ -355,11 +377,12 @@ export function NoodleComposerToolRow({
   media: NoodleComposerTool;
   trailing?: React.ReactNode;
 }) {
+  const { t: localizeUi } = useUiTranslation();
   return (
     <>
       <div ref={image.ref} className="relative">
         <NoodleToolButton
-          title="Attach image"
+          title={localizeUi("ui.noodle.noodlehome.attachImage")}
           active={Boolean(image.active)}
           disabled={image.disabled}
           onClick={() => image.onClick?.()}
@@ -369,7 +392,7 @@ export function NoodleComposerToolRow({
       </div>
       <div ref={poll.ref} className="relative">
         <NoodleToolButton
-          title={poll.active ? "Edit poll" : "Create poll"}
+          title={poll.active ?localizeUi("ui.noodle.noodlehome.editPoll") :localizeUi("ui.noodle.noodlehome.createPoll")}
           active={Boolean(poll.active)}
           disabled={poll.disabled}
           onClick={() => poll.onClick?.()}
@@ -379,7 +402,7 @@ export function NoodleComposerToolRow({
       </div>
       <div ref={media.ref} className="relative">
         <NoodleToolButton
-          title="Emoji, GIFs and stickers"
+          title={localizeUi("ui.noodle.noodlehome.emojiGifsAndStickers")}
           active={Boolean(media.active)}
           disabled={media.disabled}
           onClick={() => media.onClick?.()}
@@ -476,6 +499,7 @@ export function NoodleToolPopover({
   anchorRef: React.RefObject<HTMLElement | null>;
   modalOwned?: boolean;
 }) {
+  const { t: localizeUi } = useUiTranslation();
   return (
     <NoodleAnchoredPopover anchorRef={anchorRef} wide={wide} modalOwned={modalOwned}>
       <div className="marinara-chat-popover flex h-[22rem] max-h-[60vh] flex-col overflow-hidden rounded-xl border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)] text-[var(--foreground)] shadow-2xl shadow-black/35">
@@ -487,7 +511,7 @@ export function NoodleToolPopover({
             type="button"
             onClick={onClose}
             className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-[var(--noodle-blue)] transition-colors hover:bg-foreground/10"
-            title="Close"
+            title={localizeUi("capabilities.actions.close")}
           >
             <X size={14} />
           </button>
@@ -766,6 +790,7 @@ export function NoodlePostCard({
   post: NoodlePostCardModel;
   ctx: NoodlePostCardCtx;
 }) {
+  const { t: localizeUi } = useUiTranslation();
   const {
     personaAccount,
     postMenuId,
@@ -910,8 +935,7 @@ export function NoodlePostCard({
         className={cn("border-[var(--noodle-divider)] py-3", nested ? "ml-10 border-b" : "mt-3 border-y")}
       >
         {replyParentInteractionId && replyTargetActor && (
-          <p className="mb-2 text-xs text-[var(--muted-foreground)]">
-            Replying to <span className="font-semibold text-[var(--noodle-blue)]">@{replyTargetActor.handle}</span>
+          <p className="mb-2 text-xs text-[var(--muted-foreground)]">{localizeUi("ui.noodle.noodlepostcard.replyingTo")} <span className="font-semibold text-[var(--noodle-blue)]">@{replyTargetActor.handle}</span>
           </p>
         )}
         <textarea
@@ -921,7 +945,7 @@ export function NoodlePostCard({
           onBlur={() => setReplyText(replyValueRef.current)}
           onKeyDown={handleReplyKeyDown}
           className={cn(textareaClass, "min-h-16 resize-none bg-transparent")}
-          placeholder="Leave a comment…"
+          placeholder={localizeUi("ui.noodle.noodlepostcard.leaveAComment")}
           aria-autocomplete="list"
           aria-controls={activeReplyMention ? "noodle-reply-mention-list" : undefined}
           aria-expanded={Boolean(activeReplyMention)}
@@ -947,16 +971,16 @@ export function NoodlePostCard({
               type="button"
               onClick={() => setImageLightbox(createNoodleLightboxImage(`reply-draft-${post.id}`, replyImageUrl))}
               className="block w-full"
-              title="Open attached image"
+              title={localizeUi("ui.noodle.noodlepostcard.openAttachedImage")}
             >
-              <img src={replyImageUrl} alt="Attached reply preview" className="max-h-52 w-full object-cover" />
+              <img src={replyImageUrl} alt={localizeUi("ui.noodle.noodlepostcard.attachedReplyPreview")} className="max-h-52 w-full object-cover" />
             </button>
             <button
               type="button"
               onClick={() => setReplyImageUrl("")}
               className="absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-full bg-black/65 text-white [&_svg]:!text-white transition-colors hover:bg-black/80"
-              title="Remove image"
-              aria-label="Remove reply image"
+              title={localizeUi("ui.noodle.noodlehome.removeImage")}
+              aria-label={localizeUi("ui.noodle.noodlepostcard.removeReplyImage")}
             >
               <X size={14} />
             </button>
@@ -967,7 +991,7 @@ export function NoodlePostCard({
             {!disableReplyImage && (
               <div ref={replyImageToolRef} className="relative">
                 <NoodleToolButton
-                  title="Attach image"
+                  title={localizeUi("ui.noodle.noodlehome.attachImage")}
                   active={activeReplyComposerTool === "image"}
                   onClick={() => setActiveReplyComposerTool((current) => (current === "image" ? null : "image"))}
                 >
@@ -977,7 +1001,7 @@ export function NoodlePostCard({
             )}
             <div ref={replyMediaToolRef} className="relative">
               <NoodleToolButton
-                title="Emoji, GIFs and stickers"
+                title={localizeUi("ui.noodle.noodlehome.emojiGifsAndStickers")}
                 active={activeReplyComposerTool === "media"}
                 onClick={() => setActiveReplyComposerTool((current) => (current === "media" ? null : "media"))}
               >
@@ -990,22 +1014,20 @@ export function NoodlePostCard({
               type="button"
               onClick={clearReplyComposer}
               className="h-8 rounded-full px-3 text-xs font-semibold text-[var(--muted-foreground)] transition-colors hover:bg-[var(--accent)] hover:text-[var(--foreground)]"
-            >
-              Cancel
-            </button>
+            >{localizeUi("chat.delete.dialog.cancel")}</button>
             <button
               type="button"
               className="h-8 rounded-full bg-[var(--noodle-blue)] px-4 text-xs font-bold text-zinc-950 transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
               disabled={(!replyHasText && !replyImageUrl.trim()) || postReplyPending}
               onClick={() => submitReply(post)}
             >
-              {postReplyPending ? "Replying…" : "Reply"}
+              {postReplyPending ?localizeUi("ui.noodle.noodlepostcard.replying") :localizeUi("ui.noodle.noodlepostcard.reply")}
             </button>
           </div>
         </div>
         {!disableReplyImage && activeReplyComposerTool === "image" && (
           <NoodleToolPopover
-            title="Attach image"
+            title={localizeUi("ui.noodle.noodlehome.attachImage")}
             anchorRef={replyImageToolRef}
             onClose={() => setActiveReplyComposerTool(null)}
             wide
@@ -1017,22 +1039,20 @@ export function NoodlePostCard({
                 disabled={uploadGlobalImages.isPending}
                 className="h-9 w-full rounded-full bg-[var(--noodle-blue)] px-4 text-xs font-bold text-zinc-950 transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {uploadGlobalImages.isPending ? "Uploading..." : "Upload From Device"}
+                {uploadGlobalImages.isPending ?localizeUi("ui.noodle.noodleprofilesurface.uploading") :localizeUi("ui.noodle.noodlehome.uploadFromDevice")}
               </button>
               <div
                 data-component="NoodleView.ReplyImageDivider"
                 className="flex items-center gap-2 text-[0.625rem] font-semibold uppercase tracking-normal text-[var(--noodle-blue)]"
               >
-                <span className="h-px flex-1 bg-[var(--noodle-divider)]" />
-                or
-                <span className="h-px flex-1 bg-[var(--noodle-divider)]" />
+                <span className="h-px flex-1 bg-[var(--noodle-divider)]" />{localizeUi("ui.noodle.noodlehome.or")}<span className="h-px flex-1 bg-[var(--noodle-divider)]" />
               </div>
               <label className="block space-y-1.5">
-                <span className={labelClass}>Image URL</span>
+                <span className={labelClass}>{localizeUi("ui.noodle.noodlehome.imageUrl")}</span>
                 <input
                   value={replyImageUrlDraft}
                   onChange={(event) => setReplyImageUrlDraft(event.target.value)}
-                  placeholder="https://..."
+                  placeholder={localizeUi("ui.noodle.noodlehome.https")}
                   className={fieldClass}
                 />
               </label>
@@ -1040,9 +1060,7 @@ export function NoodlePostCard({
                 type="button"
                 onClick={applyReplyImageUrl}
                 className="h-9 w-full rounded-full border border-[var(--noodle-divider)] px-4 text-xs font-bold text-[var(--noodle-blue)] transition-colors hover:bg-[var(--noodle-blue)]/10"
-              >
-                Attach URL
-              </button>
+              >{localizeUi("ui.noodle.noodlehome.attachUrl")}</button>
             </div>
           </NoodleToolPopover>
         )}
@@ -1082,7 +1100,7 @@ export function NoodlePostCard({
               onClick={openPostAuthor}
               disabled={!canOpenAuthorProfile}
               className="h-fit rounded-full text-left transition-opacity enabled:hover:opacity-80 disabled:cursor-default"
-              title={canOpenAuthorProfile ? `View @${author.handle}` : undefined}
+              title={canOpenAuthorProfile ?localizeUi("ui.noodle.noodlehome.viewValue1", { value1: author.handle }) : undefined}
             >
               <Avatar account={author} />
             </button>
@@ -1108,8 +1126,8 @@ export function NoodlePostCard({
                   type="button"
                   onClick={() => setPostMenuId((current) => (current === post.id ? null : post.id))}
                   className="flex h-8 w-8 items-center justify-center rounded-full text-[var(--noodle-blue)] transition-colors hover:bg-[var(--noodle-blue)]/10"
-                  title="Post actions"
-                  aria-label="Post actions"
+                  title={localizeUi("ui.noodle.noodlepostcard.postActions")}
+                  aria-label={localizeUi("ui.noodle.noodlepostcard.postActions")}
                 >
                   <MoreHorizontal size={18} />
                 </button>
@@ -1120,17 +1138,13 @@ export function NoodlePostCard({
                       onClick={() => startEditingPost(post)}
                       className="flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-[var(--accent)]"
                     >
-                      <Pencil size={14} className="text-[var(--noodle-blue)]" />
-                      Edit
-                    </button>
+                      <Pencil size={14} className="text-[var(--noodle-blue)]" />{localizeUi("ui.noodle.noodlepostcard.edit")}</button>
                     <button
                       type="button"
                       onClick={() => deleteNoodlePost(post)}
                       className="flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-[var(--accent)]"
                     >
-                      <Trash2 size={14} className="text-[var(--noodle-blue)]" />
-                      Delete
-                    </button>
+                      <Trash2 size={14} className="text-[var(--noodle-blue)]" />{localizeUi("lorebook.editor.batch.delete")}</button>
                   </div>
                 )}
               </div>}
@@ -1139,13 +1153,13 @@ export function NoodlePostCard({
               <div className="mt-2 space-y-2">
                 {titleEditing && (
                   <label className="block space-y-1">
-                    <span className={labelClass}>Title (optional)</span>
+                    <span className={labelClass}>{localizeUi("ui.noodle.noodlepostcard.titleOptional")}</span>
                     <input
                       value={titleEditing.editingPostTitle}
                       onChange={(event) => titleEditing.setEditingPostTitle(event.target.value)}
                       maxLength={titleEditing.maxLength}
                       className={fieldClass}
-                      placeholder="Post title"
+                      placeholder={localizeUi("ui.noodle.noodlepostcard.postTitle")}
                     />
                   </label>
                 )}
@@ -1153,23 +1167,21 @@ export function NoodlePostCard({
                   value={editingPostContent}
                   onChange={(event) => setEditingPostContent(event.target.value)}
                   className={cn(textareaClass, "min-h-28")}
-                  placeholder="Edit post"
+                  placeholder={localizeUi("ui.noodle.noodlepostcard.editPost")}
                 />
                 <div className="flex flex-wrap justify-end gap-2">
                   <button
                     type="button"
                     onClick={cancelEditingPost}
                     className="h-8 rounded-full border border-[var(--noodle-divider)] px-4 text-xs font-semibold text-[var(--foreground)] transition-colors hover:bg-[var(--accent)]"
-                  >
-                    Cancel
-                  </button>
+                  >{localizeUi("chat.delete.dialog.cancel")}</button>
                   <button
                     type="button"
                     onClick={() => saveEditedPost(post)}
                     disabled={!editingPostContent.trim() || updatePostPending}
                     className="h-8 rounded-full bg-[var(--noodle-blue)] px-4 text-xs font-bold text-zinc-950 transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
                   >
-                    {updatePostPending ? "Saving" : "Save"}
+                    {updatePostPending ?localizeUi("ui.noodle.noodlehome.saving") :localizeUi("ui.noodle.noodlehome.save")}
                   </button>
                 </div>
               </div>
@@ -1205,21 +1217,21 @@ export function NoodlePostCard({
                   setImageLightbox(createNoodleLightboxImage(post.id, post.imageUrl!, post.imagePrompt ?? ""))
                 }
                 className="mt-3 block w-full overflow-hidden rounded-xl text-left ring-offset-[var(--background)] transition-opacity hover:opacity-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-blue)] focus-visible:ring-offset-2"
-                title="Open image"
-                aria-label="Open post image"
+                title={localizeUi("ui.noodle.noodlepostcard.openImage")}
+                aria-label={localizeUi("ui.noodle.noodlepostcard.openPostImage")}
               >
                 <img
                   src={post.imageUrl}
-                  alt={`Image posted by ${author?.displayName ?? "Noodle user"}`}
+                  alt={localizeUi("ui.noodle.post.imageBy", {
+                    name: author?.displayName ?? localizeUi("ui.noodle.profile.fallbackUser"),
+                  })}
                   className="max-h-96 w-full object-cover"
                 />
               </button>
             ) : post.imagePrompt ? (
               <div className="mt-3 rounded-xl border border-[var(--noodle-blue)]/35 bg-[var(--noodle-blue)]/10 p-3 text-xs leading-5">
                 <span className="mb-1 flex items-center gap-1.5 font-semibold text-[var(--noodle-blue)]">
-                  <ImageIcon size={13} />
-                  Image prompt
-                </span>
+                  <ImageIcon size={13} />{localizeUi("ui.noodle.noodlepostcard.imagePrompt")}</span>
                 {post.imagePrompt}
               </div>
             ) : null}
@@ -1230,8 +1242,10 @@ export function NoodlePostCard({
                 className={cn(noodleIconButtonClass, "rounded-full", likedByPersona && "bg-[var(--noodle-blue)]/10")}
                 disabled={!personaAccount || postLikePending}
                 onClick={() => reactToPost(post, "like", likedByPersona)}
-                title={likedByPersona ? "Unlike" : "Like"}
-                aria-label={`${likedByPersona ? "Unlike" : "Like"} post`}
+                title={likedByPersona ?localizeUi("ui.noodle.noodlepostcard.unlike") :localizeUi("ui.noodle.noodlepostcard.like")}
+                aria-label={localizeUi(
+                  likedByPersona ? "ui.noodle.post.unlikeLabel" : "ui.noodle.post.likeLabel",
+                )}
                 aria-busy={postLikePending}
                 data-noodle-reaction="like"
               >
@@ -1251,7 +1265,7 @@ export function NoodlePostCard({
                 className={cn(noodleIconButtonClass, "rounded-full", repostedByPersona && "bg-[var(--noodle-blue)]/10")}
                 disabled={!personaAccount || postRepostPending}
                 onClick={() => reactToPost(post, "repost", repostedByPersona)}
-                title={repostedByPersona ? "Undo repost" : "Repost"}
+                title={repostedByPersona ?localizeUi("ui.noodle.noodlepostcard.undoRepost") :localizeUi("ui.noodle.noodlepostcard.repost")}
                 aria-busy={postRepostPending}
                 data-noodle-reaction="repost"
               >
@@ -1263,7 +1277,7 @@ export function NoodlePostCard({
                 className={cn(noodleIconButtonClass, "rounded-full hover:text-[var(--noodle-blue)]")}
                 disabled={!personaAccount}
                 onClick={() => openReplyComposer(post.id)}
-                title="Reply"
+                title={localizeUi("ui.noodle.noodlepostcard.reply")}
               >
                 <MessageCircle size={18} />
                 {replies.length}
@@ -1314,7 +1328,7 @@ export function NoodlePostCard({
                           onClick={() => openProfile(actorAccount)}
                           disabled={!actorAccount}
                           className="h-8 w-8 shrink-0 rounded-full text-left transition-opacity enabled:hover:opacity-80 disabled:cursor-default"
-                          title={actorAccount ? `View @${actorAccount.handle}` : undefined}
+                          title={actorAccount ?localizeUi("ui.noodle.noodlehome.viewValue1", { value1: actorAccount.handle }) : undefined}
                         >
                           <Avatar account={actor ?? { displayName: "Noodle User", avatarUrl: null }} size="sm" />
                         </button>
@@ -1334,14 +1348,15 @@ export function NoodlePostCard({
                             <span className="text-[var(--muted-foreground)]">· {formatTime(reply.createdAt)}</span>
                           </div>
                           {parentActor && (
-                            <p className="mt-0.5 text-[var(--muted-foreground)]">
-                              Replying to{" "}
+                            <p className="mt-0.5 text-[var(--muted-foreground)]">{localizeUi("ui.noodle.noodlepostcard.replyingTo")}{" "}
                               {parentActorAccount ? (
                                 <button
                                   type="button"
                                   onClick={() => openProfile(parentActorAccount)}
                                   className="font-medium text-[var(--noodle-blue)] hover:underline focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-blue)]/70"
-                                  aria-label={`View @${parentActorAccount.handle} profile`}
+                                  aria-label={localizeUi("ui.noodle.profile.viewHandleProfile", {
+                                    handle: parentActorAccount.handle,
+                                  })}
                                 >
                                   @{parentActorAccount.handle}
                                 </button>
@@ -1356,7 +1371,7 @@ export function NoodlePostCard({
                                 value={editingReplyContent}
                                 onChange={(event) => setEditingReplyContent(event.target.value)}
                                 className={cn(textareaClass, "min-h-20 resize-y")}
-                                placeholder="Edit comment"
+                                placeholder={localizeUi("ui.noodle.noodlepostcard.editComment")}
                                 autoFocus
                               />
                               <div className="flex justify-end gap-2">
@@ -1365,9 +1380,7 @@ export function NoodlePostCard({
                                   onClick={cancelEditingReply}
                                   disabled={updateInteraction.isPending}
                                   className="h-8 rounded-full px-3 text-xs font-semibold text-[var(--muted-foreground)] transition-colors hover:bg-[var(--accent)] hover:text-[var(--foreground)] disabled:opacity-50"
-                                >
-                                  Cancel
-                                </button>
+                                >{localizeUi("chat.delete.dialog.cancel")}</button>
                                 <button
                                   type="button"
                                   onClick={() => saveEditedReply(post, reply)}
@@ -1376,7 +1389,7 @@ export function NoodlePostCard({
                                   }
                                   className="h-8 rounded-full bg-[var(--noodle-blue)] px-4 text-xs font-bold text-zinc-950 transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
                                 >
-                                  {updateInteraction.isPending ? "Saving" : "Save"}
+                                  {updateInteraction.isPending ?localizeUi("ui.noodle.noodlehome.saving") :localizeUi("ui.noodle.noodlehome.save")}
                                 </button>
                               </div>
                             </div>
@@ -1397,12 +1410,16 @@ export function NoodlePostCard({
                                 )
                               }
                               className="mt-2 block w-full overflow-hidden rounded-xl text-left ring-offset-[var(--background)] transition-opacity hover:opacity-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-blue)] focus-visible:ring-offset-2"
-                              title="Open image"
-                              aria-label="Open comment image"
+                              title={localizeUi("ui.noodle.noodlepostcard.openImage")}
+                              aria-label={localizeUi("ui.noodle.noodlepostcard.openCommentImage")}
                             >
                               <img
                                 src={reply.imageUrl}
-                                alt={`Image in ${actor?.displayName ?? "Noodle user"}'s comment`}
+                                alt={localizeUi("ui.noodle.noodlepostcard.commentImageAlt", {
+                                  name:
+                                    actor?.displayName ??
+                                    localizeUi("ui.noodle.noodlepostcard.noodleUser"),
+                                })}
                                 className="max-h-72 w-full object-cover"
                               />
                             </button>
@@ -1416,7 +1433,7 @@ export function NoodlePostCard({
                                 "inline-flex h-7 items-center gap-1 rounded-full px-2 font-medium text-[var(--noodle-blue)] transition-colors hover:bg-[var(--noodle-blue)]/10 disabled:cursor-not-allowed disabled:opacity-50",
                                 likedReplyByPersona && "bg-[var(--noodle-blue)]/10",
                               )}
-                              title={likedReplyByPersona ? "Unlike comment" : "Like comment"}
+                              title={likedReplyByPersona ?localizeUi("ui.noodle.noodlepostcard.unlikeComment") :localizeUi("ui.noodle.noodlepostcard.likeComment")}
                               aria-busy={reactionPendingFor(post.id, "like", reply.id)}
                             >
                               <Heart
@@ -1435,8 +1452,8 @@ export function NoodlePostCard({
                               onClick={() => openReplyComposer(post.id, reply.id)}
                               disabled={!personaAccount}
                               className="inline-flex h-7 w-7 items-center justify-center rounded-full text-[var(--noodle-blue)] transition-colors hover:bg-[var(--noodle-blue)]/10 disabled:cursor-not-allowed disabled:opacity-50"
-                              title="Reply"
-                              aria-label="Reply"
+                              title={localizeUi("ui.noodle.noodlepostcard.reply")}
+                              aria-label={localizeUi("ui.noodle.noodlepostcard.reply")}
                             >
                               <MessageCircle size={14} />
                             </button>
@@ -1447,8 +1464,8 @@ export function NoodlePostCard({
                                   onClick={() => startEditingReply(reply)}
                                   disabled={updateInteraction.isPending || deleteInteraction.isPending}
                                   className="inline-flex h-7 w-7 items-center justify-center rounded-full text-[var(--noodle-blue)] transition-colors hover:bg-[var(--noodle-blue)]/10 disabled:cursor-not-allowed disabled:opacity-50"
-                                  title="Edit comment"
-                                  aria-label="Edit comment"
+                                  title={localizeUi("ui.noodle.noodlepostcard.editComment")}
+                                  aria-label={localizeUi("ui.noodle.noodlepostcard.editComment")}
                                 >
                                   <Pencil size={14} />
                                 </button>
@@ -1457,8 +1474,8 @@ export function NoodlePostCard({
                                   onClick={() => deleteNoodleReply(post, reply)}
                                   disabled={updateInteraction.isPending || deleteInteraction.isPending}
                                   className="inline-flex h-7 w-7 items-center justify-center rounded-full text-[var(--noodle-blue)] transition-colors hover:bg-[var(--noodle-blue)]/10 disabled:cursor-not-allowed disabled:opacity-50"
-                                  title="Delete comment"
-                                  aria-label="Delete comment"
+                                  title={localizeUi("ui.noodle.noodlepostcard.deleteComment")}
+                                  aria-label={localizeUi("ui.noodle.noodlepostcard.deleteComment")}
                                 >
                                   <Trash2 size={14} />
                                 </button>

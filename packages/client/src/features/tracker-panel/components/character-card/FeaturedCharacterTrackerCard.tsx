@@ -56,6 +56,7 @@ import { FeaturedCharacterNameplate } from "./FeaturedCharacterNameplate";
 import { FeaturedCharacterPortrait } from "./FeaturedCharacterPortrait";
 import { ExternalThoughtBubble, InlineThoughtBubble } from "./CharacterThoughtBubbles";
 import { useTrackerLockContext } from "../TrackerLockContext";
+import { useTranslation as useUiTranslation } from "react-i18next";
 
 const FEATURED_CARD_CLASS = cn(
   TRACKER_PROFILE_CARD_FRAME_CLASS,
@@ -119,6 +120,7 @@ export function FeaturedCharacterTrackerCard({
   onToggleFeatured?: () => void;
   onUploadAvatar?: () => void;
 }) {
+  const { t: localizeUi } = useUiTranslation();
   const {
     fieldLocks,
     hiddenTrackerFields,
@@ -298,8 +300,8 @@ export function FeaturedCharacterTrackerCard({
             type="button"
             onClick={onRemove}
             className={FEATURED_REMOVE_BUTTON_CLASS}
-            title="Remove character"
-            aria-label={`Remove ${character.name.trim() || "character"}`}
+            title={localizeUi("ui.trackerPanel.charactertrackercard.removeCharacter")}
+            aria-label={localizeUi("ui.trackerPanel.charactertrackercard.removeValue1", { value1: character.name.trim() ||localizeUi("ui.noodle.noodlehome.character") })}
           >
             <X size="0.6875rem" />
           </button>
@@ -430,7 +432,7 @@ export function FeaturedCharacterTrackerCard({
                 <InlineEdit
                   value={name}
                   onSave={(nextName) => updateCustomField(name, nextName, rawValue)}
-                  placeholder="Field"
+                  placeholder={localizeUi("ui.trackerPanel.charactertrackercard.field")}
                   ariaLabel={`${name} field name`}
                   className="min-w-0 px-0.5 py-0 font-medium"
                   scrollOnHover
@@ -453,7 +455,7 @@ export function FeaturedCharacterTrackerCard({
                 <InlineEdit
                   value={displayValue}
                   onSave={(nextValue) => updateCustomField(name, name, nextValue)}
-                  placeholder="Value"
+                  placeholder={localizeUi("ui.trackerPanel.charactertrackercard.value")}
                   ariaLabel={`${name} value`}
                   className="min-w-0 px-0.5 py-0"
                   scrollOnHover
@@ -478,8 +480,8 @@ export function FeaturedCharacterTrackerCard({
                 <button
                   type="button"
                   onClick={() => removeCustomField(name)}
-                  title={`Remove ${name}`}
-                  aria-label={`Remove ${name}`}
+                  title={localizeUi("ui.trackerPanel.charactertrackercard.removeValue1", { value1: name })}
+                  aria-label={localizeUi("ui.trackerPanel.charactertrackercard.removeValue1", { value1: name })}
                   className="flex h-5 w-5 items-center justify-center justify-self-end rounded text-[var(--destructive)] transition-all hover:bg-[var(--destructive)]/10 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--border)] active:scale-90 [@media(pointer:coarse)]:h-6 [@media(pointer:coarse)]:w-6"
                 >
                   <X size="0.625rem" />
@@ -488,7 +490,7 @@ export function FeaturedCharacterTrackerCard({
             </div>
           ))}
           {hasEditableCustomFieldAdd && (
-            <InlineAddRow title="Add custom field" onClick={addCustomField} className="col-span-full" />
+            <InlineAddRow title={localizeUi("ui.trackerPanel.charactertrackercard.addCustomField")} onClick={addCustomField} className="col-span-full" />
           )}
         </div>
       )}

@@ -121,12 +121,12 @@ test("What's New opens once for each Marinara Engine version", async ({ page }) 
   const announcement = page.getByRole("dialog", { name: "What's New?" });
   await expect(announcement).toBeVisible();
   await expect(announcement.getByText(`Version ${APP_VERSION}`, { exact: true })).toBeVisible();
-  await expect(announcement.getByRole("heading", { name: "A safer engine with finer control." })).toBeVisible();
-  await expect(announcement.getByText(/removed Extensions, sealed their unsafe code path/)).toBeVisible();
-  await expect(announcement.getByText(/every old record to be cleared automatically/)).toBeVisible();
-  await expect(announcement.getByText(/new prompt macros/)).toBeVisible();
-  await expect(announcement.getByText(/character-specific Hide From AI controls/)).toBeVisible();
-  await expect(announcement.getByText(/Grouped or Individual response handling/)).toBeVisible();
+  await expect(announcement.getByRole("heading", { name: "More control, polished down to the card." })).toBeVisible();
+  await expect(announcement.getByText(/custom quick replies/)).toBeVisible();
+  await expect(announcement.getByText(/richer translation controls/)).toBeVisible();
+  await expect(announcement.getByText(/Atlas image and video generation/)).toBeVisible();
+  await expect(announcement.getByText(/interface localization/)).toBeVisible();
+  await expect(announcement.getByText(/Character and Persona cards/)).toBeVisible();
   await expect(announcement.getByText("Marinara Engine has been updated.", { exact: true })).toHaveCount(0);
   await expect(announcement.getByText("Tactical Combat Mode in Games")).toHaveCount(0);
   await expect(announcement.getByRole("link", { name: "View release" })).toHaveAttribute(
@@ -512,25 +512,67 @@ test("Character and Persona avatar actions stay separated and visually balanced"
   const connection = (await connectionResponse.json()) as { id: string };
 
   const characterName = `Avatar Character ${suffix}`;
+  const characterCreator = "Professor Mari and the Fatui Research Collective";
+  const characterVersion = "12.34";
   const characterResponse = await page.request.post("/api/characters", {
-    data: { data: { name: characterName } },
+    data: {
+      data: {
+        name: characterName,
+        creator: characterCreator,
+        character_version: characterVersion,
+      },
+    },
   });
   expect(characterResponse.ok()).toBeTruthy();
   const character = (await characterResponse.json()) as { id: string };
 
   const personaName = `Avatar Persona ${suffix}`;
+  const personaCreator = "Professor Mari and the Snezhnayan Institute";
+  const personaVersion = "56.78";
   const personaResponse = await page.request.post("/api/characters/personas", {
-    data: { name: personaName },
+    data: {
+      name: personaName,
+      creator: personaCreator,
+      personaVersion,
+    },
   });
   expect(personaResponse.ok()).toBeTruthy();
   const persona = (await personaResponse.json()) as { id: string };
 
-  const verifyEditor = async (panel: "characters" | "personas", resourceName: string) => {
+  const verifyEditor = async (
+    panel: "characters" | "personas",
+    resourceName: string,
+    creator: string,
+    version: string,
+  ) => {
     await page.locator(`[data-tour="panel-${panel}"]`).click();
     await page.getByText(resourceName, { exact: true }).first().click();
 
     const editor = page.locator(".mari-editor-shell");
     await expect(editor).toBeVisible();
+    const titleLine = editor.locator(".mari-editor-title-line");
+    const titleInput = titleLine.locator(".mari-editor-title-input");
+    const byline = titleLine.locator(".mari-editor-byline");
+    await expect(titleInput).toHaveValue(resourceName);
+    await expect(byline).toHaveText(`by ${creator}·v${version}`);
+    await expect(editor.locator(".mari-editor-secondary-line .mari-editor-meta")).toHaveCount(0);
+
+    const [titleLineBox, titleInputBox, bylineBox] = await Promise.all([
+      titleLine.boundingBox(),
+      titleInput.boundingBox(),
+      byline.boundingBox(),
+    ]);
+    expect(titleLineBox).not.toBeNull();
+    expect(titleInputBox).not.toBeNull();
+    expect(bylineBox).not.toBeNull();
+    if (titleLineBox && titleInputBox && bylineBox) {
+      expect(titleInputBox.x + titleInputBox.width).toBeLessThanOrEqual(bylineBox.x + 1);
+      expect(bylineBox.x + bylineBox.width).toBeLessThanOrEqual(titleLineBox.x + titleLineBox.width + 1);
+      expect(Math.abs(titleInputBox.y + titleInputBox.height - (bylineBox.y + bylineBox.height))).toBeLessThanOrEqual(
+        2,
+      );
+    }
+
     const tile = editor.locator(".mari-editor-avatar-tile");
     const generateButton = tile.getByRole("button", { name: "Generate avatar with AI" });
     const cameraIcon = tile.locator("div.absolute.inset-0 svg");
@@ -600,8 +642,8 @@ test("Character and Persona avatar actions stay separated and visually balanced"
 
   try {
     await page.goto("/");
-    await verifyEditor("characters", characterName);
-    await verifyEditor("personas", personaName);
+    await verifyEditor("characters", characterName, characterCreator, characterVersion);
+    await verifyEditor("personas", personaName, personaCreator, personaVersion);
   } finally {
     await Promise.all([
       page.request.delete(`/api/characters/${character.id}`).catch(() => undefined),
@@ -1310,6 +1352,17 @@ test("Roleplay side panels synchronize their slide with the desktop shell resize
 test("desktop Tracker stays in the Roleplay gutter without shifting the chat column", async ({ page }, testInfo) => {
   test.skip(!testInfo.project.name.includes("desktop"), "Desktop Tracker gutter behavior is covered on desktop.");
 
+  // Keep this device-local layout test isolated from the shared settings
+  // record used by the parallel browser project.
+  await page.route("**/api/app-settings/ui", async (route) => {
+    if (route.request().method() === "GET") {
+      await route.fulfill({ json: { value: null } });
+      return;
+    }
+    const body = route.request().postDataJSON() as { value?: unknown } | null;
+    await route.fulfill({ json: { value: typeof body?.value === "string" ? body.value : "" } });
+  });
+
   const chatResponse = await page.request.post("/api/chats", {
     data: { name: "Tracker Gutter Layout Smoke", mode: "roleplay", characterIds: [] },
   });
@@ -1679,7 +1732,7 @@ test("Roleplay Active Context shows rich lorebook activation provenance", async 
       contentType: "image/png",
     });
   } finally {
-    await page.request.delete(`/api/chats/${chat.id}`);
+    await page.request.delete(`/api/chats/${chat.id}`, { timeout: 5_000 }).catch(() => undefined);
   }
 });
 

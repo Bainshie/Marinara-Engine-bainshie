@@ -23,6 +23,7 @@ import {
   MESSAGE_SELECTION_CHECKBOX_SELECTED_CLASS,
   MESSAGE_SELECTION_SURFACE_CLASS,
 } from "./message-selection-styles";
+import { useTranslation as useUiTranslation } from "react-i18next";
 
 export function ConversationMessageGrouped({
   ctx,
@@ -31,6 +32,7 @@ export function ConversationMessageGrouped({
   ctx: MessageRenderContext;
   msgRef: RefObject<HTMLDivElement | null>;
 }) {
+  const { t: localizeUi } = useUiTranslation();
   const {
     message,
     extra,
@@ -139,7 +141,7 @@ export function ConversationMessageGrouped({
             type="button"
             role="checkbox"
             aria-checked={isSelected}
-            aria-label={isSelected ? "Deselect message" : "Select message"}
+            aria-label={isSelected ?localizeUi("ui.chat.chatmessage.deselectMessage") :localizeUi("ui.chat.chatmessage.selectMessage")}
             onClick={(e) => {
               e.stopPropagation();
               onToggleSelect?.();
@@ -160,7 +162,7 @@ export function ConversationMessageGrouped({
       {hiddenFromAIHeader && !isHiddenCollapsed && (
         <div className="mb-1 flex items-center gap-1 pl-14 text-[0.6875rem] text-amber-500/80">
           {hiddenFromAIHeader}
-          <span>Hidden from AI</span>
+          <span>{localizeUi("ui.chat.conversationmessagegrouped.hiddenFromAi")}</span>
         </div>
       )}
 

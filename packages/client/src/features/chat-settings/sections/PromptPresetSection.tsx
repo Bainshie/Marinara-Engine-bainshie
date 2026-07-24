@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { AlertTriangle, ChevronDown, Layers, Pencil, Sliders } from "lucide-react";
-import { useTranslation } from "react-i18next";
+import { useTranslation, useTranslation as useUiTranslation } from "react-i18next";
 import { ChatSettingsSection } from "../ChatSettingsSection";
 
 interface PromptPresetOption {
@@ -30,15 +30,16 @@ export function PromptPresetSection({
   onEditVariables,
   onPromptPresetChange,
 }: PromptPresetSectionProps) {
+  const { t: localizeUi } = useUiTranslation();
   const { t } = useTranslation();
   const showVariableEditor = !!promptPresetId && hasVariables;
 
   return (
     <ChatSettingsSection
       id="prompt-preset"
-      label="Prompt Preset"
+      label={localizeUi("ui.chatSettings.conversationpromptsection.promptPreset")}
       icon={<Sliders size="0.875rem" />}
-      help="Presets control how the system prompt is structured and what generation parameters are used. Different presets produce different AI behaviors."
+      help={localizeUi("ui.chatSettings.promptpresetsection.presetsControlHowTheSystemPromptIsStructuredAnd")}
     >
       <div className="flex items-center gap-1.5">
         <div className="relative min-w-0 flex-1">
@@ -47,7 +48,7 @@ export function PromptPresetSection({
             onChange={(event) => onPromptPresetChange(event.target.value || null)}
             className="mari-preset-native-select w-full appearance-none truncate rounded-lg bg-[var(--secondary)] px-3 py-2 pr-8 text-xs text-[var(--foreground)] outline-none ring-1 ring-transparent transition-shadow focus:ring-[var(--primary)]/40"
           >
-            <option value="">None</option>
+            <option value="">{localizeUi("ui.game.gamesurfacecomponent.none")}</option>
             {presets.map((preset) => (
               <option key={preset.id} value={preset.id}>
                 {preset.name}
@@ -76,7 +77,7 @@ export function PromptPresetSection({
       {showLorebookMarkerWarning && (
         <div className="mt-2 flex items-start gap-2 rounded-lg bg-amber-400/10 px-3 py-2 text-[0.6875rem] text-amber-200 ring-1 ring-amber-400/25">
           <AlertTriangle size="0.75rem" className="mt-[0.125rem] shrink-0" />
-          <span>This preset has active lorebooks available, but no lorebook marker.</span>
+          <span>{localizeUi("ui.chatSettings.promptpresetsection.thisPresetHasActiveLorebooksAvailableButNoLorebook")}</span>
         </div>
       )}
       {promptPresetId && (

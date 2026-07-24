@@ -14,6 +14,7 @@ import { SettingsSwitch } from "../../../components/panels/settings/SettingContr
 import { useSaveConnectionDefaults } from "../../../hooks/use-connections";
 import { isLanguageGenerationConnection, type ConnectionProviderLike } from "../../../lib/connection-filters";
 import { cn } from "../../../lib/utils";
+import { useTranslation as useUiTranslation } from "react-i18next";
 
 const EDITABLE_PARAMETER_KEYS: Array<keyof EditableGenerationParameters> = [
   "temperature",
@@ -65,6 +66,7 @@ export function AdvancedParametersSection({
   onExcludePastReasoningChange,
   onImageCaptioningChange,
 }: AdvancedParametersSectionProps) {
+  const { t: localizeUi } = useUiTranslation();
   const modeDefaults = isConversation ? CHAT_PARAMETER_DEFAULTS : ROLEPLAY_PARAMETER_DEFAULTS;
   const strictModeDefaults: EditableGenerationParameters = {
     ...modeDefaults,
@@ -150,10 +152,10 @@ export function AdvancedParametersSection({
         <span className="shrink-0 text-[var(--muted-foreground)]">
           <Settings2 size="0.875rem" />
         </span>
-        <span className="min-w-0 flex-1 text-xs font-semibold">Advanced Parameters</span>
+        <span className="min-w-0 flex-1 text-xs font-semibold">{localizeUi("ui.chatSettings.advancedparameterssection.advancedParameters")}</span>
         <span className="flex shrink-0 items-center" onClick={(event) => event.stopPropagation()}>
           <HelpTooltip
-            text="Override generation parameters for this chat. Only change these if you know what you're doing."
+            text={localizeUi("ui.chatSettings.advancedparameterssection.overrideGenerationParametersForThisChatOnlyChangeThese")}
             side="left"
           />
         </span>
@@ -172,8 +174,8 @@ export function AdvancedParametersSection({
           />
           <div className="space-y-2 pt-3">
             <SettingsSwitch
-              label="Limit Context Messages"
-              description="Only send the last N messages to the model."
+              label={localizeUi("ui.chatSettings.advancedparameterssection.limitContextMessages")}
+              description={localizeUi("ui.chatSettings.advancedparameterssection.onlySendTheLastNMessagesToTheModel")}
               checked={Boolean(contextMessageLimit)}
               onChange={(checked) => onContextMessageLimitChange(checked ? 50 : null)}
               labelPosition="start"
@@ -188,7 +190,7 @@ export function AdvancedParametersSection({
             {contextMessageLimit && (
               <div className="flex items-center gap-2 px-1">
                 <DraftNumberInput
-                  aria-label="Context message limit"
+                  aria-label={localizeUi("ui.chatSettings.advancedparameterssection.contextMessageLimit")}
                   min={1}
                   max={9999}
                   value={contextMessageLimit}
@@ -196,12 +198,12 @@ export function AdvancedParametersSection({
                   selectOnFocus
                   className="w-20 rounded-lg bg-[var(--secondary)] px-3 py-1.5 text-xs outline-none ring-1 ring-transparent transition-shadow focus:ring-[var(--primary)]/40"
                 />
-                <span className="text-[0.625rem] text-[var(--muted-foreground)]">messages</span>
+                <span className="text-[0.625rem] text-[var(--muted-foreground)]">{localizeUi("ui.agents.agenteditor.messages")}</span>
               </div>
             )}
             <SettingsSwitch
-              label="Exclude Past Reasoning"
-              description="Keep stored thinking/reasoning metadata out of future prompts."
+              label={localizeUi("ui.chatSettings.advancedparameterssection.excludePastReasoning")}
+              description={localizeUi("ui.chatSettings.advancedparameterssection.keepStoredThinkingReasoningMetadataOutOfFuturePrompts")}
               checked={excludeReasoningEnabled}
               onChange={onExcludePastReasoningChange}
               labelPosition="start"
@@ -214,11 +216,11 @@ export function AdvancedParametersSection({
               labelClassName="text-xs font-medium"
             />
             <SettingsSwitch
-              label="Image Captioning"
+              label={localizeUi("ui.chatSettings.advancedparameterssection.imageCaptioning")}
               description={
                 hasCaptioningConnection
-                  ? "Describe image attachments with a selected connection instead of sending native images. Text-only endpoints may fail."
-                  : "Add a connection before enabling image captioning."
+                  ?localizeUi("ui.chatSettings.advancedparameterssection.describeImageAttachmentsWithASelectedConnectionInsteadOf")
+                  :localizeUi("ui.chatSettings.advancedparameterssection.addAConnectionBeforeEnablingImageCaptioning")
               }
               checked={captioningEnabled}
               onChange={(checked) =>
@@ -241,9 +243,7 @@ export function AdvancedParametersSection({
             />
             {captioningEnabled && (
               <label className="block space-y-1 px-1">
-                <span className="text-[0.6875rem] font-medium text-[var(--muted-foreground)]">
-                  Captioning Connection
-                </span>
+                <span className="text-[0.6875rem] font-medium text-[var(--muted-foreground)]">{localizeUi("ui.chatSettings.advancedparameterssection.captioningConnection")}</span>
                 <select
                   value={selectedCaptioningConnectionId ?? ""}
                   onChange={(event) =>
@@ -254,16 +254,14 @@ export function AdvancedParametersSection({
                   className="w-full rounded-lg bg-[var(--secondary)] px-3 py-2 text-xs outline-none ring-1 ring-transparent transition-shadow focus:ring-[var(--primary)]/40"
                 >
                   {chatConnectionCanCaption ? (
-                    <option value="">Use chat connection</option>
+                    <option value="">{localizeUi("ui.agents.agenteditor.useChatConnection")}</option>
                   ) : (
-                    <option value="" disabled>
-                      Select a captioning connection
-                    </option>
+                    <option value="" disabled>{localizeUi("ui.chatSettings.advancedparameterssection.selectACaptioningConnection")}</option>
                   )}
                   {connectionOptions.map((connection) => (
                     <option key={connection.id} value={connection.id}>
                       {connection.name}
-                      {connection.model ? ` - ${connection.model}` : ""}
+                      {connection.model ?localizeUi("ui.chatSettings.advancedparameterssection.value1", { value1: connection.model }) : ""}
                     </option>
                   ))}
                 </select>
@@ -281,15 +279,13 @@ export function AdvancedParametersSection({
               className="w-full rounded-lg bg-[var(--primary)]/10 px-3 py-1.5 text-[0.625rem] font-medium text-[var(--primary)] ring-1 ring-[var(--primary)]/20 transition-colors hover:bg-[var(--primary)]/20"
             >
               <Save size="0.625rem" className="inline mr-1 -mt-px" />
-              {saveDefaults.isPending ? "Saving…" : "Save as Connection Default"}
+              {saveDefaults.isPending ?localizeUi("chat.settings.inlineEditor.saving") :localizeUi("ui.chatSettings.advancedparameterssection.saveAsConnectionDefault")}
             </button>
           )}
           <button
             onClick={() => onChatParametersChange({})}
             className="w-full rounded-lg bg-[var(--secondary)] px-3 py-1.5 text-[0.625rem] text-[var(--muted-foreground)] transition-colors hover:bg-[var(--accent)]"
-          >
-            Reset to Defaults
-          </button>
+          >{localizeUi("ui.chatSettings.advancedparameterssection.resetToDefaults")}</button>
         </div>
       )}
     </div>

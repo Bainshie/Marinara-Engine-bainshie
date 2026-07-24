@@ -51,6 +51,7 @@ import { StatList } from "../controls/StatList";
 import { useTrackerLockContext } from "../TrackerLockContext";
 import { PersonaInventoryRow } from "./PersonaInventoryRow";
 import { PersonaPortraitStage } from "./PersonaPortraitStage";
+import { useTranslation as useUiTranslation } from "react-i18next";
 
 const PERSONA_COCKPIT_SHELF_CLASS = cn(
   "pointer-events-none absolute inset-x-0 top-5 z-0 h-[9rem] overflow-hidden border-b border-[color-mix(in_srgb,var(--tracker-profile-dialogue-border)_46%,transparent)] shadow-[inset_0_10px_18px_color-mix(in_srgb,var(--background)_20%,transparent),inset_0_-12px_22px_color-mix(in_srgb,var(--background)_44%,transparent)] @min-[380px]:h-[10.5rem]",
@@ -126,6 +127,7 @@ export function PersonaInventoryPanel({
   collapsed?: boolean;
   onToggleCollapsed?: () => void;
 }) {
+  const { t: localizeUi } = useUiTranslation();
   const { fieldLocks, lockMode, onToggleFieldLock } = useTrackerLockContext();
   const updatePersona = useUpdatePersona();
   const personaPortraitSaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -228,12 +230,10 @@ export function PersonaInventoryPanel({
           size="0.6875rem"
           className="relative z-[1] shrink-0 text-[color-mix(in_srgb,var(--tracker-profile-label-muted-text)_42%,var(--tracker-profile-label-icon)_58%)]"
         />
-        <span className="relative z-[1] min-w-0 flex-1 truncate font-semibold uppercase tracking-[0.06em] text-[color-mix(in_srgb,var(--tracker-profile-label-muted-text)_62%,var(--tracker-profile-label-text)_38%)]">
-          Inventory
-        </span>
+        <span className="relative z-[1] min-w-0 flex-1 truncate font-semibold uppercase tracking-[0.06em] text-[color-mix(in_srgb,var(--tracker-profile-label-muted-text)_62%,var(--tracker-profile-label-text)_38%)]">{localizeUi("ui.trackerPanel.personainventorypanel.inventory")}</span>
         {addMode && (
           <span className="relative z-[1]">
-            <AddRowButton title="Add item" onClick={onAddInventoryItem} />
+            <AddRowButton title={localizeUi("ui.trackerPanel.personainventorypanel.addItem")} onClick={onAddInventoryItem} />
           </span>
         )}
         <div className="pointer-events-none absolute inset-x-0 bottom-0 h-px bg-[linear-gradient(90deg,transparent,color-mix(in_srgb,var(--tracker-profile-dialogue-border)_42%,transparent),transparent)] opacity-80" />
@@ -264,7 +264,7 @@ export function PersonaInventoryPanel({
         )}
       >
         {inventory.length === 0 ? (
-          <span className="relative z-[1]">Inventory empty.</span>
+          <span className="relative z-[1]">{localizeUi("ui.trackerPanel.personainventorypanel.inventoryEmpty")}</span>
         ) : (
           inventory.map((item, index) => (
             <PersonaInventoryRow
@@ -308,7 +308,7 @@ export function PersonaInventoryPanel({
 
       <SectionHeader
         icon={<Sparkles size="0.6875rem" />}
-        title="Persona"
+        title={localizeUi("ui.characters.cardlibrarydetailcard.persona")}
         action={action}
         className="bg-[color-mix(in_srgb,var(--background)_86%,var(--card)_14%)] [--primary:var(--foreground)] [--tracker-profile-icon:var(--muted-foreground)]"
         collapsed={collapsed}
@@ -332,7 +332,7 @@ export function PersonaInventoryPanel({
                 TRACKER_PROFILE_GRID_CLASS_BY_PORTRAIT_SIDE[personaPortraitSide],
               )}
             >
-              <TrackerProfileNameplate placeholder="Persona" value={persona?.name} />
+              <TrackerProfileNameplate placeholder={localizeUi("ui.characters.cardlibrarydetailcard.persona")} value={persona?.name} />
               <div aria-hidden="true" className={PERSONA_COCKPIT_SHELF_CLASS}>
                 <div className={TRACKER_PROFILE_SURFACE_TEXTURE_CLASS} />
                 <div className={TRACKER_PROFILE_SURFACE_TOP_RULE_CLASS} />
@@ -358,7 +358,7 @@ export function PersonaInventoryPanel({
                         {addMode && (
                           <InlineAddRow
                             onClick={onAddPersonaStat}
-                            title="Add stat"
+                            title={localizeUi("ui.trackerPanel.statlist.addStat")}
                             className="shrink-0 rounded-[5px] border border-[color-mix(in_srgb,var(--tracker-profile-dialogue-border)_32%,transparent)] bg-[image:var(--tracker-profile-field-material)] [background-blend-mode:var(--tracker-profile-field-material-blend)]"
                           />
                         )}
@@ -404,12 +404,12 @@ export function PersonaInventoryPanel({
                   <InlineEdit
                     value={status}
                     onSave={onSaveStatus}
-                    placeholder="Status"
+                    placeholder={localizeUi("ui.trackerPanel.personainventorypanel.status")}
                     className={cn(
                       "relative z-[1] min-h-5 flex-1 rounded-[2px] px-0.5 py-0 text-[0.6875rem] font-medium leading-[0.875rem] text-[color-mix(in_srgb,var(--tracker-profile-text)_92%,var(--muted-foreground)_8%)] hover:bg-[var(--accent)]/18",
                       trackerPanelSizeProfile === "compact" && "h-5",
                     )}
-                    title={`${personaName} status`}
+                    title={localizeUi("ui.trackerPanel.personainventorypanel.value1Status", { value1: personaName })}
                     scrollOnHover={trackerPanelSizeProfile === "compact"}
                     previewLineCount={trackerPanelSizeProfile === "compact" ? undefined : 2}
                     showEditHint={false}
