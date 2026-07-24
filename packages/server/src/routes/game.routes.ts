@@ -117,6 +117,7 @@ import {
   GAME_STORYBOARD_BUILT_IN_PROMPT_TEMPLATES,
   GAME_STORYBOARD_ILLUSTRATION_PROMPT_TEMPLATE_ID,
   GAME_STORYBOARD_ILLUSTRATION_PROMPT_TEMPLATES,
+  GAME_STORYBOARD_LTX_DIRECTOR_PROMPT_TEMPLATE_ID,
   GAME_STORYBOARD_KEYFRAME_COUNT_DEFAULT,
   GAME_STORYBOARD_KEYFRAME_COUNT_MAX,
   GAME_STORYBOARD_KEYFRAME_COUNT_MIN,
@@ -132,6 +133,7 @@ import {
   serializeResolvedSkillCheckTag,
   applyTrackerFieldLocksToGameStatePatch,
   normalizeWorldCustomFields,
+  LTX_DIRECTOR_GAME_VIDEO_PROMPT_TEMPLATE_ID,
   parseTrackerFieldLocks,
   parseTrackerHiddenFields,
   normalizeRpgStatPools,
@@ -203,6 +205,7 @@ import {
   generateVideo,
   removeSavedVideoFromDisk,
   saveVideoToDisk,
+  type LtxDirectorPromptInput,
   type VideoReferenceImage,
 } from "../services/video/video-generation.js";
 import { resolveGameVideoRuntime, type GameVideoRuntime } from "../services/video/game-video-runtime.js";
@@ -1516,6 +1519,55 @@ function buildOmniSettingLine(
   return compactParts.length ? compactParts.join("; ") : "Current game scene.";
 }
 
+export function sanitizeLtxDirectorStoryboardSegments(value: unknown): string[] {
+  if (typeof value !== "string") return [];
+  const segments = value
+    .split("|")
+    .map((segment) => segment.trim())
+    .filter(Boolean);
+  if (segments.length <= 4) return segments;
+  return [...segments.slice(0, 3), segments[segments.length - 1]!];
+}
+
+function pipeNeutralizedPrompt(value: unknown): string {
+  return typeof value === "string" ? value.replaceAll("|", " ").replace(/\s+/g, " ").trim() : "";
+}
+
+function ensurePromptSentence(value: string): string {
+  return /[.!?]["']?$/.test(value) ? value : `${value}.`;
+}
+
+export function buildLtxDirectorStoryboardPrompt(args: {
+  globalPrompt: string;
+  narrationBeat: unknown;
+  fallbackAction: string;
+  useSegmentedPlanner: boolean;
+  maxLength: number | null;
+}): { prompt: string; ltxDirectorPrompt: LtxDirectorPromptInput } {
+  const plannedSegments = args.useSegmentedPlanner ? sanitizeLtxDirectorStoryboardSegments(args.narrationBeat) : [];
+  const fallbackSegment = pipeNeutralizedPrompt(args.fallbackAction);
+  const localSegments = plannedSegments.length > 0 ? plannedSegments : fallbackSegment ? [fallbackSegment] : [];
+  const globalPrompt = args.globalPrompt.trim();
+  const actionSequence = localSegments.map(ensurePromptSentence).join(" ");
+  const prompt = limitSceneVideoPromptForProvider(
+    [globalPrompt, actionSequence ? `Action sequence: ${actionSequence}` : ""].filter(Boolean).join("\n"),
+    args.maxLength,
+  );
+  return {
+    prompt,
+    ltxDirectorPrompt: {
+      globalPrompt,
+      localPrompts: localSegments.join(" | "),
+      segmentLengths: "",
+    },
+  };
+}
+
+type StoryboardGalleryAnimatePrompt = {
+  prompt: string;
+  ltxDirectorPrompt?: LtxDirectorPromptInput;
+};
+
 async function buildStoryboardGalleryAnimatePrompt(args: {
   promptOverridesStorage: PromptOverridesStorage;
   galleryImage: ChatGalleryImageRow;
@@ -1528,7 +1580,7 @@ async function buildStoryboardGalleryAnimatePrompt(args: {
   artStyle: string;
   promptLimits: SceneVideoPromptLimits;
   debugMode?: boolean;
-}): Promise<string> {
+}): Promise<StoryboardGalleryAnimatePrompt> {
   const sourceDescription = `storyboard keyframe ${args.frameIndex + 1} (${args.galleryImage.id})`;
   const narrationSummary =
     compactVideoPromptText(args.plannedFrame.narrationBeat, args.promptLimits.narrationSummary) ||
@@ -1538,6 +1590,9 @@ async function buildStoryboardGalleryAnimatePrompt(args: {
       ? args.plannedFrame.characters
       : collectOmniCharacterNames(args.meta, args.latestState);
 
+  const storyboardVideoTemplateId =
+    readTrimmedString(args.meta.gameStoryboardVideoPromptTemplateId) ??
+    readTrimmedString(args.meta.gameVideoPromptTemplateId);
   const promptDraft = await loadGameVideoPrompt({
     promptOverridesStorage: args.promptOverridesStorage,
     meta: args.meta,
@@ -1566,7 +1621,18 @@ async function buildStoryboardGalleryAnimatePrompt(args: {
       sourceIllustrationLine: `Use ${sourceDescription} as the first frame/reference image.`,
     },
   });
-  return limitSceneVideoPromptForProvider(promptDraft, args.promptLimits.finalPrompt);
+  if (storyboardVideoTemplateId !== LTX_DIRECTOR_GAME_VIDEO_PROMPT_TEMPLATE_ID) {
+    return { prompt: limitSceneVideoPromptForProvider(promptDraft, args.promptLimits.finalPrompt) };
+  }
+  return buildLtxDirectorStoryboardPrompt({
+    globalPrompt: promptDraft,
+    narrationBeat: args.plannedFrame.narrationBeat,
+    fallbackAction: narrationSummary,
+    useSegmentedPlanner:
+      readTrimmedString(args.meta.gameStoryboardAnimationPromptTemplateId) ===
+      GAME_STORYBOARD_LTX_DIRECTOR_PROMPT_TEMPLATE_ID,
+    maxLength: args.promptLimits.finalPrompt,
+  });
 }
 
 async function resolveGameVideoConnectionId(
@@ -10786,7 +10852,7 @@ export async function gameRoutes(app: FastifyInstance) {
                 galleryImagePath,
                 sourceGalleryImagePathForMetadata(galleryImage),
               );
-              const prompt = await buildStoryboardGalleryAnimatePrompt({
+              const promptBuild = await buildStoryboardGalleryAnimatePrompt({
                 promptOverridesStorage,
                 galleryImage,
                 plannedFrame,
@@ -10799,6 +10865,7 @@ export async function gameRoutes(app: FastifyInstance) {
                 promptLimits: videoRuntime.promptLimits,
                 debugMode: requestDebug,
               });
+              const prompt = promptBuild.prompt;
               await storyboards.updateKeyframe(frame.id, { videoPrompt: prompt });
               if (debugLogsEnabled) {
                 debugLog("[debug/game/storyboard-video] frame=%d prompt:\n%s", frame.index + 1, prompt);
@@ -10815,9 +10882,11 @@ export async function gameRoutes(app: FastifyInstance) {
                   aspectRatio: plannedFrame.aspectRatio,
                   resolution: videoRuntime.resolution,
                   comfyWorkflow: videoRuntime.comfyWorkflow,
+                  ltxDirectorPrompt: promptBuild.ltxDirectorPrompt,
                   referenceImage,
                   publicReferenceUpload: videoRuntime.publicReferenceUpload,
                   fallback: videoFallback,
+                  debugMode: debugOverrideEnabled,
                   signal: backgroundSignal,
                 },
               );
