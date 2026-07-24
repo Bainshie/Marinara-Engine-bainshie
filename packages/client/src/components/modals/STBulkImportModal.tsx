@@ -25,6 +25,7 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import { cn } from "../../lib/utils";
 import { api } from "../../lib/api-client";
+import { useTranslation as useUiTranslation } from "react-i18next";
 
 interface Props {
   open: boolean;
@@ -138,6 +139,7 @@ function formatModifiedAt(value: string | null) {
 }
 
 export function STBulkImportModal({ open, onClose }: Props) {
+  const { t: localizeUi } = useUiTranslation();
   const [folderPath, setFolderPath] = useState("");
   const [folderToken, setFolderToken] = useState<string | null>(null);
   const [phase, setPhase] = useState<Phase>("input");
@@ -365,17 +367,14 @@ export function STBulkImportModal({ open, onClose }: Props) {
   const builtinPresetCount = scanResult?.presets.filter((item) => item.isBuiltin).length ?? 0;
 
   return (
-    <Modal open={open} onClose={handleClose} title="Import from SillyTavern" width="max-w-3xl">
+    <Modal open={open} onClose={handleClose} title={localizeUi("ui.modals.stbulkimportmodal.importFromSillytavern")} width="max-w-3xl">
       <div className="flex flex-col gap-4">
         {(phase === "input" || phase === "scanning") && (
           <>
-            <p className="text-xs text-[var(--muted-foreground)]">
-              Select or enter the path to your SillyTavern installation folder. We&apos;ll scan for characters, chats,
-              presets, lorebooks, backgrounds, and personas before you choose exactly what to import.
-            </p>
+            <p className="text-xs text-[var(--muted-foreground)]">{localizeUi("ui.modals.stbulkimportmodal.selectOrEnterThePathToYourSillytavernInstallation")}</p>
 
             <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-medium">SillyTavern Folder Path</label>
+              <label className="text-xs font-medium">{localizeUi("ui.modals.stbulkimportmodal.sillytavernFolderPath")}</label>
               <div className="flex gap-2 max-sm:flex-col">
                 <input
                   type="text"
@@ -384,7 +383,7 @@ export function STBulkImportModal({ open, onClose }: Props) {
                     setFolderPath(e.target.value);
                     setFolderToken(null);
                   }}
-                  placeholder="/path/to/SillyTavern"
+                  placeholder={localizeUi("ui.modals.stbulkimportmodal.pathToSillytavern")}
                   disabled={phase === "scanning"}
                   className="flex-1 rounded-lg bg-[var(--secondary)] px-3 py-2 text-xs outline-none ring-1 ring-transparent placeholder:text-[var(--muted-foreground)]/50 focus:ring-[var(--primary)]"
                   onKeyDown={(e) => {
@@ -395,11 +394,9 @@ export function STBulkImportModal({ open, onClose }: Props) {
                   onClick={handleBrowse}
                   disabled={phase === "scanning" || picking}
                   className="flex items-center justify-center gap-1 rounded-lg border border-[var(--border)] px-3 py-2 text-xs font-medium transition-all hover:bg-[var(--secondary)] active:scale-95 disabled:opacity-50"
-                  title="Browse for folder"
+                  title={localizeUi("ui.modals.stbulkimportmodal.browseForFolder")}
                 >
-                  {picking ? <Loader2 size="0.875rem" className="animate-spin" /> : <FolderOpen size="0.875rem" />}
-                  Browse
-                </button>
+                  {picking ? <Loader2 size="0.875rem" className="animate-spin" /> : <FolderOpen size="0.875rem" />}{localizeUi("ui.modals.stbulkimportmodal.browse")}</button>
               </div>
             </div>
 
@@ -415,7 +412,7 @@ export function STBulkImportModal({ open, onClose }: Props) {
                     }}
                     disabled={browserLoading || browserPath === "/"}
                     className="rounded p-1 transition-colors hover:bg-[var(--accent)] disabled:opacity-30"
-                    title="Go up"
+                    title={localizeUi("ui.modals.stbulkimportmodal.goUp")}
                   >
                     <ArrowLeft size="0.75rem" />
                   </button>
@@ -428,9 +425,7 @@ export function STBulkImportModal({ open, onClose }: Props) {
                       setShowFolderBrowser(false);
                     }}
                     className="rounded-lg bg-[var(--primary)] px-2.5 py-1 text-[0.625rem] font-medium text-[var(--primary-foreground)] transition-all hover:opacity-90 active:scale-95"
-                  >
-                    Select This Folder
-                  </button>
+                  >{localizeUi("ui.modals.stbulkimportmodal.selectThisFolder")}</button>
                 </div>
                 <div className="max-h-48 overflow-y-auto p-1">
                   {browserLoading ? (
@@ -438,7 +433,7 @@ export function STBulkImportModal({ open, onClose }: Props) {
                       <Loader2 size="0.875rem" className="animate-spin text-[var(--muted-foreground)]" />
                     </div>
                   ) : browserFolders.length === 0 ? (
-                    <p className="py-3 text-center text-[0.625rem] text-[var(--muted-foreground)]">No subfolders</p>
+                    <p className="py-3 text-center text-[0.625rem] text-[var(--muted-foreground)]">{localizeUi("ui.modals.stbulkimportmodal.noSubfolders")}</p>
                   ) : (
                     browserFolders.map((name) => (
                       <button
@@ -474,7 +469,7 @@ export function STBulkImportModal({ open, onClose }: Props) {
               ) : (
                 <FolderSearch size="0.875rem" />
               )}
-              {phase === "scanning" ? "Scanning..." : "Scan Folder"}
+              {phase === "scanning" ?localizeUi("ui.modals.stbulkimportmodal.scanning") :localizeUi("ui.modals.stbulkimportmodal.scanFolder")}
             </button>
 
             {error && (
@@ -485,8 +480,8 @@ export function STBulkImportModal({ open, onClose }: Props) {
             )}
 
             <div className="rounded-lg bg-[var(--secondary)]/50 p-2.5 text-[0.625rem] text-[var(--muted-foreground)] ring-1 ring-[var(--border)]">
-              <strong>Tip:</strong> This is the main SillyTavern folder, usually the one containing{" "}
-              <code className="rounded bg-[var(--secondary)] px-1">data/</code> or{" "}
+              <strong>{localizeUi("ui.panels.themessettings.tip")}</strong> {localizeUi("ui.modals.stbulkimportmodal.thisIsTheMainSillytavernFolderUsuallyTheOne")}{" "}
+              <code className="rounded bg-[var(--secondary)] px-1">data/</code> {localizeUi("ui.noodle.noodlehome.or")}{" "}
               <code className="rounded bg-[var(--secondary)] px-1">public/</code>.
             </div>
           </>
@@ -496,8 +491,7 @@ export function STBulkImportModal({ open, onClose }: Props) {
           <>
             <div className="flex items-start gap-2 rounded-lg bg-emerald-500/10 p-2.5 text-xs text-emerald-400">
               <CheckCircle size="0.875rem" className="mt-0.5 shrink-0" />
-              <span>
-                Found SillyTavern data in{" "}
+              <span>{localizeUi("ui.modals.stbulkimportmodal.foundSillytavernDataIn")}{" "}
                 <code className="rounded bg-[var(--secondary)] px-1 text-[0.625rem]">{scanResult.dataDir}</code>
               </span>
             </div>
@@ -506,23 +500,20 @@ export function STBulkImportModal({ open, onClose }: Props) {
               <div className="flex items-start gap-2 rounded-lg bg-amber-500/10 p-2.5 text-xs text-amber-400">
                 <AlertTriangle size="0.875rem" className="mt-0.5 shrink-0" />
                 <span>
-                  {builtinPresetCount} built-in preset{builtinPresetCount !== 1 ? "s were" : " was"} detected and left
-                  unchecked by default so only likely custom presets come across unless you opt in.
-                </span>
+                  {builtinPresetCount} {localizeUi("ui.modals.stbulkimportmodal.builtInPreset")}{builtinPresetCount !== 1 ?localizeUi("ui.modals.stbulkimportmodal.sWere") :localizeUi("ui.modals.stbulkimportmodal.was")} {localizeUi("ui.modals.stbulkimportmodal.detectedAndLeftUncheckedByDefaultSoOnlyLikely")}</span>
               </div>
             )}
 
             <div className="space-y-3">
               <div className="flex items-center justify-between gap-2">
-                <span className="text-xs font-medium">Choose exactly what to import</span>
+                <span className="text-xs font-medium">{localizeUi("ui.modals.stbulkimportmodal.chooseExactlyWhatToImport")}</span>
                 <span className="text-[0.6875rem] text-[var(--muted-foreground)]">
-                  {Object.values(selection).reduce((sum, ids) => sum + ids.length, 0)} selected
-                </span>
+                  {Object.values(selection).reduce((sum, ids) => sum + ids.length, 0)} {localizeUi("ui.agents.agenteditor.selected")}</span>
               </div>
 
               <SelectableImportCategory
                 icon={<Users size="0.875rem" />}
-                label="Characters"
+                label={localizeUi("navigation.topbar.characters")}
                 items={scanResult.characters}
                 selectedIds={selection.characters}
                 onToggleItem={(itemId, checked) => toggleCategoryItem("characters", itemId, checked)}
@@ -538,7 +529,7 @@ export function STBulkImportModal({ open, onClose }: Props) {
                   return (
                     <span>
                       {item.format.toUpperCase()}
-                      {modified ? ` · modified ${modified}` : ""}
+                      {modified ?localizeUi("ui.modals.stbulkimportmodal.modifiedValue1", { value1: modified }) : ""}
                     </span>
                   );
                 }}
@@ -546,10 +537,8 @@ export function STBulkImportModal({ open, onClose }: Props) {
 
               {scanResult.characters.length > 0 && (
                 <div className="rounded-lg border border-[var(--border)] bg-[var(--secondary)]/40 p-3">
-                  <p className="text-xs font-medium text-[var(--foreground)]">Imported character tags</p>
-                  <p className="mt-0.5 text-[0.6875rem] text-[var(--muted-foreground)]">
-                    Choose how source-site tags are applied to imported characters.
-                  </p>
+                  <p className="text-xs font-medium text-[var(--foreground)]">{localizeUi("ui.modals.stbulkimportmodal.importedCharacterTags")}</p>
+                  <p className="mt-0.5 text-[0.6875rem] text-[var(--muted-foreground)]">{localizeUi("ui.modals.stbulkimportmodal.chooseHowSourceSiteTagsAreAppliedToImported")}</p>
                   <div className="mt-2 grid gap-2 sm:grid-cols-3">
                     {TAG_IMPORT_OPTIONS.map((option) => (
                       <label
@@ -580,10 +569,8 @@ export function STBulkImportModal({ open, onClose }: Props) {
 
               {scanResult.characters.length > 0 && (
                 <div className="rounded-lg border border-[var(--border)] bg-[var(--secondary)]/40 p-3">
-                  <p className="text-xs font-medium text-[var(--foreground)]">Imported regex scripts</p>
-                  <p className="mt-0.5 text-[0.6875rem] text-[var(--muted-foreground)]">
-                    Keep each bot's embedded find/replace scripts scoped to that character, or add them globally.
-                  </p>
+                  <p className="text-xs font-medium text-[var(--foreground)]">{localizeUi("ui.modals.importcharactermodal.importedRegexScripts")}</p>
+                  <p className="mt-0.5 text-[0.6875rem] text-[var(--muted-foreground)]">{localizeUi("ui.modals.stbulkimportmodal.keepEachBotSEmbeddedFindReplaceScriptsScoped")}</p>
                   <div className="mt-2 grid gap-2 sm:grid-cols-2">
                     {REGEX_SCOPE_OPTIONS.map((option) => (
                       <label
@@ -614,7 +601,7 @@ export function STBulkImportModal({ open, onClose }: Props) {
 
               <SelectableImportCategory
                 icon={<MessageSquare size="0.875rem" />}
-                label="Chats"
+                label={localizeUi("navigation.common.chats")}
                 items={scanResult.chats}
                 selectedIds={selection.chats}
                 onToggleItem={(itemId, checked) => toggleCategoryItem("chats", itemId, checked)}
@@ -629,9 +616,8 @@ export function STBulkImportModal({ open, onClose }: Props) {
                 renderDetails={(item) => {
                   const modified = formatModifiedAt(item.modifiedAt);
                   return (
-                    <span>
-                      Folder: {item.folderName} · fileName: {item.name} · characterName: {item.characterName}
-                      {modified ? ` · modified ${modified}` : ""}
+                    <span>{localizeUi("ui.modals.stbulkimportmodal.folder")} {item.folderName} {localizeUi("ui.modals.stbulkimportmodal.filename")} {item.name} {localizeUi("ui.modals.stbulkimportmodal.charactername")} {item.characterName}
+                      {modified ?localizeUi("ui.modals.stbulkimportmodal.modifiedValue1", { value1: modified }) : ""}
                     </span>
                   );
                 }}
@@ -639,7 +625,7 @@ export function STBulkImportModal({ open, onClose }: Props) {
 
               <SelectableImportCategory
                 icon={<Users size="0.875rem" />}
-                label="Group Chats"
+                label={localizeUi("ui.modals.stbulkimportmodal.groupChats")}
                 items={scanResult.groupChats}
                 selectedIds={selection.groupChats}
                 onToggleItem={(itemId, checked) => toggleCategoryItem("groupChats", itemId, checked)}
@@ -655,8 +641,8 @@ export function STBulkImportModal({ open, onClose }: Props) {
                   const modified = formatModifiedAt(item.modifiedAt);
                   return (
                     <span>
-                      {item.members.length > 0 ? item.members.join(", ") : "No linked members"}
-                      {modified ? ` · modified ${modified}` : ""}
+                      {item.members.length > 0 ? item.members.join(", ") :localizeUi("ui.modals.stbulkimportmodal.noLinkedMembers")}
+                      {modified ?localizeUi("ui.modals.stbulkimportmodal.modifiedValue1", { value1: modified }) : ""}
                     </span>
                   );
                 }}
@@ -664,7 +650,7 @@ export function STBulkImportModal({ open, onClose }: Props) {
 
               <SelectableImportCategory
                 icon={<FileText size="0.875rem" />}
-                label="Presets"
+                label={localizeUi("navigation.topbar.presets")}
                 items={scanResult.presets}
                 selectedIds={selection.presets}
                 onToggleItem={(itemId, checked) => toggleCategoryItem("presets", itemId, checked)}
@@ -679,23 +665,21 @@ export function STBulkImportModal({ open, onClose }: Props) {
                   const modified = formatModifiedAt(item.modifiedAt);
                   return (
                     <span>
-                      {item.isBuiltin ? "Detected built-in preset" : "Custom or user preset"}
-                      {modified ? ` · modified ${modified}` : ""}
+                      {item.isBuiltin ?localizeUi("ui.modals.stbulkimportmodal.detectedBuiltInPreset") :localizeUi("ui.modals.stbulkimportmodal.customOrUserPreset")}
+                      {modified ?localizeUi("ui.modals.stbulkimportmodal.modifiedValue1", { value1: modified }) : ""}
                     </span>
                   );
                 }}
                 renderBadge={(item) =>
                   item.isBuiltin ? (
-                    <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[0.5625rem] font-medium text-amber-400">
-                      Built-in
-                    </span>
+                    <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[0.5625rem] font-medium text-amber-400">{localizeUi("ui.modals.stbulkimportmodal.builtIn")}</span>
                   ) : null
                 }
               />
 
               <SelectableImportCategory
                 icon={<BookOpen size="0.875rem" />}
-                label="Lorebooks"
+                label={localizeUi("navigation.topbar.lorebooks")}
                 items={scanResult.lorebooks}
                 selectedIds={selection.lorebooks}
                 onToggleItem={(itemId, checked) => toggleCategoryItem("lorebooks", itemId, checked)}
@@ -708,13 +692,13 @@ export function STBulkImportModal({ open, onClose }: Props) {
                 onSelectNone={() => updateCategorySelection("lorebooks", [])}
                 renderDetails={(item) => {
                   const modified = formatModifiedAt(item.modifiedAt);
-                  return modified ? <span>Modified {modified}</span> : null;
+                  return modified ? <span>{localizeUi("ui.modals.stbulkimportmodal.modified")} {modified}</span> : null;
                 }}
               />
 
               <SelectableImportCategory
                 icon={<Image size="0.875rem" />}
-                label="Backgrounds"
+                label={localizeUi("settings.controls.backgroundGeneration.label")}
                 items={scanResult.backgrounds}
                 selectedIds={selection.backgrounds}
                 onToggleItem={(itemId, checked) => toggleCategoryItem("backgrounds", itemId, checked)}
@@ -727,13 +711,13 @@ export function STBulkImportModal({ open, onClose }: Props) {
                 onSelectNone={() => updateCategorySelection("backgrounds", [])}
                 renderDetails={(item) => {
                   const modified = formatModifiedAt(item.modifiedAt);
-                  return modified ? <span>Modified {modified}</span> : null;
+                  return modified ? <span>{localizeUi("ui.modals.stbulkimportmodal.modified")} {modified}</span> : null;
                 }}
               />
 
               <SelectableImportCategory
                 icon={<UserCircle size="0.875rem" />}
-                label="Personas"
+                label={localizeUi("navigation.topbar.personas")}
                 items={scanResult.personas}
                 selectedIds={selection.personas}
                 onToggleItem={(itemId, checked) => toggleCategoryItem("personas", itemId, checked)}
@@ -750,7 +734,7 @@ export function STBulkImportModal({ open, onClose }: Props) {
                   return (
                     <span>
                       {description || "No description"}
-                      {modified ? ` · modified ${modified}` : ""}
+                      {modified ?localizeUi("ui.modals.stbulkimportmodal.modifiedValue1", { value1: modified }) : ""}
                     </span>
                   );
                 }}
@@ -768,9 +752,7 @@ export function STBulkImportModal({ open, onClose }: Props) {
               <button
                 onClick={reset}
                 className="flex-1 rounded-lg border border-[var(--border)] px-3 py-2 text-xs font-medium transition-all hover:bg-[var(--secondary)] active:scale-95"
-              >
-                Back
-              </button>
+              >{localizeUi("ui.noodle.noodlerframe.back")}</button>
               <button
                 onClick={handleImport}
                 disabled={!hasAnySelected}
@@ -781,9 +763,7 @@ export function STBulkImportModal({ open, onClose }: Props) {
                     : "cursor-not-allowed bg-[var(--secondary)] text-[var(--muted-foreground)] opacity-60",
                 )}
               >
-                <Import size="0.875rem" />
-                Import Selected
-              </button>
+                <Import size="0.875rem" />{localizeUi("ui.modals.stbulkimportmodal.importSelected")}</button>
             </div>
           </>
         )}
@@ -791,7 +771,7 @@ export function STBulkImportModal({ open, onClose }: Props) {
         {phase === "importing" && (
           <div className="flex flex-col items-center gap-4 py-6">
             <Loader2 size="2rem" className="animate-spin text-[var(--primary)]" />
-            <p className="text-sm font-medium">Importing your data...</p>
+            <p className="text-sm font-medium">{localizeUi("ui.modals.stbulkimportmodal.importingYourData")}</p>
             {progress ? (
               <div className="flex w-full flex-col gap-2">
                 <div className="flex items-center justify-between text-xs">
@@ -809,17 +789,17 @@ export function STBulkImportModal({ open, onClose }: Props) {
                 <p className="truncate text-[0.6875rem] text-[var(--muted-foreground)]">{progress.item}</p>
 
                 <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-[0.625rem] text-[var(--muted-foreground)]">
-                  {progress.imported.characters > 0 && <span>{progress.imported.characters} characters</span>}
-                  {progress.imported.chats > 0 && <span>{progress.imported.chats} chats</span>}
-                  {progress.imported.groupChats > 0 && <span>{progress.imported.groupChats} group chats</span>}
-                  {progress.imported.presets > 0 && <span>{progress.imported.presets} presets</span>}
-                  {progress.imported.lorebooks > 0 && <span>{progress.imported.lorebooks} lorebooks</span>}
-                  {progress.imported.backgrounds > 0 && <span>{progress.imported.backgrounds} backgrounds</span>}
-                  {progress.imported.personas > 0 && <span>{progress.imported.personas} personas</span>}
+                  {progress.imported.characters > 0 && <span>{progress.imported.characters} {localizeUi("ui.noodle.noodlehome.characters")}</span>}
+                  {progress.imported.chats > 0 && <span>{progress.imported.chats} {localizeUi("ui.modals.stbulkimportmodal.chats")}</span>}
+                  {progress.imported.groupChats > 0 && <span>{progress.imported.groupChats} {localizeUi("ui.modals.stbulkimportmodal.groupChats_f61d9ba")}</span>}
+                  {progress.imported.presets > 0 && <span>{progress.imported.presets} {localizeUi("ui.modals.stbulkimportmodal.presets")}</span>}
+                  {progress.imported.lorebooks > 0 && <span>{progress.imported.lorebooks} {localizeUi("ui.modals.stbulkimportmodal.lorebooks")}</span>}
+                  {progress.imported.backgrounds > 0 && <span>{progress.imported.backgrounds} {localizeUi("ui.panels.backgroundpicker.backgrounds")}</span>}
+                  {progress.imported.personas > 0 && <span>{progress.imported.personas} {localizeUi("ui.modals.stbulkimportmodal.personas")}</span>}
                 </div>
               </div>
             ) : (
-              <p className="text-xs text-[var(--muted-foreground)]">Preparing...</p>
+              <p className="text-xs text-[var(--muted-foreground)]">{localizeUi("ui.modals.stbulkimportmodal.preparing")}</p>
             )}
           </div>
         )}
@@ -836,7 +816,7 @@ export function STBulkImportModal({ open, onClose }: Props) {
             >
               {importResult.success ? <CheckCircle size="0.875rem" /> : <XCircle size="0.875rem" />}
               <span className="font-medium">
-                {importResult.success ? "Import complete!" : (importResult.error ?? "Import failed")}
+                {importResult.success ?localizeUi("ui.modals.stbulkimportmodal.importComplete") : (importResult.error ?? "Import failed")}
               </span>
             </div>
 
@@ -844,29 +824,29 @@ export function STBulkImportModal({ open, onClose }: Props) {
               <div className="grid grid-cols-2 gap-2">
                 <StatCard
                   icon={<Users size="0.875rem" />}
-                  label="Characters"
+                  label={localizeUi("navigation.topbar.characters")}
                   count={importResult.imported.characters}
                 />
-                <StatCard icon={<MessageSquare size="0.875rem" />} label="Chats" count={importResult.imported.chats} />
+                <StatCard icon={<MessageSquare size="0.875rem" />} label={localizeUi("navigation.common.chats")} count={importResult.imported.chats} />
                 <StatCard
                   icon={<Users size="0.875rem" />}
-                  label="Group Chats"
+                  label={localizeUi("ui.modals.stbulkimportmodal.groupChats")}
                   count={importResult.imported.groupChats}
                 />
-                <StatCard icon={<FileText size="0.875rem" />} label="Presets" count={importResult.imported.presets} />
+                <StatCard icon={<FileText size="0.875rem" />} label={localizeUi("navigation.topbar.presets")} count={importResult.imported.presets} />
                 <StatCard
                   icon={<BookOpen size="0.875rem" />}
-                  label="Lorebooks"
+                  label={localizeUi("navigation.topbar.lorebooks")}
                   count={importResult.imported.lorebooks}
                 />
                 <StatCard
                   icon={<Image size="0.875rem" />}
-                  label="Backgrounds"
+                  label={localizeUi("settings.controls.backgroundGeneration.label")}
                   count={importResult.imported.backgrounds}
                 />
                 <StatCard
                   icon={<UserCircle size="0.875rem" />}
-                  label="Personas"
+                  label={localizeUi("navigation.topbar.personas")}
                   count={importResult.imported.personas}
                 />
               </div>
@@ -876,7 +856,7 @@ export function STBulkImportModal({ open, onClose }: Props) {
               <div className="flex flex-col gap-1.5 rounded-lg bg-amber-500/10 p-2.5">
                 <div className="flex items-center gap-1.5 text-xs font-medium text-amber-400">
                   <AlertTriangle size="0.75rem" />
-                  {importResult.errors.length} warning{importResult.errors.length !== 1 ? "s" : ""}
+                  {importResult.errors.length} {localizeUi("ui.modals.stbulkimportmodal.warning")}{importResult.errors.length !== 1 ?localizeUi("ui.noodle.stageprofileview.s") : ""}
                 </div>
                 <div className="max-h-24 overflow-y-auto text-[0.625rem] text-[var(--muted-foreground)]">
                   {importResult.errors.map((warning, index) => (
@@ -891,9 +871,7 @@ export function STBulkImportModal({ open, onClose }: Props) {
             <button
               onClick={handleClose}
               className="rounded-lg bg-[var(--primary)] px-3 py-2 text-xs font-medium text-[var(--primary-foreground)] transition-all hover:opacity-90 active:scale-95"
-            >
-              Done
-            </button>
+            >{localizeUi("lorebook.editor.batch.done")}</button>
           </>
         )}
       </div>
@@ -924,6 +902,7 @@ function SelectableImportCategory<T extends ScanItemBase>({
   renderDetails?: (item: T) => React.ReactNode;
   renderBadge?: (item: T) => React.ReactNode;
 }) {
+  const { t: localizeUi } = useUiTranslation();
   const [expanded, setExpanded] = useState(items.length <= 8 && items.length > 0);
   const selectedSet = new Set(selectedIds);
 
@@ -949,22 +928,18 @@ function SelectableImportCategory<T extends ScanItemBase>({
               type="button"
               onClick={onSelectAll}
               className="rounded-md px-2 py-1 text-[0.625rem] font-medium text-[var(--primary)] transition-colors hover:bg-[var(--accent)]"
-            >
-              All
-            </button>
+            >{localizeUi("ui.noodle.stageprofilesourcepicker.all")}</button>
             <button
               type="button"
               onClick={onSelectNone}
               className="rounded-md px-2 py-1 text-[0.625rem] font-medium text-[var(--muted-foreground)] transition-colors hover:bg-[var(--accent)] hover:text-[var(--foreground)]"
-            >
-              None
-            </button>
+            >{localizeUi("ui.game.gamesurfacecomponent.none")}</button>
             <button
               type="button"
               onClick={() => setExpanded((prev) => !prev)}
               className="rounded-md px-2 py-1 text-[0.625rem] font-medium text-[var(--primary)] transition-colors hover:bg-[var(--accent)]"
             >
-              {expanded ? "Hide" : "Show"}
+              {expanded ?localizeUi("ui.noodle.stageprofileview.hide") :localizeUi("ui.modals.selectableimportcategory.show")}
             </button>
           </>
         )}
@@ -997,9 +972,7 @@ function SelectableImportCategory<T extends ScanItemBase>({
                     {checked && (
                       <span className="shrink-0 rounded-full bg-[var(--primary)]/15 px-1.5 py-0.5 text-[0.5625rem] font-medium text-[var(--primary)]">
                         <span className="inline-flex items-center gap-1">
-                          <Check size="0.5625rem" />
-                          Selected
-                        </span>
+                          <Check size="0.5625rem" />{localizeUi("ui.modals.selectableimportcategory.selected")}</span>
                       </span>
                     )}
                   </div>

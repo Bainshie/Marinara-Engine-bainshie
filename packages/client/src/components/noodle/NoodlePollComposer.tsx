@@ -3,6 +3,7 @@ import { type ReactNode, useRef, useState } from "react";
 import { noodlePollInputSchema, type NoodlePollInput } from "@marinara-engine/shared";
 import { ConversationMediaPickerPanel } from "../chat/ConversationMediaPickerPanel";
 import { NoodleAnchoredPopover } from "./NoodlePostCard";
+import { useTranslation as useUiTranslation } from "react-i18next";
 
 const EMPTY_POLL: NoodlePollInput = { question: "", options: ["", ""] };
 const EMOJI_GRAPHEME_PATTERN = /[\p{Extended_Pictographic}\p{Regional_Indicator}\u20e3]/u;
@@ -44,6 +45,7 @@ export function NoodlePollComposer({
   /** Replaces the built-in submit button when a parent owns the editor's shared actions. */
   action?: ReactNode;
 }) {
+  const { t: localizeUi } = useUiTranslation();
   const poll = value ?? EMPTY_POLL;
   const [emojiOptionIndex, setEmojiOptionIndex] = useState<number | null>(null);
   const emojiAnchorRef = useRef<HTMLButtonElement | null>(null);
@@ -96,13 +98,13 @@ export function NoodlePollComposer({
         </div>
 
         <label className="block space-y-2">
-          <span className="text-sm font-bold">Question</span>
+          <span className="text-sm font-bold">{localizeUi("ui.noodle.noodlehome.question")}</span>
           <input
             value={poll.question}
             maxLength={240}
             disabled={disabled}
             onChange={(event) => onChange({ question: event.target.value, options: poll.options })}
-            placeholder="What question do you want to ask?"
+            placeholder={localizeUi("ui.noodle.noodlepollcomposer.whatQuestionDoYouWantToAsk")}
             className="mari-chrome-field h-14 w-full rounded-xl border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--noodle-accent)]/5 px-4 text-sm outline-none transition-colors placeholder:text-[var(--muted-foreground)] focus:border-[var(--noodle-accent)]"
           />
           <span className="block text-right text-xs tabular-nums text-[var(--noodle-accent)]">
@@ -123,8 +125,8 @@ export function NoodlePollComposer({
                   ref={emojiOptionIndex === index ? emojiAnchorRef : undefined}
                   disabled={disabled}
                   aria-expanded={emojiOptionIndex === index}
-                  aria-label={`Choose emoji for answer ${index + 1}`}
-                  title={`Choose emoji for answer ${index + 1}`}
+                  aria-label={localizeUi("ui.noodle.noodlepollcomposer.chooseEmojiForAnswerValue1", { value1: index + 1 })}
+                  title={localizeUi("ui.noodle.noodlepollcomposer.chooseEmojiForAnswerValue1", { value1: index + 1 })}
                   onClick={(event) => {
                     emojiAnchorRef.current = event.currentTarget;
                     setEmojiOptionIndex((current) => (current === index ? null : index));
@@ -137,8 +139,8 @@ export function NoodlePollComposer({
                   value={answer}
                   maxLength={120 - (emoji ? emoji.length + 1 : 0)}
                   disabled={disabled}
-                  aria-label={`Poll answer ${index + 1}`}
-                  placeholder={`Option ${index + 1}`}
+                  aria-label={localizeUi("ui.noodle.noodlepollcomposer.pollAnswerValue1", { value1: index + 1 })}
+                  placeholder={localizeUi("ui.noodle.noodlepollcomposer.optionValue1", { value1: index + 1 })}
                   onChange={(event) =>
                     onChange({
                       question: poll.question,
@@ -154,8 +156,8 @@ export function NoodlePollComposer({
                   disabled={disabled || (!option && poll.options.length === 2)}
                   onClick={() => removeOption(index)}
                   className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-[var(--muted-foreground)] transition-colors hover:bg-[var(--destructive)]/10 hover:text-[var(--destructive)] disabled:cursor-not-allowed disabled:opacity-30"
-                  aria-label={`Delete answer ${index + 1}`}
-                  title={`Delete answer ${index + 1}`}
+                  aria-label={localizeUi("ui.noodle.noodlepollcomposer.deleteAnswerValue1", { value1: index + 1 })}
+                  title={localizeUi("ui.noodle.noodlepollcomposer.deleteAnswerValue1", { value1: index + 1 })}
                 >
                   <Trash2 size={16} />
                 </button>
@@ -171,9 +173,7 @@ export function NoodlePollComposer({
             onClick={() => onChange({ question: poll.question, options: [...poll.options, ""] })}
             className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-[var(--noodle-accent)]/15 px-3 text-xs font-bold text-[var(--noodle-accent)] transition-colors hover:bg-[var(--noodle-accent)]/20 disabled:cursor-not-allowed disabled:opacity-40"
           >
-            <Plus size={15} />
-            Add option
-          </button>
+            <Plus size={15} />{localizeUi("ui.agents.agenteditor.addOption")}</button>
           {action ?? (
             <button
               type="button"

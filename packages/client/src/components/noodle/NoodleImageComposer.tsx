@@ -1,4 +1,5 @@
 import { ImagePlus, Link, X } from "lucide-react";
+import { useTranslation as useUiTranslation } from "react-i18next";
 
 export function NoodleImageComposer({
   imageUrl,
@@ -21,17 +22,18 @@ export function NoodleImageComposer({
   fileActionLabel?: string;
   urlActionLabel?: string;
 }) {
+  const { t: localizeUi } = useUiTranslation();
   return (
     <div className="marinara-chat-popover space-y-3 rounded-2xl border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)] px-4 pb-4 pt-2 text-[var(--marinara-chat-chrome-panel-title)] shadow-2xl shadow-black/35">
       <div className="flex items-center justify-between gap-3">
-        <h2 className="text-lg font-bold">{hasImage ? "Replace image" : "Add an image"}</h2>
+        <h2 className="text-lg font-bold">{hasImage ?localizeUi("ui.noodle.noodleimagecomposer.replaceImage") :localizeUi("ui.noodle.noodleimagecomposer.addAnImage")}</h2>
         <button
           type="button"
           disabled={disabled}
           onClick={onClose}
           className="inline-flex h-9 w-9 items-center justify-center rounded-full text-[var(--marinara-chat-chrome-panel-muted)] transition-colors hover:bg-[var(--marinara-chat-chrome-highlight-bg)] hover:text-[var(--marinara-chat-chrome-panel-title)] disabled:opacity-50"
-          aria-label="Close image picker"
-          title="Close image picker"
+          aria-label={localizeUi("ui.noodle.noodleimagecomposer.closeImagePicker")}
+          title={localizeUi("ui.noodle.noodleimagecomposer.closeImagePicker")}
         >
           <X size={20} />
         </button>
@@ -48,13 +50,11 @@ export function NoodleImageComposer({
       </button>
 
       <div className="flex items-center gap-2 text-[0.625rem] font-semibold uppercase tracking-normal text-[var(--marinara-chat-chrome-panel-muted)]">
-        <span className="h-px flex-1 bg-[var(--noodle-divider)]" />
-        or
-        <span className="h-px flex-1 bg-[var(--noodle-divider)]" />
+        <span className="h-px flex-1 bg-[var(--noodle-divider)]" />{localizeUi("ui.noodle.noodlehome.or")}<span className="h-px flex-1 bg-[var(--noodle-divider)]" />
       </div>
 
       <label className="block space-y-1.5">
-        <span className="text-xs font-bold">Image URL</span>
+        <span className="text-xs font-bold">{localizeUi("ui.noodle.noodlehome.imageUrl")}</span>
         <input
           type="url"
           inputMode="url"
@@ -68,7 +68,7 @@ export function NoodleImageComposer({
               onUseImageUrl();
             }
           }}
-          placeholder="https://example.com/image.png"
+          placeholder={localizeUi("ui.noodle.noodleimagecomposer.httpsExampleComImagePng")}
           className="mari-chrome-field h-10 w-full px-3 text-sm"
         />
       </label>

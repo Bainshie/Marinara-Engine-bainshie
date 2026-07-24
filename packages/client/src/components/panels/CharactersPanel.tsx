@@ -2,7 +2,7 @@
 // Panel: Characters (overhauled — search, folders, avatars)
 // ──────────────────────────────────────────────
 import { useState, useMemo, useCallback, useEffect, useLayoutEffect, useRef, type UIEvent } from "react";
-import { useTranslation } from "react-i18next";
+import { useTranslation, useTranslation as useUiTranslation } from "react-i18next";
 import { toast } from "sonner";
 import {
   fetchAllCharacterPages,
@@ -149,6 +149,7 @@ function usePanelMobileOverlay() {
 }
 
 export function CharactersPanel() {
+  const { t: localizeUi } = useUiTranslation();
   const { t } = useTranslation();
   const { data: groups } = useCharacterGroups();
   const deleteCharacter = useDeleteCharacter();
@@ -280,9 +281,9 @@ export function CharactersPanel() {
     async (tag: string) => {
       if (
         !(await showConfirmDialog({
-          title: "Remove Tag",
-          message: `Remove tag "${tag}" from all characters?`,
-          confirmLabel: "Remove",
+          title:localizeUi("ui.panels.characterspanel.removeTag"),
+          message:localizeUi("ui.panels.characterspanel.removeTagValue1FromAllCharacters", { value1: tag }),
+          confirmLabel:localizeUi("settings.notifications.customSound.actions.remove"),
           tone: "destructive",
         }))
       ) {
@@ -308,10 +309,10 @@ export function CharactersPanel() {
           setCharacterPanelExcludedTags([...next]);
         }
       } catch {
-        toast.error("Failed to remove tag from some characters");
+        toast.error(localizeUi("ui.panels.characterspanel.failedToRemoveTagFromSomeCharacters"));
       }
     },
-    [sort, updateCharacter, includedTags, excludedTags, setCharacterPanelIncludedTags, setCharacterPanelExcludedTags],
+    [sort, updateCharacter, includedTags, excludedTags, setCharacterPanelIncludedTags, setCharacterPanelExcludedTags, localizeUi],
   );
 
   const toggleIncludedTag = useCallback(
@@ -631,13 +632,13 @@ export function CharactersPanel() {
         { ids: [...selectedCharacterIds], format: "native" },
         "marinara-characters.zip",
       );
-      toast.success(`Exported ${selectedCharacterIds.size} character${selectedCharacterIds.size === 1 ? "" : "s"}`);
+      toast.success(localizeUi("ui.panels.characterspanel.exportedValue1CharacterValue2", { value1: selectedCharacterIds.size, value2: selectedCharacterIds.size === 1 ? "" :localizeUi("ui.noodle.stageprofileview.s") }));
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Failed to export characters");
+      toast.error(error instanceof Error ? error.message :localizeUi("ui.panels.characterspanel.failedToExportCharacters"));
     } finally {
       setExportingSelected(false);
     }
-  }, [selectedCharacterIds]);
+  }, [selectedCharacterIds, localizeUi]);
 
   const handleDeleteSelected = useCallback(async () => {
     const ids = [...selectedCharacterIds];
@@ -645,9 +646,9 @@ export function CharactersPanel() {
 
     if (
       !(await showConfirmDialog({
-        title: "Delete Characters",
-        message: `Delete ${ids.length} character${ids.length === 1 ? "" : "s"}?`,
-        confirmLabel: "Delete",
+        title:localizeUi("ui.panels.characterspanel.deleteCharacters"),
+        message:localizeUi("ui.panels.characterspanel.deleteValue1CharacterValue2", { value1: ids.length, value2: ids.length === 1 ? "" :localizeUi("ui.noodle.stageprofileview.s") }),
+        confirmLabel:localizeUi("lorebook.editor.batch.delete"),
         tone: "destructive",
       }))
     ) {
@@ -659,17 +660,17 @@ export function CharactersPanel() {
     const deletedCount = ids.length - failedIds.length;
 
     if (deletedCount > 0) {
-      toast.success(`Deleted ${deletedCount} character${deletedCount === 1 ? "" : "s"}`);
+      toast.success(localizeUi("ui.panels.characterspanel.deletedValue1CharacterValue2", { value1: deletedCount, value2: deletedCount === 1 ? "" :localizeUi("ui.noodle.stageprofileview.s") }));
     }
 
     if (failedIds.length > 0) {
       setSelectedCharacterIds(new Set(failedIds));
-      toast.error(`Failed to delete ${failedIds.length} character${failedIds.length === 1 ? "" : "s"}`);
+      toast.error(localizeUi("ui.panels.characterspanel.failedToDeleteValue1CharacterValue2", { value1: failedIds.length, value2: failedIds.length === 1 ? "" :localizeUi("ui.noodle.stageprofileview.s") }));
       return;
     }
 
     exitSelectionMode();
-  }, [selectedCharacterIds, deleteCharacter, exitSelectionMode]);
+  }, [selectedCharacterIds, deleteCharacter, exitSelectionMode, localizeUi]);
 
   return (
     <div
@@ -680,25 +681,23 @@ export function CharactersPanel() {
       <button
         onClick={openCharacterLibrary}
         className="mari-chrome-control mari-chrome-control--primary w-full text-xs"
-        title="Open full library"
+        title={localizeUi("ui.panels.characterspanel.openFullLibrary")}
       >
-        <Users size="0.875rem" />
-        Open Full Library
-      </button>
+        <Users size="0.875rem" />{localizeUi("ui.panels.characterspanel.openFullLibrary_336ca82")}</button>
 
       {/* Actions */}
       <div className="flex gap-2">
         <button
           onClick={() => openModal("create-character")}
           className="mari-panel-gradient-button mari-panel-gradient--characters flex-1 text-xs"
-          title="New"
+          title={localizeUi("ui.lorebooks.lorebookassignmentsection.new")}
         >
           <Plus size="0.8125rem" />
         </button>
         <button
           onClick={() => openModal("import-character")}
           className="mari-chrome-control mari-chrome-control--primary flex-1 text-xs"
-          title="Import"
+          title={localizeUi("ui.chat.chatbranchselector.import")}
         >
           <Download size="0.8125rem" />
         </button>
@@ -714,7 +713,7 @@ export function CharactersPanel() {
             "mari-chrome-control mari-chrome-control--primary flex-1 text-xs",
             selectionMode && "mari-chrome-control--selected",
           )}
-          title="Select"
+          title={localizeUi("settings.common.select")}
         >
           <Check size="0.8125rem" />
         </button>
@@ -736,13 +735,13 @@ export function CharactersPanel() {
             value={sort}
             onChange={(e) => setCharacterLibrarySort(e.target.value as CharacterLibrarySort)}
             className="mari-chrome-field mari-chrome-sort-field mari-accent-animated h-10 appearance-none py-0 pl-2.5 pr-7 text-[0.6875rem] md:h-9"
-            title="Sort order"
+            title={localizeUi("ui.panels.agentspanel.sortOrder")}
           >
-            <option value="name-asc">A-Z</option>
-            <option value="name-desc">Z-A</option>
-            <option value="newest">Newest</option>
-            <option value="oldest">Oldest</option>
-            <option value="favorites">Favorites</option>
+            <option value="name-asc">{localizeUi("ui.panels.backgroundpicker.aZ")}</option>
+            <option value="name-desc">{localizeUi("ui.panels.backgroundpicker.zA")}</option>
+            <option value="newest">{localizeUi("ui.panels.backgroundpicker.newest")}</option>
+            <option value="oldest">{localizeUi("ui.panels.backgroundpicker.oldest")}</option>
+            <option value="favorites">{localizeUi("ui.panels.characterspanel.favorites")}</option>
           </select>
           <ArrowUpDown
             size="0.625rem"
@@ -757,14 +756,10 @@ export function CharactersPanel() {
             onClick={handleCreateFolder}
             className="mari-chrome-control mari-chrome-control--small flex-1 justify-start text-[0.6875rem]"
           >
-            <FolderPlus size="0.75rem" />
-            New Folder
-          </button>
+            <FolderPlus size="0.75rem" />{localizeUi("ui.panels.backgroundpicker.newFolder")}</button>
         </div>
         {parsedGroups.length > 0 && (
-          <p className="mari-folder-helper">
-            Drag and drop characters to folders, double-click or double-tap to rename
-          </p>
+          <p className="mari-folder-helper">{localizeUi("ui.panels.characterspanel.dragAndDropCharactersToFoldersDoubleClickOr")}</p>
         )}
       </div>
 
@@ -779,7 +774,7 @@ export function CharactersPanel() {
               favFilter === opt && "mari-chrome-control--selected",
             )}
           >
-            {opt === "all" ? "All" : opt === "favorites" ? "Favs" : "Non-favs"}
+            {opt === "all" ?localizeUi("ui.noodle.stageprofilesourcepicker.all") : opt === "favorites" ?localizeUi("ui.panels.characterspanel.favs") :localizeUi("ui.panels.characterspanel.nonFavs")}
           </button>
         ))}
         {allTags.length > 0 && (
@@ -790,8 +785,7 @@ export function CharactersPanel() {
               (includedTags.size > 0 || excludedTags.size > 0) && "mari-chrome-control--selected",
             )}
           >
-            <Tag size="0.625rem" />
-            Tags ({allTags.length})
+            <Tag size="0.625rem" />{localizeUi("ui.panels.backgroundpicker.tags")}{allTags.length})
             <ChevronDown size="0.625rem" className={cn("transition-transform", tagsExpanded && "rotate-180")} />
           </button>
         )}
@@ -804,8 +798,7 @@ export function CharactersPanel() {
               onClick={clearTagFilters}
               className="mari-chrome-control mari-chrome-control--compact mari-chrome-control--danger"
             >
-              <X size="0.5rem" /> Clear
-            </button>
+              <X size="0.5rem" /> {localizeUi("lorebook.editor.batch.clear")}</button>
           )}
           {allTags.map((tag) => {
             const included = includedTags.has(tag);
@@ -835,7 +828,7 @@ export function CharactersPanel() {
                     handleDeleteTag(tag);
                   }}
                   className="rounded-full p-0.5 transition-colors hover:bg-[var(--destructive)]/20 hover:text-[var(--destructive)]"
-                  title={`Delete tag "${tag}"`}
+                  title={localizeUi("ui.panels.characterspanel.deleteTagValue1", { value1: tag })}
                 >
                   <X size="0.5rem" />
                 </button>
@@ -877,8 +870,8 @@ export function CharactersPanel() {
                 role="button"
                 tabIndex={0}
                 aria-expanded={isExpanded}
-                aria-label={`${isExpanded ? "Collapse" : "Expand"} folder ${group.name}. Double-tap or press F2 to rename.`}
-                title="Double-click, double-tap, or press F2 to rename."
+                aria-label={localizeUi("ui.panels.agentspanel.value1FolderValue2DoubleTapOrPressF2To", { value1: isExpanded ?localizeUi("ui.panels.ttsconfigcard.collapse") :localizeUi("ui.panels.ttsconfigcard.expand"), value2: group.name })}
+                title={localizeUi("ui.panels.backgroundpicker.doubleClickDoubleTapOrPressF2ToRename")}
                 className="group relative flex cursor-pointer items-center gap-1.5 rounded-lg px-2 py-1.5 transition-all hover:bg-[var(--sidebar-accent)]/40"
                 onClick={(event) =>
                   handleFolderRenameGesture(group.id, event, {
@@ -942,7 +935,7 @@ export function CharactersPanel() {
                       void handleDeleteGroup(group);
                     }}
                     className="mari-chrome-control mari-chrome-control--small p-1"
-                    title="Delete folder"
+                    title={localizeUi("ui.panels.backgroundpicker.deleteFolder")}
                   >
                     <Trash2 size="0.6875rem" />
                   </button>
@@ -956,9 +949,7 @@ export function CharactersPanel() {
                 innerClassName="flex flex-col gap-0.5"
               >
                 {folderMemberIds.length === 0 && (
-                  <div className="py-2 text-[0.625rem] italic text-[var(--muted-foreground)]">
-                    Drop characters here.
-                  </div>
+                  <div className="py-2 text-[0.625rem] italic text-[var(--muted-foreground)]">{localizeUi("ui.panels.characterspanel.dropCharactersHere")}</div>
                 )}
                 {folderMemberIds.map((memberId) => {
                   const member = charMap.get(memberId);
@@ -1017,7 +1008,7 @@ export function CharactersPanel() {
                       {selectionMode && (
                         <button
                           type="button"
-                          aria-label={isBulkSelected ? "Deselect character" : "Select character"}
+                          aria-label={isBulkSelected ?localizeUi("ui.panels.characterspanel.deselectCharacter") :localizeUi("ui.panels.ttsconfigcard.selectCharacter")}
                           className={cn(
                             "flex h-5 w-5 shrink-0 items-center justify-center rounded border-2 transition-colors",
                             isBulkSelected
@@ -1033,7 +1024,7 @@ export function CharactersPanel() {
                         </button>
                       )}
                       <TouchDragHandle
-                        label="Drag character"
+                        label={localizeUi("ui.panels.characterspanel.dragCharacter")}
                         size="0.75rem"
                         onTouchStart={(event) => {
                           startCharacterTouchDrag(event, memberId, {
@@ -1104,7 +1095,7 @@ export function CharactersPanel() {
                         {memberTokenEstimate !== null && (
                           <span
                             className="mari-chrome-text-muted flex items-center gap-1 text-[0.5625rem]"
-                            title="Estimated from character card text fields; actual tokenizer counts vary by model."
+                            title={localizeUi("ui.panels.characterspanel.estimatedFromCharacterCardTextFieldsActualTokenizerCounts")}
                           >
                             <Hash size="0.5rem" />
                             {formatEstimatedTokens(memberTokenEstimate)}
@@ -1139,7 +1130,7 @@ export function CharactersPanel() {
                             void moveCharactersToFolder([memberId], null);
                           }}
                           className="rounded p-0.5 opacity-0 transition-all hover:bg-[var(--destructive)]/15 group-hover/member:opacity-100"
-                          title="Remove from folder"
+                          title={localizeUi("ui.panels.characterspanel.removeFromFolder")}
                         >
                           <UserMinus size="0.6875rem" className="text-[var(--destructive)]" />
                         </button>
@@ -1155,10 +1146,9 @@ export function CharactersPanel() {
 
       {/* Characters Section Header */}
       <div className="flex items-center gap-1.5 px-1 pt-1 text-[0.6875rem] font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
-        <User size="0.6875rem" />
-        Characters ({filteredCharacters.length})
+        <User size="0.6875rem" />{localizeUi("ui.panels.characterspanel.characters")}{filteredCharacters.length})
         {selectionMode && (
-          <span className="text-[0.625rem] font-normal normal-case">· {selectedCharacterIds.size} selected</span>
+          <span className="text-[0.625rem] font-normal normal-case">· {selectedCharacterIds.size} {localizeUi("ui.panels.npcdefaultvoicepool.selected")}</span>
         )}
       </div>
 
@@ -1176,7 +1166,7 @@ export function CharactersPanel() {
           <div className="mari-chrome-accent-soft-tile mari-accent-animated animate-float flex h-12 w-12 items-center justify-center rounded-2xl">
             <User size="1.25rem" />
           </div>
-          <p className="mari-chrome-text-muted text-xs">{search ? "No matches found" : "No characters yet"}</p>
+          <p className="mari-chrome-text-muted text-xs">{search ?localizeUi("ui.panels.characterspanel.noMatchesFound") :localizeUi("ui.panels.characterspanel.noCharactersYet")}</p>
         </div>
       )}
 
@@ -1193,9 +1183,7 @@ export function CharactersPanel() {
             handleCharacterDrop(null, parseDroppedCharacterIds(payload));
           }}
           className="rounded-xl border border-dashed border-[var(--marinara-chat-chrome-button-border-active)] bg-[var(--marinara-chat-chrome-highlight-bg)] px-3 py-2 text-[0.625rem] text-[var(--marinara-chat-chrome-button-text-active)]"
-        >
-          Drop here to move out of folder
-        </div>
+        >{localizeUi("ui.panels.agentspanel.dropHereToMoveOutOfFolder")}</div>
       )}
 
       <div className="stagger-children flex min-h-8 flex-col gap-1 rounded-xl transition-colors">
@@ -1242,7 +1230,7 @@ export function CharactersPanel() {
               {selectionMode && (
                 <button
                   type="button"
-                  aria-label={isBulkSelected ? "Deselect character" : "Select character"}
+                  aria-label={isBulkSelected ?localizeUi("ui.panels.characterspanel.deselectCharacter") :localizeUi("ui.panels.ttsconfigcard.selectCharacter")}
                   className={cn(
                     "flex h-5 w-5 shrink-0 items-center justify-center rounded border-2 transition-colors",
                     isBulkSelected
@@ -1258,7 +1246,7 @@ export function CharactersPanel() {
                 </button>
               )}
               <TouchDragHandle
-                label="Drag character"
+                label={localizeUi("ui.panels.characterspanel.dragCharacter")}
                 onTouchStart={(event) => {
                   startCharacterTouchDrag(event, char.id, {
                     allowInteractiveTarget: true,
@@ -1321,7 +1309,7 @@ export function CharactersPanel() {
                 )}
                 <div
                   className="mari-chrome-text-muted flex items-center gap-1 text-[0.625rem]"
-                  title="Estimated from character card text fields; actual tokenizer counts vary by model."
+                  title={localizeUi("ui.panels.characterspanel.estimatedFromCharacterCardTextFieldsActualTokenizerCounts")}
                 >
                   <Hash size="0.5625rem" />
                   {formatEstimatedTokens(tokenEstimate)}
@@ -1357,12 +1345,12 @@ export function CharactersPanel() {
                       e.stopPropagation();
                       duplicateCharacter.mutate(char.id, {
                         onSuccess: () => {
-                          toast.success(`Duplicated "${char.parsed?.name ?? "character"}"`);
+                          toast.success(localizeUi("ui.panels.characterspanel.duplicatedValue1", { value1: char.parsed?.name ??localizeUi("ui.noodle.noodlehome.character") }));
                         },
                       });
                     }}
                     className="mari-chrome-control mari-chrome-control--small p-1.5"
-                    title="Duplicate"
+                    title={localizeUi("ui.presets.sectionstab.duplicate")}
                   >
                     <Copy size="0.75rem" />
                   </button>
@@ -1371,9 +1359,9 @@ export function CharactersPanel() {
                       e.stopPropagation();
                       if (
                         !(await showConfirmDialog({
-                          title: "Delete Character",
-                          message: `Delete "${char.parsed?.name ?? "this character"}"? This cannot be undone.`,
-                          confirmLabel: "Delete",
+                          title:localizeUi("ui.panels.characterspanel.deleteCharacter"),
+                          message:localizeUi("ui.panels.characterspanel.deleteValue1ThisCannotBeUndone", { value1: char.parsed?.name ??localizeUi("ui.panels.characterspanel.thisCharacter") }),
+                          confirmLabel:localizeUi("lorebook.editor.batch.delete"),
                           tone: "destructive",
                         }))
                       ) {
@@ -1382,7 +1370,7 @@ export function CharactersPanel() {
                       deleteCharacter.mutate(char.id);
                     }}
                     className="mari-chrome-control mari-chrome-control--small p-1.5"
-                    title="Delete"
+                    title={localizeUi("lorebook.editor.batch.delete")}
                   >
                     <Trash2 size="0.75rem" />
                   </button>
@@ -1401,7 +1389,7 @@ export function CharactersPanel() {
             disabled={characterPages.isFetchingNextPage}
             className="mari-chrome-control mari-chrome-control--primary w-full justify-center text-xs"
           >
-            {characterPages.isFetchingNextPage ? "Loading..." : `Load more (${parsedCharacters.length} loaded)`}
+            {characterPages.isFetchingNextPage ?localizeUi("ui.characters.characterlibraryview.loading") :localizeUi("ui.panels.characterspanel.loadMoreValue1Loaded", { value1: parsedCharacters.length })}
           </button>
         </div>
       )}

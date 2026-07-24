@@ -9,6 +9,7 @@ import { createContext, type CSSProperties, type ReactNode, type RefObject, useC
 import type { NoodleAccount } from "@marinara-engine/shared";
 import { cn, getAvatarCropStyle, type AvatarCropValue } from "../../lib/utils";
 import { useDialogFocusScope } from "../../hooks/use-dialog-focus-scope";
+import { useTranslation as useUiTranslation } from "react-i18next";
 
 export const NOODLE_BLUE = "#7EA7FF";
 
@@ -58,6 +59,7 @@ function NoodleModeToggle({
   onOpenHome: () => void;
   onOpenNoodler: () => void;
 }) {
+  const { t: localizeUi } = useUiTranslation();
   const noodler = activeMode === "noodler";
   const segment = (active: boolean) =>
     cn(
@@ -70,14 +72,10 @@ function NoodleModeToggle({
     <div
       className="grid grid-cols-2 gap-1 rounded-full bg-[var(--accent)] p-1"
       role="tablist"
-      aria-label="Switch between Noodle and NoodleR"
+      aria-label={localizeUi("ui.noodle.noodlemodetoggle.switchBetweenNoodleAndNoodler")}
     >
-      <button type="button" role="tab" aria-selected={!noodler} onClick={onOpenHome} className={segment(!noodler)}>
-        Noodle
-      </button>
-      <button type="button" role="tab" aria-selected={noodler} onClick={onOpenNoodler} className={segment(noodler)}>
-        NoodleR
-      </button>
+      <button type="button" role="tab" aria-selected={!noodler} onClick={onOpenHome} className={segment(!noodler)}>{localizeUi("navigation.topbar.noodle")}</button>
+      <button type="button" role="tab" aria-selected={noodler} onClick={onOpenNoodler} className={segment(noodler)}>{localizeUi("ui.noodle.noodlemodetoggle.noodler")}</button>
     </div>
   );
 }
@@ -204,6 +202,7 @@ export function NoodleShell({
   accent = NOODLE_BLUE,
   children,
 }: NoodleShellProps) {
+  const { t: localizeUi } = useUiTranslation();
   const mobileDrawerRef = useRef<HTMLElement | null>(null);
   const mobileDrawerCloseRef = useRef<HTMLButtonElement | null>(null);
   const prefersReducedMotion = Boolean(useReducedMotion());
@@ -243,7 +242,7 @@ export function NoodleShell({
               ref={mobileDrawerRef}
               role="dialog"
               aria-modal="true"
-              aria-label="Noodle account menu"
+              aria-label={localizeUi("ui.noodle.noodleshell.noodleAccountMenu")}
               tabIndex={-1}
               className="mari-chrome-token-scope flex h-full w-full flex-col overflow-y-auto bg-[var(--background)] px-5 pb-[max(1rem,env(safe-area-inset-bottom))] pt-5 text-[var(--foreground)]"
             >
@@ -258,7 +257,7 @@ export function NoodleShell({
                   )}
                   <p className="mt-3 truncate text-lg font-bold">{personaAccount?.displayName ?? "Noodle Account"}</p>
                   <p className="truncate text-sm text-[var(--muted-foreground)]">
-                    {personaAccount ? `@${personaAccount.handle}` : "Pick a persona below"}
+                    {personaAccount ?localizeUi("ui.noodle.noodlehome.value1_0a5edda", { value1: personaAccount.handle }) :localizeUi("ui.noodle.noodleshell.pickAPersonaBelow")}
                   </p>
                 </div>
                 <button
@@ -266,8 +265,8 @@ export function NoodleShell({
                   type="button"
                   onClick={() => onMobileDrawerOpenChange(false)}
                   className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[var(--noodle-accent)] transition-colors hover:bg-[var(--noodle-accent)]/10"
-                  title="Close"
-                  aria-label="Close Noodle account menu"
+                  title={localizeUi("capabilities.actions.close")}
+                  aria-label={localizeUi("ui.noodle.noodleshell.closeNoodleAccountMenu")}
                 >
                   <X size={20} />
                 </button>
@@ -278,7 +277,7 @@ export function NoodleShell({
                   <NoodleModeToggle activeMode={resolvedAppMode} onOpenHome={onOpenHome} onOpenNoodler={onOpenNoodler} />
                 </div>
               )}
-              <nav className="mt-3 space-y-1" aria-label="Noodle account navigation">
+              <nav className="mt-3 space-y-1" aria-label={localizeUi("ui.noodle.noodleshell.noodleAccountNavigation")}>
                 <button
                   type="button"
                   onClick={onOpenHomeDestination}
@@ -297,32 +296,26 @@ export function NoodleShell({
                   disabled={!onOpenProfile}
                   className="flex min-h-12 w-full items-center gap-4 rounded-xl px-2 text-left text-base font-bold transition-colors hover:bg-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
                 >
-                  <User size={23} />
-                  Profile
-                </button>
+                  <User size={23} />{localizeUi("ui.noodle.noodlehome.profile")}</button>
                 <button
                   type="button"
                   onClick={onOpenSettings}
                   className="flex min-h-12 w-full items-center gap-4 rounded-xl px-2 text-left text-base font-bold transition-colors hover:bg-[var(--accent)]"
                 >
-                  <Settings2 size={23} />
-                  Settings
-                </button>
+                  <Settings2 size={23} />{localizeUi("navigation.topbar.settings")}</button>
                 <button
                   type="button"
                   onClick={(event) => onCompose?.(event.currentTarget)}
                   disabled={!onCompose}
                   className="flex min-h-12 w-full items-center gap-4 rounded-xl px-2 text-left text-base font-bold transition-colors hover:bg-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
                 >
-                  <Pencil size={23} />
-                  Post
-                </button>
+                  <Pencil size={23} />{localizeUi("ui.noodle.noodlehome.post")}</button>
               </nav>
 
               <div className="relative mt-auto border-t border-[var(--noodle-divider)] pt-3">
                 {mobileAccountSwitcherOpen && (
                   <div className="absolute bottom-[calc(100%+0.5rem)] left-0 right-0 max-h-64 overflow-y-auto rounded-2xl border border-[var(--noodle-divider)] bg-[var(--background)] p-2 shadow-2xl shadow-black/35">
-                    <p className={cn(labelClass, "px-2 pb-2")}>Switch account</p>
+                    <p className={cn(labelClass, "px-2 pb-2")}>{localizeUi("ui.noodle.noodleshell.switchAccount")}</p>
                     {sortedPersonaAccounts.length > 0 ? (
                       <div className="space-y-1">
                         {sortedPersonaAccounts.map((account) => {
@@ -345,9 +338,7 @@ export function NoodleShell({
                                   @{account.handle}
                                 </span>
                                 {linkedPublicAccountIds?.has(account.id) && (
-                                  <span className="mt-0.5 block text-[0.65rem] font-semibold text-[var(--noodle-accent)]" aria-label="NoodleR profile linked">
-                                    NoodleR linked
-                                  </span>
+                                  <span className="mt-0.5 block text-[0.65rem] font-semibold text-[var(--noodle-accent)]" aria-label={localizeUi("ui.noodle.noodleshell.noodlerProfileLinked")}>{localizeUi("ui.noodle.noodleshell.noodlerLinked")}</span>
                                 )}
                               </span>
                               {selected && <span className="h-2 w-2 rounded-full bg-[var(--noodle-accent)]" />}
@@ -356,7 +347,7 @@ export function NoodleShell({
                         })}
                       </div>
                     ) : (
-                      <p className="px-2 py-3 text-xs text-[var(--muted-foreground)]">No persona accounts yet.</p>
+                      <p className="px-2 py-3 text-xs text-[var(--muted-foreground)]">{localizeUi("ui.noodle.noodleshell.noPersonaAccountsYet")}</p>
                     )}
                   </div>
                 )}
@@ -375,9 +366,9 @@ export function NoodleShell({
                     </span>
                   )}
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm font-semibold">Switch account</span>
+                    <span className="block truncate text-sm font-semibold">{localizeUi("ui.noodle.noodleshell.switchAccount")}</span>
                     <span className="block truncate text-xs text-[var(--muted-foreground)]">
-                      {personaAccount ? `@${personaAccount.handle}` : "Choose a persona"}
+                      {personaAccount ?localizeUi("ui.noodle.noodlehome.value1_0a5edda", { value1: personaAccount.handle }) :localizeUi("ui.noodle.noodleshell.chooseAPersona")}
                     </span>
                   </span>
                   <MoreHorizontal size={19} />
@@ -434,9 +425,7 @@ export function NoodleShell({
                         {notificationBadgeLabel}
                       </span>
                     )}
-                  </span>
-                  Notifications
-                </button>
+                  </span>{localizeUi("settings.sections.notifications.title")}</button>
                 <button
                   type="button"
                   onClick={onOpenProfile}
@@ -446,9 +435,7 @@ export function NoodleShell({
                     activeView === "profile" && "bg-[var(--noodle-accent)]/10",
                   )}
                 >
-                  <User size={22} className="!text-[var(--noodle-accent)]" />
-                  Profile
-                </button>
+                  <User size={22} className="!text-[var(--noodle-accent)]" />{localizeUi("ui.noodle.noodlehome.profile")}</button>
                 <button
                   type="button"
                   onClick={onOpenSettings}
@@ -457,22 +444,18 @@ export function NoodleShell({
                     activeView === "settings" && "bg-[var(--noodle-accent)]/10",
                   )}
                 >
-                  <Settings2 size={22} className="!text-[var(--noodle-accent)]" />
-                  Settings
-                </button>
+                  <Settings2 size={22} className="!text-[var(--noodle-accent)]" />{localizeUi("navigation.topbar.settings")}</button>
               </nav>
               <button
                 type="button"
                 onClick={(event) => onCompose?.(event.currentTarget)}
                 disabled={!onCompose}
                 className="mt-5 h-12 rounded-full bg-[var(--noodle-accent)] px-6 text-sm font-bold text-zinc-950 transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                Post
-              </button>
+              >{localizeUi("ui.noodle.noodlehome.post")}</button>
               <div ref={accountSwitcherRef} className="relative mt-auto">
                 {accountSwitcherOpen && (
                   <div className="absolute bottom-[calc(100%+0.5rem)] left-0 right-0 z-30 overflow-hidden rounded-xl border border-[var(--noodle-divider)] bg-[var(--background)] p-2 shadow-2xl shadow-black/30">
-                    <p className={cn(labelClass, "px-2 pb-2")}>Switch account</p>
+                    <p className={cn(labelClass, "px-2 pb-2")}>{localizeUi("ui.noodle.noodleshell.switchAccount")}</p>
                     {sortedPersonaAccounts.length > 0 ? (
                       <div className="max-h-72 space-y-1 overflow-y-auto">
                         {visiblePersonaAccounts.map((account) => {
@@ -495,9 +478,7 @@ export function NoodleShell({
                                   @{account.handle}
                                 </span>
                                 {linkedPublicAccountIds?.has(account.id) && (
-                                  <span className="mt-0.5 block text-[0.62rem] font-semibold text-[var(--noodle-accent)]" aria-label="NoodleR profile linked">
-                                    NoodleR linked
-                                  </span>
+                                  <span className="mt-0.5 block text-[0.62rem] font-semibold text-[var(--noodle-accent)]" aria-label={localizeUi("ui.noodle.noodleshell.noodlerProfileLinked")}>{localizeUi("ui.noodle.noodleshell.noodlerLinked")}</span>
                                 )}
                               </span>
                               {selected && <span className="h-2 w-2 rounded-full bg-[var(--noodle-accent)]" />}
@@ -509,13 +490,12 @@ export function NoodleShell({
                             type="button"
                             onClick={onLoadMorePersonaAccounts}
                             className="mt-1 h-9 w-full rounded-lg text-xs font-semibold text-[var(--noodle-accent)] transition-colors hover:bg-[var(--noodle-accent)]/10"
-                          >
-                            Load more ({visiblePersonaAccounts.length} of {sortedPersonaAccounts.length})
+                          >{localizeUi("ui.noodle.noodlehome.loadMore")}{visiblePersonaAccounts.length} {localizeUi("ui.noodle.noodlehome.of")} {sortedPersonaAccounts.length})
                           </button>
                         )}
                       </div>
                     ) : (
-                      <p className="px-2 py-3 text-xs text-[var(--muted-foreground)]">No persona accounts yet.</p>
+                      <p className="px-2 py-3 text-xs text-[var(--muted-foreground)]">{localizeUi("ui.noodle.noodleshell.noPersonaAccountsYet")}</p>
                     )}
                   </div>
                 )}
@@ -524,7 +504,7 @@ export function NoodleShell({
                   type="button"
                   onClick={() => onAccountSwitcherOpenChange(!accountSwitcherOpen)}
                   className="flex min-h-16 w-full items-center gap-3 rounded-full px-3 text-left transition-colors hover:bg-[var(--accent)]"
-                  title="Switch account"
+                  title={localizeUi("ui.noodle.noodleshell.switchAccount")}
                 >
                   {personaAccount ? (
                     <Avatar account={personaAccount} />
@@ -534,7 +514,7 @@ export function NoodleShell({
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-semibold">{personaAccount?.displayName ?? "Noodle Account"}</p>
                     <p className="truncate text-xs text-[var(--muted-foreground)]">
-                      {personaAccount ? `@${personaAccount.handle}` : "Pick a persona"}
+                      {personaAccount ?localizeUi("ui.noodle.noodlehome.value1_0a5edda", { value1: personaAccount.handle }) :localizeUi("ui.noodle.noodleshell.pickAPersona")}
                     </p>
                   </div>
                   <MoreHorizontal size={18} className="!text-[var(--noodle-accent)] opacity-70" />
@@ -552,14 +532,14 @@ export function NoodleShell({
 
       <nav
         className="absolute inset-x-0 bottom-0 z-50 border-t border-[var(--noodle-divider)] bg-[var(--background)]/95 pb-[env(safe-area-inset-bottom)] backdrop-blur lg:hidden"
-        aria-label="Noodle mobile navigation"
+        aria-label={localizeUi("ui.noodle.noodleshell.noodleMobileNavigation")}
         data-component="NoodleView.MobileBottomNav"
       >
         <div className="grid h-[52px] grid-cols-4">
           <button
             type="button"
             onClick={() => onMobileDrawerOpenChange(true)}
-            aria-label="Open Noodle account menu"
+            aria-label={localizeUi("ui.noodle.noodlehome.openNoodleAccountMenu")}
             className="flex items-center justify-center transition-colors hover:bg-[var(--accent)]"
           >
             {personaAccount ? (
@@ -573,7 +553,7 @@ export function NoodleShell({
           <button
             type="button"
             onClick={onOpenMobileHomeDestination}
-            aria-label={`Noodle ${homeLabel.toLowerCase()}`}
+            aria-label={localizeUi("ui.noodle.noodleshell.noodleValue1", { value1: homeLabel.toLowerCase() })}
             aria-current={homeActive ? "page" : undefined}
             className="relative flex items-center justify-center transition-colors hover:bg-[var(--accent)]"
           >
@@ -584,7 +564,7 @@ export function NoodleShell({
             type="button"
             onClick={onOpenSearch}
             disabled={!onOpenSearch}
-            aria-label="Search Noodle"
+            aria-label={localizeUi("ui.noodle.noodlehome.searchNoodle")}
             aria-current={activeView === "search" ? "page" : undefined}
             className="relative flex items-center justify-center transition-colors hover:bg-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
           >
@@ -595,7 +575,7 @@ export function NoodleShell({
             type="button"
             onClick={onOpenNotifications}
             disabled={!onOpenNotifications}
-            aria-label="Noodle notifications"
+            aria-label={localizeUi("ui.noodle.noodleshell.noodleNotifications")}
             aria-current={activeView === "notifications" ? "page" : undefined}
             className="relative flex items-center justify-center transition-colors hover:bg-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
           >

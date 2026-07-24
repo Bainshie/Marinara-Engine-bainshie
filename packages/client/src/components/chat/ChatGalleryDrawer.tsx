@@ -23,6 +23,7 @@ import {
   isChatToolbarPanelTrigger,
   type ChatToolbarFloatingPanelAnchor,
 } from "./ChatToolbarControls";
+import { useTranslation as useUiTranslation } from "react-i18next";
 
 interface ChatGalleryDrawerProps {
   chat: Chat;
@@ -65,6 +66,7 @@ export function ChatGalleryDrawer({
   onGenerateVideo,
   onAnimateImage,
 }: ChatGalleryDrawerProps) {
+  const { t: localizeUi } = useUiTranslation();
   const panelRef = useRef<HTMLDivElement | null>(null);
   const chatMetadata = useMemo(
     () => parseChatMetadata(chat.metadata) as GalleryChatMetadata,
@@ -134,10 +136,8 @@ export function ChatGalleryDrawer({
         {/* Header */}
         <div className={cn(ROLEPLAY_POPOVER_HEADER, "flex items-center justify-between")}>
           <h3 className={ROLEPLAY_POPOVER_TITLE}>
-            <Image size="0.8125rem" className="shrink-0 text-[var(--muted-foreground)]" />
-            Gallery
-          </h3>
-          <button type="button" onClick={onClose} aria-label="Close gallery" className={ROLEPLAY_POPOVER_CLOSE_BUTTON}>
+            <Image size="0.8125rem" className="shrink-0 text-[var(--muted-foreground)]" />{localizeUi("chat.toolbar.gallery")}</h3>
+          <button type="button" onClick={onClose} aria-label={localizeUi("ui.chat.chatgallerydrawer.closeGallery")} className={ROLEPLAY_POPOVER_CLOSE_BUTTON}>
             <X size={ROLEPLAY_POPOVER_CLOSE_ICON_SIZE} />
           </button>
         </div>

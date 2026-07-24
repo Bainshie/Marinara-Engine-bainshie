@@ -20,8 +20,10 @@ import {
   formatTimestamp,
   type MessageRenderContext,
 } from "./ConversationMessageShared";
+import { useTranslation as useUiTranslation } from "react-i18next";
 
 export function ConversationMessageLine({ ctx }: { ctx: MessageRenderContext }) {
+  const { t: localizeUi } = useUiTranslation();
   const {
     message,
     extra,
@@ -78,7 +80,7 @@ export function ConversationMessageLine({ ctx }: { ctx: MessageRenderContext }) 
             type="button"
             role="checkbox"
             aria-checked={isSelected}
-            aria-label={isSelected ? "Deselect message" : "Select message"}
+            aria-label={isSelected ?localizeUi("ui.chat.chatmessage.deselectMessage") :localizeUi("ui.chat.chatmessage.selectMessage")}
             onClick={(e) => { e.stopPropagation(); onToggleSelect?.(); }}
             className={cn(
               MESSAGE_SELECTION_CHECKBOX_CLASS,
@@ -104,8 +106,8 @@ export function ConversationMessageLine({ ctx }: { ctx: MessageRenderContext }) 
               <button
                 type="button"
                 onClick={(e) => ctx.onOpenAboutMe?.(e.currentTarget.getBoundingClientRect())}
-                aria-label={`View ${displayName}'s about me`}
-                title={`View ${displayName}'s about me`}
+                aria-label={localizeUi("ui.chat.conversationmessagebubble.viewValue1SAboutMe", { value1: displayName })}
+                title={localizeUi("ui.chat.conversationmessagebubble.viewValue1SAboutMe", { value1: displayName })}
                 className="relative block h-10 w-10 overflow-hidden rounded-full bg-[var(--accent)] cursor-pointer transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)]/50"
               >
                 {avatarUrl ? (

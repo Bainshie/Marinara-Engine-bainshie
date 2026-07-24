@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react"
 import { Crop, Move, RotateCcw } from "lucide-react";
 import type { NoodlePostImageCrop } from "@marinara-engine/shared";
 import { cn } from "../../lib/utils";
+import { useTranslation as useUiTranslation } from "react-i18next";
 
 type CropAspect = "original" | "square" | "portrait" | "landscape";
 
@@ -37,6 +38,7 @@ export function PostImageCropEditor({
   onCancel: () => void;
   onApply: (crop: NoodlePostImageCrop) => Promise<void>;
 }) {
+  const { t: localizeUi } = useUiTranslation();
   const imageRef = useRef<HTMLImageElement>(null);
   const dragRef = useRef<{
     pointerId: number;
@@ -156,10 +158,8 @@ export function PostImageCropEditor({
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <h3 className="flex items-center gap-2 text-sm font-bold">
-            <Crop size={15} className="text-[var(--noodle-accent)]" />
-            Frame image
-          </h3>
-          <p className="mt-0.5 text-xs text-[var(--muted-foreground)]">Drag the frame to position the image.</p>
+            <Crop size={15} className="text-[var(--noodle-accent)]" />{localizeUi("ui.noodle.postimagecropeditor.frameImage")}</h3>
+          <p className="mt-0.5 text-xs text-[var(--muted-foreground)]">{localizeUi("ui.noodle.postimagecropeditor.dragTheFrameToPositionTheImage")}</p>
         </div>
         <button
           type="button"
@@ -167,9 +167,7 @@ export function PostImageCropEditor({
           disabled={busy}
           className="inline-flex min-h-9 items-center gap-1.5 rounded-full px-3 text-xs font-bold text-[var(--muted-foreground)] hover:bg-[var(--accent)] hover:text-[var(--foreground)] disabled:opacity-50"
         >
-          <RotateCcw size={13} />
-          Reset
-        </button>
+          <RotateCcw size={13} />{localizeUi("ui.characters.charactercliptrimmodal.reset")}</button>
       </div>
 
       <div className="overflow-hidden rounded-lg bg-black/55 p-2">
@@ -177,7 +175,7 @@ export function PostImageCropEditor({
           <img
             ref={imageRef}
             src={sourceUrl}
-            alt="Crop preview"
+            alt={localizeUi("ui.noodle.postimagecropeditor.cropPreview")}
             draggable={false}
             onLoad={(event) => {
               const image = event.currentTarget;
@@ -191,7 +189,7 @@ export function PostImageCropEditor({
           {crop && displaySize && (
             <div
               role="application"
-              aria-label="Image crop frame. Drag to reposition."
+              aria-label={localizeUi("ui.noodle.postimagecropeditor.imageCropFrameDragToReposition")}
               className="absolute touch-none cursor-move overflow-hidden rounded-xl outline outline-2 outline-white"
               style={{
                 left: crop.x * displaySize.width,
@@ -261,9 +259,7 @@ export function PostImageCropEditor({
             </button>
           ))}
         </div>
-        <label className="flex items-center gap-3 text-xs font-bold text-[var(--muted-foreground)]">
-          Zoom
-          <input
+        <label className="flex items-center gap-3 text-xs font-bold text-[var(--muted-foreground)]">{localizeUi("ui.noodle.postimagecropeditor.zoom")}<input
             type="range"
             min="1"
             max="3"
@@ -288,16 +284,14 @@ export function PostImageCropEditor({
           onClick={onCancel}
           disabled={busy}
           className="min-h-10 rounded-full border border-[var(--noodle-divider)] px-4 text-xs font-bold disabled:opacity-50"
-        >
-          Cancel
-        </button>
+        >{localizeUi("chat.delete.dialog.cancel")}</button>
         <button
           type="button"
           onClick={apply}
           disabled={!crop || busy}
           className="min-h-10 rounded-full bg-[var(--noodle-accent)] px-5 text-xs font-bold text-zinc-950 disabled:opacity-50"
         >
-          {applying ? "Applying…" : "Apply crop"}
+          {applying ?localizeUi("ui.noodle.postimagecropeditor.applying") :localizeUi("ui.noodle.postimagecropeditor.applyCrop")}
         </button>
       </div>
     </section>

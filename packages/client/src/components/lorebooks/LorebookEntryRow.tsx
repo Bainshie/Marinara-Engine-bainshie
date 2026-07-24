@@ -56,6 +56,7 @@ import {
   ToggleButton,
   estimateTokens,
 } from "./LorebookFormFields";
+import { useTranslation as useUiTranslation } from "react-i18next";
 
 interface Props {
   entry: LorebookEntry;
@@ -225,6 +226,7 @@ export function LorebookEntryRow({
   mapBacklinks = [],
   onUpdateEntry,
 }: Props) {
+  const { t: localizeUi } = useUiTranslation();
   const updateEntry = useUpdateLorebookEntry();
   const deleteEntry = useDeleteLorebookEntry();
   const duplicateEntry = useDuplicateLorebookEntry();
@@ -419,9 +421,9 @@ export function LorebookEntryRow({
       e.stopPropagation();
       if (
         !(await showConfirmDialog({
-          title: "Delete Entry",
-          message: "Delete this lorebook entry?",
-          confirmLabel: "Delete",
+          title:localizeUi("ui.lorebooks.lorebookentryrow.deleteEntry_46ca45b"),
+          message:localizeUi("ui.lorebooks.lorebookentryrow.deleteThisLorebookEntry"),
+          confirmLabel:localizeUi("lorebook.editor.batch.delete"),
           tone: "destructive",
         }))
       ) {
@@ -429,7 +431,7 @@ export function LorebookEntryRow({
       }
       deleteEntry.mutate({ lorebookId, entryId: entry.id });
     },
-    [lorebookId, entry.id, deleteEntry],
+    [lorebookId, entry.id, deleteEntry, localizeUi],
   );
 
   const duplicateDisabled = duplicateEntry.isPending || updateEntry.isPending;
@@ -528,7 +530,7 @@ export function LorebookEntryRow({
               ? "cursor-grab hover:bg-[var(--accent)] hover:text-[var(--foreground)] active:cursor-grabbing"
               : "cursor-not-allowed opacity-40",
           )}
-          title={draggable ? "Drag to reorder" : "Use Order sort and clear search to reorder"}
+          title={draggable ?localizeUi("ui.lorebooks.lorebookentryrow.dragToReorder") :localizeUi("ui.lorebooks.lorebookentryrow.useOrderSortAndClearSearchToReorder")}
           onClick={(e) => e.stopPropagation()}
           onMouseDown={(e) => {
             e.stopPropagation();
@@ -549,8 +551,8 @@ export function LorebookEntryRow({
         {selectionMode && (
           <button
             type="button"
-            aria-label={isSelected ? "Deselect entry" : "Select entry"}
-            title={isSelected ? "Deselect entry" : "Select entry"}
+            aria-label={isSelected ?localizeUi("ui.lorebooks.lorebookentryrow.deselectEntry") :localizeUi("ui.lorebooks.lorebookentryrow.selectEntry")}
+            title={isSelected ?localizeUi("ui.lorebooks.lorebookentryrow.deselectEntry") :localizeUi("ui.lorebooks.lorebookentryrow.selectEntry")}
             onClick={(e) => {
               e.stopPropagation();
               onToggleSelected?.();
@@ -569,7 +571,7 @@ export function LorebookEntryRow({
         {/* Expand chevron */}
         <button
           type="button"
-          aria-label={isExpanded ? "Collapse entry" : "Expand entry"}
+          aria-label={isExpanded ?localizeUi("ui.lorebooks.lorebookentryrow.collapseEntry") :localizeUi("ui.lorebooks.lorebookentryrow.expandEntry")}
           className="flex h-6 w-4 shrink-0 items-center justify-center rounded p-0 text-[var(--muted-foreground)] transition-transform hover:bg-[var(--accent)] hover:text-[var(--foreground)] sm:h-auto sm:w-auto sm:p-0.5"
           onClick={(e) => {
             e.stopPropagation();
@@ -586,7 +588,7 @@ export function LorebookEntryRow({
         >
           <SettingsSwitch
             ariaLabel={localEnabled ? "Disable entry" : "Enable entry"}
-            title={localEnabled ? "Entry enabled" : "Entry disabled"}
+            title={localEnabled ?localizeUi("ui.lorebooks.lorebookentryrow.entryEnabled") :localizeUi("ui.lorebooks.lorebookentryrow.entryDisabled")}
             checked={localEnabled}
             onChange={handleEnabledChange}
             className="p-0 hover:bg-transparent"
@@ -596,8 +598,8 @@ export function LorebookEntryRow({
         {/* Regex key matching toggle */}
         <button
           type="button"
-          aria-label={localUseRegex ? "Disable regex key matching" : "Enable regex key matching"}
-          title={localUseRegex ? "Regex key matching enabled" : "Plain-text key matching"}
+          aria-label={localUseRegex ?localizeUi("ui.lorebooks.lorebookentryrow.disableRegexKeyMatching") :localizeUi("ui.lorebooks.lorebookentryrow.enableRegexKeyMatching")}
+          title={localUseRegex ?localizeUi("ui.lorebooks.lorebookentryrow.regexKeyMatchingEnabled") :localizeUi("ui.lorebooks.lorebookentryrow.plainTextKeyMatching")}
           onClick={handleUseRegexToggle}
           className={cn(
             "ml-1 shrink-0 rounded p-0 transition-colors sm:ml-0 sm:p-0.5",
@@ -618,7 +620,7 @@ export function LorebookEntryRow({
             "flex h-6 w-6 shrink-0 items-center justify-center rounded-full transition-colors hover:bg-[var(--accent)] focus:outline-none focus:ring-2 focus:ring-[var(--ring)] sm:h-7 sm:w-7",
             showStatusMenu && "bg-[var(--accent)]",
           )}
-          aria-label={`Entry type: ${STATUS_LABEL[localStatus]}. Choose entry type.`}
+          aria-label={localizeUi("ui.lorebooks.lorebookentryrow.entryTypeValue1ChooseEntryType", { value1: STATUS_LABEL[localStatus] })}
           aria-haspopup="menu"
           aria-expanded={showStatusMenu}
         >
@@ -629,7 +631,7 @@ export function LorebookEntryRow({
             <div
               ref={statusMenuRef}
               role="menu"
-              aria-label="Choose entry type"
+              aria-label={localizeUi("ui.lorebooks.lorebookentryrow.chooseEntryType")}
               className="fixed z-[120] rounded-lg border border-[var(--border)] bg-[var(--popover)] p-1 text-[var(--popover-foreground)] shadow-xl ring-1 ring-[var(--border)]"
               style={{
                 left: statusMenuPosition.left,
@@ -681,12 +683,12 @@ export function LorebookEntryRow({
             )}
             title={
               previewMatch === "matched"
-                ? "This entry's keys match the keyword-test text."
-                : "This entry is constant and would activate regardless of text."
+                ?localizeUi("ui.lorebooks.lorebookentryrow.thisEntrySKeysMatchTheKeywordTestText")
+                :localizeUi("ui.lorebooks.lorebookentryrow.thisEntryIsConstantAndWouldActivateRegardlessOf")
             }
           >
             <Sparkles size="0.625rem" />
-            {previewMatch === "matched" ? "Would activate" : "Always active"}
+            {previewMatch === "matched" ?localizeUi("ui.lorebooks.lorebookentryrow.wouldActivate") :localizeUi("ui.lorebooks.lorebookentryrow.alwaysActive")}
           </span>
         )}
         <input
@@ -700,7 +702,7 @@ export function LorebookEntryRow({
             }
           }}
           onClick={(e) => e.stopPropagation()}
-          placeholder="Untitled entry"
+          placeholder={localizeUi("ui.lorebooks.lorebookentryrow.untitledEntry")}
           className="min-w-0 flex-1 truncate rounded bg-transparent px-1 text-sm font-medium outline-none transition-colors hover:bg-[var(--accent)]/40 focus:bg-[var(--accent)]/40 focus:ring-1 focus:ring-[var(--ring)] sm:min-w-[7rem]"
         />
 
@@ -708,14 +710,14 @@ export function LorebookEntryRow({
           <button
             type="button"
             className="inline-flex min-h-7 shrink-0 items-center gap-1 rounded-md bg-sky-400/10 px-1.5 text-[0.625rem] font-medium text-sky-300 ring-1 ring-sky-400/20 hover:bg-sky-400/15"
-            title={`Used by: ${mapBacklinks.map((backlink) => backlink.locationName).join(", ")}`}
-            aria-label={`Open hierarchical map. Used by ${mapBacklinks.map((backlink) => backlink.locationName).join(", ")}`}
+            title={localizeUi("ui.lorebooks.lorebookentryrow.usedByValue1", { value1: mapBacklinks.map((backlink) => backlink.locationName).join(", ") })}
+            aria-label={localizeUi("ui.lorebooks.lorebookentryrow.openHierarchicalMapUsedByValue1", { value1: mapBacklinks.map((backlink) => backlink.locationName).join(", ") })}
             onClick={(event) => {
               event.stopPropagation();
               useUIStore.getState().openSpatialMapDetail(mapBacklinks[0]!.chatId);
             }}
           >
-            <MapPin size="0.6875rem" /> Used by {mapBacklinks.length}
+            <MapPin size="0.6875rem" /> {localizeUi("ui.lorebooks.lorebookentryrow.usedBy")} {mapBacklinks.length}
           </button>
         )}
 
@@ -761,9 +763,9 @@ export function LorebookEntryRow({
         >
           <button
             type="button"
-            aria-label="Entry quick controls"
+            aria-label={localizeUi("ui.lorebooks.lorebookentryrow.entryQuickControls")}
             aria-expanded={showMobileControls}
-            title="Entry quick controls"
+            title={localizeUi("ui.lorebooks.lorebookentryrow.entryQuickControls")}
             onClick={() => setShowMobileControls((current) => !current)}
             className={cn(
               "flex h-6 w-6 items-center justify-center rounded-md text-[var(--muted-foreground)] ring-1 ring-[var(--border)] transition-colors hover:bg-[var(--accent)] hover:text-[var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[var(--ring)] sm:h-7 sm:w-7",
@@ -776,18 +778,16 @@ export function LorebookEntryRow({
           {showMobileControls && (
             <div className="absolute right-0 top-full z-30 mt-1 w-64 max-w-[calc(100vw-2rem)] space-y-2 rounded-xl border border-[var(--border)] bg-[var(--popover)] p-3 text-[var(--popover-foreground)] shadow-xl">
               <div className="flex items-center justify-between gap-2 border-b border-[var(--border)] pb-2">
-                <p className="text-[0.6875rem] font-semibold">Entry controls</p>
+                <p className="text-[0.6875rem] font-semibold">{localizeUi("ui.lorebooks.lorebookentryrow.entryControls")}</p>
                 <button
                   type="button"
                   onClick={() => setShowMobileControls(false)}
                   className="rounded px-1.5 py-0.5 text-[0.625rem] text-[var(--muted-foreground)] hover:bg-[var(--accent)] hover:text-[var(--foreground)]"
-                >
-                  Done
-                </button>
+                >{localizeUi("lorebook.editor.batch.done")}</button>
               </div>
 
               <MobileSelect
-                label="Position"
+                label={localizeUi("ui.lorebooks.lorebookentryrow.position")}
                 value={String(localPosition)}
                 onChange={(v) => {
                   const n = Number(v);
@@ -802,7 +802,7 @@ export function LorebookEntryRow({
               />
               {showDepthInput && (
                 <MobileNumber
-                  label="Depth"
+                  label={localizeUi("ui.lorebooks.lorebookentryrow.depth")}
                   value={localDepth}
                   onCommit={(n) => {
                     setLocalDepth(n);
@@ -813,7 +813,7 @@ export function LorebookEntryRow({
                 />
               )}
               <MobileNumber
-                label="Order"
+                label={localizeUi("ui.lorebooks.lorebookentryrow.order")}
                 value={localOrder}
                 onCommit={(n) => {
                   setLocalOrder(n);
@@ -821,7 +821,7 @@ export function LorebookEntryRow({
                 }}
               />
               <MobileNumber
-                label="Probability"
+                label={localizeUi("ui.lorebooks.lorebookentryrow.probability")}
                 value={localProbability}
                 onCommit={(n) => {
                   const clamped = Math.max(0, Math.min(100, n));
@@ -834,7 +834,7 @@ export function LorebookEntryRow({
               />
               {folders.length > 0 && (
                 <MobileSelect
-                  label="Folder"
+                  label={localizeUi("ui.lorebooks.lorebookentryrow.folder")}
                   value={entry.folderId ?? ""}
                   onChange={(v) => patch({ folderId: v === "" ? null : v })}
                   options={[{ value: "", label: "(none)" }, ...folders.map((f) => ({ value: f.id, label: f.name }))]}
@@ -848,8 +848,8 @@ export function LorebookEntryRow({
         {entry.locked && (
           <span
             className="mari-editor-chip mari-editor-chip--accent h-6 w-6 shrink-0 justify-center rounded-md p-0"
-            title="Locked entry"
-            aria-label="Locked entry"
+            title={localizeUi("ui.lorebooks.lorebookentryrow.lockedEntry")}
+            aria-label={localizeUi("ui.lorebooks.lorebookentryrow.lockedEntry")}
           >
             <Lock size="0.75rem" />
           </span>
@@ -869,7 +869,7 @@ export function LorebookEntryRow({
               setLocalPosition(n);
               patch({ position: n });
             }}
-            title="Position in the prompt: Before Chat, After Chat, or @ Depth (injected into chat history)."
+            title={localizeUi("ui.lorebooks.lorebookentryrow.positionInThePromptBeforeChatAfterChatOr")}
             options={[
               { value: "0", label: "↑Char" },
               { value: "1", label: "↓Char" },
@@ -884,7 +884,7 @@ export function LorebookEntryRow({
                 setLocalDepth(n);
                 patch({ depth: n });
               }}
-              title="Depth (messages back from the latest) where this entry is injected."
+              title={localizeUi("ui.lorebooks.lorebookentryrow.depthMessagesBackFromTheLatestWhereThisEntry")}
               ariaLabel="Depth"
               prefix="d"
               min={0}
@@ -897,7 +897,7 @@ export function LorebookEntryRow({
               setLocalOrder(n);
               patch({ order: n });
             }}
-            title="Insertion order when multiple entries activate (lower = earlier in prompt)."
+            title={localizeUi("ui.lorebooks.lorebookentryrow.insertionOrderWhenMultipleEntriesActivateLowerEarlierIn")}
             ariaLabel="Order"
             prefix="ord"
           />
@@ -910,7 +910,7 @@ export function LorebookEntryRow({
               // for parity with how new entries are created.
               patch({ probability: clamped === 100 ? null : clamped });
             }}
-            title="Trigger probability (0–100%). 100% always fires when keys match."
+            title={localizeUi("ui.lorebooks.lorebookentryrow.triggerProbability0100100AlwaysFiresWhenKeys")}
             ariaLabel="Trigger probability"
             prefix="p"
             suffix="%"
@@ -921,7 +921,7 @@ export function LorebookEntryRow({
             <CompactSelect
               value={entry.folderId ?? ""}
               onChange={(v) => patch({ folderId: v === "" ? null : v })}
-              title="Move this entry to a different folder. (none) = root level."
+              title={localizeUi("ui.lorebooks.lorebookentryrow.moveThisEntryToADifferentFolderNoneRoot")}
               options={[{ value: "", label: "(none)" }, ...folders.map((f) => ({ value: f.id, label: f.name }))]}
               className="w-[5.5rem] sm:w-[6.25rem]"
             />
@@ -935,7 +935,7 @@ export function LorebookEntryRow({
               "hidden items-center gap-0.5 rounded px-1 py-0.5 text-[0.625rem] text-[var(--muted-foreground)]",
               !compact && "lg:inline-flex",
             )}
-            title={`~${estimateTokens(entry.content).toLocaleString()} tokens (estimated)`}
+            title={localizeUi("ui.lorebooks.lorebookentryrow.value1TokensEstimated", { value1: estimateTokens(entry.content).toLocaleString() })}
           >
             <Hash size="0.5625rem" />
             {estimateTokens(entry.content).toLocaleString()}
@@ -945,8 +945,8 @@ export function LorebookEntryRow({
         {/* Duplicate button (visible on hover, always on mobile) */}
         <button
           type="button"
-          aria-label="Duplicate entry"
-          title="Duplicate entry"
+          aria-label={localizeUi("ui.lorebooks.lorebookentryrow.duplicateEntry")}
+          title={localizeUi("ui.lorebooks.lorebookentryrow.duplicateEntry")}
           disabled={duplicateDisabled}
           onClick={handleDuplicate}
           className="shrink-0 rounded p-0.5 text-[var(--muted-foreground)] opacity-0 transition-all hover:bg-[var(--accent)] hover:text-[var(--foreground)] group-hover:opacity-100 disabled:cursor-not-allowed max-md:opacity-100 sm:p-1"
@@ -957,7 +957,7 @@ export function LorebookEntryRow({
         {/* Delete button (visible on hover, always on mobile) */}
         <button
           type="button"
-          aria-label="Delete entry"
+          aria-label={localizeUi("ui.lorebooks.lorebookentryrow.deleteEntry")}
           onClick={handleDelete}
           className="shrink-0 rounded p-0.5 text-[var(--muted-foreground)] opacity-0 transition-all hover:bg-[var(--accent)] hover:text-[var(--foreground)] group-hover:opacity-100 max-md:opacity-100 sm:p-1"
         >
@@ -1288,6 +1288,7 @@ function ExpandedDrawer({
   compact: boolean;
   onUpdateEntry?: LorebookEntryUpdateHandler;
 }) {
+  const { t: localizeUi } = useUiTranslation();
   const { mutate: mutateEntry, mutateAsync: mutateEntryAsync } = useUpdateLorebookEntry();
   const [form, setForm] = useState<Partial<LorebookEntry>>(() => ({ ...entry }));
   const [dirty, setDirty] = useState(false);
@@ -1461,9 +1462,9 @@ function ExpandedDrawer({
       >
         {/* Description */}
         <FieldGroup
-          label="Description"
+          label={localizeUi("chat.settings.inlineEditor.fields.description")}
           icon={FileText}
-          help="Brief summary of what this entry is about. Used by the Knowledge Router agent to decide whether to inject this entry — not sent to the main AI as content."
+          help={localizeUi("ui.lorebooks.expandeddrawer.briefSummaryOfWhatThisEntryIsAboutUsed")}
         >
           <MacroTextarea
             value={form.description ?? ""}
@@ -1471,29 +1472,29 @@ function ExpandedDrawer({
             onBlur={flushAutosave}
             rows={3}
             className="mari-editor-field w-full resize-y px-2.5 py-2 text-xs leading-5"
-            placeholder="Brief summary for routing."
-            title="Edit Description"
+            placeholder={localizeUi("ui.lorebooks.expandeddrawer.briefSummaryForRouting")}
+            title={localizeUi("ui.lorebooks.expandeddrawer.editDescription")}
           />
         </FieldGroup>
 
         {/* Keys */}
         <FieldGroup
-          label="Primary Keys"
+          label={localizeUi("ui.lorebooks.expandeddrawer.primaryKeys")}
           icon={Key}
-          help="Keywords that trigger this entry. When any of these words appear in the chat, this entry's content is injected into the AI's context."
+          help={localizeUi("ui.lorebooks.expandeddrawer.keywordsThatTriggerThisEntryWhenAnyOfThese")}
         >
           <KeysEditor keys={form.keys ?? []} onChange={(keys) => update({ keys })} />
         </FieldGroup>
 
         {/* Secondary Keys + Logic */}
         <FieldGroup
-          label="Secondary Keys"
+          label={localizeUi("ui.lorebooks.expandeddrawer.secondaryKeys")}
           icon={Key}
-          help="Additional keywords used with SillyTavern-style selective logic. Any means at least one secondary key; All means every secondary key."
+          help={localizeUi("ui.lorebooks.expandeddrawer.additionalKeywordsUsedWithSillytavernStyleSelectiveLogicAny")}
         >
           <KeysEditor keys={form.secondaryKeys ?? []} onChange={(keys) => update({ secondaryKeys: keys })} />
           <div className="mt-2 flex flex-wrap items-center gap-1.5">
-            <label className="text-[0.6875rem] text-[var(--muted-foreground)]">Logic:</label>
+            <label className="text-[0.6875rem] text-[var(--muted-foreground)]">{localizeUi("ui.lorebooks.expandeddrawer.logic")}</label>
             {SELECTIVE_LOGIC_OPTIONS.map((option) => (
               <button
                 key={option.value}
@@ -1513,14 +1514,12 @@ function ExpandedDrawer({
       </div>
 
       <details className="mari-editor-panel mari-editor-panel--soft px-3 py-2">
-        <summary className="cursor-pointer text-xs font-medium text-[var(--foreground)]">
-          Context filters & matching sources
-        </summary>
+        <summary className="cursor-pointer text-xs font-medium text-[var(--foreground)]">{localizeUi("ui.lorebooks.expandeddrawer.contextFiltersMatchingSources")}</summary>
         <div className="mt-3 space-y-3">
           <div className={cn("grid gap-3", !compact && "lg:grid-cols-3")}>
             <div className="mari-editor-panel mari-editor-panel--soft space-y-2 p-2">
               <div className="flex items-center justify-between gap-2">
-                <span className="text-[0.6875rem] font-medium">Characters</span>
+                <span className="text-[0.6875rem] font-medium">{localizeUi("navigation.topbar.characters")}</span>
                 <FilterModeSelect
                   value={form.characterFilterMode ?? "any"}
                   onChange={(value) => update({ characterFilterMode: value })}
@@ -1536,7 +1535,7 @@ function ExpandedDrawer({
 
             <div className="mari-editor-panel mari-editor-panel--soft space-y-2 p-2">
               <div className="flex items-center justify-between gap-2">
-                <span className="text-[0.6875rem] font-medium">Character tags</span>
+                <span className="text-[0.6875rem] font-medium">{localizeUi("ui.lorebooks.expandeddrawer.characterTags")}</span>
                 <FilterModeSelect
                   value={form.characterTagFilterMode ?? "any"}
                   onChange={(value) => update({ characterTagFilterMode: value })}
@@ -1552,7 +1551,7 @@ function ExpandedDrawer({
 
             <div className="mari-editor-panel mari-editor-panel--soft space-y-2 p-2">
               <div className="flex items-center justify-between gap-2">
-                <span className="text-[0.6875rem] font-medium">Generation</span>
+                <span className="text-[0.6875rem] font-medium">{localizeUi("ui.lorebooks.expandeddrawer.generation")}</span>
                 <FilterModeSelect
                   value={form.generationTriggerFilterMode ?? "any"}
                   onChange={(value) => update({ generationTriggerFilterMode: value })}
@@ -1569,10 +1568,8 @@ function ExpandedDrawer({
 
           <div className="mari-editor-panel mari-editor-panel--soft space-y-2 p-2">
             <div>
-              <p className="text-[0.6875rem] font-medium">Additional matching sources</p>
-              <p className="text-[0.625rem] text-[var(--muted-foreground)]">
-                Optional card fields to scan for this entry&apos;s keywords in addition to recent chat.
-              </p>
+              <p className="text-[0.6875rem] font-medium">{localizeUi("ui.lorebooks.expandeddrawer.additionalMatchingSources")}</p>
+              <p className="text-[0.625rem] text-[var(--muted-foreground)]">{localizeUi("ui.lorebooks.expandeddrawer.optionalCardFieldsToScanForThisEntryS")}</p>
             </div>
             <FilterPills
               values={MATCHING_SOURCE_OPTIONS}
@@ -1586,9 +1583,9 @@ function ExpandedDrawer({
 
       {/* Content */}
       <FieldGroup
-        label="Content"
+        label={localizeUi("ui.lorebooks.expandeddrawer.content")}
         icon={FileText}
-        help="The text that gets injected into the AI's context when this entry activates. Write it as you'd want the AI to know it."
+        help={localizeUi("ui.lorebooks.expandeddrawer.theTextThatGetsInjectedIntoTheAiS")}
       >
         <ExpandableTextarea
           value={form.content ?? ""}
@@ -1596,42 +1593,41 @@ function ExpandedDrawer({
           onBlur={flushAutosave}
           onCommit={flushAutosave}
           rows={5}
-          placeholder="The content that will be injected into the prompt when this entry activates…"
-          title="Edit Content"
+          placeholder={localizeUi("ui.lorebooks.expandeddrawer.theContentThatWillBeInjectedIntoThePrompt")}
+          title={localizeUi("ui.lorebooks.expandeddrawer.editContent")}
           showMacroReference
         />
         <p className="mt-1 flex items-center gap-1 text-[0.625rem] text-[var(--muted-foreground)]">
-          <Hash size="0.5625rem" />~{estimateTokens(form.content ?? "").toLocaleString()} tokens
-        </p>
+          <Hash size="0.5625rem" />~{estimateTokens(form.content ?? "").toLocaleString()} {localizeUi("ui.lorebooks.expandeddrawer.tokens")}</p>
       </FieldGroup>
 
       {/* Toggles row — note: enable / regex / trigger mode are now on the row header,
           so they are intentionally omitted from this block to avoid duplication. */}
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
         <ToggleButton
-          label="Whole Words"
+          label={localizeUi("ui.lorebooks.expandeddrawer.wholeWords")}
           value={form.matchWholeWords ?? false}
           onChange={(v) => update({ matchWholeWords: v })}
         />
         <ToggleButton
-          label="Case Sensitive"
+          label={localizeUi("ui.lorebooks.expandeddrawer.caseSensitive")}
           value={form.caseSensitive ?? false}
           onChange={(v) => update({ caseSensitive: v })}
         />
         <ToggleButton
-          label="Locked"
+          label={localizeUi("ui.lorebooks.expandeddrawer.locked")}
           value={form.locked ?? false}
           onChange={(v) => update({ locked: v })}
           tooltip="Prevents the Lorebook Keeper agent from modifying this entry."
         />
         <ToggleButton
-          label="Recursion"
+          label={localizeUi("ui.lorebooks.expandeddrawer.recursion")}
           value={!(form.preventRecursion ?? true)}
           onChange={(v) => update({ preventRecursion: !v })}
           tooltip="When enabled, this entry's content can trigger additional entries during recursive scanning. Keep this off unless this entry should chain lore."
         />
         <ToggleButton
-          label="No Vector"
+          label={localizeUi("ui.lorebooks.expandeddrawer.noVector")}
           value={form.excludeFromVectorization ?? false}
           onChange={(v) => update({ excludeFromVectorization: v })}
           tooltip="When enabled, bulk vectorization skips this entry and removes any stored embedding."
@@ -1646,43 +1642,43 @@ function ExpandedDrawer({
       >
         {/* Role (position/depth/order/probability live on the row header). */}
         <FieldGroup
-          label="Role"
+          label={localizeUi("ui.lorebooks.expandeddrawer.role")}
           icon={Settings2}
-          help="Which role this entry's content is attributed to in the prompt (only meaningful when injected at depth)."
+          help={localizeUi("ui.lorebooks.expandeddrawer.whichRoleThisEntrySContentIsAttributedTo")}
         >
           <select
             value={form.role ?? "system"}
             onChange={(e) => update({ role: e.target.value as "system" | "user" | "assistant" })}
             className="mari-editor-field w-full px-2 py-1.5 text-xs"
           >
-            <option value="system">System</option>
-            <option value="user">User</option>
-            <option value="assistant">Assistant</option>
+            <option value="system">{localizeUi("ui.lorebooks.expandeddrawer.system")}</option>
+            <option value="user">{localizeUi("ui.lorebooks.expandeddrawer.user")}</option>
+            <option value="assistant">{localizeUi("ui.lorebooks.expandeddrawer.assistant")}</option>
           </select>
         </FieldGroup>
 
         {/* Timing */}
         <FieldGroup
-          label="Timing"
+          label={localizeUi("ui.lorebooks.expandeddrawer.timing")}
           icon={Settings2}
-          help="Sticky = stays active for N messages after triggering. Cooldown = waits N messages before it can trigger again. Delay = waits N messages before first activation. Ephemeral = auto-disables after N activations (0 = unlimited)."
+          help={localizeUi("ui.lorebooks.expandeddrawer.stickyStaysActiveForNMessagesAfterTriggeringCooldown")}
         >
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:gap-1.5">
             <NumberField
-              label="Sticky"
+              label={localizeUi("ui.lorebooks.expandeddrawer.sticky")}
               value={form.sticky ?? 0}
               onChange={(v) => update({ sticky: v || null })}
               min={0}
             />
             <NumberField
-              label="Cooldown"
+              label={localizeUi("ui.lorebooks.expandeddrawer.cooldown")}
               value={form.cooldown ?? 0}
               onChange={(v) => update({ cooldown: v || null })}
               min={0}
             />
-            <NumberField label="Delay" value={form.delay ?? 0} onChange={(v) => update({ delay: v || null })} min={0} />
+            <NumberField label={localizeUi("ui.lorebooks.expandeddrawer.delay")} value={form.delay ?? 0} onChange={(v) => update({ delay: v || null })} min={0} />
             <NumberField
-              label="Ephemeral"
+              label={localizeUi("ui.lorebooks.expandeddrawer.ephemeral")}
               value={form.ephemeral ?? 0}
               onChange={(v) => update({ ephemeral: v || null })}
               min={0}
@@ -1692,29 +1688,29 @@ function ExpandedDrawer({
 
         {/* Group & Tag */}
         <FieldGroup
-          label="Group & Tag"
+          label={localizeUi("ui.lorebooks.expandeddrawer.groupTag")}
           icon={Settings2}
-          help="Group entries together so only one from the group activates at a time. Tags are for your own organization."
+          help={localizeUi("ui.lorebooks.expandeddrawer.groupEntriesTogetherSoOnlyOneFromTheGroup")}
         >
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:gap-1.5">
             <div>
-              <label className="mb-1 block text-[0.6875rem] text-[var(--muted-foreground)]">Group</label>
+              <label className="mb-1 block text-[0.6875rem] text-[var(--muted-foreground)]">{localizeUi("ui.lorebooks.expandeddrawer.group")}</label>
               <input
                 value={form.group ?? ""}
                 onChange={(e) => update({ group: e.target.value })}
                 onBlur={flushAutosave}
                 className="mari-editor-field w-full px-2 py-1.5 text-xs"
-                placeholder="Group name"
+                placeholder={localizeUi("ui.lorebooks.expandeddrawer.groupName")}
               />
             </div>
             <div>
-              <label className="mb-1 block text-[0.6875rem] text-[var(--muted-foreground)]">Tag</label>
+              <label className="mb-1 block text-[0.6875rem] text-[var(--muted-foreground)]">{localizeUi("ui.lorebooks.expandeddrawer.tag")}</label>
               <input
                 value={form.tag ?? ""}
                 onChange={(e) => update({ tag: e.target.value })}
                 onBlur={flushAutosave}
                 className="mari-editor-field w-full px-2 py-1.5 text-xs"
-                placeholder="e.g. location, item, lore"
+                placeholder={localizeUi("ui.lorebooks.expandeddrawer.eGLocationItemLore")}
               />
             </div>
           </div>
@@ -1726,12 +1722,12 @@ function ExpandedDrawer({
           className={cn("text-[0.6875rem]", saveError ? "text-[var(--destructive)]" : "text-[var(--muted-foreground)]")}
         >
           {saveError
-            ? "Autosave failed. Your edits are still here and will retry when you change the entry again."
+            ?localizeUi("ui.lorebooks.expandeddrawer.autosaveFailedYourEditsAreStillHereAndWill")
             : saving
-              ? "Saving…"
+              ?localizeUi("chat.settings.inlineEditor.saving")
               : dirty
-                ? "Autosaving…"
-                : "Saved automatically"}
+                ?localizeUi("ui.lorebooks.expandeddrawer.autosaving")
+                :localizeUi("ui.lorebooks.expandeddrawer.savedAutomatically")}
         </span>
       </div>
     </div>
