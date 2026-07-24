@@ -2740,21 +2740,23 @@ function LockedPrivatePostCard({
   const replyCount = interactions.filter((i) => i.type === "reply").length;
   return (
     <article className="border-b border-[var(--noodle-divider)] px-4 py-4 transition-colors hover:bg-[var(--accent)]/35">
+      {/* Author row */}
       <div className="flex gap-3">
         <ProfileInitial profile={profile} />
-        <div className="min-w-0 flex-1">
-          {/* Author row */}
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-            <span className="font-semibold">{profile.displayName}</span>
-            <span className="text-xs text-[var(--muted-foreground)]">@{profile.handle}</span>
-            <span className="text-xs text-[var(--muted-foreground)]">{formatTime(post.createdAt)}</span>
-            <span className="rounded-full border border-[var(--noodle-divider)] px-2 py-0.5 text-[0.68rem] font-bold text-[var(--muted-foreground)]">
-              {post.access === "ppv"
-                ? localizeUi("ui.noodle.noodlepostcard.payToUnlock")
-                : localizeUi("ui.noodle.privatepostcomposer.subscribers")}
-            </span>
-          </div>
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1">
+          <span className="font-semibold">{profile.displayName}</span>
+          <span className="text-xs text-[var(--muted-foreground)]">@{profile.handle}</span>
+          <span className="text-xs text-[var(--muted-foreground)]">{formatTime(post.createdAt)}</span>
+          <span className="rounded-full border border-[var(--noodle-divider)] px-2 py-0.5 text-[0.68rem] font-bold text-[var(--muted-foreground)]">
+            {post.access === "ppv"
+              ? localizeUi("ui.noodle.noodlepostcard.payToUnlock")
+              : localizeUi("ui.noodle.privatepostcomposer.subscribers")}
+          </span>
+        </div>
+      </div>
 
+      {/* Full-width body */}
+      <div>
           {/* Blurred media with Locked badge — only when the post has an image */}
           {post.imageUrl && (
             <div className="relative mt-3 h-72 w-full overflow-hidden rounded-xl bg-[var(--muted)]">
@@ -2819,7 +2821,6 @@ function LockedPrivatePostCard({
               <span className="flex items-center gap-1"><Lock size={14} /> {localizeUi("ui.noodle.lockedprivatepostcard.locked")}</span>
             </div>
           </div>
-        </div>
       </div>
     </article>
   );
