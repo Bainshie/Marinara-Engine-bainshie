@@ -1,7 +1,7 @@
 // ──────────────────────────────────────────────
 // Schema: Noodle Fake Social Media
 // ──────────────────────────────────────────────
-import { fileTable, integer, real, text } from "../file-schema.js";
+import { fileTable, real, text } from "../file-schema.js";
 
 export const noodleAccounts = fileTable(
   "noodle_accounts",
@@ -65,27 +65,6 @@ export const noodlePostUnlocks = fileTable(
     createdAt: text("created_at").notNull(),
   },
   { uniqueBy: [{ keys: ["viewerAccountId", "postId"] }] },
-);
-
-export const noodlerPrivateMedia = fileTable(
-  "noodler_private_media",
-  {
-    id: text("id").primaryKey(),
-    ownerAccountId: text("owner_account_id").notNull(),
-    attachedPostId: text("attached_post_id"),
-    source: text("source").notNull().default("upload"),
-    storageKey: text("storage_key").notNull(),
-    contentType: text("content_type").notNull(),
-    byteLength: integer("byte_length").notNull(),
-    createdAt: text("created_at").notNull(),
-    updatedAt: text("updated_at").notNull(),
-  },
-  {
-    uniqueBy: [
-      ["storageKey"],
-      { keys: ["attachedPostId"], when: (row) => row.attachedPostId != null },
-    ],
-  },
 );
 
 export const noodleInteractions = fileTable(

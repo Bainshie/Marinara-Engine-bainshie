@@ -3,18 +3,24 @@ import {
   type NoodleAccount,
   type NoodlePrivateGenerationRequest,
   type NoodlePrivatePostCreateInput,
+  type NoodlePrivatePostUpdateInput,
   type NoodlerManagedPost,
   type NoodlerRefreshNowOutcome,
 } from "@marinara-engine/shared";
 import type { NoodleImagePromptReviewItem } from "./noodle-public-images.service.js";
 import type { DB } from "../../db/connection.js";
 import { logger } from "../../lib/logger.js";
+import { newId } from "../../utils/id-generator.js";
 import { createConnectionsStorage } from "../storage/connections.storage.js";
-import {
-  createNoodleStorage,
-  NoodlerPrivateMediaClaimError,
-} from "../storage/noodle.storage.js";
+import { createNoodleStorage } from "../storage/noodle.storage.js";
 import { generatePrivatePost } from "./noodle-private-generation.service.js";
+import {
+  privatePostMediaUrl,
+  readPrivateMediaPath,
+  stageUploadedPrivatePostMedia,
+  unlinkPrivateMedia,
+  type NoodlerPrivatePostMediaUpload,
+} from "./noodle-private-media.js";
 import { tryNoodlePrivateAccountOperation } from "./noodle-private-account-operation-lock.js";
 import { settleAgentJobsWithConcurrencyLimit } from "../agents/agent-concurrency.js";
 
@@ -24,15 +30,19 @@ export type GenerateNoodlePrivatePostResult =
   | { status: "busy" }
   | { status: "connection_required" }
   | { status: "connection_not_found" }
-  | { status: "private_account_not_found" }
-  | { status: "media_unavailable" };
+  | { status: "private_account_not_found" };
 
 export type CreateNoodlePrivatePostResult =
   | { status: "created"; post: NoodlerManagedPost }
   | { status: "disabled" }
   | { status: "busy" }
-  | { status: "private_account_not_found" }
-  | { status: "media_unavailable" };
+  | { status: "private_account_not_found" };
+
+export type UpdateNoodlePrivatePostResult =
+  | { status: "updated"; post: NoodlerManagedPost }
+  | { status: "disabled" }
+  | { status: "busy" }
+  | { status: "private_post_not_found" };
 
 /**
  * Reusable generated-post application seam for HTTP now and Slice 8 scheduling later.
@@ -41,6 +51,7 @@ export type CreateNoodlePrivatePostResult =
 export async function generateNoodlePrivatePost(
   db: DB,
   request: NoodlePrivateGenerationRequest,
+  media?: NoodlerPrivatePostMediaUpload,
 ): Promise<GenerateNoodlePrivatePostResult> {
   const noodle = createNoodleStorage(db);
   const settings = await noodle.getSettings();
@@ -55,17 +66,12 @@ export async function generateNoodlePrivatePost(
     if (!connectionId) return { status: "connection_required" } as const;
     const connection = await createConnectionsStorage(db).getWithKey(connectionId);
     if (!connection) return { status: "connection_not_found" } as const;
-    try {
-      const generated = await generatePrivatePost(db, { account, request, connection });
-      return {
-        status: "generated",
-        post: generated.post,
-        imagePromptReview: generated.imagePromptReview,
-      } as const;
-    } catch (error) {
-      if (error instanceof NoodlerPrivateMediaClaimError) return { status: "media_unavailable" } as const;
-      throw error;
-    }
+    const generated = await generatePrivatePost(db, { account, request, connection, media });
+    return {
+      status: "generated",
+      post: generated.post,
+      imagePromptReview: generated.imagePromptReview,
+    } as const;
   });
   return locked.acquired ? locked.value : { status: "busy" };
 }
@@ -126,33 +132,79 @@ export async function refreshAllNoodlerCreatorsNow(db: DB): Promise<NoodlerRefre
 export async function createNoodlePrivatePost(
   db: DB,
   input: NoodlePrivatePostCreateInput,
+  media?: NoodlerPrivatePostMediaUpload,
 ): Promise<CreateNoodlePrivatePostResult> {
   const noodle = createNoodleStorage(db);
   const settings = await noodle.getSettings();
   if (!settings.enableNoodler) return { status: "disabled" };
 
   const locked = await tryNoodlePrivateAccountOperation(input.targetAccountId, async () => {
-    let post;
+    const postId = media ? newId() : undefined;
+    const staged = media ? stageUploadedPrivatePostMedia(input.targetAccountId, media) : null;
     try {
-      post = await noodle.createPrivatePost({
-      authorAccountId: input.targetAccountId,
-      title: input.title,
-      content: input.content,
-        imageAssetId: input.imageAssetId,
-      source: "manual",
-      access: input.access,
-      ppvPrice: input.access === "ppv" ? (input.ppvPrice ?? null) : null,
+      staged?.stagedMedia.promote();
+      const post = await noodle.createPrivatePost({
+        id: postId,
+        authorAccountId: input.targetAccountId,
+        title: input.title,
+        content: input.content,
+        source: "manual",
+        access: input.access,
+        ppvPrice: input.access === "ppv" ? (input.ppvPrice ?? null) : null,
+        imageUrl: postId ? privatePostMediaUrl(postId) : null,
         metadata: {
           ...(input.poll ? { poll: createNoodlePoll(input.poll) } : {}),
           ...(input.imageCrop ? { imageCrop: input.imageCrop } : {}),
+          ...(staged ? { privateMediaPath: staged.privateMediaPath } : {}),
         },
-    });
+      });
+      if (!post) {
+        staged?.stagedMedia.compensate();
+        return { status: "private_account_not_found" } as const;
+      }
+      return { status: "created", post } as const;
     } catch (error) {
-      if (error instanceof NoodlerPrivateMediaClaimError) return { status: "media_unavailable" } as const;
+      staged?.stagedMedia.compensate();
       throw error;
     }
-    if (!post) return { status: "private_account_not_found" } as const;
-    return { status: "created", post } as const;
+  });
+  return locked.acquired ? locked.value : { status: "busy" };
+}
+
+export async function updateNoodlePrivatePostWithMedia(
+  db: DB,
+  id: string,
+  input: NoodlePrivatePostUpdateInput,
+  media: NoodlerPrivatePostMediaUpload,
+): Promise<UpdateNoodlePrivatePostResult> {
+  const noodle = createNoodleStorage(db);
+  const settings = await noodle.getSettings();
+  if (!settings.enableNoodler) return { status: "disabled" };
+
+  const existing = await noodle.getPrivatePostById(id);
+  if (!existing) return { status: "private_post_not_found" };
+
+  const locked = await tryNoodlePrivateAccountOperation(existing.authorAccountId, async () => {
+    const current = await noodle.getPrivatePostById(id);
+    if (!current) return { status: "private_post_not_found" } as const;
+    const oldPath = readPrivateMediaPath(current);
+    const staged = stageUploadedPrivatePostMedia(current.authorAccountId, media);
+    try {
+      staged.stagedMedia.promote();
+      const post = await noodle.updatePrivatePost(id, input, {
+        imageUrl: privatePostMediaUrl(id),
+        privateMediaPath: staged.privateMediaPath,
+      });
+      if (!post) {
+        staged.stagedMedia.compensate();
+        return { status: "private_post_not_found" } as const;
+      }
+      if (oldPath !== staged.privateMediaPath) unlinkPrivateMedia(oldPath);
+      return { status: "updated", post } as const;
+    } catch (error) {
+      staged.stagedMedia.compensate();
+      throw error;
+    }
   });
   return locked.acquired ? locked.value : { status: "busy" };
 }

@@ -185,6 +185,7 @@ export function PostImageCropEditor({
               const rect = image.getBoundingClientRect();
               setDisplaySize({ width: rect.width, height: rect.height });
             }}
+            onError={() => setError("Could not load this image. Check that the file or URL is available.")}
             className="block max-h-80 max-w-full select-none object-contain"
           />
           {crop && displaySize && (

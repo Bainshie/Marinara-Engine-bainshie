@@ -21,7 +21,7 @@ import {
   X,
 } from "lucide-react";
 import { createPortal } from "react-dom";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import {
   NOODLE_PRIVATE_POST_CONTENT_MAX_LENGTH,
@@ -49,14 +49,12 @@ import {
   useCreateNoodlerInteraction,
   useCreateNoodlerStageProfile,
   useDeleteNoodlerPost,
-  useDeleteNoodlerPostImage,
   useDeleteNoodlerStageProfile,
   useGeneratePrivateNoodlePost,
   useConfirmNoodlerImagePrompts,
   useRunNoodlerAutoPostNow,
   useRefreshAllNoodlerCreatorsNow,
   useGenerateNoodlerStageProfileDraft,
-  useImportNoodlerPostImageUrl,
   useLoadNoodlerPostImage,
   useNoodle,
   useNoodlerAccounts,
@@ -68,12 +66,13 @@ import {
   useToggleNoodlerSubscription,
   useUnlockNoodlerPost,
   useUpdateNoodlerPost,
+  useReplaceNoodlerPostImage,
   useUpdateNoodlerAccess,
   useUpdateNoodlerAutoPosting,
   useRescheduleNoodlerAutoPost,
   useUpdateNoodleSettings,
   useUpdateNoodlerStageProfile,
-  useUploadNoodlerPostImage,
+  type NoodlerPostDraftImage,
 } from "../../hooks/use-noodle";
 import { useActivePersona, usePersonas } from "../../hooks/use-characters";
 import { useConnections } from "../../hooks/use-connections";
@@ -124,8 +123,7 @@ interface PrivatePostSubmission {
   body: string;
   access: NoodlePostAccess;
   ppvPrice: number | null;
-  imageAssetId: string | null;
-  imageCrop: NoodlePostImageCrop | null;
+  image: NoodlerPostDraftImage | null;
   poll: { question: string; options: string[] } | null;
 }
 
@@ -134,13 +132,12 @@ interface PrivatePostDraft {
   body: string;
   access: NoodlePostAccess;
   ppvPrice: string;
-  image: { id: string; imageUrl: string; crop: NoodlePostImageCrop } | null;
+  image: NoodlerPostDraftImage | null;
   poll: NoodlePollInput | null;
 }
 
 interface PendingPrivateImage {
   source: File | string;
-  stagedAsset: { id: string; imageUrl: string } | null;
 }
 
 const EMPTY_PRIVATE_POST_DRAFT: PrivatePostDraft = {
@@ -161,6 +158,20 @@ function isEmptyPrivatePostDraft(draft: PrivatePostDraft): boolean {
     !draft.image &&
     !draft.poll
   );
+}
+
+function PrivateDraftImageFrame({ image }: { image: NoodlerPostDraftImage }) {
+  const sourceUrl = useMemo(
+    () => (typeof image.source === "string" ? image.source : URL.createObjectURL(image.source)),
+    [image.source],
+  );
+  useEffect(
+    () => () => {
+      if (image.source instanceof File) URL.revokeObjectURL(sourceUrl);
+    },
+    [image.source, sourceUrl],
+  );
+  return <PostImageFrame src={sourceUrl} crop={image.crop} alt="Attached post image" maxHeight={240} />;
 }
 
 type NoodlerProfileTab = "posts" | "media" | "subscribers";
@@ -322,8 +333,7 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
       window.removeEventListener("pointerdown", onPointerDown, true);
     };
   }, [accountSwitcherOpen]);
-  const deleteStagedImage = useDeleteNoodlerPostImage();
-  const uploadEditedPostImage = useUploadNoodlerPostImage();
+  const replacePostImage = useReplaceNoodlerPostImage();
   const loadPostImage = useLoadNoodlerPostImage();
   const [privatePostDrafts, setPrivatePostDrafts] = useState<Record<string, PrivatePostDraft>>({});
   const updatePrivatePostDraft = (profileId: string, patch: Partial<PrivatePostDraft>) => {
@@ -342,9 +352,7 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
       return next;
     });
   };
-  const clearPrivatePostDraft = (profileId: string, discardImage = false) => {
-    const stagedImage = privatePostDrafts[profileId]?.image;
-    if (discardImage && stagedImage) deleteStagedImage.mutate({ accountId: profileId, imageId: stagedImage.id });
+  const clearPrivatePostDraft = (profileId: string) => {
     setPrivatePostDrafts((current) => {
       if (!current[profileId]) return current;
       const next = { ...current };
@@ -362,15 +370,11 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
     });
   const exitToPublic = async () => {
     if (!(await confirmDiscardPrivatePostDrafts())) return;
-    for (const [profileId, draft] of Object.entries(privatePostDrafts))
-      if (draft.image) deleteStagedImage.mutate({ accountId: profileId, imageId: draft.image.id });
     setPrivatePostDrafts({});
     onNavigate({ mode: "public", view: "home" });
   };
   const openSettings = async () => {
     if (!(await confirmDiscardPrivatePostDrafts())) return;
-    for (const [profileId, draft] of Object.entries(privatePostDrafts))
-      if (draft.image) deleteStagedImage.mutate({ accountId: profileId, imageId: draft.image.id });
     setPrivatePostDrafts({});
     onNavigate({ mode: "settings" });
   };
@@ -528,34 +532,29 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
       poll?: NoodlePollInput | null;
     },
   ) => {
-    let stagedImageId: string | null = null;
     try {
       if (input.image?.kind === "replace") {
-        const staged = await uploadEditedPostImage.mutateAsync({
+        await replacePostImage.mutateAsync({
+          id: post.id,
           accountId: post.authorAccountId,
           file: input.image.file,
+          crop: input.image.crop,
+          title: input.title,
+          ...(input.content !== post.content.trim() && { content: input.content }),
+          ...(input.poll !== undefined && { poll: input.poll }),
         });
-        stagedImageId = staged.id;
+      } else {
+        await updatePost.mutateAsync({
+          id: post.id,
+          accountId: post.authorAccountId,
+          title: input.title,
+          ...(input.content !== post.content.trim() && { content: input.content }),
+          ...(input.poll !== undefined && { poll: input.poll }),
+          ...(input.image?.kind === "crop" && { imageCrop: input.image.crop }),
+          ...(input.image?.kind === "remove" && { removeImage: true }),
+        });
       }
-      await updatePost.mutateAsync({
-        id: post.id,
-        accountId: post.authorAccountId,
-        title: input.title,
-        ...(input.content !== post.content.trim() && { content: input.content }),
-        ...(input.poll !== undefined && { poll: input.poll }),
-        ...(input.image?.kind === "replace" && {
-          imageAssetId: stagedImageId,
-          imageCrop: input.image.crop,
-        }),
-        ...(input.image?.kind === "crop" && { imageCrop: input.image.crop }),
-        ...(input.image?.kind === "remove" && { imageAssetId: null }),
-      });
     } catch (error) {
-      if (stagedImageId) {
-        await deleteStagedImage
-          .mutateAsync({ accountId: post.authorAccountId, imageId: stagedImageId })
-          .catch(() => {});
-      }
       toast.error(errorMessage(error, "Could not update this post."));
       throw error;
     }
@@ -587,7 +586,7 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
     reactionPendingFor: () => false,
     createInteractionPendingFor: (_postId, type) =>
       (type === "reply" || type === "vote") && createInteraction.isPending,
-    updatePostPending: updatePost.isPending || uploadEditedPostImage.isPending || deleteStagedImage.isPending,
+    updatePostPending: updatePost.isPending || replacePostImage.isPending,
     titleMaxLength: NOODLE_PRIVATE_POST_TITLE_MAX_LENGTH,
     allowPollOnlyEdits: true,
     deduplicatePollBody: false,
@@ -759,8 +758,7 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
     body,
     access,
     ppvPrice,
-    imageAssetId,
-    imageCrop,
+    image,
     poll,
   }: PrivatePostSubmission) => {
     await createPost.mutateAsync({
@@ -769,8 +767,7 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
       content: body,
       access,
       ...(access === "ppv" ? { ppvPrice } : {}),
-      imageAssetId,
-      ...(imageCrop ? { imageCrop } : {}),
+      image,
       poll,
     });
     toast.success("Private post published.");
@@ -782,8 +779,7 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
     body,
     access,
     ppvPrice,
-    imageAssetId,
-    imageCrop,
+    image,
     poll,
   }: PrivatePostSubmission) => {
     const guide = serializePrivatePostGuide(title, body);
@@ -793,8 +789,7 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
       ...(guide ? { privatePostGuide: guide } : {}),
       access,
       ...(access === "ppv" ? { ppvPrice } : {}),
-      imageAssetId,
-      ...(imageCrop ? { imageCrop } : {}),
+      image,
       poll,
     });
     if (result.imagePromptReview) {
@@ -1049,7 +1044,7 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
           draft={privatePostDrafts[selectedProfile.id] ?? EMPTY_PRIVATE_POST_DRAFT}
           onDraftChange={(patch) => updatePrivatePostDraft(selectedProfile.id, patch)}
           onClearDraft={() => clearPrivatePostDraft(selectedProfile.id)}
-            onDiscardDraft={() => clearPrivatePostDraft(selectedProfile.id, true)}
+            onDiscardDraft={() => clearPrivatePostDraft(selectedProfile.id)}
           isLoading={postsQuery.isLoading}
           isError={postsQuery.isError}
           onRetry={() => void postsQuery.refetch()}
@@ -1064,7 +1059,7 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
             if (!confirmed) return;
             deleteProfile.mutate(selectedProfile.id, {
               onSuccess: () => {
-                  clearPrivatePostDraft(selectedProfile.id, true);
+                  clearPrivatePostDraft(selectedProfile.id);
                 onNavigate({ mode: "private", view: "profiles" });
                 toast.success("Stage profile deleted.");
               },
@@ -1280,7 +1275,7 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
           if (mainAuthorProfile) clearPrivatePostDraft(mainAuthorProfile.id);
         }}
         onDiscardAuthorDraft={() => {
-          if (mainAuthorProfile) clearPrivatePostDraft(mainAuthorProfile.id, true);
+          if (mainAuthorProfile) clearPrivatePostDraft(mainAuthorProfile.id);
         }}
         authorLoading={accountsQuery.isLoading || !data}
         authorError={accountsQuery.isError && !accountsQuery.data}
@@ -2396,7 +2391,7 @@ function StageProfileView({
         onClose={() => setAutomationOpen(false)}
         title="Automatic posting"
         width="max-w-md"
-        panelStyle={{ "--noodle-blue": accent } as React.CSSProperties}
+        panelStyle={getNoodleAccentStyle(accent)}
       >
         <div className="space-y-4">
           <p className="text-xs leading-5 text-[var(--muted-foreground)]">
@@ -2425,7 +2420,7 @@ function StageProfileView({
                   { onError: (error) => toast.error(errorMessage(error, "Could not update automatic posting.")) },
                 )
               }
-              className="h-5 w-5 accent-[var(--noodle-blue)]"
+              className="h-5 w-5 accent-[var(--noodle-accent)]"
             />
           </label>
           <fieldset disabled={!autoPosting.enabled || updateAutoPosting.isPending} className="disabled:opacity-50">
@@ -2444,7 +2439,7 @@ function StageProfileView({
                   className={cn(
                     "h-9 flex-1 rounded-full border px-3 text-xs font-bold",
                     autoPosting.intensity === value
-                      ? "border-transparent bg-[var(--noodle-blue)] text-zinc-950"
+                      ? "border-transparent bg-[var(--noodle-accent)] text-zinc-950"
                       : "border-[var(--noodle-divider)] hover:bg-[var(--accent)]",
                   )}
                 >
@@ -2468,7 +2463,7 @@ function StageProfileView({
                     { onError: (error) => toast.error(errorMessage(error, "Could not update image generation.")) },
                   )
                 }
-                className="h-5 w-5 accent-[var(--noodle-blue)]"
+                className="h-5 w-5 accent-[var(--noodle-accent)]"
               />
             </label>
           </fieldset>
@@ -2886,7 +2881,7 @@ function PrivatePostComposer({
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
   const [pendingImage, setPendingImage] = useState<PendingPrivateImage | null>(null);
   const [imageUrlDraft, setImageUrlDraft] = useState("");
-  const [localOperation, setLocalOperation] = useState<"submission" | "upload" | "remove" | null>(null);
+  const [localOperation, setLocalOperation] = useState<"submission" | null>(null);
   const imageFileRef = useRef<HTMLInputElement | null>(null);
   const imageToolRef = useRef<HTMLDivElement | null>(null);
   const pollToolRef = useRef<HTMLDivElement | null>(null);
@@ -2894,20 +2889,10 @@ function PrivatePostComposer({
   const coinToolRef = useRef<HTMLDivElement | null>(null);
   const composerBusyRef = useRef(false);
   const draftRevisionRef = useRef(0);
-  const editableImageSourceRef = useRef<{ imageId: string; source: File | string } | null>(null);
   const { title, body, access, ppvPrice, image, poll } = draft;
-  const uploadImage = useUploadNoodlerPostImage();
-  const importImageUrl = useImportNoodlerPostImageUrl();
-  const deleteImage = useDeleteNoodlerPostImage();
   const hasDraft = pendingImage !== null || !isEmptyPrivatePostDraft(draft);
   const parsedPrice = Number(ppvPrice);
-  const composerBusy =
-    localOperation !== null ||
-    manualPending ||
-    guidePending ||
-    uploadImage.isPending ||
-    importImageUrl.isPending ||
-    deleteImage.isPending;
+  const composerBusy = localOperation !== null || manualPending || guidePending;
   composerBusyRef.current = composerBusy;
   const guide = serializePrivatePostGuide(title, body);
 
@@ -2922,20 +2907,11 @@ function PrivatePostComposer({
     onDraftChange(patch);
     return true;
   };
-  const finishOperation = (operation: "submission" | "upload" | "remove") => {
+  const finishOperation = (operation: "submission") => {
     setLocalOperation((current) => (current === operation ? null : current));
   };
   const discardPendingImage = () => {
-    const stagedAsset = pendingImage?.stagedAsset;
     setPendingImage(null);
-    if (!stagedAsset) return;
-    deleteImage.mutate(
-      { accountId: profile.id, imageId: stagedAsset.id },
-      {
-        onError: () =>
-          setAttachmentError("The imported image was discarded, but cleanup will be retried by the server."),
-      },
-    );
   };
 
   const clearDraft = () => {
@@ -2947,7 +2923,6 @@ function PrivatePostComposer({
     discardPendingImage();
     setImageUrlDraft("");
     setPollEditorValue(null);
-    editableImageSourceRef.current = null;
     setActiveTool(null);
     setExpanded(false);
   };
@@ -2961,29 +2936,14 @@ function PrivatePostComposer({
     discardPendingImage();
     setImageUrlDraft("");
     setPollEditorValue(null);
-    editableImageSourceRef.current = null;
     setActiveTool(null);
     setExpanded(false);
   };
   const removeImage = () => {
     if (!image || composerBusyRef.current) return;
-    const revision = ++draftRevisionRef.current;
-    composerBusyRef.current = true;
-    setLocalOperation("remove");
+    draftRevisionRef.current += 1;
     onDraftChange({ image: null });
     setPendingImage(null);
-    editableImageSourceRef.current = null;
-    deleteImage.mutate(
-      { accountId: profile.id, imageId: image.id },
-      {
-        onError: () => {
-          if (draftRevisionRef.current === revision) {
-            setAttachmentError("The image was removed from this draft, but cleanup will be retried by the server.");
-          }
-        },
-        onSettled: () => finishOperation("remove"),
-      },
-    );
   };
   const handleImageFile = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -2995,77 +2955,32 @@ function PrivatePostComposer({
     }
     setAttachmentError(null);
     discardPendingImage();
-    setPendingImage({ source: file, stagedAsset: null });
+    onDraftChange({ image: { source: file, crop: null } });
     setActiveTool(null);
   };
-  const handleImageUrl = async () => {
+  const handleImageUrl = () => {
     const imageUrl = imageUrlDraft.trim();
     if (!imageUrl || composerBusyRef.current) return;
     setAttachmentError(null);
-    setActiveTool(null);
     try {
-      const stagedAsset = await importImageUrl.mutateAsync({ accountId: profile.id, imageUrl });
-      const replacedStagedAsset = pendingImage?.stagedAsset;
+      const parsed = new URL(imageUrl);
+      if (!["http:", "https:"].includes(parsed.protocol)) throw new Error("Use an HTTP or HTTPS image URL.");
       setImageUrlDraft("");
-      setPendingImage({
-        source: stagedAsset.imageUrl,
-        stagedAsset: { id: stagedAsset.id, imageUrl: stagedAsset.imageUrl },
-      });
-      if (replacedStagedAsset && replacedStagedAsset.id !== stagedAsset.id) {
-        deleteImage.mutate(
-          { accountId: profile.id, imageId: replacedStagedAsset.id },
-          {
-            onError: () =>
-              setAttachmentError("The previous imported image could not be removed; cleanup will be retried."),
-          },
-        );
-      }
+      onDraftChange({ image: { source: parsed.toString(), crop: null } });
+      setActiveTool(null);
     } catch (error) {
-      setAttachmentError(errorMessage(error, "Could not import this image URL."));
+      setAttachmentError(errorMessage(error, "Enter a valid image URL."));
     }
   };
   const applyImageCrop = async (crop: NoodlePostImageCrop) => {
     if (composerBusyRef.current) return;
     const pending = pendingImage;
     if (!pending) return;
-    if (
-      image &&
-      editableImageSourceRef.current?.imageId === image.id &&
-      editableImageSourceRef.current.source === pending.source
-    ) {
-      onDraftChange({ image: { ...image, crop } });
-      setPendingImage(null);
-      setActiveTool(null);
-      return;
-    }
-    const revision = ++draftRevisionRef.current;
-    const replacedImage = image;
-    composerBusyRef.current = true;
-    setLocalOperation("upload");
+    draftRevisionRef.current += 1;
     setAttachmentError(null);
-    try {
-      const next = pending.stagedAsset
-        ? pending.stagedAsset
-        : pending.source instanceof File
-          ? await uploadImage.mutateAsync({ accountId: profile.id, file: pending.source })
-          : null;
-      if (!next) throw new Error("The editable image source is no longer available.");
-      if (draftRevisionRef.current !== revision) return;
-      if (replacedImage && replacedImage.id !== next.id) {
-        deleteImage.mutate({ accountId: profile.id, imageId: replacedImage.id });
-      }
-      editableImageSourceRef.current = { imageId: next.id, source: pending.source };
-      onDraftChange({ image: { id: next.id, imageUrl: next.imageUrl, crop } });
-      setPendingImage(null);
-      setActiveTool(null);
-    } catch (error) {
-      if (draftRevisionRef.current === revision) {
-        setAttachmentError(errorMessage(error, "Could not upload this image."));
-      }
-      throw error;
-    } finally {
-      finishOperation("upload");
-    }
+    onDraftChange({ image: { source: pending.source, crop } });
+    setPendingImage(null);
+    setActiveTool(null);
   };
 
   const toggleTool = (tool: PrivateComposerTool) => {
@@ -3104,8 +3019,7 @@ function PrivatePostComposer({
     body: body.trim() || (image && !poll ? "Shared an image." : ""),
     access,
     ppvPrice: access === "ppv" ? parsedPrice : null,
-    imageAssetId: image?.id ?? null,
-    imageCrop: image?.crop ?? null,
+    image,
     poll: poll ? { question: poll.question.trim(), options: poll.options.map((option) => option.trim()) } : null,
   });
 
@@ -3429,7 +3343,7 @@ function PrivatePostComposer({
       {pendingImage && (
         <PostImageCropEditor
           source={pendingImage.source}
-          crop={image && editableImageSourceRef.current?.imageId === image.id ? image.crop : null}
+          crop={image?.source === pendingImage.source ? image.crop : null}
           disabled={composerBusy}
           onCancel={discardPendingImage}
           onApply={applyImageCrop}
@@ -3437,25 +3351,18 @@ function PrivatePostComposer({
       )}
       {image && !pendingImage && (
         <div className="mb-3 overflow-hidden rounded-xl border border-[var(--noodle-divider)] bg-[var(--noodle-accent)]/10">
-          <PostImageFrame src={image.imageUrl} crop={image.crop} alt="Attached post image" maxHeight={240} />
+          <PrivateDraftImageFrame image={image} />
           <div className="flex items-center justify-between gap-2 px-3 py-2 text-xs text-[var(--noodle-accent)]">
             <span>Attached image</span>
             <div className="flex items-center gap-1">
-              {editableImageSourceRef.current?.imageId === image.id && (
-                <button
-                  type="button"
-                  onClick={() =>
-                    setPendingImage({
-                      source: editableImageSourceRef.current!.source,
-                      stagedAsset: null,
-                    })
-                  }
-                  disabled={composerBusy}
-                  className="min-h-8 px-2 font-bold disabled:opacity-50"
-                >
-                  Adjust
-                </button>
-              )}
+              <button
+                type="button"
+                onClick={() => setPendingImage({ source: image.source })}
+                disabled={composerBusy}
+                className="min-h-8 px-2 font-bold disabled:opacity-50"
+              >
+                Adjust
+              </button>
               <button
                 type="button"
                 onClick={removeImage}

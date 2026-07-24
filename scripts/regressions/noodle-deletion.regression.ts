@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { DB } from "../../packages/server/src/db/connection.js";
@@ -84,83 +84,45 @@ try {
     disclosureMode: "secret",
   });
   assert.ok(privateAccount);
-  const originalPostMedia = await noodle.createPrivateMediaAsset({
-    ownerAccountId: privateAccount.id,
-    storageKey: "original-post-image.png",
-    contentType: "image/png",
-    byteLength: 16,
-  });
   const replacementPost = await noodle.createPrivatePost({
     authorAccountId: privateAccount.id,
     content: "Replace this image",
-    imageAssetId: originalPostMedia.id,
+    imageUrl: "/api/noodle/noodler/posts/replacement-post/media",
+    metadata: { privateMediaPath: `noodler-private/${privateAccount.id}/original-post-image.png` },
   });
   assert.ok(replacementPost);
-  const replacementMedia = await noodle.createPrivateMediaAsset({
-    ownerAccountId: privateAccount.id,
-    storageKey: "replacement-post-image.png",
-    contentType: "image/png",
-    byteLength: 24,
-  });
   const replacementCrop = {
-    x: 10,
-    y: 15,
-    width: 70,
-    height: 60,
+    x: 0.1,
+    y: 0.15,
+    width: 0.7,
+    height: 0.6,
     sourceWidth: 1200,
     sourceHeight: 800,
   };
-  const replacedPost = await noodle.updatePrivatePost(replacementPost.id, {
-    imageAssetId: replacementMedia.id,
-    imageCrop: replacementCrop,
-  });
-  assert.equal(
-    replacedPost?.imageUrl,
-    `/api/noodle/noodler/media/${replacementMedia.id}?accountId=${encodeURIComponent(privateAccount.id)}`,
-  );
-  assert.deepEqual(replacedPost?.metadata.imageCrop, replacementCrop);
-  assert.equal(await noodle.getPrivateMediaAsset(originalPostMedia.id), null, "the replaced attachment must be removed");
-  assert.equal(
-    (await noodle.getPrivateMediaAsset(replacementMedia.id))?.attachedPostId,
+  const replacementPath = `noodler-private/${privateAccount.id}/replacement-post-image.png`;
+  const replacedPost = await noodle.updatePrivatePost(
     replacementPost.id,
-    "the replacement must be attached to the post",
+    { imageCrop: replacementCrop },
+    {
+      imageUrl: `/api/noodle/noodler/posts/${replacementPost.id}/media`,
+      privateMediaPath: replacementPath,
+    },
   );
-
-  const privateMedia = await noodle.createPrivateMediaAsset({
-    ownerAccountId: privateAccount.id,
-    storageKey: "recovery-regression.png",
-    contentType: "image/png",
-    byteLength: 16,
-  });
-  assert.ok(privateMedia);
+  assert.equal(replacedPost?.imageUrl, `/api/noodle/noodler/posts/${replacementPost.id}/media`);
+  assert.equal(replacedPost?.metadata.privateMediaPath, replacementPath);
+  assert.deepEqual(replacedPost?.metadata.imageCrop, replacementCrop);
 
   await fileDb._fileStore.close();
   fileDb = await createFileNativeDB();
   const reloadedNoodle = createNoodleStorage(fileDb as unknown as DB);
   const persistedReplacement = await reloadedNoodle.getPrivatePostById(replacementPost.id);
-  assert.equal(
-    persistedReplacement?.imageUrl,
-    `/api/noodle/noodler/media/${replacementMedia.id}?accountId=${encodeURIComponent(privateAccount.id)}`,
-    "the replacement image must persist across storage reload",
-  );
+  assert.equal(persistedReplacement?.imageUrl, `/api/noodle/noodler/posts/${replacementPost.id}/media`);
+  assert.equal(persistedReplacement?.metadata.privateMediaPath, replacementPath);
   assert.deepEqual(persistedReplacement?.metadata.imageCrop, replacementCrop);
-  await fileDb._fileStore.close();
-
-  const accountsPath = join(storageDir, "tables", "noodle_accounts.json");
-  writeFileSync(`${accountsPath}.bak`, "[]");
-  writeFileSync(accountsPath, "{");
-
-  fileDb = await createFileNativeDB();
-  const recoveredDb = fileDb as unknown as DB;
-  const recoveredNoodle = createNoodleStorage(recoveredDb);
-  assert.deepEqual(fileDb._fileStore.getRecoveredTables(), [{ table: "noodle_accounts", source: "backup" }]);
-  const recovery = await recoveredNoodle.reconcilePrivateMediaRelationships();
-  assert.equal(recovery.trusted, false, "backup recovery must disable destructive relationship cleanup");
-  assert.deepEqual(recovery.recoveredTables, ["noodle_accounts"]);
-  assert.ok(
-    await recoveredNoodle.getPrivateMediaAsset(privateMedia.id),
-    "media metadata must survive cross-table backup skew for manual reconciliation",
-  );
+  const removedImage = await reloadedNoodle.updatePrivatePost(replacementPost.id, { removeImage: true });
+  assert.equal(removedImage?.imageUrl, null);
+  assert.equal(removedImage?.metadata.privateMediaPath, undefined);
+  assert.equal(removedImage?.metadata.imageCrop, undefined);
 } finally {
   await fileDb._fileStore.close();
   rmSync(storageDir, { recursive: true, force: true });

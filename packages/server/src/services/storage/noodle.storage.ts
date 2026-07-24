@@ -49,7 +49,6 @@ import {
 } from "@marinara-engine/shared";
 import type { DB } from "../../db/connection.js";
 import { isFileUniqueConstraintError } from "../../db/file-schema.js";
-import { logger } from "../../lib/logger.js";
 import { isNoodlerHiddenFromViewer } from "../noodle/noodler-access.js";
 import { nextAutoPostRunAt } from "../noodle/noodle-autopost-cadence.js";
 import {
@@ -60,14 +59,8 @@ import {
   noodlePosts,
   noodlePostUnlocks,
   noodleRefreshRuns,
-  noodlerPrivateMedia,
 } from "../../db/schema/index.js";
 import { newId, now } from "../../utils/id-generator.js";
-import {
-  stageNoodlerPrivateMediaDeletion,
-  type NoodlerPrivateMediaFile,
-} from "../noodle/noodler-private-media-files.js";
-import { tryNoodlePrivateAccountOperation } from "../noodle/noodle-private-account-operation-lock.js";
 import { createAppSettingsStorage } from "./app-settings.storage.js";
 import {
   clearNoodleRefreshFailure,
@@ -88,10 +81,6 @@ type DigestRow = typeof noodleActivityDigests.$inferSelect;
 type RefreshRunRow = typeof noodleRefreshRuns.$inferSelect;
 type SubscriptionRow = typeof noodleAccountSubscriptions.$inferSelect;
 type PostUnlockRow = typeof noodlePostUnlocks.$inferSelect;
-type PrivateMediaRow = typeof noodlerPrivateMedia.$inferSelect;
-type PrivateMediaRecoveryAction =
-  | { kind: "attach"; assetId: string; postId: string }
-  | { kind: "remove"; assetId: string };
 type PublicCreateInteractionCommand = Omit<NoodleCreateInteractionInput, "actorKind" | "actorEntityId"> & {
   actorAccountId: string;
 };
@@ -127,53 +116,9 @@ type PrivatePostPersistenceInput = {
   access?: NoodlePostAccess;
   ppvPrice?: number | null;
   metadata?: Record<string, unknown>;
-  imageAssetId?: string | null;
+  imageUrl?: string | null;
+  imagePrompt?: string | null;
 };
-
-type NoodlerPrivateMediaAsset = PrivateMediaRow;
-
-type NoodlerPrivateMediaRecoveryResult = {
-  trusted: boolean;
-  complete: boolean;
-  repairedClaims: number;
-  removedClaims: number;
-  quarantinedTables: string[];
-  recoveredTables: string[];
-};
-
-export class NoodlerPrivateMediaClaimError extends Error {
-  constructor() {
-    super("The staged NoodleR media does not belong to this account or is already attached.");
-    this.name = "NoodlerPrivateMediaClaimError";
-  }
-}
-
-async function deleteRowsWithStagedMedia<T>(
-  assets: NoodlerPrivateMediaFile[],
-  mutate: () => Promise<T>,
-): Promise<T> {
-  const staged = await stageNoodlerPrivateMediaDeletion(assets);
-  try {
-    const result = await mutate();
-    const cleanupFailures = await staged.commit();
-    if (cleanupFailures > 0) {
-      logger.warn(
-        "[noodler] %d staged private-media file(s) could not be removed; bounded cleanup will retry",
-        cleanupFailures,
-      );
-    }
-    return result;
-  } catch (error) {
-    const rollbackFailures = await staged.rollback();
-    if (rollbackFailures > 0) {
-      logger.error(
-        "[noodler] %d private-media file(s) could not be restored after a database failure",
-        rollbackFailures,
-      );
-    }
-    throw error;
-  }
-}
 
 function parseRecord(value: unknown): Record<string, unknown> {
   if (!value) return {};
@@ -524,25 +469,10 @@ function mapPost(row: PostRow): NoodlePost {
 }
 
 function mapManagedPost(row: PostRow): NoodlerManagedPost {
-  const post = mapPost(row);
-  const privateMediaMatch = post.imageUrl?.match(/^\/api\/noodle\/noodler\/media\/([^?]+)/);
   return {
-    ...post,
-    imageUrl: privateMediaMatch?.[1]
-      ? `/api/noodle/noodler/media/${privateMediaMatch[1]}?accountId=${encodeURIComponent(row.authorAccountId)}`
-      : post.imageUrl,
+    ...mapPost(row),
     title: row.title?.trim() || null,
   };
-}
-
-function privateMediaIdFromPostImage(imageUrl: string | null): string | null {
-  const match = /^\/api\/noodle\/noodler\/media\/([^?]+)/.exec(imageUrl ?? "");
-  if (!match?.[1]) return null;
-  try {
-    return decodeURIComponent(match[1]);
-  } catch {
-    return null;
-  }
 }
 
 function updatePollMetadata(
@@ -912,265 +842,31 @@ export function createNoodleStorage(db: DB) {
       return rows[0] ? mapAccount(rows[0]) : null;
     },
 
-    async createPrivateMediaAsset(input: {
-      ownerAccountId: string;
-      storageKey: string;
-      contentType: string;
-      byteLength: number;
-    }): Promise<NoodlerPrivateMediaAsset | null> {
-      const timestamp = now();
-      const id = newId();
-      return db.transaction(async (tx) => {
-        const ownerRows = await tx
-          .select()
-          .from(noodleAccounts)
-          .where(
-            and(
-              eq(noodleAccounts.id, input.ownerAccountId),
-              eq(noodleAccounts.visibility, "private"),
-            ),
-          );
-        if (!ownerRows[0]) return null;
-        await tx.insert(noodlerPrivateMedia).values({
-          id,
-          ownerAccountId: input.ownerAccountId,
-          attachedPostId: null,
-          source: "upload",
-          storageKey: input.storageKey,
-          contentType: input.contentType,
-          byteLength: input.byteLength,
-          createdAt: timestamp,
-          updatedAt: timestamp,
-        });
-        const rows = await tx.select().from(noodlerPrivateMedia).where(eq(noodlerPrivateMedia.id, id));
-        await tx._fileStore.flush();
-        return rows[0] ?? null;
-      });
-    },
-
-    async getPrivateMediaAsset(id: string): Promise<NoodlerPrivateMediaAsset | null> {
-      const rows = await db.select().from(noodlerPrivateMedia).where(eq(noodlerPrivateMedia.id, id));
-      return rows[0] ?? null;
-    },
-
-    async privateMediaAssetExists(storageKey: string): Promise<boolean> {
-      const rows = await db.select().from(noodlerPrivateMedia).where(eq(noodlerPrivateMedia.storageKey, storageKey));
-      return Boolean(rows[0]);
-    },
-
-    async reconcilePrivateMediaRelationships(limit = 100): Promise<NoodlerPrivateMediaRecoveryResult> {
-      const authoritativeTables = new Set(["noodle_accounts", "noodle_posts", "noodler_private_media"]);
-      const quarantinedTables = db._fileStore
-        .getQuarantinedTables()
-        .map(({ table }) => table)
-        .filter((table) => authoritativeTables.has(table));
-      const recoveredTables = db._fileStore
-        .getRecoveredTables()
-        .map(({ table }) => table)
-        .filter((table) => authoritativeTables.has(table));
-      if (quarantinedTables.length > 0 || recoveredTables.length > 0) {
-        return {
-          trusted: false,
-          complete: false,
-          repairedClaims: 0,
-          removedClaims: 0,
-          quarantinedTables,
-          recoveredTables,
-        };
-      }
-
-      const [accountRows, postRows, mediaRows] = await Promise.all([
-        db.select().from(noodleAccounts),
-        db.select().from(noodlePosts),
-        db.select().from(noodlerPrivateMedia),
-      ]);
-      const privateAccountIds = new Set(
-        accountRows.filter((account) => account.visibility === "private").map((account) => account.id),
-      );
-      const postsById = new Map(postRows.map((post) => [post.id, post]));
-      const postsByMediaId = new Map<string, PostRow[]>();
-      for (const post of postRows) {
-        if (!privateAccountIds.has(post.authorAccountId)) continue;
-        const mediaId = privateMediaIdFromPostImage(post.imageUrl);
-        if (!mediaId) continue;
-        const references = postsByMediaId.get(mediaId);
-        if (references) references.push(post);
-        else postsByMediaId.set(mediaId, [post]);
-      }
-
-      const actions: PrivateMediaRecoveryAction[] = [];
-      for (const media of mediaRows) {
-        const ownerExists = privateAccountIds.has(media.ownerAccountId);
-        if (media.attachedPostId) {
-          const attachedPost = postsById.get(media.attachedPostId);
-          const isConsistent =
-            ownerExists &&
-            attachedPost?.authorAccountId === media.ownerAccountId &&
-            privateMediaIdFromPostImage(attachedPost.imageUrl) === media.id;
-          if (!isConsistent) actions.push({ kind: "remove", assetId: media.id });
-          continue;
-        }
-
-        if (!ownerExists) {
-          actions.push({ kind: "remove", assetId: media.id });
-          continue;
-        }
-        const matchingPosts = (postsByMediaId.get(media.id) ?? []).filter(
-          (post) => post.authorAccountId === media.ownerAccountId,
-        );
-        if (matchingPosts.length === 1) {
-          actions.push({ kind: "attach", assetId: media.id, postId: matchingPosts[0]!.id });
-        }
-      }
-
-      const boundedLimit = Math.max(0, Math.min(1_000, Math.floor(limit)));
-      const selectedActions = actions.slice(0, boundedLimit);
-      const repairedClaims = selectedActions.filter((action) => action.kind === "attach").length;
-      const removedClaims = selectedActions.length - repairedClaims;
-      if (selectedActions.length > 0) {
-        const timestamp = now();
-        await db.transaction(async (tx) => {
-          for (const action of selectedActions) {
-            if (action.kind === "attach") {
-              await tx
-                .update(noodlerPrivateMedia)
-                .set({ attachedPostId: action.postId, updatedAt: timestamp })
-                .where(and(eq(noodlerPrivateMedia.id, action.assetId), isNull(noodlerPrivateMedia.attachedPostId)));
-            }
-          }
-          const removedAssetIds = selectedActions
-            .filter((action): action is Extract<PrivateMediaRecoveryAction, { kind: "remove" }> => action.kind === "remove")
-            .map((action) => action.assetId);
-          if (removedAssetIds.length > 0) {
-            await tx.delete(noodlerPrivateMedia).where(inArray(noodlerPrivateMedia.id, removedAssetIds));
-          }
-          await tx._fileStore.flush();
-        });
-      }
-
-      return {
-        trusted: true,
-        complete: actions.length <= boundedLimit,
-        repairedClaims,
-        removedClaims,
-        quarantinedTables: [],
-        recoveredTables: [],
-      };
-    },
-
-    async deleteUnattachedPrivateMediaAsset(
-      ownerAccountId: string,
-      id: string,
-    ): Promise<NoodlerPrivateMediaAsset | null> {
-      const rows = await db
-        .select()
-        .from(noodlerPrivateMedia)
-        .where(
-          and(
-            eq(noodlerPrivateMedia.id, id),
-            eq(noodlerPrivateMedia.ownerAccountId, ownerAccountId),
-            isNull(noodlerPrivateMedia.attachedPostId),
-          ),
-        );
-      const asset = rows[0];
-      if (!asset) return null;
-      const staged = await stageNoodlerPrivateMediaDeletion([asset]);
-      try {
-        const deleted = await db.transaction(async (tx) => {
-          const currentRows = await tx
-            .select()
-            .from(noodlerPrivateMedia)
-            .where(
-              and(
-                eq(noodlerPrivateMedia.id, id),
-                eq(noodlerPrivateMedia.ownerAccountId, ownerAccountId),
-                isNull(noodlerPrivateMedia.attachedPostId),
-              ),
-            );
-          if (!currentRows[0]) return false;
-          await tx.delete(noodlerPrivateMedia).where(eq(noodlerPrivateMedia.id, id));
-          await tx._fileStore.flush();
-          return true;
-        });
-        if (!deleted) {
-          const rollbackFailures = await staged.rollback();
-          if (rollbackFailures > 0) {
-            logger.error(
-              "[noodler] %d private-media file(s) could not be restored after their ownership changed",
-              rollbackFailures,
-            );
-          }
-          return null;
-        }
-        const cleanupFailures = await staged.commit();
-        if (cleanupFailures > 0) {
-          logger.warn(
-            "[noodler] %d staged private-media file(s) could not be removed; bounded cleanup will retry",
-            cleanupFailures,
-          );
-        }
-        return asset;
-      } catch (error) {
-        const rollbackFailures = await staged.rollback();
-        if (rollbackFailures > 0) {
-          logger.error(
-            "[noodler] %d private-media file(s) could not be restored after a database failure",
-            rollbackFailures,
-          );
-        }
-        throw error;
-      }
-    },
-
-    async cleanupStalePrivateMediaAssets(cutoff: string, limit = 20): Promise<number> {
-      const boundedLimit = Math.max(0, Math.min(100, Math.floor(limit)));
-      if (boundedLimit === 0) return 0;
-      const rows = await db
-        .select()
-        .from(noodlerPrivateMedia)
-        .where(and(isNull(noodlerPrivateMedia.attachedPostId), lt(noodlerPrivateMedia.createdAt, cutoff)))
-        .orderBy(noodlerPrivateMedia.createdAt)
-        .limit(boundedLimit);
-      let deleted = 0;
-      for (const asset of rows) {
-        const locked = await tryNoodlePrivateAccountOperation(asset.ownerAccountId, () =>
-          this.deleteUnattachedPrivateMediaAsset(asset.ownerAccountId, asset.id),
-        );
-        if (locked.acquired && locked.value) deleted += 1;
-      }
-      return deleted;
-    },
-
     async deletePrivateAccount(id: string): Promise<NoodleAccount | null> {
       const existing = await this.getPrivateAccountById(id);
       if (!existing) return null;
-      const [postRows, mediaRows] = await Promise.all([
-        db.select().from(noodlePosts).where(eq(noodlePosts.authorAccountId, id)),
-        db.select().from(noodlerPrivateMedia).where(eq(noodlerPrivateMedia.ownerAccountId, id)),
-      ]);
+      const postRows = await db.select().from(noodlePosts).where(eq(noodlePosts.authorAccountId, id));
       const postIds = postRows.map((post) => post.id);
       const interactionRows =
         postIds.length > 0
           ? await db.select().from(noodleInteractions).where(inArray(noodleInteractions.postId, postIds))
           : [];
       const interactionIds = interactionRows.map((interaction) => interaction.id);
-      return deleteRowsWithStagedMedia(mediaRows, async () => {
-        await db.transaction(async (tx) => {
-          if (postIds.length > 0) {
-            await tx.delete(noodleActivityDigests).where(inArray(noodleActivityDigests.sourcePostId, postIds));
-          }
-          if (interactionIds.length > 0) {
-            await tx
-              .delete(noodleActivityDigests)
-              .where(inArray(noodleActivityDigests.sourceInteractionId, interactionIds));
-          }
+      await db.transaction(async (tx) => {
+        if (postIds.length > 0) {
+          await tx.delete(noodleActivityDigests).where(inArray(noodleActivityDigests.sourcePostId, postIds));
+        }
+        if (interactionIds.length > 0) {
           await tx
-            .delete(noodleAccounts)
-            .where(and(eq(noodleAccounts.id, id), eq(noodleAccounts.visibility, "private")));
-          await tx._fileStore.flush();
-        });
-      return existing;
+            .delete(noodleActivityDigests)
+            .where(inArray(noodleActivityDigests.sourceInteractionId, interactionIds));
+        }
+        await tx
+          .delete(noodleAccounts)
+          .where(and(eq(noodleAccounts.id, id), eq(noodleAccounts.visibility, "private")));
+        await tx._fileStore.flush();
       });
+      return existing;
     },
 
     async listNoodlerStageProfiles(): Promise<NoodlerManagedStageProfile[]> {
@@ -1671,27 +1367,13 @@ export function createNoodleStorage(db: DB) {
       const timestamp = now();
       const id = input.id ?? newId();
       return db.transaction(async (tx) => {
-        const imageAssetId = input.imageAssetId ?? null;
-        if (imageAssetId) {
-          const mediaRows = await tx
-            .select()
-            .from(noodlerPrivateMedia)
-            .where(
-              and(
-                eq(noodlerPrivateMedia.id, imageAssetId),
-                eq(noodlerPrivateMedia.ownerAccountId, input.authorAccountId),
-                isNull(noodlerPrivateMedia.attachedPostId),
-              ),
-            );
-          if (!mediaRows[0]) throw new NoodlerPrivateMediaClaimError();
-        }
         await tx.insert(noodlePosts).values({
           id,
           authorAccountId: input.authorAccountId,
           title: input.title?.trim() || null,
           content: input.content,
-          imageUrl: imageAssetId ? `/api/noodle/noodler/media/${imageAssetId}` : null,
-          imagePrompt: null,
+          imageUrl: input.imageUrl ?? null,
+          imagePrompt: input.imagePrompt ?? null,
           parentPostId: null,
           quotePostId: null,
           source: input.source ?? "manual",
@@ -1702,18 +1384,6 @@ export function createNoodleStorage(db: DB) {
           createdAt: timestamp,
           updatedAt: timestamp,
         });
-        if (imageAssetId) {
-          await tx
-            .update(noodlerPrivateMedia)
-            .set({ attachedPostId: id, updatedAt: timestamp })
-            .where(
-              and(
-                eq(noodlerPrivateMedia.id, imageAssetId),
-                eq(noodlerPrivateMedia.ownerAccountId, input.authorAccountId),
-                isNull(noodlerPrivateMedia.attachedPostId),
-              ),
-            );
-        }
         const rows = await tx.select().from(noodlePosts).where(eq(noodlePosts.id, id));
         return rows[0] ? mapManagedPost(rows[0]) : null;
       });
@@ -1928,123 +1598,76 @@ export function createNoodleStorage(db: DB) {
       return existing;
     },
 
-    async updatePrivatePost(id: string, input: NoodlePrivatePostUpdateInput): Promise<NoodlerManagedPost | null> {
+    async updatePrivatePost(
+      id: string,
+      input: NoodlePrivatePostUpdateInput,
+      media?: { imageUrl: string; privateMediaPath: string },
+    ): Promise<NoodlerManagedPost | null> {
       const existing = await this.getPrivatePostById(id);
       if (!existing) return null;
-      const currentMediaId = privateMediaIdFromPostImage(existing.imageUrl);
-      const imageChangeRequested =
-        input.imageAssetId !== undefined &&
-        (input.imageAssetId !== currentMediaId || (input.imageAssetId === null && existing.imageUrl !== null));
-      const imageCropUpdate =
-        input.imageCrop !== undefined ? input.imageCrop : input.imageAssetId !== undefined ? null : undefined;
       const pollUpdate = updatePollMetadata(existing.metadata, input.poll);
       const nextMetadata = pollUpdate.metadata;
-      if (imageCropUpdate === null) delete nextMetadata.imageCrop;
-      else if (imageCropUpdate !== undefined) nextMetadata.imageCrop = imageCropUpdate;
-      if (!imageChangeRequested) {
-        await db.transaction(async (tx) => {
-          await tx
-            .update(noodlePosts)
-            .set({
-              ...(input.title !== undefined && { title: input.title }),
-              ...(input.content !== undefined && { content: input.content.trim().slice(0, 4000) }),
-              ...((imageCropUpdate !== undefined || input.poll !== undefined) && {
-                metadata: JSON.stringify(nextMetadata),
-              }),
-              updatedAt: now(),
-            })
-            .where(eq(noodlePosts.id, id));
-          if (pollUpdate.changed) {
-            await tx
-              .delete(noodleInteractions)
-              .where(and(eq(noodleInteractions.postId, id), eq(noodleInteractions.type, "vote")));
-          }
-        });
-        return this.getPrivatePostById(id);
+      const imageChanged = Boolean(media || input.removeImage);
+      if (imageChanged) {
+        for (const key of [
+          "privateMediaPath",
+          "imageGenerated",
+          "imageProvider",
+          "imageModel",
+          "imageStyleProfileId",
+          "imageGenerationFailed",
+          "imageGenerationError",
+          "imagePendingReview",
+        ]) {
+          delete nextMetadata[key];
+        }
       }
-
-      const previousMedia = await db
-        .select()
-        .from(noodlerPrivateMedia)
-        .where(eq(noodlerPrivateMedia.attachedPostId, id));
-      return deleteRowsWithStagedMedia(previousMedia, async () => {
-        const timestamp = now();
-        return db.transaction(async (tx) => {
-          const nextMediaId = input.imageAssetId ?? null;
-          if (nextMediaId) {
-            const mediaRows = await tx
-              .select()
-              .from(noodlerPrivateMedia)
-              .where(
-                and(
-                  eq(noodlerPrivateMedia.id, nextMediaId),
-                  eq(noodlerPrivateMedia.ownerAccountId, existing.authorAccountId),
-                  isNull(noodlerPrivateMedia.attachedPostId),
-                ),
-              );
-            if (!mediaRows[0]) throw new NoodlerPrivateMediaClaimError();
-          }
-          if (previousMedia.length > 0) {
-            await tx
-              .delete(noodlerPrivateMedia)
-              .where(inArray(noodlerPrivateMedia.id, previousMedia.map((asset) => asset.id)));
-          }
-          await tx
-            .update(noodlePosts)
-            .set({
-              ...(input.title !== undefined && { title: input.title }),
-              ...(input.content !== undefined && { content: input.content.trim().slice(0, 4000) }),
-              imageUrl: nextMediaId ? `/api/noodle/noodler/media/${nextMediaId}` : null,
+      if (media) nextMetadata.privateMediaPath = media.privateMediaPath;
+      if (input.removeImage || input.imageCrop === null) delete nextMetadata.imageCrop;
+      else if (input.imageCrop !== undefined) nextMetadata.imageCrop = input.imageCrop;
+      await db.transaction(async (tx) => {
+        await tx
+          .update(noodlePosts)
+          .set({
+            ...(input.title !== undefined && { title: input.title }),
+            ...(input.content !== undefined && { content: input.content.trim().slice(0, 4000) }),
+            ...(imageChanged && {
+              imageUrl: media?.imageUrl ?? null,
               imagePrompt: null,
+              imageClaimToken: null,
+              imageClaimLeaseUntil: null,
+            }),
+            ...((imageChanged || input.imageCrop !== undefined || input.poll !== undefined) && {
               metadata: JSON.stringify(nextMetadata),
-              updatedAt: timestamp,
-            })
-            .where(eq(noodlePosts.id, id));
-          if (nextMediaId) {
-            await tx
-              .update(noodlerPrivateMedia)
-              .set({ attachedPostId: id, updatedAt: timestamp })
-              .where(
-                and(
-                  eq(noodlerPrivateMedia.id, nextMediaId),
-                  eq(noodlerPrivateMedia.ownerAccountId, existing.authorAccountId),
-                  isNull(noodlerPrivateMedia.attachedPostId),
-                ),
-              );
-          }
-          if (pollUpdate.changed) {
-            await tx
-              .delete(noodleInteractions)
-              .where(and(eq(noodleInteractions.postId, id), eq(noodleInteractions.type, "vote")));
-          }
-          await tx._fileStore.flush();
-          const rows = await tx.select().from(noodlePosts).where(eq(noodlePosts.id, id));
-          return rows[0] ? mapManagedPost(rows[0]) : null;
-        });
+            }),
+            updatedAt: now(),
+          })
+          .where(eq(noodlePosts.id, id));
+        if (pollUpdate.changed) {
+          await tx
+            .delete(noodleInteractions)
+            .where(and(eq(noodleInteractions.postId, id), eq(noodleInteractions.type, "vote")));
+        }
       });
+      return this.getPrivatePostById(id);
     },
 
     async deletePrivatePost(id: string): Promise<NoodlerManagedPost | null> {
       const existing = await this.getPrivatePostById(id);
       if (!existing) return null;
-      const [mediaRows, interactionRows] = await Promise.all([
-        db.select().from(noodlerPrivateMedia).where(eq(noodlerPrivateMedia.attachedPostId, id)),
-        db.select().from(noodleInteractions).where(eq(noodleInteractions.postId, id)),
-      ]);
+      const interactionRows = await db.select().from(noodleInteractions).where(eq(noodleInteractions.postId, id));
       const interactionIds = interactionRows.map((interaction) => interaction.id);
-      return deleteRowsWithStagedMedia(mediaRows, async () => {
       await db.transaction(async (tx) => {
         await tx.delete(noodleActivityDigests).where(eq(noodleActivityDigests.sourcePostId, id));
-          if (interactionIds.length > 0) {
-            await tx
-              .delete(noodleActivityDigests)
-              .where(inArray(noodleActivityDigests.sourceInteractionId, interactionIds));
-          }
+        if (interactionIds.length > 0) {
+          await tx
+            .delete(noodleActivityDigests)
+            .where(inArray(noodleActivityDigests.sourceInteractionId, interactionIds));
+        }
         await tx.delete(noodlePosts).where(eq(noodlePosts.id, id));
-          await tx._fileStore.flush();
+        await tx._fileStore.flush();
       });
       return existing;
-      });
     },
 
     async resetTimeline(): Promise<void> {

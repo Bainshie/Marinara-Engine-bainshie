@@ -27,7 +27,11 @@ import { createNoodleStorage } from "../storage/noodle.storage.js";
 import { createPromptOverridesStorage } from "../storage/prompt-overrides.storage.js";
 import { formatNoodleMessagesForLog } from "./noodle-generation-log.js";
 import { generatePrivatePostImage } from "./noodle-private-images.service.js";
-import { privatePostMediaUrl } from "./noodle-private-media.js";
+import {
+  privatePostMediaUrl,
+  stageUploadedPrivatePostMedia,
+  type NoodlerPrivatePostMediaUpload,
+} from "./noodle-private-media.js";
 import type { NoodleImagePromptReviewItem } from "./noodle-public-images.service.js";
 import { getErrorMessage } from "./noodle-public-support.js";
 import { noodleResponseFormat } from "./noodle-response-format.js";
@@ -43,6 +47,7 @@ export type PrivatePostGenerationInput = {
   account: NoodleAccount;
   request: NoodlePrivateGenerationRequest;
   connection: GenerationConnection;
+  media?: NoodlerPrivatePostMediaUpload;
 };
 
 const PRIVATE_POST_MAX_TOKENS = 2048;
@@ -179,7 +184,7 @@ export async function generatePrivatePost(
   const { account } = input;
   const settings = await noodle.getSettings();
   const autoPosting = account.settings.scheduler.autoPosting;
-  const imagesEnabled = autoPosting?.imagesEnabled === true;
+  const imagesEnabled = autoPosting?.imagesEnabled === true && !input.media;
 
   const connections = createConnectionsStorage(db);
   const fallbackConnection = await connections.getFallbackForMain();
@@ -292,7 +297,6 @@ export async function generatePrivatePost(
     source: "generated" as const,
     access: input.request.access,
     ppvPrice: input.request.access === "ppv" ? (input.request.ppvPrice ?? null) : null,
-    imageAssetId: input.request.imageAssetId,
     metadata: {
       ...(input.request.poll ? { poll: createNoodlePoll(input.request.poll) } : {}),
       ...(input.request.imageCrop ? { imageCrop: input.request.imageCrop } : {}),
@@ -310,6 +314,25 @@ export async function generatePrivatePost(
     if (!post) throw new Error("Failed to persist the generated private NoodleR post.");
     return post;
   };
+
+  if (input.media) {
+    const postId = newId();
+    const staged = stageUploadedPrivatePostMedia(account.id, input.media);
+    try {
+      staged.stagedMedia.promote();
+      return {
+        post: await persist({
+          id: postId,
+          imageUrl: privatePostMediaUrl(postId),
+          metadata: { privateMediaPath: staged.privateMediaPath },
+        }),
+        imagePromptReview: null,
+      };
+    } catch (error) {
+      staged.stagedMedia.compensate();
+      throw error;
+    }
+  }
 
   if (!draftImagePrompt) return { post: await persist(), imagePromptReview: null };
 

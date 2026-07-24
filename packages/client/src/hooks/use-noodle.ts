@@ -18,6 +18,7 @@ import type {
   NoodleInteraction,
   NoodleInteractionUpdateInput,
   NoodlePost,
+  NoodlePostImageCrop,
   NoodlePostUpdateInput,
   NoodlePrivatePostCreateInput,
   NoodlePrivatePostUpdateInput,
@@ -199,15 +200,48 @@ export type GeneratedPrivateNoodlePost = NoodlerManagedPost & {
   imagePromptReview?: ImagePromptReviewItem;
 };
 
+export type NoodlerPostDraftImage = {
+  source: File | string;
+  crop: NoodlePostImageCrop | null;
+};
+
+type NoodlerCreatePostRequest = Omit<NoodlePrivatePostCreateInput, "uploadedImageUrl" | "imageCrop"> & {
+  image?: NoodlerPostDraftImage | null;
+};
+
+type NoodlerGeneratePostRequest = Omit<NoodlePrivateGenerationRequest, "uploadedImageUrl" | "imageCrop"> & {
+  image?: NoodlerPostDraftImage | null;
+};
+
+function postNoodlerRequestWithImage<T>(
+  path: string,
+  input: Record<string, unknown>,
+  image?: NoodlerPostDraftImage | null,
+): Promise<T> {
+  if (!image) return api.post<T>(path, input);
+  const payload = { ...input, ...(image.crop ? { imageCrop: image.crop } : {}) };
+  if (image.source instanceof File) {
+    const form = new FormData();
+    form.append("payload", JSON.stringify(payload));
+    form.append("file", image.source);
+    return api.upload<T>(path, form);
+  }
+  return api.post<T>(path, { ...payload, uploadedImageUrl: image.source });
+}
+
 export function useGeneratePrivateNoodlePost() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (input: NoodlePrivateGenerationRequest) =>
-      api.post<GeneratedPrivateNoodlePost>("/noodle/refresh", {
-        ...input,
-        debugMode: useUIStore.getState().debugMode,
-        reviewImagePromptsBeforeSend: useUIStore.getState().reviewImagePromptsBeforeSend,
-      } satisfies NoodlePrivateGenerationRequest),
+    mutationFn: ({ image, ...input }: NoodlerGeneratePostRequest) =>
+      postNoodlerRequestWithImage<GeneratedPrivateNoodlePost>(
+        "/noodle/refresh",
+        {
+          ...input,
+          debugMode: useUIStore.getState().debugMode,
+          reviewImagePromptsBeforeSend: useUIStore.getState().reviewImagePromptsBeforeSend,
+        },
+        image,
+      ),
     onSuccess: (_post, input) =>
       Promise.all([
         qc.invalidateQueries({ queryKey: noodleKeys.privatePosts(input.targetAccountId) }),
@@ -235,7 +269,8 @@ export function useConfirmNoodlerImagePrompts() {
 export function useCreateNoodlerPost() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (input: NoodlePrivatePostCreateInput) => api.post<NoodlerManagedPost>("/noodle/noodler/posts", input),
+    mutationFn: ({ image, ...input }: NoodlerCreatePostRequest) =>
+      postNoodlerRequestWithImage<NoodlerManagedPost>("/noodle/noodler/posts", input, image),
     onSuccess: (_post, input) =>
       Promise.all([
         qc.invalidateQueries({ queryKey: noodleKeys.privatePosts(input.targetAccountId) }),
@@ -244,39 +279,12 @@ export function useCreateNoodlerPost() {
   });
 }
 
-interface NoodlerStagedImage {
-  id: string;
-  imageUrl: string;
-  contentType: string;
-  byteLength: number;
-}
-
 function imageFileExtension(contentType: string): string {
   if (contentType === "image/png") return "png";
   if (contentType === "image/webp") return "webp";
   if (contentType === "image/gif") return "gif";
   if (contentType === "image/avif") return "avif";
   return "jpg";
-}
-
-export function useUploadNoodlerPostImage() {
-  return useMutation({
-    mutationFn: ({ accountId, file }: { accountId: string; file: File }) => {
-      const form = new FormData();
-      form.append("file", file);
-      return api.upload<NoodlerStagedImage>(`/noodle/noodler/accounts/${encodeURIComponent(accountId)}/media`, form);
-    },
-  });
-}
-
-export function useImportNoodlerPostImageUrl() {
-  return useMutation({
-    mutationFn: ({ accountId, imageUrl }: { accountId: string; imageUrl: string }) =>
-      api.post<NoodlerStagedImage>(
-        `/noodle/noodler/accounts/${encodeURIComponent(accountId)}/media/import-url`,
-        { imageUrl },
-      ),
-  });
 }
 
 export function useLoadNoodlerPostImage() {
@@ -292,15 +300,6 @@ export function useLoadNoodlerPostImage() {
       const extension = imageFileExtension(blob.type);
       return new File([blob], `noodler-post.${extension}`, { type: blob.type, lastModified: Date.now() });
     },
-  });
-}
-
-export function useDeleteNoodlerPostImage() {
-  return useMutation({
-    mutationFn: ({ accountId, imageId }: { accountId: string; imageId: string }) =>
-      api.delete<{ ok: true }>(
-        `/noodle/noodler/accounts/${encodeURIComponent(accountId)}/media/${encodeURIComponent(imageId)}`,
-      ),
   });
 }
 
@@ -388,6 +387,34 @@ export function useUpdateNoodlerPost() {
         qc.invalidateQueries({ queryKey: noodleKeys.privateViewers() }),
       ]);
     },
+  });
+}
+
+export function useReplaceNoodlerPostImage() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      id,
+      accountId: _accountId,
+      file,
+      crop,
+      ...input
+    }: {
+      id: string;
+      accountId: string;
+      file: File;
+      crop: NoodlePostImageCrop;
+    } & Omit<NoodlePrivatePostUpdateInput, "imageCrop" | "removeImage">) => {
+      const form = new FormData();
+      form.append("payload", JSON.stringify({ ...input, imageCrop: crop }));
+      form.append("file", file);
+      return api.upload<NoodlerManagedPost>(`/noodle/noodler/posts/${encodeURIComponent(id)}/media`, form);
+    },
+    onSuccess: (_post, input) =>
+      Promise.all([
+        qc.invalidateQueries({ queryKey: noodleKeys.privatePosts(input.accountId) }),
+        qc.invalidateQueries({ queryKey: noodleKeys.privateViewers() }),
+      ]),
   });
 }
 

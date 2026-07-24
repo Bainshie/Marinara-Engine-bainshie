@@ -4,7 +4,7 @@
 //
 // Marinara stores user data as JSON table snapshots under DATA_DIR/storage.
 // This in-memory table store persists dirty tables back to those files.
-import { existsSync, mkdirSync, openSync, closeSync, readFileSync, readSync, readdirSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, openSync, closeSync, readFileSync, readSync, statSync } from "node:fs";
 import { copyFile, open, rename, unlink, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { AsyncLocalStorage } from "node:async_hooks";
@@ -83,17 +83,11 @@ export type QuarantinedStorageTable = {
   }>;
 };
 
-export type RecoveredStorageTable = {
-  table: string;
-  source: "backup" | "fallback";
-};
-
 export type FileNativeStoreController = {
   flush: () => Promise<void>;
   close: () => Promise<void>;
   rootDir: string;
   getQuarantinedTables: () => QuarantinedStorageTable[];
-  getRecoveredTables: () => RecoveredStorageTable[];
 };
 
 export type FileNativeDB = {
@@ -174,7 +168,6 @@ export const FILE_BACKED_TABLES = [
   "noodle_posts",
   "noodle_account_subscriptions",
   "noodle_post_unlocks",
-  "noodler_private_media",
   "noodle_interactions",
   "noodle_activity_digests",
   "noodle_refresh_runs",
@@ -247,10 +240,8 @@ export const CASCADES: Array<{ parent: FileBackedTable; child: FileBackedTable; 
     { parent: "noodle_accounts", child: "noodle_post_unlocks", parentKey: "id", childKey: "viewerAccountId" },
     { parent: "noodle_accounts", child: "noodle_accounts", parentKey: "id", childKey: "publicAccountId" },
     { parent: "noodle_accounts", child: "noodle_posts", parentKey: "id", childKey: "authorAccountId" },
-    { parent: "noodle_accounts", child: "noodler_private_media", parentKey: "id", childKey: "ownerAccountId" },
     { parent: "noodle_posts", child: "noodle_post_unlocks", parentKey: "id", childKey: "postId" },
     { parent: "noodle_posts", child: "noodle_interactions", parentKey: "id", childKey: "postId" },
-    { parent: "noodle_posts", child: "noodler_private_media", parentKey: "id", childKey: "attachedPostId" },
     { parent: "chats", child: "messages", parentKey: "id", childKey: "chatId" },
     { parent: "chats", child: "conversation_call_sessions", parentKey: "id", childKey: "chatId" },
     { parent: "chats", child: "conversation_call_messages", parentKey: "id", childKey: "chatId" },
@@ -663,32 +654,6 @@ function tableFilePath(rootDir: string, table: string) {
   return join(rootDir, "tables", `${table}.json`);
 }
 
-function discoverQuarantinedTableArtifacts(rootDir: string): QuarantinedStorageTable[] {
-  const tablesDir = join(rootDir, "tables");
-  let fileNames: string[];
-  try {
-    fileNames = readdirSync(tablesDir);
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
-    throw error;
-  }
-
-  const artifactsByTable = new Map<string, QuarantinedFile[]>();
-  for (const table of FILE_BACKED_TABLES) {
-    const primaryPrefix = `${table}.json.corrupt-`;
-    const backupPrefix = `${table}.json.bak.corrupt-`;
-    for (const fileName of fileNames) {
-      if (!fileName.startsWith(primaryPrefix) && !fileName.startsWith(backupPrefix)) continue;
-      const to = join(tablesDir, fileName);
-      const from = join(tablesDir, fileName.slice(0, fileName.indexOf(".corrupt-")));
-      const files = artifactsByTable.get(table);
-      if (files) files.push({ from, to });
-      else artifactsByTable.set(table, [{ from, to }]);
-    }
-  }
-  return [...artifactsByTable].map(([table, files]) => ({ table, files }));
-}
-
 function manifestPath(rootDir: string) {
   return join(rootDir, "manifest.json");
 }
@@ -922,7 +887,6 @@ class FileTableStore {
   private transactionIdleWaiters = new Set<() => void>();
   private pendingTransactionFlush = false;
   private quarantinedTables: QuarantinedStorageTable[] = [];
-  private recoveredTables: RecoveredStorageTable[] = [];
 
   constructor(
     private readonly rootDir: string,
@@ -1210,24 +1174,6 @@ class FileTableStore {
     }));
   }
 
-  getRecoveredTables() {
-    return this.recoveredTables.map((entry) => ({ ...entry }));
-  }
-
-  private recordQuarantinedTable(table: string, files: QuarantinedFile[]) {
-    const existing = this.quarantinedTables.find((entry) => entry.table === table);
-    if (!existing) {
-      this.quarantinedTables.push({ table, files: files.map((file) => ({ ...file })) });
-      return;
-    }
-    const knownPaths = new Set(existing.files.map((file) => file.to));
-    for (const file of files) {
-      if (knownPaths.has(file.to)) continue;
-      existing.files.push({ ...file });
-      knownPaths.add(file.to);
-    }
-  }
-
   contextForRow(meta: TableMeta, row: Row): RowContext {
     return {
       rows: { [meta.name]: row },
@@ -1329,10 +1275,6 @@ class FileTableStore {
       this.dirty = true;
     }
 
-    for (const quarantine of discoverQuarantinedTableArtifacts(this.rootDir)) {
-      this.recordQuarantinedTable(quarantine.table, quarantine.files);
-    }
-
     const counts: Record<string, number> = {};
     for (const table of FILE_BACKED_TABLES) {
       const meta = getMeta(table);
@@ -1347,10 +1289,6 @@ class FileTableStore {
       this.tables.set(table, normalized);
       counts[table] = normalized.length;
       if (recoveredFromBackup || recoveredFromFallback) {
-        this.recoveredTables.push({
-          table,
-          source: recoveredFromBackup ? "backup" : "fallback",
-        });
         this.backupRecoveredPaths.add(path);
         // Same self-heal: rewrite the corrupt main file from in-memory data on
         // the next flush, while suppressing .bak refresh for that write so a
@@ -1360,18 +1298,16 @@ class FileTableStore {
       }
       if (recoveredFromFallback && unreadablePaths.length > 0) {
         const files = await quarantineUnrecoverableFiles(unreadablePaths, `table ${table}`);
-        // Record the degraded table even when every rename failed. The corrupt
-        // primary/backup will be rediscovered on the next boot, while this
-        // in-memory entry prevents recovery cleanup from trusting the empty
-        // fallback during the current process.
-        this.recordQuarantinedTable(table, files);
+        if (files.length > 0) {
+          this.quarantinedTables.push({ table, files });
           logger.error(
             { table, files },
-          "[file-storage] Table %s was unrecoverable from primary and backup; started the table empty and disabled dependent cleanup. Quarantine artifacts require manual recovery or removal.",
+            "[file-storage] Table %s was unrecoverable from primary and backup; quarantined corrupt files and started the table empty. Preserved files require manual recovery.",
             table,
           );
         }
       }
+    }
     logger.info({ tables: counts }, `[file-storage] Loaded file-native data from ${this.rootDir}`);
   }
 
@@ -1512,7 +1448,6 @@ export async function createFileNativeDB(testHooks?: FileNativeStoreTestHooks): 
     flush: () => store.flush(true, true),
     close: () => store.close(),
     getQuarantinedTables: () => store.getQuarantinedTables(),
-    getRecoveredTables: () => store.getRecoveredTables(),
   };
 
   let db: FileNativeDB;

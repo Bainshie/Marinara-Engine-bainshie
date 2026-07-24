@@ -4,12 +4,30 @@ import type { NoodlerManagedPost } from "@marinara-engine/shared";
 import { logger } from "../../lib/logger.js";
 import { DATA_DIR } from "../../utils/data-dir.js";
 import { assertInsideDir } from "../../utils/security.js";
+import { stageImageToDisk, type StagedGalleryImage } from "../image/image-generation.js";
 
 // NoodleR-owned private media lives under the gallery data dir but in a namespace whose
 // path contains a slash, so the public gallery serve routes (which reject slashes in the
 // chatId segment) can never reach it. Only the access-checked media endpoint serves it.
 const GALLERY_DIR = join(DATA_DIR, "gallery");
 const PRIVATE_MEDIA_PREFIX = "noodler-private/";
+
+export type NoodlerPrivatePostMediaUpload = {
+  buffer: Buffer;
+  extension: string;
+};
+
+export function stageUploadedPrivatePostMedia(
+  accountId: string,
+  upload: NoodlerPrivatePostMediaUpload,
+): { privateMediaPath: string; stagedMedia: StagedGalleryImage } {
+  const stagedMedia = stageImageToDisk(
+    `${PRIVATE_MEDIA_PREFIX}${accountId}`,
+    upload.buffer.toString("base64"),
+    upload.extension,
+  );
+  return { privateMediaPath: stagedMedia.filePath, stagedMedia };
+}
 
 /** Access-checked serving URL for a private post's generated image. */
 export function privatePostMediaUrl(postId: string): string {

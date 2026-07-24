@@ -710,23 +710,28 @@ verification remains manual.
 
 Add one user-uploaded image and one optional two-to-four-option poll through real
 schema, private storage, mutation, projection, voting, and cleanup plumbing. Enable
-the existing disabled composer controls only after those paths work. The body remains
-required and the title remains optional. A user may deliberately add either attachment
-or both to one post.
+the existing disabled composer controls only after those paths work. The title remains
+optional; an image or poll may stand alone without a body. A user may deliberately add
+either attachment or both to one post.
 
 Literal **Post** publishes the user's title, body, image, poll, access, and PPV values.
 **Guide** may change title/body text only and must preserve the selected image and poll.
 The private text model remains title/body-only; this slice must not re-enable generated
 image prompts or generated polls.
 
-Uploaded bytes live in a NoodleR-owned private-media namespace, never the public
-Noodle/global gallery. Locked projections expose neither image URLs nor poll metadata.
-Media delivery repeats the viewer access check, and poll voting uses the existing
-viewer-persona access and creator self-interaction gates.
+Uploaded bytes use Slice 8b's post-owned NoodleR private-media namespace, never the
+public Noodle/global gallery. A draft keeps its local file or source URL in the client;
+the Post, Guide, or edit request promotes the bytes and persists the post's serving URL
+and `metadata.privateMediaPath` together. Replacement promotes the new file before the
+post update, removes the old file only after that update succeeds, and compensates the
+new file on failure. This deliberately avoids a second unattached-asset table, claim
+lifecycle, and stale-draft cleanup job. Locked projections expose neither image URLs
+nor poll metadata. Media delivery repeats the viewer access check, and poll voting
+uses the existing viewer-persona access and creator self-interaction gates.
 
-User-uploaded media remains distinct from Slice 8b's LLM-generated private images.
-Slice 10 reuses only shared media presentation/storage primitives and does not reopen
-Slice 8b's generation, disclosure, or prompt-review contract.
+User-uploaded media remains distinct from Slice 8b's LLM-generated private images at
+the authoring boundary, while sharing its post-owned storage and serving contract.
+Slice 10 does not reopen Slice 8b's generation, disclosure, or prompt-review contract.
 
 ## Slice 11 — Cross-mode integration
 

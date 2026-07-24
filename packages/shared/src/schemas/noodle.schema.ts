@@ -390,23 +390,16 @@ const noodlePrivatePostTitleUpdateSchema = noodlePrivatePostTitleValueSchema
   .optional()
   .transform((value) => (value === undefined ? undefined : value?.trim() || null));
 
-export const noodlerPrivateMediaUrlImportSchema = z
-  .object({
-    imageUrl: z.string().trim().url().max(2000),
-  })
-  .strict();
-
 const noodlePrivatePostCreateShape = {
   targetAccountId: z.string().min(1),
   title: noodlePrivatePostTitleSchema,
   content: z.string().trim().max(NOODLE_PRIVATE_POST_CONTENT_MAX_LENGTH),
-  imageAssetId: z.string().min(1).nullable().optional(),
+  uploadedImageUrl: z.string().trim().url().max(2000).optional(),
   imageCrop: noodlePostImageCropSchema.optional(),
   poll: noodlePollInputSchema.nullable().optional(),
 };
 
-export const noodlePrivatePostCreateSchema = z
-  .union([
+export const noodlePrivatePostCreateWithMediaSchema = z.union([
   z.object({ ...noodlePrivatePostCreateShape, access: z.literal("public").default("public") }).strict(),
   z.object({ ...noodlePrivatePostCreateShape, access: z.literal("subscriber") }).strict(),
   z
@@ -416,13 +409,15 @@ export const noodlePrivatePostCreateSchema = z
       ppvPrice: z.number().finite().min(0).max(999_999).nullable().optional(),
     })
     .strict(),
-  ])
+]);
+
+export const noodlePrivatePostCreateSchema = noodlePrivatePostCreateWithMediaSchema
   .superRefine((input, ctx) => {
-    if (!input.content && !input.poll) {
+    if (!input.content && !input.poll && !input.uploadedImageUrl) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ["content"],
-        message: "Posts need a body or poll.",
+        message: "Posts need a body, image, or poll.",
       });
     }
   });
@@ -431,7 +426,7 @@ export const noodlePrivatePostUpdateSchema = z
   .object({
     title: noodlePrivatePostTitleUpdateSchema,
     content: z.string().trim().max(NOODLE_PRIVATE_POST_CONTENT_MAX_LENGTH).optional(),
-    imageAssetId: z.string().min(1).nullable().optional(),
+    removeImage: z.literal(true).optional(),
     imageCrop: noodlePostImageCropSchema.nullable().optional(),
     poll: noodlePollInputSchema.nullable().optional(),
   })
@@ -440,7 +435,7 @@ export const noodlePrivatePostUpdateSchema = z
     (input) =>
       input.title !== undefined ||
       input.content !== undefined ||
-      input.imageAssetId !== undefined ||
+      input.removeImage !== undefined ||
       input.imageCrop !== undefined ||
       input.poll !== undefined,
     {
@@ -546,7 +541,7 @@ const noodlePrivateGenerationRequestShape = {
   // Manual Guide path may ask to review the image prompt before rendering; the autonomous
   // scheduler never sets this (no human in the loop).
   reviewImagePromptsBeforeSend: z.boolean().optional(),
-  imageAssetId: z.string().min(1).nullable().optional(),
+  uploadedImageUrl: z.string().trim().url().max(2000).optional(),
   imageCrop: noodlePostImageCropSchema.optional(),
   poll: noodlePollInputSchema.nullable().optional(),
 };

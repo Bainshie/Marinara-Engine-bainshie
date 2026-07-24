@@ -47,6 +47,10 @@ assert.equal(readPrivateMediaPath({ metadata: {} }), null);
 // Traversal and non-namespaced paths never resolve to an on-disk file.
 assert.equal(resolvePrivateMediaAbsolutePath("noodler-private/../../etc/passwd"), null);
 assert.equal(resolvePrivateMediaAbsolutePath("gallery/chat/img.png"), null);
-assert.ok(resolvePrivateMediaAbsolutePath("noodler-private/acc/img.png")?.endsWith("noodler-private/acc/img.png"));
+assert.ok(
+  resolvePrivateMediaAbsolutePath("noodler-private/acc/img.png")
+    ?.replaceAll("\\", "/")
+    .endsWith("noodler-private/acc/img.png"),
+);
 
 process.stdout.write("Noodle autopost image regression passed.\n");
