@@ -72,7 +72,7 @@ import {
   type Message,
   isInstalledCapabilityReady,
 } from "@marinara-engine/shared";
-import { useTranslation } from "react-i18next";
+import { useTranslation, useTranslation as useUiTranslation } from "react-i18next";
 
 interface Attachment {
   type: string;
@@ -325,6 +325,7 @@ export function ConversationInput({
   onIllustrate,
   onGenerateSelfie,
 }: ConversationInputProps) {
+  const { t: localizeUi } = useUiTranslation();
   const { t } = useTranslation();
   const [hasInput, setHasInput] = useState(false);
   const [completions, setCompletions] = useState<ConversationSlashCompletion[]>([]);
@@ -748,12 +749,11 @@ export function ConversationInput({
       const MAX_SIZE = 20 * 1024 * 1024;
       const acceptedFiles = Array.from(files).filter((file) => {
         if (file.size > MAX_SIZE) {
-          toast.error(`${file.name} exceeds 20 MB limit`);
+          toast.error(localizeUi("ui.chat.conversationinput.value1Exceeds20MbLimit", { value1: file.name }));
           return false;
         }
         if (!isSupportedChatAttachment(file)) {
-          toast.error(
-            `${file.name || "That file"} is not supported in chat. Attach images, PDFs, or text files like JSON, TXT, Markdown, or CSV.`,
+          toast.error(localizeUi("ui.chat.chatinput.value1IsNotSupportedInChatAttachImagesPdfs", { value1: file.name ||localizeUi("ui.chat.chatinput.thatFile") }),
           );
           return false;
         }
@@ -769,7 +769,7 @@ export function ConversationInput({
           try {
             appendAttachmentForChat(originChatId, await prepareImageAttachment(file, displayName));
           } catch {
-            toast.error(`Failed to prepare ${displayName}`);
+            toast.error(localizeUi("ui.chat.chatinput.failedToPrepareValue1", { value1: displayName }));
           } finally {
             adjustPendingAttachmentReads(originChatId, -1);
           }
@@ -780,13 +780,13 @@ export function ConversationInput({
           const data = await readFileAsDataUrl(file);
           appendAttachmentForChat(originChatId, { type: inferAttachmentType(file), data, name: displayName });
         } catch {
-          toast.error(`Failed to read ${displayName}`);
+          toast.error(localizeUi("ui.chat.chatinput.failedToReadValue1", { value1: displayName }));
         } finally {
           adjustPendingAttachmentReads(originChatId, -1);
         }
       }
     },
-    [adjustPendingAttachmentReads, appendAttachmentForChat],
+    [adjustPendingAttachmentReads, appendAttachmentForChat, localizeUi],
   );
 
   const handlePaste = useCallback(
@@ -892,7 +892,7 @@ export function ConversationInput({
   const handleSend = useCallback(async () => {
     if (!activeChatId || isSendBlocked) return;
     if (isReadingAttachments) {
-      toast.info("Still reading attached files. Send will be ready in a moment.");
+      toast.info(localizeUi("ui.chat.chatinput.stillReadingAttachedFilesSendWillBeReadyIn"));
       return;
     }
     const raw = textareaRef.current?.value.trim() ?? "";
@@ -1035,7 +1035,7 @@ export function ConversationInput({
         const translated = await translateText(message, "input");
         if (translated.trim()) message = translated;
       } catch {
-        toast.error("Failed to translate message — sending original");
+        toast.error(localizeUi("ui.chat.chatinput.failedToTranslateMessageSendingOriginal"));
       }
     }
 
@@ -1090,7 +1090,7 @@ export function ConversationInput({
     onIllustrate,
     onGenerateSelfie,
     availableCapabilityIds,
-    conversationGameSlashContributions,
+    conversationGameSlashContributions, localizeUi,
   ]);
 
   const runQuickSlashCommand = useCallback(
@@ -1104,7 +1104,7 @@ export function ConversationInput({
       });
       if (!matched) return;
       if (isConversationHiddenSlashCommand(matched.command)) {
-        toast.info("Impersonate is not available in Conversation mode.");
+        toast.info(localizeUi("ui.chat.conversationinput.impersonateIsNotAvailableInConversationMode"));
         return;
       }
       const generationStatus: { succeeded?: boolean } = {};
@@ -1198,7 +1198,7 @@ export function ConversationInput({
       conversationGameSlashContributions,
       qc,
       setInputDraft,
-      syncInputState,
+      syncInputState, localizeUi,
     ],
   );
 
@@ -1206,7 +1206,7 @@ export function ConversationInput({
     if (!activeChatId || isSendBlocked) return;
     const submittingChatId = activeChatId;
     if (isReadingAttachments) {
-      toast.info("Still reading attached files. Post will be ready in a moment.");
+      toast.info(localizeUi("ui.chat.chatinput.stillReadingAttachedFilesPostWillBeReadyIn"));
       return;
     }
     const raw = textareaRef.current?.value.trim() ?? "";
@@ -1244,7 +1244,7 @@ export function ConversationInput({
         const translated = await translateText(message, "input");
         if (translated.trim()) message = translated;
       } catch {
-        toast.error("Failed to translate message; posting original");
+        toast.error(localizeUi("ui.chat.chatinput.failedToTranslateMessagePostingOriginal"));
       }
     }
 
@@ -1318,7 +1318,7 @@ export function ConversationInput({
         setInputDraft(submittingChatId, submittedDraft);
       }
       const msg = error instanceof Error ? error.message : "Failed to post message";
-      toast.error(rollbackFailed ? `${msg}; the partial message may need to be removed before retrying.` : msg);
+      toast.error(rollbackFailed ?localizeUi("ui.chat.chatinput.value1ThePartialMessageMayNeedToBeRemoved", { value1: msg }) : msg);
     }
   }, [
     activeChatId,
@@ -1340,19 +1340,19 @@ export function ConversationInput({
     updateMessageExtra,
     handleSend,
     availableCapabilityIds,
-    conversationGameSlashContributions,
+    conversationGameSlashContributions, localizeUi,
   ]);
 
   const handleGuidedGenerationButton = useCallback(async () => {
     if (!activeChatId || isSendBlocked) return;
     if (hasPendingAttachments) {
-      toast.info("Clear or send attachments before using guided generation.");
+      toast.info(localizeUi("ui.chat.chatinput.clearOrSendAttachmentsBeforeUsingGuidedGeneration"));
       return;
     }
     const text = textareaRef.current?.value?.trim() ?? "";
     if (!text) return;
     await runQuickSlashCommand(`/guided ${text}`, "Guided generation failed");
-  }, [activeChatId, isSendBlocked, hasPendingAttachments, runQuickSlashCommand]);
+  }, [activeChatId, isSendBlocked, hasPendingAttachments, runQuickSlashCommand, localizeUi]);
 
   const sendCustomQuickReply = useCallback(
     async (content: string) => {
@@ -1863,13 +1863,13 @@ export function ConversationInput({
               ) : (
                 <Languages size="1rem" className="shrink-0" />
               )}
-              <span className="min-w-0 flex-1 truncate text-sm font-medium">Translate draft</span>
+              <span className="min-w-0 flex-1 truncate text-sm font-medium">{localizeUi("chat.input.translateDraft")}</span>
             </button>
           )}
 
           {speechToTextEnabled && (
             <div className="flex min-h-11 items-center justify-between gap-2 rounded-lg px-3 py-2">
-              <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground/80">Voice input</span>
+              <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground/80">{localizeUi("ui.chat.conversationinput.voiceInput")}</span>
               <SpeechToTextButton
                 disabled={!activeChatId}
                 onTranscript={(transcript) => {
@@ -2015,7 +2015,7 @@ export function ConversationInput({
               )}
             >
               {em.kind === "custom" ? (
-                <img src={em.url} alt={`:${em.name}:`} className="h-5 w-5 shrink-0 object-contain" />
+                <img src={em.url} alt={localizeUi("ui.chat.conversationinput.value1", { value1: em.name })} className="h-5 w-5 shrink-0 object-contain" />
               ) : (
                 <span className="flex h-5 w-5 shrink-0 items-center justify-center text-base" aria-hidden="true">
                   {em.emoji}
@@ -2078,9 +2078,7 @@ export function ConversationInput({
           ))}
           {isReadingAttachments && (
             <div className="flex items-center gap-1.5 rounded-lg bg-foreground/10 px-2.5 py-1.5 text-xs text-foreground/60 ring-1 ring-foreground/10">
-              <Loader2 size="0.875rem" className="animate-spin" />
-              Reading file...
-            </div>
+              <Loader2 size="0.875rem" className="animate-spin" />{localizeUi("ui.chat.chatinput.readingFile")}</div>
           )}
         </div>
       )}

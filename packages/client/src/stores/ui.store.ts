@@ -596,6 +596,8 @@ interface UIState {
   showQuickReplyImpersonate: boolean;
   /** User-defined quick replies that send a fixed prompt, macro, or slash command. */
   customQuickReplies: CustomQuickReply[];
+  /** Remembered expand/collapse state of Chat Settings sections, keyed by section id. */
+  chatSettingsExpandedSections: Record<string, boolean>;
   confirmBeforeDelete: boolean;
   /** When true, chat exports include saved thinking/reasoning metadata. */
   includeReasoningInExports: boolean;
@@ -899,6 +901,7 @@ interface UIState {
   addCustomQuickReply: (label: string, content: string) => void;
   updateCustomQuickReply: (id: string, patch: Partial<Omit<CustomQuickReply, "id">>) => void;
   removeCustomQuickReply: (id: string) => void;
+  setChatSettingsSectionExpanded: (id: string, open: boolean) => void;
   setConfirmBeforeDelete: (v: boolean) => void;
   setIncludeReasoningInExports: (v: boolean) => void;
   setMessagesPerPage: (n: number) => void;
@@ -1094,6 +1097,7 @@ export function pickSyncedSettings(state: UIState) {
     showQuickReplyGuide: state.showQuickReplyGuide,
     showQuickReplyImpersonate: state.showQuickReplyImpersonate,
     customQuickReplies: state.customQuickReplies,
+    chatSettingsExpandedSections: state.chatSettingsExpandedSections,
     confirmBeforeDelete: state.confirmBeforeDelete,
     includeReasoningInExports: state.includeReasoningInExports,
     messagesPerPage: state.messagesPerPage,
@@ -1282,6 +1286,7 @@ export const useUIStore = create<UIState>()(
       showQuickReplyGuide: true,
       showQuickReplyImpersonate: true,
       customQuickReplies: [],
+      chatSettingsExpandedSections: {},
       confirmBeforeDelete: true,
       includeReasoningInExports: false,
       messagesPerPage: 20,
@@ -2033,6 +2038,10 @@ export const useUIStore = create<UIState>()(
         })),
       removeCustomQuickReply: (id) =>
         set((state) => ({ customQuickReplies: state.customQuickReplies.filter((entry) => entry.id !== id) })),
+      setChatSettingsSectionExpanded: (id, open) =>
+        set((state) => ({
+          chatSettingsExpandedSections: { ...state.chatSettingsExpandedSections, [id]: open },
+        })),
       setConfirmBeforeDelete: (v) => set({ confirmBeforeDelete: v }),
       setIncludeReasoningInExports: (v) => set({ includeReasoningInExports: v }),
       setMessagesPerPage: (n) => set({ messagesPerPage: n }),
@@ -2910,6 +2919,7 @@ export const useUIStore = create<UIState>()(
         showQuickReplyGuide: state.showQuickReplyGuide,
         showQuickReplyImpersonate: state.showQuickReplyImpersonate,
         customQuickReplies: state.customQuickReplies,
+        chatSettingsExpandedSections: state.chatSettingsExpandedSections,
         confirmBeforeDelete: state.confirmBeforeDelete,
         includeReasoningInExports: state.includeReasoningInExports,
         messagesPerPage: state.messagesPerPage,

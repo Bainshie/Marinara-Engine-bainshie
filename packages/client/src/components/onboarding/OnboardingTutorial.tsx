@@ -7,6 +7,7 @@ import { useTrackAchievement } from "../../hooks/use-achievements";
 import { motion, AnimatePresence } from "framer-motion";
 import { ChevronRight } from "lucide-react";
 import { useLocalizedUiText } from "../../localization/use-localized-ui-text";
+import { useTranslation as useUiTranslation } from "react-i18next";
 
 // ─── Step definitions ─────────────────────────
 
@@ -396,6 +397,7 @@ function TourCardContent({
   onNext: () => void;
   onSkip: () => void;
 }) {
+  const { t: localizeUi } = useUiTranslation();
   const localize = useLocalizedUiText();
   const localizedBody = localize(currentStep.body);
   return (
@@ -405,7 +407,7 @@ function TourCardContent({
         <div className="mb-2 flex justify-center">
           <img
             src={currentStep.sprite.src}
-            alt="Professor Mari"
+            alt={localizeUi("ui.onboarding.tourcardcontent.professorMari")}
             className="h-32 max-h-[15vh] w-auto object-contain drop-shadow-lg"
             style={currentStep.sprite.flip ? { transform: "scaleX(-1)" } : undefined}
             draggable={false}

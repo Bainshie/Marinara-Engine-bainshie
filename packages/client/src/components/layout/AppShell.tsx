@@ -48,6 +48,7 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
 } from "react";
+import { useTranslation as useUiTranslation } from "react-i18next";
 
 const ChatArea = lazy(() => import("../chat/ChatArea").then((module) => ({ default: module.ChatArea })));
 const CharacterEditor = lazy(() =>
@@ -146,7 +147,8 @@ function getViewportWidth() {
 }
 
 function MainPaneFallback() {
-  return <div className="mari-chrome-text-muted flex flex-1 items-center justify-center text-sm">Loading...</div>;
+  const { t: localizeUi } = useUiTranslation();
+  return <div className="mari-chrome-text-muted flex flex-1 items-center justify-center text-sm">{localizeUi("ui.characters.characterlibraryview.loading")}</div>;
 }
 /** Mounts children once `open` becomes true, then keeps them mounted so state persists.
  *  `overlay` mode uses framer-motion slide-in and never unmounts. */
@@ -187,10 +189,12 @@ function MountOnceWhenOpened({
 }
 
 function SidePanelFallback() {
-  return <div className="mari-chrome-text-muted flex h-full items-center justify-center text-sm">Loading...</div>;
+  const { t: localizeUi } = useUiTranslation();
+  return <div className="mari-chrome-text-muted flex h-full items-center justify-center text-sm">{localizeUi("ui.characters.characterlibraryview.loading")}</div>;
 }
 
 export function AppShell() {
+  const { t: localizeUi } = useUiTranslation();
   const capabilityAgents = useCapabilityAgentRegistry();
   const installedCapabilities = useCapabilityClientModules();
   const updateChatMetadata = useUpdateChatMetadata();
@@ -211,27 +215,51 @@ export function AppShell() {
     if (typeof window === "undefined" || typeof document === "undefined") return;
     const root = document.documentElement;
     let frame = 0;
-    const updateVisualViewportHeight = () => {
+    let focusTimers: number[] = [];
+    const updateVisualViewportGeometry = () => {
       if (frame) cancelAnimationFrame(frame);
       frame = requestAnimationFrame(() => {
-        const height = window.visualViewport?.height ?? window.innerHeight;
+        frame = 0;
+        const viewport = window.visualViewport;
+        const heightCandidates = [viewport?.height, window.innerHeight, root.clientHeight].filter(
+          (value): value is number => typeof value === "number" && Number.isFinite(value) && value > 0,
+        );
+        const height = heightCandidates.length > 0 ? Math.min(...heightCandidates) : window.innerHeight;
+        const maxOffsetTop = Math.max(0, window.innerHeight - height);
+        const offsetTop = Math.min(maxOffsetTop, Math.max(0, viewport?.offsetTop ?? 0));
         root.style.setProperty("--mari-visual-viewport-height", `${Math.max(0, Math.round(height))}px`);
+        root.style.setProperty("--mari-visual-viewport-offset-top", `${Math.round(offsetTop)}px`);
       });
     };
+    const refreshAfterFocusChange = () => {
+      focusTimers.forEach((timer) => window.clearTimeout(timer));
+      focusTimers = [];
+      updateVisualViewportGeometry();
+      // Android browsers can publish the keyboard-adjusted viewport after the
+      // focus event. Re-sample both the early animation and settled geometry.
+      focusTimers.push(window.setTimeout(updateVisualViewportGeometry, 80));
+      focusTimers.push(window.setTimeout(updateVisualViewportGeometry, 320));
+    };
 
-    updateVisualViewportHeight();
-    window.visualViewport?.addEventListener("resize", updateVisualViewportHeight);
-    window.visualViewport?.addEventListener("scroll", updateVisualViewportHeight);
-    window.addEventListener("resize", updateVisualViewportHeight);
-    window.addEventListener("orientationchange", updateVisualViewportHeight);
+    updateVisualViewportGeometry();
+    window.visualViewport?.addEventListener("resize", updateVisualViewportGeometry);
+    window.visualViewport?.addEventListener("scroll", updateVisualViewportGeometry);
+    window.addEventListener("resize", updateVisualViewportGeometry);
+    window.addEventListener("orientationchange", updateVisualViewportGeometry);
+    document.addEventListener("focusin", refreshAfterFocusChange);
+    document.addEventListener("focusout", refreshAfterFocusChange);
 
     return () => {
       if (frame) cancelAnimationFrame(frame);
-      window.visualViewport?.removeEventListener("resize", updateVisualViewportHeight);
-      window.visualViewport?.removeEventListener("scroll", updateVisualViewportHeight);
-      window.removeEventListener("resize", updateVisualViewportHeight);
-      window.removeEventListener("orientationchange", updateVisualViewportHeight);
+      focusTimers.forEach((timer) => window.clearTimeout(timer));
+      window.visualViewport?.removeEventListener("resize", updateVisualViewportGeometry);
+      window.visualViewport?.removeEventListener("scroll", updateVisualViewportGeometry);
+      window.removeEventListener("resize", updateVisualViewportGeometry);
+      window.removeEventListener("orientationchange", updateVisualViewportGeometry);
+      document.removeEventListener("focusin", refreshAfterFocusChange);
+      document.removeEventListener("focusout", refreshAfterFocusChange);
       root.style.removeProperty("--mari-visual-viewport-height");
+      root.style.removeProperty("--mari-visual-viewport-offset-top");
     };
   }, []);
 
@@ -966,7 +994,7 @@ export function AppShell() {
         }}
         data-component={`TrackerDataSidebarDesktop.${side}`}
         data-tracker-size-profile={trackerPanelSizeProfile}
-        aria-label="Tracker data panel"
+        aria-label={localizeUi("ui.layout.appshell.trackerDataPanel")}
         className={cn(
           "mari-tracker-panel fixed z-30 hidden overflow-hidden bg-zinc-950/95 shadow-2xl ring-1 ring-zinc-700/80 backdrop-blur-2xl transition-[width] duration-200 ease-[cubic-bezier(0.16,1,0.3,1)] will-change-[transform,opacity] md:block",
           side === "left" ? "rounded-r-xl" : "rounded-l-xl",
@@ -1029,7 +1057,7 @@ export function AppShell() {
       <aside
         data-tour="sidebar"
         data-component="ChatSidebarSlot"
-        aria-label="Chat list"
+        aria-label={localizeUi("ui.layout.appshell.chatList")}
         aria-hidden={!sidebarOpen}
         inert={!sidebarOpen}
         className={cn(
@@ -1065,7 +1093,7 @@ export function AppShell() {
         <div
           role="separator"
           aria-orientation="vertical"
-          aria-label="Resize left sidebar"
+          aria-label={localizeUi("ui.layout.appshell.resizeLeftSidebar")}
           aria-valuemin={SHARED_SIDEBAR_WIDTH_MIN}
           aria-valuemax={SHARED_SIDEBAR_WIDTH_MAX}
           aria-valuenow={Math.round(liveSidebarWidth)}
@@ -1088,7 +1116,7 @@ export function AppShell() {
         data-component="CenterContent"
         data-center-compact={centerCompact ? "true" : undefined}
         data-shell-overlay-mode={shellOverlayMode ? "true" : undefined}
-        aria-label="Main content"
+        aria-label={localizeUi("ui.layout.appshell.mainContent")}
         className="@container mari-main mari-app-background-paint relative flex min-w-0 flex-1 flex-col overflow-hidden"
       >
         {/* iOS safe area spacer — pushes TopBar below status bar and fills that gap with topbar bg */}
@@ -1159,7 +1187,7 @@ export function AppShell() {
               exit={{ x: trackerPanelSide === "left" ? "-100%" : "100%" }}
               transition={{ type: "spring", damping: 28, stiffness: 350 }}
               data-component="TrackerDataSidebarMobile"
-              aria-label="Tracker data panel"
+              aria-label={localizeUi("ui.layout.appshell.trackerDataPanel")}
               className={cn(
                 "mari-tracker-panel !fixed bottom-0 z-40 w-screen max-w-none overflow-hidden bg-zinc-950/95 pb-[max(env(safe-area-inset-bottom),0.5rem)] shadow-2xl ring-1 ring-zinc-700/80 backdrop-blur-xl",
                 MOBILE_SHELL_PANEL_TOP_CLASS,
@@ -1194,7 +1222,7 @@ export function AppShell() {
               exit={{ x: "100%" }}
               transition={{ type: "spring", damping: 28, stiffness: 350 }}
               data-component="RightPanelMobile"
-              aria-label="Settings and tools panel"
+              aria-label={localizeUi("ui.layout.appshell.settingsAndToolsPanel")}
               className={cn(
                 "mari-right-panel !fixed bottom-0 right-0 z-40 !w-full overflow-hidden bg-[var(--background)]/80 pb-[max(env(safe-area-inset-bottom),0.5rem)] shadow-2xl backdrop-blur-xl",
                 MOBILE_SHELL_PANEL_TOP_CLASS,
@@ -1210,7 +1238,7 @@ export function AppShell() {
       ) : (
         <aside
           data-component="RightPanelDesktopSlot"
-          aria-label="Settings and tools panel"
+          aria-label={localizeUi("ui.layout.appshell.settingsAndToolsPanel")}
           aria-hidden={!rightPanelOpen}
           inert={!rightPanelOpen}
           className={cn(
@@ -1253,7 +1281,7 @@ export function AppShell() {
             exit={{ opacity: 0, x: 24 }}
             transition={{ type: "spring", damping: 30, stiffness: 360 }}
             data-component="MobileDetailSheet"
-            aria-label="Detail editor"
+            aria-label={localizeUi("ui.layout.appshell.detailEditor")}
             className={cn(
               "mari-mobile-detail-sheet !fixed bottom-0 right-0 z-40 flex min-h-0 !w-full flex-col overflow-hidden bg-[var(--background)]/95 pb-[max(env(safe-area-inset-bottom),0.5rem)] shadow-2xl backdrop-blur-xl",
               MOBILE_SHELL_PANEL_TOP_CLASS,
@@ -1267,7 +1295,7 @@ export function AppShell() {
         <div
           role="separator"
           aria-orientation="vertical"
-          aria-label="Resize right sidebar"
+          aria-label={localizeUi("ui.layout.appshell.resizeRightSidebar")}
           aria-valuemin={SHARED_SIDEBAR_WIDTH_MIN}
           aria-valuemax={SHARED_SIDEBAR_WIDTH_MAX}
           aria-valuenow={Math.round(liveRightPanelWidth)}

@@ -5,6 +5,7 @@ import { KaomojiPicker } from "../ui/KaomojiPicker";
 import { GifPicker } from "../ui/GifPicker";
 import { StickerPicker } from "./StickerPicker";
 import { CustomEmojiTab } from "./CustomEmojiTab";
+import { useTranslation } from "react-i18next";
 
 export type ConversationMediaPickerTabId = "emoji" | "kaomoji" | "gifs" | "stickers" | "tools";
 export type ConversationMediaPickerTab = { id: ConversationMediaPickerTabId; label: string };
@@ -32,6 +33,7 @@ export function ConversationMediaPickerPanel({
   toolsContent,
   className,
 }: ConversationMediaPickerPanelProps) {
+  const { t } = useTranslation();
   return (
     <div
       className={cn(
@@ -52,7 +54,7 @@ export function ConversationMediaPickerPanel({
                 : "text-foreground/45 hover:bg-foreground/10 hover:text-foreground/70",
             )}
           >
-            {tab.label}
+            {t(`ui.noodle.media.tabs.${tab.id}`, { defaultValue: tab.label })}
           </button>
         ))}
       </div>
@@ -65,7 +67,7 @@ export function ConversationMediaPickerPanel({
             onSelect={onEmojiSelect}
             customTab={{
               icon: "⭐",
-              label: "Custom emojis",
+              label: t("ui.noodle.media.customEmojis"),
               render: (query) => <CustomEmojiTab onInsert={onEmojiSelect} query={query} />,
               renderSearch: (query) => (
                 <CustomEmojiTab onInsert={onEmojiSelect} query={query} searchResultsOnly />

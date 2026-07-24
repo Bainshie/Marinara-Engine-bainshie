@@ -1642,6 +1642,44 @@
   line-height: 1.2;
 }
 
+.mari-editor-title-line {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+
+.mari-editor-title-line .mari-editor-title-input {
+  width: auto;
+  max-width: 100%;
+  flex: 0 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  field-sizing: content;
+}
+
+.mari-editor-byline {
+  display: flex;
+  min-width: 0;
+  max-width: 42%;
+  flex: 0 1 auto;
+  align-items: baseline;
+  gap: 0.25rem;
+}
+
+.mari-editor-byline-creator {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mari-editor-byline-version {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
 .mari-editor-secondary-line {
   display: flex;
   min-width: 0;
@@ -1652,11 +1690,6 @@
 .mari-editor-secondary-line .mari-editor-subtitle-input {
   width: auto;
   flex: 1 1 auto;
-}
-
-.mari-editor-secondary-line .mari-editor-meta {
-  max-width: 42%;
-  flex: 0 1 auto;
 }
 
 .mari-editor-meta {
@@ -4756,6 +4789,13 @@ strong {
     /* Safe-area insets handled by AppShell — only apply sides here */
     padding-left: env(safe-area-inset-left);
     padding-right: env(safe-area-inset-right);
+  }
+
+  .mari-app {
+    top: var(--mari-visual-viewport-offset-top, 0px);
+    bottom: auto;
+    height: var(--mari-visual-viewport-height, 100dvh);
+    min-height: 0;
   }
 
   .app-sidebar-mobile {

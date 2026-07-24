@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Modal } from "./Modal";
 import { dismissActiveDialog, resolveActiveDialog } from "../../lib/app-dialogs";
 import { useDialogStore } from "../../stores/dialog.store";
+import { useTranslation as useUiTranslation } from "react-i18next";
 
 function getDialogTitle(kind: "alert" | "confirm" | "prompt" | "choice", title?: string) {
   if (title) return title;
@@ -11,6 +12,7 @@ function getDialogTitle(kind: "alert" | "confirm" | "prompt" | "choice", title?:
 }
 
 export function AppDialogRenderer() {
+  const { t: localizeUi } = useUiTranslation();
   const dialog = useDialogStore((state) => state.dialog);
   const [promptValue, setPromptValue] = useState("");
   const promptInputRef = useRef<HTMLInputElement>(null);
@@ -70,7 +72,7 @@ export function AppDialogRenderer() {
               <div className="flex justify-center">
                 <img
                   src={dialog.previewImageUrl}
-                  alt="Preview"
+                  alt={localizeUi("settings.notifications.customSound.actions.preview")}
                   className="max-h-24 max-w-[8rem] rounded-md object-contain ring-1 ring-[var(--border)]"
                 />
               </div>

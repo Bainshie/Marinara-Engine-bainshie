@@ -6,6 +6,12 @@ This file is the release-notes source of truth for Marinara Engine. Reuse these 
 
 ### Added
 
+- Added a **Retry** action to Game Mode character-sheet editing. It regenerates only the selected Persona or party member from their card and the current campaign history, keeps the result as an unsaved draft for review, and preserves the original sheet unless the user saves (#4048).
+
+## [2.3.5]
+
+### Added
+
 - Added a built-in **kaomoji picker** to the composer (a `(◕‿◕)` button beside the emoji picker in Roleplay/Game, and a Kaomoji tab in the Conversation media panel) with categories and fuzzy keyword search, so emoticons like `¯\_(ツ)_/¯` and `(╯°□°）╯︵ ┻━┻` can be inserted without leaving the app (#4038).
 - Added user-defined **Custom Quick Replies**: create your own buttons in **Settings → General → Quick replies** that each send a fixed message, macro, or `/slash` command from the quick replies menu beside Send, in both Conversation and Roleplay/Game input (#4024).
 - Added a **Show Only Translation** toggle to **Chat Settings → Translation** that displays just the translated text in place of the original once a message is translated, and rendered translated text through the same markdown pipeline as messages so bold, italics, and quotes format correctly (#4024).
@@ -23,6 +29,8 @@ This file is the release-notes source of truth for Marinara Engine. Reuse these 
 
 ### Changed
 
+- Reworked the Chat Settings **Prompt Preset** area. Roleplay now shows the preset-section editor directly once a preset is selected instead of hiding it behind a collapsible toggle. Conversation and Game show the effective Conversation/Game prompt (from the selected preset, or the built-in default when the preset has none) in an inline editor you can type in directly, expand to a full window, and browse macros from — and the redundant "open selected preset" shortcut button was removed. Chat Settings now also remembers which sections you left expanded and restores them the next time you open the drawer.
+- Synchronized the stable release identity as v2.3.5 across the Engine, PWA manifest, Windows installer, Android bootstrap APK, update checks, Home release link, and Professor Mari's What's New announcement. Android uses `versionName` `2.3.5` with `versionCode` `40` so it updates over every previously published APK.
 - Confined Professor Mari's raw shell commands to macOS Seatbelt or Linux Bubblewrap with outbound network denied, inherited server secrets removed, environment-secret and Git-internal files unreadable, and filesystem writes limited to ordinary workspace files and a private temporary directory. Dependency manifests, lockfiles, launchers, installers, and CI workflows are read-only in the shell and use an explicit in-chat review; raw package-manager mutations are blocked even when a package is cached. Raw shell now fails closed when no supported sandbox is available, while structured workspace and app-data tools remain available (#3973).
 - Made **Default Dialogue Color** permanently active for cards without their own dialogue color and removed its redundant Appearance toggle; Character and Persona card colors still take priority.
 
@@ -35,7 +43,15 @@ This file is the release-notes source of truth for Marinara Engine. Reuse these 
 
 ### Fixed
 
+- Kept the mobile chat composer above the Android Firefox software keyboard by explicitly requesting content
+  resizing and sizing the app shell to the smallest live visual/layout viewport, including delayed keyboard geometry
+  updates after focus (#4044).
 - Improved character and persona card version history: restoring an older version now saves the current card to history first (so the newer version is never lost), each saved version keeps its own edit timestamp instead of the later save's time, and the side-by-side comparison view wraps long unbroken text such as URLs and HTML in creator notes instead of overflowing (#4040).
+- Made Settings tabs—including **Appearance**—resolve duplicate English labels against the selected locale instead
+  of falling back through an unrelated untranslated key, and routed the remaining static client interface copy,
+  editor and library controls, chat toolbars, notices, accessibility text, and Noodle surfaces through the English
+  localization catalog with an automated untranslated-UI audit.
+- Moved Character and Persona creator/version metadata beside the editable card name in editor headers, with responsive truncation that preserves the version and keeps long names from displacing header actions.
 - Stopped Conversation **Selfie** mode from pasting the image style profile's Generation Style Text verbatim into the final image prompt. The style now guides the prompt-building model (matching Roleplay illustration), so it still shapes the image without the redundant, CLIP-diluting copy (#4028).
 - Moved the Natural/Random progression choice onto the **Push Story** button: clicking it now opens a Naturally/Randomly selector that arms the chosen mode for the next response, replacing the mode controls previously buried in **Chat Settings → Agents → Narrative Director**, the add-agent setup, and the Narrative Director editor's Story Push Mode default (#4022).
 - Fetched the full Google Gemini model catalog in the connection editor by following the ListModels pagination, and refreshed the built-in Gemini/Gemma fallback list with the latest entries (#4021).

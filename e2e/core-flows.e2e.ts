@@ -121,12 +121,12 @@ test("What's New opens once for each Marinara Engine version", async ({ page }) 
   const announcement = page.getByRole("dialog", { name: "What's New?" });
   await expect(announcement).toBeVisible();
   await expect(announcement.getByText(`Version ${APP_VERSION}`, { exact: true })).toBeVisible();
-  await expect(announcement.getByRole("heading", { name: "A safer engine with finer control." })).toBeVisible();
-  await expect(announcement.getByText(/removed Extensions, sealed their unsafe code path/)).toBeVisible();
-  await expect(announcement.getByText(/every old record to be cleared automatically/)).toBeVisible();
-  await expect(announcement.getByText(/new prompt macros/)).toBeVisible();
-  await expect(announcement.getByText(/character-specific Hide From AI controls/)).toBeVisible();
-  await expect(announcement.getByText(/Grouped or Individual response handling/)).toBeVisible();
+  await expect(announcement.getByRole("heading", { name: "More control, polished down to the card." })).toBeVisible();
+  await expect(announcement.getByText(/custom quick replies/)).toBeVisible();
+  await expect(announcement.getByText(/richer translation controls/)).toBeVisible();
+  await expect(announcement.getByText(/Atlas image and video generation/)).toBeVisible();
+  await expect(announcement.getByText(/interface localization/)).toBeVisible();
+  await expect(announcement.getByText(/Character and Persona cards/)).toBeVisible();
   await expect(announcement.getByText("Marinara Engine has been updated.", { exact: true })).toHaveCount(0);
   await expect(announcement.getByText("Tactical Combat Mode in Games")).toHaveCount(0);
   await expect(announcement.getByRole("link", { name: "View release" })).toHaveAttribute(
@@ -512,25 +512,67 @@ test("Character and Persona avatar actions stay separated and visually balanced"
   const connection = (await connectionResponse.json()) as { id: string };
 
   const characterName = `Avatar Character ${suffix}`;
+  const characterCreator = "Professor Mari and the Fatui Research Collective";
+  const characterVersion = "12.34";
   const characterResponse = await page.request.post("/api/characters", {
-    data: { data: { name: characterName } },
+    data: {
+      data: {
+        name: characterName,
+        creator: characterCreator,
+        character_version: characterVersion,
+      },
+    },
   });
   expect(characterResponse.ok()).toBeTruthy();
   const character = (await characterResponse.json()) as { id: string };
 
   const personaName = `Avatar Persona ${suffix}`;
+  const personaCreator = "Professor Mari and the Snezhnayan Institute";
+  const personaVersion = "56.78";
   const personaResponse = await page.request.post("/api/characters/personas", {
-    data: { name: personaName },
+    data: {
+      name: personaName,
+      creator: personaCreator,
+      personaVersion,
+    },
   });
   expect(personaResponse.ok()).toBeTruthy();
   const persona = (await personaResponse.json()) as { id: string };
 
-  const verifyEditor = async (panel: "characters" | "personas", resourceName: string) => {
+  const verifyEditor = async (
+    panel: "characters" | "personas",
+    resourceName: string,
+    creator: string,
+    version: string,
+  ) => {
     await page.locator(`[data-tour="panel-${panel}"]`).click();
     await page.getByText(resourceName, { exact: true }).first().click();
 
     const editor = page.locator(".mari-editor-shell");
     await expect(editor).toBeVisible();
+    const titleLine = editor.locator(".mari-editor-title-line");
+    const titleInput = titleLine.locator(".mari-editor-title-input");
+    const byline = titleLine.locator(".mari-editor-byline");
+    await expect(titleInput).toHaveValue(resourceName);
+    await expect(byline).toHaveText(`by ${creator}·v${version}`);
+    await expect(editor.locator(".mari-editor-secondary-line .mari-editor-meta")).toHaveCount(0);
+
+    const [titleLineBox, titleInputBox, bylineBox] = await Promise.all([
+      titleLine.boundingBox(),
+      titleInput.boundingBox(),
+      byline.boundingBox(),
+    ]);
+    expect(titleLineBox).not.toBeNull();
+    expect(titleInputBox).not.toBeNull();
+    expect(bylineBox).not.toBeNull();
+    if (titleLineBox && titleInputBox && bylineBox) {
+      expect(titleInputBox.x + titleInputBox.width).toBeLessThanOrEqual(bylineBox.x + 1);
+      expect(bylineBox.x + bylineBox.width).toBeLessThanOrEqual(titleLineBox.x + titleLineBox.width + 1);
+      expect(Math.abs(titleInputBox.y + titleInputBox.height - (bylineBox.y + bylineBox.height))).toBeLessThanOrEqual(
+        2,
+      );
+    }
+
     const tile = editor.locator(".mari-editor-avatar-tile");
     const generateButton = tile.getByRole("button", { name: "Generate avatar with AI" });
     const cameraIcon = tile.locator("div.absolute.inset-0 svg");
@@ -600,8 +642,8 @@ test("Character and Persona avatar actions stay separated and visually balanced"
 
   try {
     await page.goto("/");
-    await verifyEditor("characters", characterName);
-    await verifyEditor("personas", personaName);
+    await verifyEditor("characters", characterName, characterCreator, characterVersion);
+    await verifyEditor("personas", personaName, personaCreator, personaVersion);
   } finally {
     await Promise.all([
       page.request.delete(`/api/characters/${character.id}`).catch(() => undefined),
@@ -1310,6 +1352,17 @@ test("Roleplay side panels synchronize their slide with the desktop shell resize
 test("desktop Tracker stays in the Roleplay gutter without shifting the chat column", async ({ page }, testInfo) => {
   test.skip(!testInfo.project.name.includes("desktop"), "Desktop Tracker gutter behavior is covered on desktop.");
 
+  // Keep this device-local layout test isolated from the shared settings
+  // record used by the parallel browser project.
+  await page.route("**/api/app-settings/ui", async (route) => {
+    if (route.request().method() === "GET") {
+      await route.fulfill({ json: { value: null } });
+      return;
+    }
+    const body = route.request().postDataJSON() as { value?: unknown } | null;
+    await route.fulfill({ json: { value: typeof body?.value === "string" ? body.value : "" } });
+  });
+
   const chatResponse = await page.request.post("/api/chats", {
     data: { name: "Tracker Gutter Layout Smoke", mode: "roleplay", characterIds: [] },
   });
@@ -1679,7 +1732,7 @@ test("Roleplay Active Context shows rich lorebook activation provenance", async 
       contentType: "image/png",
     });
   } finally {
-    await page.request.delete(`/api/chats/${chat.id}`);
+    await page.request.delete(`/api/chats/${chat.id}`, { timeout: 5_000 }).catch(() => undefined);
   }
 });
 
@@ -1860,23 +1913,10 @@ test("roleplay quick preset editor uses chat settings spacing and surfaces", asy
     await expect(drawer).toBeVisible();
     await drawer.getByText("Prompt Preset", { exact: true }).click();
 
-    const quickToggle = drawer.getByRole("button", { name: "Edit preset sections", exact: true });
-    await quickToggle.click();
     const quickEditor = drawer.locator(".mari-quick-preset-editor");
     await expect(quickEditor).toBeVisible();
-    const openQuickToggle = drawer.getByRole("button", { name: "Hide preset editor", exact: true });
-
-    const [selectChevronBox, quickChevronBox] = await Promise.all([
-      drawer.locator('[data-prompt-preset-chevron="select"]').boundingBox(),
-      openQuickToggle.locator('[data-prompt-preset-chevron="quick-editor"]').boundingBox(),
-    ]);
-    expect(selectChevronBox).not.toBeNull();
-    expect(quickChevronBox).not.toBeNull();
-    if (selectChevronBox && quickChevronBox) {
-      expect(
-        Math.abs(selectChevronBox.x + selectChevronBox.width - (quickChevronBox.x + quickChevronBox.width)),
-      ).toBeLessThanOrEqual(1);
-    }
+    await expect(drawer.getByText("Preset sections", { exact: true })).toBeVisible();
+    await expect(drawer.locator('[data-prompt-preset-chevron="select"]')).toBeVisible();
 
     const toolbar = quickEditor.locator(".mari-editor-toolbar");
     const firstToolbarControl = toolbar.locator("button").first();
@@ -1981,7 +2021,6 @@ test("mobile roleplay quick preset editor keeps marker and metadata controls com
     const drawer = page.locator(".mari-chat-settings-drawer");
     await expect(drawer).toBeVisible();
     await drawer.getByText("Prompt Preset", { exact: true }).click();
-    await drawer.getByRole("button", { name: "Edit preset sections", exact: true }).click();
 
     const quickEditor = drawer.locator(".mari-quick-preset-editor");
     await expect(quickEditor).toBeVisible();
@@ -2397,6 +2436,267 @@ test("game widget edits preserve their live numeric values", async ({ request },
     expect(storedWidgets[0]?.config).toMatchObject({ startingValue: 20, value: 55, max: 100 });
   } finally {
     await request.delete(`/api/chats/${chat.id}`);
+  }
+});
+
+test("Game character sheet Retry remains a draft until Save", async ({ page, request }, testInfo) => {
+  const suffix = Date.now().toString(36);
+  const characterName = `Retry Sheet Character ${suffix}`;
+  const personaName = `Retry Sheet Persona ${suffix}`;
+  const personaRpgStats = {
+    enabled: true,
+    attributes: [{ name: "INT", value: 16 }],
+    hp: { value: 18, max: 18 },
+    pools: [{ name: "Focus", value: 8, max: 8, color: "#60a5fa" }],
+  };
+  const originalCard = {
+    name: characterName,
+    shortDescription: "Original saved sheet.",
+    class: "Scout",
+    abilities: ["Trail Sense"],
+    strengths: ["Patience"],
+    weaknesses: ["Deep water"],
+    extra: { oath: "Find the tide keys" },
+    rpgStats: {
+      attributes: [{ name: "WIS", value: 14 }],
+      hp: { value: 24, max: 24 },
+      pools: [{ name: "HP", value: 24, max: 24, color: "#a78bfa" }],
+    },
+  };
+  const regeneratedCard = {
+    name: characterName,
+    shortDescription: "A tide-wise scout shaped by the flooded vault.",
+    class: "Chronomancer",
+    abilities: ["Tide Step", "Read the Lost Hour"],
+    strengths: ["Calm under pressure"],
+    weaknesses: ["Overextends for the party"],
+    extra: { oath: "Recover every tide key" },
+    rpgStats: { hp: { value: 1, max: 1 } },
+  };
+  const providerRequests: Array<Record<string, unknown>> = [];
+  const providerServer = createServer((incoming, response) => {
+    const chunks: Buffer[] = [];
+    incoming.on("data", (chunk) => chunks.push(Buffer.from(chunk)));
+    incoming.on("end", () => {
+      const body = Buffer.concat(chunks).toString("utf8");
+      if (incoming.method !== "POST" || incoming.url !== "/v1/chat/completions") {
+        response.writeHead(404, { "Content-Type": "application/json" });
+        response.end(JSON.stringify({ error: "Unexpected test provider request" }));
+        return;
+      }
+      providerRequests.push(JSON.parse(body) as Record<string, unknown>);
+      response.writeHead(200, { "Content-Type": "application/json" });
+      response.end(
+        JSON.stringify({
+          id: `character-sheet-retry-${providerRequests.length}`,
+          object: "chat.completion",
+          created: Math.floor(Date.now() / 1000),
+          model: "character-sheet-retry-model",
+          choices: [
+            {
+              index: 0,
+              message: { role: "assistant", content: JSON.stringify(regeneratedCard) },
+              finish_reason: "stop",
+            },
+          ],
+          usage: { prompt_tokens: 100, completion_tokens: 80, total_tokens: 180 },
+        }),
+      );
+    });
+  });
+  await new Promise<void>((resolve) => providerServer.listen(0, "127.0.0.1", resolve));
+  let connectionId: string | undefined;
+  let characterId: string | undefined;
+  let personaId: string | undefined;
+  let chatId: string | undefined;
+
+  try {
+    const providerAddress = providerServer.address();
+    if (!providerAddress || typeof providerAddress === "string") {
+      throw new Error("Character sheet retry provider fixture did not bind to a TCP port");
+    }
+    const connectionResponse = await request.post("/api/connections", {
+      data: {
+        name: `Character Sheet Retry Provider ${suffix}`,
+        provider: "custom",
+        baseUrl: `http://127.0.0.1:${providerAddress.port}/v1`,
+        apiKey: "e2e-character-sheet-retry",
+        model: "character-sheet-retry-model",
+        maxContext: 128000,
+      },
+    });
+    expect(connectionResponse.ok()).toBeTruthy();
+    const connection = (await connectionResponse.json()) as { id: string };
+    connectionId = connection.id;
+    const characterResponse = await request.post("/api/characters", {
+      data: {
+        data: {
+          name: characterName,
+          description: "A careful scout who reads the weather.",
+          personality: "Patient and observant.",
+          scenario: "Traveling through a drowned city.",
+        },
+      },
+    });
+    expect(characterResponse.ok()).toBeTruthy();
+    const character = (await characterResponse.json()) as { id: string };
+    characterId = character.id;
+    const personaResponse = await request.post("/api/characters/personas", {
+      data: {
+        name: personaName,
+        description: "A memory-weaver who maps the drowned city's forgotten roads.",
+        personaStats: JSON.stringify({ rpgStats: personaRpgStats }),
+      },
+    });
+    expect(personaResponse.ok()).toBeTruthy();
+    const persona = (await personaResponse.json()) as { id: string };
+    personaId = persona.id;
+
+    const chatResponse = await request.post("/api/chats", {
+      data: {
+        name: `Character Sheet Retry Smoke ${suffix}`,
+        mode: "game",
+        characterIds: [character.id],
+        connectionId: connection.id,
+      },
+    });
+    expect(chatResponse.ok()).toBeTruthy();
+    const chat = (await chatResponse.json()) as { id: string };
+    chatId = chat.id;
+    const metadataResponse = await request.patch(`/api/chats/${chat.id}/metadata`, {
+      data: {
+        gameId: `character-sheet-retry-${suffix}`,
+        gameSessionStatus: "active",
+        gameSessionNumber: 1,
+        gameIntroPresented: true,
+        gamePartyCharacterIds: [character.id],
+        gameCharacterCards: [originalCard],
+        gameWorldOverview: "A drowned city beneath a glass sea.",
+        gameStoryArc: "Recover the seven tide keys before the Leviathan wakes.",
+        gamePlotTwists: ["The cartographer serves the Leviathan."],
+        gamePreviousSessionSummaries: [
+          { sessionNumber: 0, summary: "The party opened the first lock and found a broken tide compass." },
+        ],
+        gameSetupConfig: {
+          genre: "Fantasy",
+          setting: "A drowned city beneath a glass sea",
+          tone: "Adventurous",
+          difficulty: "Normal",
+          playerGoals: "Recover the seven tide keys",
+          gmMode: "standalone",
+          rating: "sfw",
+          partyCharacterIds: [character.id],
+          language: "English",
+        },
+      },
+    });
+    expect(metadataResponse.ok()).toBeTruthy();
+    expect(
+      (
+        await request.post(`/api/chats/${chat.id}/messages`, {
+          data: { role: "assistant", content: "The party reaches the first flooded vault." },
+        })
+      ).ok(),
+    ).toBeTruthy();
+
+    await page.addInitScript(
+      ({ activeChatId }) => {
+        localStorage.setItem("marinara-active-chat-id", activeChatId);
+        const stored = JSON.parse(localStorage.getItem("marinara-engine-ui") || '{"state":{}}') as {
+          state?: Record<string, unknown>;
+          version?: number;
+        };
+        localStorage.setItem(
+          "marinara-engine-ui",
+          JSON.stringify({
+            ...stored,
+            state: { ...(stored.state ?? {}), gameTutorialDisabled: true },
+            version: 82,
+          }),
+        );
+      },
+      { activeChatId: chat.id },
+    );
+
+    const readStoredCard = async () => {
+      const response = await request.get(`/api/chats/${chat.id}`);
+      const storedChat = (await response.json()) as { metadata: string | Record<string, unknown> };
+      const metadata =
+        typeof storedChat.metadata === "string"
+          ? (JSON.parse(storedChat.metadata) as Record<string, unknown>)
+          : storedChat.metadata;
+      return (metadata.gameCharacterCards as Array<Record<string, unknown>>)[0];
+    };
+
+    await page.goto("/");
+    if (testInfo.project.name.includes("mobile")) {
+      await page.getByTitle("Open party members").click();
+    }
+    await page.getByTitle(`${characterName} - Click to open character sheet`).filter({ visible: true }).click();
+    const sheet = page.locator('[data-component="GameCharacterSheet"]');
+    await expect(sheet).toBeVisible();
+    await sheet.getByRole("button", { name: "Edit sheet" }).click();
+
+    const classInput = sheet.getByPlaceholder("Class or role");
+    await expect(classInput).toHaveValue("Scout");
+    await sheet.getByRole("button", { name: "Retry", exact: true }).click();
+    await expect(classInput).toHaveValue("Chronomancer");
+    expect((await readStoredCard())?.class).toBe("Scout");
+    await page.mouse.move(0, 0);
+    await expect(page.locator("[data-sonner-toast]")).toHaveCount(0);
+
+    await sheet.getByRole("button", { name: "Cancel", exact: true }).click();
+    await sheet.getByRole("button", { name: "Edit sheet" }).click();
+    await expect(classInput).toHaveValue("Scout");
+
+    await sheet.getByRole("button", { name: "Retry", exact: true }).click();
+    await expect(classInput).toHaveValue("Chronomancer");
+    await page.mouse.move(0, 0);
+    await expect(page.locator("[data-sonner-toast]")).toHaveCount(0);
+    await sheet.getByRole("button", { name: "Save sheet" }).click();
+    await expect(page.getByRole("heading", { name: characterName })).toHaveCount(0);
+    await expect.poll(async () => (await readStoredCard())?.class).toBe("Chronomancer");
+    expect((await readStoredCard())?.rpgStats).toEqual(originalCard.rpgStats);
+
+    const personaRetryResponse = await request.post("/api/game/character-sheet/regenerate", {
+      data: {
+        chatId: chat.id,
+        characterId: `persona:${persona.id}`,
+        characterName: personaName,
+        connectionId: connection.id,
+      },
+    });
+    expect(personaRetryResponse.ok()).toBeTruthy();
+    const personaRetry = (await personaRetryResponse.json()) as {
+      gameCard: { rpgStats?: Record<string, unknown> };
+    };
+    expect(personaRetry.gameCard.rpgStats).toEqual(personaRpgStats);
+
+    expect(providerRequests).toHaveLength(3);
+    for (const providerRequest of providerRequests.slice(0, 2)) {
+      expect(providerRequest).toMatchObject({
+        model: "character-sheet-retry-model",
+        stream: false,
+      });
+      const prompt = JSON.stringify(providerRequest.messages);
+      expect(prompt).toContain("A careful scout who reads the weather.");
+      expect(prompt).toContain("The party reaches the first flooded vault.");
+      expect(prompt).toContain("The party opened the first lock and found a broken tide compass.");
+      expect(prompt).toContain(`Regenerate only ${characterName}'s character sheet now.`);
+    }
+    const personaPrompt = JSON.stringify(providerRequests[2]?.messages);
+    expect(personaPrompt).toContain("A memory-weaver who maps the drowned city's forgotten roads.");
+    expect(personaPrompt).toContain(`Regenerate only ${personaName}'s character sheet now.`);
+  } finally {
+    await Promise.all([
+      chatId ? request.delete(`/api/chats/${chatId}`).catch(() => undefined) : Promise.resolve(),
+      personaId ? request.delete(`/api/characters/personas/${personaId}`).catch(() => undefined) : Promise.resolve(),
+      characterId ? request.delete(`/api/characters/${characterId}`).catch(() => undefined) : Promise.resolve(),
+      connectionId ? request.delete(`/api/connections/${connectionId}`).catch(() => undefined) : Promise.resolve(),
+    ]);
+    await new Promise<void>((resolve, reject) => {
+      providerServer.close((error) => (error ? reject(error) : resolve()));
+    });
   }
 });
 
@@ -7061,6 +7361,93 @@ test("memory recall modal accepts clicks from chat settings", async ({ page }, t
   await dialog.getByText("0 memory chunks").click();
   await expect(dialog).toBeVisible();
   await expect(drawer.getByRole("heading", { name: "Chat Settings" })).toBeVisible();
+});
+
+test("mobile chat composer follows the visual viewport above the software keyboard", async ({ page }, testInfo) => {
+  test.skip(!testInfo.project.name.includes("mobile"), "Software-keyboard viewport behavior is mobile-only.");
+
+  const response = await page.request.post("/api/chats", {
+    data: {
+      name: "Mobile Keyboard Viewport Smoke",
+      mode: "roleplay",
+      characterIds: [],
+    },
+  });
+  expect(response.ok()).toBeTruthy();
+  const chat = (await response.json()) as { id: string };
+
+  await page.addInitScript(() => {
+    const state = {
+      height: window.innerHeight,
+      offsetTop: 0,
+    };
+    const viewport = new EventTarget();
+    Object.defineProperties(viewport, {
+      height: { configurable: true, get: () => state.height },
+      offsetTop: { configurable: true, get: () => state.offsetTop },
+      offsetLeft: { configurable: true, get: () => 0 },
+      pageLeft: { configurable: true, get: () => 0 },
+      pageTop: { configurable: true, get: () => state.offsetTop },
+      scale: { configurable: true, get: () => 1 },
+      width: { configurable: true, get: () => window.innerWidth },
+    });
+    Object.defineProperty(window, "visualViewport", {
+      configurable: true,
+      value: viewport,
+    });
+    Object.defineProperty(window, "__setMarinaraVisualViewport", {
+      configurable: true,
+      value: (height: number, offsetTop: number) => {
+        state.height = height;
+        state.offsetTop = offsetTop;
+        viewport.dispatchEvent(new Event("resize"));
+        viewport.dispatchEvent(new Event("scroll"));
+      },
+    });
+  });
+  await page.addInitScript((chatId) => {
+    localStorage.setItem("marinara-active-chat-id", chatId);
+  }, chat.id);
+
+  try {
+    await page.goto("/");
+
+    const viewportMeta = page.locator('meta[name="viewport"]');
+    await expect(viewportMeta).toHaveAttribute("content", /interactive-widget=resizes-content/);
+
+    const shell = page.locator('[data-component="AppShell"]');
+    const composer = page.locator(".chat-input-container:visible");
+    const textarea = composer.locator("textarea:visible");
+    await expect(textarea).toBeVisible();
+    await textarea.focus();
+
+    await page.evaluate(() => {
+      (
+        window as typeof window & {
+          __setMarinaraVisualViewport: (height: number, offsetTop: number) => void;
+        }
+      ).__setMarinaraVisualViewport(360, 72);
+    });
+
+    await expect
+      .poll(() =>
+        page.evaluate(() => ({
+          height: getComputedStyle(document.documentElement).getPropertyValue("--mari-visual-viewport-height").trim(),
+          top: getComputedStyle(document.documentElement).getPropertyValue("--mari-visual-viewport-offset-top").trim(),
+        })),
+      )
+      .toEqual({ height: "360px", top: "72px" });
+
+    const [shellBox, composerBox] = await Promise.all([shell.boundingBox(), composer.boundingBox()]);
+    expect(shellBox).not.toBeNull();
+    expect(composerBox).not.toBeNull();
+    expect(Math.abs(shellBox!.y - 72)).toBeLessThanOrEqual(1);
+    expect(Math.abs(shellBox!.height - 360)).toBeLessThanOrEqual(1);
+    expect(composerBox!.y).toBeGreaterThanOrEqual(72);
+    expect(composerBox!.y + composerBox!.height).toBeLessThanOrEqual(432);
+  } finally {
+    await page.request.delete(`/api/chats/${chat.id}`).catch(() => undefined);
+  }
 });
 
 test("mobile topbar remains reachable while sidebars switch", async ({ page }, testInfo) => {

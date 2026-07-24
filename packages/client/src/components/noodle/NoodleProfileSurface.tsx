@@ -2,6 +2,7 @@ import { MapPin } from "lucide-react";
 import type { ChangeEvent, ReactNode, RefObject } from "react";
 import { cn } from "../../lib/utils";
 import { Avatar, NoodleLogo } from "./NoodleShell";
+import { useTranslation as useUiTranslation } from "react-i18next";
 
 type NoodleProfileTab = "posts" | "likes" | "media";
 
@@ -15,6 +16,12 @@ const profileTabs: Array<{ id: NoodleProfileTab; label: string }> = [
   { id: "likes", label: "Likes" },
   { id: "media", label: "Media" },
 ];
+
+const PROFILE_TAB_KEYS: Record<NoodleProfileTab, string> = {
+  posts: "ui.noodle.profile.tabs.posts",
+  likes: "ui.noodle.profile.tabs.likes",
+  media: "ui.noodle.profile.tabs.media",
+};
 
 interface NoodleProfileSurfaceProps<TTab extends string = NoodleProfileTab> {
   mobileHeader: ReactNode;
@@ -86,6 +93,7 @@ export function NoodleProfileSurface<TTab extends string = NoodleProfileTab>({
   preTabsContent,
   postList,
 }: NoodleProfileSurfaceProps<TTab>) {
+  const { t: localizeUi } = useUiTranslation();
   const hasBanner = Boolean(banner) || decorativeBanner;
   const resolvedTabs = tabs ?? (profileTabs as Array<{ id: TTab; label: ReactNode; ariaLabel?: string }>);
   return (
@@ -101,7 +109,7 @@ export function NoodleProfileSurface<TTab extends string = NoodleProfileTab>({
           "relative block h-40 w-full overflow-hidden bg-[var(--noodle-accent)]/15 text-left disabled:cursor-default",
           banner.uploadTarget === "banner" && "cursor-wait opacity-80",
         )}
-        title={banner.canEdit ? "Upload banner" : undefined}
+        title={banner.canEdit ?localizeUi("ui.noodle.noodleprofilesurface.uploadBanner") : undefined}
       >
         {banner.url ? (
           <img src={banner.url} alt="" className="h-full w-full object-cover" />
@@ -111,9 +119,7 @@ export function NoodleProfileSurface<TTab extends string = NoodleProfileTab>({
           </div>
         )}
         {banner.uploadTarget === "banner" && (
-          <span className="absolute bottom-3 right-3 rounded-full bg-[var(--marinara-chat-chrome-panel-bg)] px-3 py-1.5 text-xs font-semibold text-[var(--noodle-accent)] shadow-lg ring-1 ring-[var(--marinara-chat-chrome-panel-border)]">
-            Uploading...
-          </span>
+          <span className="absolute bottom-3 right-3 rounded-full bg-[var(--marinara-chat-chrome-panel-bg)] px-3 py-1.5 text-xs font-semibold text-[var(--noodle-accent)] shadow-lg ring-1 ring-[var(--marinara-chat-chrome-panel-border)]">{localizeUi("ui.noodle.noodleprofilesurface.uploading")}</span>
         )}
       </button>
       <input
@@ -147,13 +153,11 @@ export function NoodleProfileSurface<TTab extends string = NoodleProfileTab>({
               "relative rounded-full bg-[var(--background)] p-1 text-left disabled:cursor-default",
               avatarUpload.uploadTarget === "avatar" && "cursor-wait opacity-80",
             )}
-            title={avatarUpload.canEdit ? "Upload avatar" : undefined}
+            title={avatarUpload.canEdit ?localizeUi("editor.avatar.upload") : undefined}
           >
             <Avatar account={account} size="lg" />
             {avatarUpload.uploadTarget === "avatar" && (
-              <span className="absolute inset-1 flex items-center justify-center rounded-full bg-black/50 text-[0.625rem] font-semibold text-white">
-                Uploading
-              </span>
+              <span className="absolute inset-1 flex items-center justify-center rounded-full bg-black/50 text-[0.625rem] font-semibold text-white">{localizeUi("ui.noodle.noodleprofilesurface.uploading_de27240")}</span>
             )}
           </button> : decorativeBanner ? (
             <div className="shrink-0 rounded-full ring-4 ring-[var(--background)]">
@@ -181,7 +185,7 @@ export function NoodleProfileSurface<TTab extends string = NoodleProfileTab>({
               disabled={editor.isEditing ? !editor.canSave || editor.isSaving : false}
               className="h-9 rounded-full bg-[var(--noodle-accent)] px-5 text-xs font-bold text-zinc-950 transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {editor.isEditing ? (editor.isSaving ? "Saving" : "Save") : "Edit Profile"}
+              {editor.isEditing ? (editor.isSaving ?localizeUi("ui.noodle.noodlehome.saving") :localizeUi("ui.noodle.noodlehome.save")) :localizeUi("ui.noodle.stageprofileview.editProfile")}
             </button>
           ) : followAction ? (
             <button
@@ -195,7 +199,7 @@ export function NoodleProfileSurface<TTab extends string = NoodleProfileTab>({
                   : "bg-[var(--foreground)] text-[var(--background)]",
               )}
             >
-              {followAction.followed ? "Following" : "Follow"}
+              {followAction.followed ?localizeUi("ui.noodle.noodleprofilesurface.following") :localizeUi("ui.noodle.noodlehome.follow")}
             </button>
           ) : null}
           {secondaryActions}
@@ -206,30 +210,30 @@ export function NoodleProfileSurface<TTab extends string = NoodleProfileTab>({
           <div className="mt-3 space-y-3">
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <label className="block space-y-1.5">
-                <span className={labelClass}>Display name</span>
+                <span className={labelClass}>{localizeUi("ui.noodle.noodleprofilesurface.displayName")}</span>
                 <input value={editor.name} onChange={(event) => editor.onNameChange(event.target.value)} className={fieldClass} />
               </label>
               <label className="block space-y-1.5">
-                <span className={labelClass}>@name</span>
+                <span className={labelClass}>{localizeUi("ui.noodle.noodleprofilesurface.name")}</span>
                 <input
                   value={editor.handle}
                   onChange={(event) => editor.onHandleChange(event.target.value)}
                   className={fieldClass}
-                  placeholder="@mari"
+                  placeholder={localizeUi("ui.noodle.noodleprofilesurface.mari")}
                 />
               </label>
             </div>
             <label className="block space-y-1.5">
-              <span className={labelClass}>Bio</span>
+              <span className={labelClass}>{localizeUi("ui.noodle.noodleprofilesurface.bio")}</span>
               <textarea value={editor.bio} onChange={(event) => editor.onBioChange(event.target.value)} className={cn(fieldClass, "h-24 resize-none py-2")} />
             </label>
             <label className="block space-y-1.5">
-              <span className={labelClass}>Location</span>
+              <span className={labelClass}>{localizeUi("ui.noodle.noodleprofilesurface.location")}</span>
               <input
                 value={editor.location}
                 onChange={(event) => editor.onLocationChange(event.target.value)}
                 className={fieldClass}
-                placeholder="Somewhere cozy"
+                placeholder={localizeUi("ui.noodle.noodleprofilesurface.somewhereCozy")}
               />
             </label>
           </div>
@@ -250,11 +254,9 @@ export function NoodleProfileSurface<TTab extends string = NoodleProfileTab>({
             )}
             {connections && <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-sm text-[var(--muted-foreground)]">
               <button type="button" onClick={connections.onOpenFollowing} className="transition-colors hover:text-[var(--noodle-accent)]">
-                <span className="font-bold text-[var(--foreground)]">{connections.followingCount}</span> Following
-              </button>
+                <span className="font-bold text-[var(--foreground)]">{connections.followingCount}</span> {localizeUi("ui.noodle.noodleprofilesurface.following")}</button>
               <button type="button" onClick={connections.onOpenFollowers} className="transition-colors hover:text-[var(--noodle-accent)]">
-                <span className="font-bold text-[var(--foreground)]">{connections.followerCount}</span> Followers
-              </button>
+                <span className="font-bold text-[var(--foreground)]">{connections.followerCount}</span> {localizeUi("ui.noodle.noodleprofilesurface.followers")}</button>
             </div>}
           </div>
         )}
@@ -273,7 +275,11 @@ export function NoodleProfileSurface<TTab extends string = NoodleProfileTab>({
                 activeTab === tab.id && "text-[var(--foreground)]",
               )}
             >
-              <span className="truncate">{tab.label}</span>
+              <span className="truncate">
+                {tab.id in PROFILE_TAB_KEYS
+                  ? localizeUi(PROFILE_TAB_KEYS[tab.id as NoodleProfileTab])
+                  : tab.label}
+              </span>
               {activeTab === tab.id && (
                 <span className="absolute bottom-0 left-1/2 h-1 w-12 -translate-x-1/2 rounded-full bg-[var(--noodle-accent)]" />
               )}
