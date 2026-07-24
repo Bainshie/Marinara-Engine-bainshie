@@ -30,6 +30,7 @@ import type {
   NoodlePrivateGenerationRequest,
   NoodleStageProfileDraftRequest,
   NoodlerManagedPost,
+  NoodlerRefreshNowOutcome,
   NoodlerStageProfile,
   NoodlerManagedStageProfile,
   NoodlerSubscriber,
@@ -374,7 +375,6 @@ export function useUpdateNoodlerAutoPosting() {
       enabled?: boolean;
       intensity?: NoodleAutoPostingIntensity;
       imagesEnabled?: boolean;
-      maxImagesPerRun?: number;
     }) =>
       api.patch<NoodleAccount>(`/noodle/accounts/${encodeURIComponent(accountId)}/settings`, {
         subtree: "scheduler",
@@ -398,7 +398,7 @@ export function useRunNoodlerAutoPostNow() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (accountId: string) =>
-      api.post<GeneratedPrivateNoodlePost>(`/noodle/noodler/accounts/${encodeURIComponent(accountId)}/auto-post/run-now`),
+      api.post<NoodlerManagedPost>(`/noodle/noodler/accounts/${encodeURIComponent(accountId)}/auto-post/run-now`),
     onSuccess: (_post, accountId) =>
       Promise.all([
         qc.invalidateQueries({ queryKey: noodleKeys.privatePosts(accountId) }),
@@ -411,7 +411,7 @@ export function useRefreshAllNoodlerCreatorsNow() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: () =>
-      api.post<{ outcomes: { accountId: string; status: string }[] }>("/noodle/noodler/auto-post/refresh-now"),
+      api.post<{ outcomes: NoodlerRefreshNowOutcome[] }>("/noodle/noodler/auto-post/refresh-now"),
     onSuccess: () =>
       Promise.all([
         qc.invalidateQueries({ queryKey: noodleKeys.privateAccounts() }),

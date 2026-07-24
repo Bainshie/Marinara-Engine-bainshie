@@ -1,7 +1,9 @@
 import type {
+  NoodleAccount,
   NoodlePrivateGenerationRequest,
   NoodlePrivatePostCreateInput,
   NoodlerManagedPost,
+  NoodlerRefreshNowOutcome,
 } from "@marinara-engine/shared";
 import type { NoodleImagePromptReviewItem } from "./noodle-public-images.service.js";
 import type { DB } from "../../db/connection.js";
@@ -55,11 +57,6 @@ export async function generateNoodlePrivatePost(
 
 const MAX_CONCURRENT_MANUAL_REFRESH = 3;
 
-export type NoodlerRefreshNowOutcome = {
-  accountId: string;
-  status: GenerateNoodlePrivatePostResult["status"] | "skipped" | "error";
-};
-
 export type NoodlerRefreshNowResult =
   | { status: "disabled" }
   | { status: "ok"; outcomes: NoodlerRefreshNowOutcome[] };
@@ -77,24 +74,25 @@ export async function refreshAllNoodlerCreatorsNow(db: DB): Promise<NoodlerRefre
   if (!settings.enableNoodler) return { status: "disabled" };
 
   const accounts = await noodle.listAutoPostEnabledAccounts();
-  const nextRunAtMs = (accountId: string) => {
-    const nextRunAt = accounts.find((account) => account.id === accountId)?.settings.scheduler.autoPosting?.nextRunAt;
+  const nextRunAtMs = (account: NoodleAccount) => {
+    const nextRunAt = account.settings.scheduler.autoPosting?.nextRunAt;
     return nextRunAt === null || nextRunAt === undefined ? Number.POSITIVE_INFINITY : Date.parse(nextRunAt);
   };
-  const prioritized = [...accounts].sort((a, b) => nextRunAtMs(a.id) - nextRunAtMs(b.id));
+  const prioritized = [...accounts].sort((a, b) => nextRunAtMs(a) - nextRunAtMs(b));
 
   const nowIso = new Date().toISOString();
   const settled = await settleAgentJobsWithConcurrencyLimit(
     prioritized,
     MAX_CONCURRENT_MANUAL_REFRESH,
     async (account): Promise<NoodlerRefreshNowOutcome> => {
-      const claim = await noodle.claimAutoPostRunNow(account.id, nowIso);
-      if (claim !== "claimed") return { accountId: account.id, status: "skipped" };
       const result = await generateNoodlePrivatePost(db, {
         mode: "private",
         targetAccountId: account.id,
         access: "subscriber",
       });
+      // Consume the slot only on a real post; busy/failed/skipped runs leave any explicit
+      // schedule edit intact instead of burning the creator's next automatic slot.
+      if (result.status === "generated") await noodle.claimAutoPostRunNow(account.id, nowIso);
       return { accountId: account.id, status: result.status };
     },
   );

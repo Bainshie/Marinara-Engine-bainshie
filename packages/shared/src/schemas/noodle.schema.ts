@@ -147,7 +147,6 @@ export const noodleAutoPostingSettingsSchema = z
     enabled: z.boolean().default(false),
     intensity: noodleAutoPostingIntensitySchema.default(1),
     imagesEnabled: z.boolean().default(false),
-    maxImagesPerRun: z.number().int().min(0).max(4).default(1),
     nextRunAt: z.string().datetime().nullable().default(null),
   })
   .strict();
@@ -166,7 +165,7 @@ export const noodleAutoPostRescheduleSchema = z.object({ nextRunAt: z.string().d
 export const noodleAccountSchedulerPatchSchema = z
   .object({
     autoPosting: noodleAutoPostingSettingsSchema
-      .pick({ enabled: true, intensity: true, imagesEnabled: true, maxImagesPerRun: true })
+      .pick({ enabled: true, intensity: true, imagesEnabled: true })
       .partial()
       .optional(),
   })

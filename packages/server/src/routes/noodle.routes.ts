@@ -659,11 +659,9 @@ export async function noodleRoutes(app: FastifyInstance) {
         targetAccountId: id,
         access: "subscriber",
       });
-      if (result.status === "generated") {
-        return result.imagePromptReview
-          ? { ...result.post, imagePromptReview: result.imagePromptReview }
-          : result.post;
-      }
+      // Run-now never sets reviewImagePromptsBeforeSend, so the generator can only return a
+      // plain post here — no image-prompt review is ever produced on this path.
+      if (result.status === "generated") return result.post;
       if (result.status === "busy") {
         return reply.code(409).send({ error: "A generation for this NoodleR account is already running." });
       }

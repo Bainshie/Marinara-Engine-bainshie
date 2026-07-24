@@ -42,14 +42,28 @@ export interface NoodleAutoPostingSettings {
   intensity: NoodleAutoPostingIntensity;
   /** NoodleR-owned image enablement; independent of public Noodle's enableImagePrompts. */
   imagesEnabled: boolean;
-  /** NoodleR-owned bounded per-run image quota. */
-  maxImagesPerRun: number;
   /** Server-owned; excluded from client-editable patches. */
   nextRunAt: string | null;
 }
 
 export interface NoodleAccountSchedulerSettings {
   autoPosting?: NoodleAutoPostingSettings;
+}
+
+/** Per-creator outcome of the global "Refresh NoodleR now" action; one creator never rolls back another. */
+export type NoodlerRefreshNowOutcomeStatus =
+  | "generated"
+  | "disabled"
+  | "busy"
+  | "connection_required"
+  | "connection_not_found"
+  | "private_account_not_found"
+  | "skipped"
+  | "error";
+
+export interface NoodlerRefreshNowOutcome {
+  accountId: string;
+  status: NoodlerRefreshNowOutcomeStatus;
 }
 export interface NoodleAccountPrivacySettings {
   identityDisclosure?: NoodleIdentityDisclosure;

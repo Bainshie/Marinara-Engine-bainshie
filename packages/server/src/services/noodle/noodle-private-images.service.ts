@@ -38,8 +38,9 @@ type ImageConnection = NonNullable<Awaited<ReturnType<ReturnType<typeof createCo
  * Private analog of generateNoodlePostImage. The deliberate difference from public
  * Noodle: bytes stage into a NoodleR-owned private-media namespace and never touch the
  * public gallery or character gallery, so subscriber/PPV output can be served only
- * through the access-checked media endpoint. Returns the relative on-disk path; the
- * caller derives the access-checked URL from the persisted post id.
+ * through the access-checked media endpoint. The staged file's on-disk path is persisted in
+ * `metadata.privateMediaPath`; callers finalize via `stagedMedia` and derive the access-checked
+ * URL from the persisted post id.
  */
 export async function generatePrivatePostImage(input: {
   account: NoodleAccount;
@@ -56,7 +57,6 @@ export async function generatePrivatePostImage(input: {
   previewOnly?: boolean;
   promptOverride?: { prompt: string; negativePrompt?: string };
 }): Promise<{
-  mediaPath: string | null;
   metadata: Record<string, unknown>;
   preview: Omit<NoodleImagePromptReviewItem, "id"> | null;
   stagedMedia: StagedGalleryImage | null;
@@ -144,7 +144,6 @@ export async function generatePrivatePostImage(input: {
       imageDefaults,
     });
     return {
-      mediaPath: null,
       metadata: {},
       preview: {
         kind: "illustration",
@@ -186,7 +185,6 @@ export async function generatePrivatePostImage(input: {
   const provider = input.imageConnection.provider ?? "image_generation";
   const file = stageImageToDisk(`noodler-private/${input.account.id}`, image.base64, image.ext);
   return {
-    mediaPath: file.filePath,
     metadata: {
       imageGenerated: true,
       imageProvider: provider,
@@ -287,6 +285,24 @@ export function createPrivateNoodleImagesService(db: DB) {
         await renewClaim();
         if (!claimOwned) {
           image.stagedMedia?.compensate();
+          continue;
+        }
+
+        // Re-read the profile before finalizing: if disclosure or the linked public identity
+        // changed during the (potentially long) provider call, the staged image was built from a
+        // now-stale appearance policy, so discard it and finalize as failed rather than publish it.
+        const fresh = await noodle.getPrivateAccountById(claimed.authorAccountId);
+        const freshDisclosure = fresh?.settings.privacy.identityDisclosure ?? "secret";
+        if (!fresh || freshDisclosure !== disclosureMode || (fresh.publicAccountId ?? null) !== (account.publicAccountId ?? null)) {
+          image.stagedMedia?.compensate();
+          await noodle.finalizePostImageClaim(claimed.id, claimToken, {
+            imageUrl: null,
+            imagePrompt: null,
+            metadata: {
+              imageGenerationFailed: true,
+              imageGenerationError: "Stage profile identity changed during image generation.",
+            },
+          });
           continue;
         }
         try {

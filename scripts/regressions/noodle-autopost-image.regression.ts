@@ -11,16 +11,14 @@ import {
   resolvePrivateMediaAbsolutePath,
 } from "../../packages/server/src/services/noodle/noodle-private-media.js";
 
-// NoodleR-owned image enablement + bounded per-run quota live on the autoPosting subtree.
-const settings = noodleAutoPostingSettingsSchema.parse({ imagesEnabled: true, maxImagesPerRun: 2 });
+// NoodleR-owned image enablement is the single one-image policy on the autoPosting subtree.
+const settings = noodleAutoPostingSettingsSchema.parse({ imagesEnabled: true });
 assert.equal(settings.imagesEnabled, true);
-assert.equal(settings.maxImagesPerRun, 2);
-// Quota is bounded 0..4 (0 = images disabled by quota even if toggled on).
-assert.equal(noodleAutoPostingSettingsSchema.parse({ maxImagesPerRun: 0 }).maxImagesPerRun, 0);
-assert.throws(() => noodleAutoPostingSettingsSchema.parse({ maxImagesPerRun: 5 }));
-assert.throws(() => noodleAutoPostingSettingsSchema.parse({ maxImagesPerRun: -1 }));
-// The client patch may carry the image controls but never the server-owned nextRunAt.
-assert.ok(noodleAccountSchedulerPatchSchema.parse({ autoPosting: { imagesEnabled: true, maxImagesPerRun: 3 } }));
+assert.equal(noodleAutoPostingSettingsSchema.parse({}).imagesEnabled, false);
+// The client patch may carry the image toggle but never the server-owned nextRunAt.
+assert.ok(noodleAccountSchedulerPatchSchema.parse({ autoPosting: { imagesEnabled: true } }));
+// The removed per-run quota is rejected by the strict schema.
+assert.throws(() => noodleAccountSchedulerPatchSchema.parse({ autoPosting: { maxImagesPerRun: 3 } }));
 
 // The private generator surfaces its optional imagePrompt (no second text-model call) but
 // never a poll.

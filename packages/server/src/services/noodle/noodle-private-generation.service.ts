@@ -10,6 +10,7 @@ import {
   type NoodlerManagedPost,
 } from "@marinara-engine/shared";
 import { isDebugAgentsEnabled } from "../../config/runtime-config.js";
+import { newId } from "../../utils/id-generator.js";
 import type { DB } from "../../db/connection.js";
 import { logger, logDebugOverride } from "../../lib/logger.js";
 import { resolveBaseUrl } from "../generation/connection-base-url.js";
@@ -177,7 +178,7 @@ export async function generatePrivatePost(
   const { account } = input;
   const settings = await noodle.getSettings();
   const autoPosting = account.settings.scheduler.autoPosting;
-  const imagesEnabled = autoPosting?.imagesEnabled === true && (autoPosting.maxImagesPerRun ?? 0) > 0;
+  const imagesEnabled = autoPosting?.imagesEnabled === true;
 
   const connections = createConnectionsStorage(db);
   const fallbackConnection = await connections.getFallbackForMain();
@@ -293,7 +294,7 @@ export async function generatePrivatePost(
   };
 
   const persist = async (
-    extra: { imagePrompt?: string | null; imageUrl?: string | null; metadata?: Record<string, unknown> } = {},
+    extra: { id?: string; imagePrompt?: string | null; imageUrl?: string | null; metadata?: Record<string, unknown> } = {},
   ): Promise<NoodlerManagedPost> => {
     const post = await noodle.createPrivatePost({ ...baseInput, ...extra });
     if (!post) throw new Error("Failed to persist the generated private NoodleR post.");
@@ -350,18 +351,11 @@ export async function generatePrivatePost(
     }
   }
 
-  // Immediate generation: image-provider failure must leave a valid text post, not fail the run.
+  // Immediate generation: only a provider failure falls back to a text-only post. Persistence
+  // failures propagate so a single run can never both persist an image post and a text fallback.
+  let image: Awaited<ReturnType<typeof generatePrivatePostImage>>;
   try {
-    const image = await generatePrivatePostImage({ ...imageInput, previewOnly: false });
-    image.stagedMedia?.promote();
-    try {
-      const post = await persist({ imagePrompt: draftImagePrompt, metadata: image.metadata });
-      const withUrl = await noodle.updatePrivatePost(post.id, { imageUrl: privatePostMediaUrl(post.id) });
-      return { post: withUrl ?? post, imagePromptReview: null };
-    } catch (err) {
-      image.stagedMedia?.compensate();
-      throw err;
-    }
+    image = await generatePrivatePostImage({ ...imageInput, previewOnly: false });
   } catch (err) {
     logger.warn(err, "[noodler] Failed to generate private image for %s", account.displayName);
     return {
@@ -370,5 +364,22 @@ export async function generatePrivatePost(
       }),
       imagePromptReview: null,
     };
+  }
+
+  // One operation owns promotion and exactly one committed post: the serving URL is derived from
+  // a pre-generated id so the image URL and media metadata persist together in a single insert.
+  const postId = newId();
+  try {
+    image.stagedMedia?.promote();
+    const post = await persist({
+      id: postId,
+      imagePrompt: draftImagePrompt,
+      imageUrl: privatePostMediaUrl(postId),
+      metadata: image.metadata,
+    });
+    return { post, imagePromptReview: null };
+  } catch (err) {
+    image.stagedMedia?.compensate();
+    throw err;
   }
 }

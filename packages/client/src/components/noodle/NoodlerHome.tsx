@@ -670,14 +670,8 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
 
   const submitRunNow = (accountId: string) => {
     runAutoPostNow.mutate(accountId, {
-      onSuccess: (result) => {
-        if (result.imagePromptReview) {
-          setImagePromptReview({ accountId, items: [result.imagePromptReview] });
-          toast.success("Automatic post generated. Review the image prompt to render it.");
-          return;
-        }
-        toast.success("Automatic post generated.");
-      },
+      // Run-now never requests prompt review, so it only ever yields a plain generated post.
+      onSuccess: () => toast.success("Automatic post generated."),
       onError: (error) => toast.error(errorMessage(error, "Could not run an automatic post now.")),
     });
   };
@@ -751,6 +745,18 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
   // Reserve the same rail width as the feed view (see NoodleHome's "settings" rail) so
   // non-feed screens don't stretch the shell wider and look like a different layout.
   const emptyRightRail = <aside className="hidden w-[22rem] shrink-0 px-4 py-3 xl:block" aria-hidden="true" />;
+
+  // Shared review layer: Guide generation can be triggered from both the selected stage-profile
+  // view and the hub, so the confirmation modal must render on every branch that owns that action.
+  const reviewModal = (
+    <ImagePromptReviewModal
+      open={Boolean(imagePromptReview)}
+      items={imagePromptReview?.items ?? []}
+      isSubmitting={confirmImagePrompts.isPending}
+      onCancel={() => setImagePromptReview(null)}
+      onConfirm={confirmReviewedImagePrompts}
+    />
+  );
 
   if (!data && !isError) {
     return (
@@ -955,6 +961,7 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
           }
         />
       </main>
+      {reviewModal}
       </NoodleShell>
     );
   }
@@ -1009,6 +1016,20 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
               type="button"
               onClick={() =>
                 refreshAllNow.mutate(undefined, {
+                  onSuccess: ({ outcomes }) => {
+                    const generated = outcomes.filter((o) => o.status === "generated").length;
+                    const skipped = outcomes.filter((o) => o.status === "skipped").length;
+                    const failed = outcomes.length - generated - skipped;
+                    if (outcomes.length === 0) {
+                      toast.success("No creators have automatic posting enabled.");
+                    } else if (failed === 0) {
+                      toast.success(`Generated ${generated} post${generated === 1 ? "" : "s"}.`);
+                    } else if (generated === 0) {
+                      toast.error(`All ${failed} creator${failed === 1 ? "" : "s"} failed to post (connection or provider error).`);
+                    } else {
+                      toast.error(`Generated ${generated}, ${failed} failed${skipped ? `, ${skipped} skipped` : ""}.`);
+                    }
+                  },
                   onError: (error) => toast.error(errorMessage(error, "Could not refresh NoodleR creators.")),
                 })
               }
@@ -1144,13 +1165,7 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
         onToggleSubscription={toggleCreatorSubscription}
         togglePending={toggleSubscription.isPending}
       />
-      <ImagePromptReviewModal
-        open={Boolean(imagePromptReview)}
-        items={imagePromptReview?.items ?? []}
-        isSubmitting={confirmImagePrompts.isPending}
-        onCancel={() => setImagePromptReview(null)}
-        onConfirm={confirmReviewedImagePrompts}
-      />
+      {reviewModal}
     </NoodleShell>
   );
 }

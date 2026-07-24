@@ -104,6 +104,8 @@ type InsertInteractionCommand = {
   parentInteractionId: string | null;
 };
 type PrivatePostPersistenceInput = {
+  /** Optional caller-supplied id so a serving URL can be derived before the row is inserted. */
+  id?: string;
   authorAccountId: string;
   title?: string | null;
   content: string;
@@ -138,7 +140,7 @@ function emptyNoodleAccountSettings(): NoodleAccountSettings {
 }
 
 function defaultAutoPostingSettings(): NonNullable<NoodleAccountSchedulerSettings["autoPosting"]> {
-  return { enabled: false, intensity: 1, imagesEnabled: false, maxImagesPerRun: 1, nextRunAt: null };
+  return { enabled: false, intensity: 1, imagesEnabled: false, nextRunAt: null };
 }
 
 export function normalizeScheduler(value: unknown): NoodleAccountSchedulerSettings {
@@ -148,16 +150,11 @@ export function normalizeScheduler(value: unknown): NoodleAccountSchedulerSettin
   const raw = parseRecord(parseRecord(value).autoPosting);
   const intensity = noodleAutoPostingIntensitySchema.safeParse(raw.intensity);
   const nextRunAtValid = typeof raw.nextRunAt === "string" && !Number.isNaN(Date.parse(raw.nextRunAt));
-  const maxImagesPerRun = Number(raw.maxImagesPerRun);
   return {
     autoPosting: {
       enabled: typeof raw.enabled === "boolean" ? raw.enabled : defaults.enabled,
       intensity: intensity.success ? intensity.data : defaults.intensity,
       imagesEnabled: typeof raw.imagesEnabled === "boolean" ? raw.imagesEnabled : defaults.imagesEnabled,
-      maxImagesPerRun:
-        Number.isInteger(maxImagesPerRun) && maxImagesPerRun >= 0 && maxImagesPerRun <= 4
-          ? maxImagesPerRun
-          : defaults.maxImagesPerRun,
       nextRunAt: raw.nextRunAt === null ? null : nextRunAtValid ? (raw.nextRunAt as string) : defaults.nextRunAt,
     },
   };
@@ -1010,7 +1007,6 @@ export function createNoodleStorage(db: DB) {
                 intensity: patchAuto.intensity ?? currentAuto.intensity,
                 // Image enablement/quota do not affect cadence, so they never reset nextRunAt.
                 imagesEnabled: patchAuto.imagesEnabled ?? currentAuto.imagesEnabled,
-                maxImagesPerRun: patchAuto.maxImagesPerRun ?? currentAuto.maxImagesPerRun,
                 nextRunAt:
                   (patchAuto.enabled !== undefined && patchAuto.enabled !== currentAuto.enabled) ||
                   (patchAuto.intensity !== undefined && patchAuto.intensity !== currentAuto.intensity)
@@ -1261,7 +1257,7 @@ export function createNoodleStorage(db: DB) {
       const account = await this.getPrivateAccountById(input.authorAccountId);
       if (!account) return null;
       const timestamp = now();
-      const id = newId();
+      const id = input.id ?? newId();
       return db.transaction(async (tx) => {
         await tx.insert(noodlePosts).values({
           id,
@@ -1413,12 +1409,16 @@ export function createNoodleStorage(db: DB) {
         ) {
           return false;
         }
+        // Finalization owns the terminal transition: drop the pending-review marker so a
+        // finalized (success or failed) row never keeps contradictory pending lifecycle state.
+        const mergedMetadata = { ...parseRecord(row.metadata), ...input.metadata };
+        delete mergedMetadata.imagePendingReview;
         await tx
           .update(noodlePosts)
           .set({
             imageUrl: input.imageUrl,
             ...(input.imagePrompt !== undefined && { imagePrompt: input.imagePrompt }),
-            metadata: JSON.stringify({ ...parseRecord(row.metadata), ...input.metadata }),
+            metadata: JSON.stringify(mergedMetadata),
             imageClaimToken: null,
             imageClaimLeaseUntil: null,
             updatedAt: now(),
