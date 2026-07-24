@@ -193,6 +193,7 @@ A timeout is the longest time the server waits for a slow job before giving up. 
 | Variable | Default | What it does |
 | --- | --- | --- |
 | `CHAT_GENERATION_TIMEOUT_MS` | `300000` (5 minutes) | Provider headers/time-to-first-token and inter-chunk timeout for ordinary Conversation, Roleplay, and Game generations. Valid range: `10000`-`3600000`. It does not change Agent, media, embedding, tool, or background-job timeouts. |
+| `AGENT_CALL_TIMEOUT_MS` | `300000` (5 minutes) | Total-duration cap for one agent LLM call (trackers, HTML reformatter, and other agents), applied even while the response is still streaming. Raise it for slow local models that need longer than 5 minutes per agent pass. Valid range: `10000`-`3600000`. The Illustrator keeps at least its built-in 30-minute budget. |
 | `EMBEDDING_TIMEOUT_MS` | `300000` (5 minutes) | Time allowed for one embedding request. Higher helps slow local embedding servers. |
 | `IMAGE_GEN_TIMEOUT_MS` | `1800000` (30 minutes) | Time allowed for one image generation request. |
 | `VIDEO_GEN_TIMEOUT_MS` | `1800000` (30 minutes) | Time allowed for one scene video generation request, including local ComfyUI video workflows. |
@@ -202,7 +203,7 @@ A timeout is the longest time the server waits for a slow job before giving up. 
 | `CUSTOM_TOOL_TIMEOUT_MS` | `60000` (1 minute) | Time allowed for one custom tool call. |
 | `MAX_TOOL_ROUNDS` | `100` | Most tool-call rounds before the model must give a final answer. |
 
-The image, video, sprite, and ComfyUI timeouts are locked in at startup, so a change to them needs a restart. Chat-generation, embedding, and custom-tool timeouts take effect on the next request, with no restart. Invalid, zero, negative, or out-of-range chat timeout values log a warning and safely use the five-minute default. Raise a media timeout when large or high-quality jobs fail partway through. To learn more about video jobs, see [Scene Video](media/scene-video.md).
+The image, video, sprite, and ComfyUI timeouts are locked in at startup, so a change to them needs a restart. Chat-generation, agent, embedding, and custom-tool timeouts take effect on the next request or agent run, with no restart. Invalid, zero, negative, or out-of-range chat or agent timeout values log a warning and safely use the five-minute default. Raise a media timeout when large or high-quality jobs fail partway through. To learn more about video jobs, see [Scene Video](media/scene-video.md).
 
 ## Privileged APIs (ADMIN_SECRET)
 
