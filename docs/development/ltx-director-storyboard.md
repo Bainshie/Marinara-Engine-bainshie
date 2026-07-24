@@ -112,7 +112,7 @@ Add four narrow substitutions while retaining every existing substitution:
 | Placeholder | Value |
 | --- | --- |
 | `%global_prompt%` | Stable prompt from the new LTX Director Video template |
-| `%local_prompts%` | Sanitized ` | `-delimited local beats |
+| `%local_prompts%` | Sanitized local beats separated by pipe delimiters |
 | `%segment_lengths%` | Empty string in this increment for automatic equal timing |
 | `%duration_seconds%` | The same resolved request duration used to calculate `%length%` |
 
@@ -136,13 +136,13 @@ For the current LTX Director node, use:
 }
 ```
 
-Keep the known-working timeline wrapper and one image segment at frame zero. Its `global_prompt` and duration fields may use the same placeholders for consistency:
+Keep the known-working timeline wrapper and one image segment at frame zero. Leave its nested `global_prompt` empty because the direct LTX Director input is authoritative; interpolating arbitrary prompt text into serialized `timeline_data` could invalidate its JSON. Numeric duration and reference-image placeholders remain safe:
 
-```json
+```text
 {
-  "global_prompt": "%global_prompt%",
+  "global_prompt": "",
   "normalStartFrame": 0,
-  "normalDurationFrames": "%length%",
+  "normalDurationFrames": %length%,
   "segments": [
     {
       "id": "marinara-reference",

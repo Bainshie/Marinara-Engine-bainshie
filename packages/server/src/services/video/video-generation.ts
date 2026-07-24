@@ -1,5 +1,6 @@
 import { mkdir, rename, unlink, writeFile } from "fs/promises";
 import { join } from "path";
+import { isDebugAgentsEnabled } from "../../config/runtime-config.js";
 import { DATA_DIR } from "../../utils/data-dir.js";
 import { newId } from "../../utils/id-generator.js";
 import { logger, logDebugOverride } from "../../lib/logger.js";
@@ -21,6 +22,12 @@ export interface VideoReferencePublicUploadOptions {
   expiry?: VideoReferencePublicUploadExpiry | string | null;
 }
 
+export interface LtxDirectorPromptInput {
+  globalPrompt: string;
+  localPrompts: string;
+  segmentLengths: string;
+}
+
 export interface VideoGenerationRequest {
   prompt: string;
   model?: string;
@@ -31,6 +38,8 @@ export interface VideoGenerationRequest {
   referenceImage?: VideoReferenceImage | null;
   /** API-format workflow JSON for local ComfyUI video generation. */
   comfyWorkflow?: string;
+  /** Optional LTX Director global/local prompt inputs for workflows using the matching placeholders. */
+  ltxDirectorPrompt?: LtxDirectorPromptInput;
   lastFrameImage?: VideoReferenceImage | null;
   publicReferenceUpload?: VideoReferencePublicUploadOptions | null;
   signal?: AbortSignal;
@@ -323,6 +332,38 @@ function replaceComfyUiVideoPlaceholders(value: unknown, replacements: Record<st
   return value;
 }
 
+export function resolveLtxDirectorPromptInput(
+  request: Pick<VideoGenerationRequest, "prompt" | "ltxDirectorPrompt">,
+): LtxDirectorPromptInput {
+  return {
+    globalPrompt: request.ltxDirectorPrompt?.globalPrompt.trim() || request.prompt,
+    localPrompts: request.ltxDirectorPrompt?.localPrompts.trim() || "",
+    segmentLengths: request.ltxDirectorPrompt?.segmentLengths.trim() || "",
+  };
+}
+
+export function resolveComfyUiVideoWorkflowPlaceholders(
+  workflow: unknown,
+  request: Pick<VideoGenerationRequest, "prompt" | "model" | "durationSeconds" | "ltxDirectorPrompt">,
+  runtime: { seed: number; width: number; height: number; referenceImageName?: string },
+): unknown {
+  const ltxDirectorPrompt = resolveLtxDirectorPromptInput(request);
+  const replacements: Record<string, string | number> = {
+    "%prompt%": request.prompt,
+    "%width%": runtime.width,
+    "%height%": runtime.height,
+    "%seed%": runtime.seed,
+    "%length%": Math.max(1, Math.round(request.durationSeconds * 16)),
+    "%duration_seconds%": request.durationSeconds,
+    "%global_prompt%": ltxDirectorPrompt.globalPrompt,
+    "%local_prompts%": ltxDirectorPrompt.localPrompts,
+    "%segment_lengths%": ltxDirectorPrompt.segmentLengths,
+  };
+  if (request.model?.trim()) replacements["%model%"] = request.model.trim();
+  if (runtime.referenceImageName) replacements["%reference_image_name%"] = runtime.referenceImageName;
+  return replaceComfyUiVideoPlaceholders(workflow, replacements);
+}
+
 function comfyUiVideoFetch(url: string | URL, init?: RequestInit, maxResponseBytes = 2 * 1024 * 1024) {
   return safeFetch(url, {
     ...(init ?? {}),
@@ -414,26 +455,31 @@ async function generateComfyUiVideo(baseUrl: string, request: VideoGenerationReq
         ? { width: 1920, height: 1080 }
         : { width: 1280, height: 720 };
   const dimensions = request.aspectRatio === "9:16" ? { width: landscape.height, height: landscape.width } : landscape;
-  const replacements: Record<string, string | number> = {
-    "%prompt%": request.prompt,
-    "%width%": dimensions.width,
-    "%height%": dimensions.height,
-    "%seed%": Math.floor(Math.random() * 2 ** 32),
-    "%length%": Math.max(1, Math.round(request.durationSeconds * 16)),
-  };
-  if (request.model?.trim()) replacements["%model%"] = request.model.trim();
+  let referenceImageName: string | undefined;
   if (request.referenceImage && workflowText.includes("%reference_image_name%")) {
-    replacements["%reference_image_name%"] = await uploadComfyUiVideoReference(
-      base,
-      request.referenceImage,
-      request.signal,
+    referenceImageName = await uploadComfyUiVideoReference(base, request.referenceImage, request.signal);
+  }
+  const resolvedWorkflow = resolveComfyUiVideoWorkflowPlaceholders(workflow, request, {
+    seed: Math.floor(Math.random() * 2 ** 32),
+    width: dimensions.width,
+    height: dimensions.height,
+    referenceImageName,
+  });
+  if (["%global_prompt%", "%local_prompts%", "%segment_lengths%"].some((value) => workflowText.includes(value))) {
+    const ltxDirectorPrompt = resolveLtxDirectorPromptInput(request);
+    logDebugOverride(
+      request.debugMode === true || isDebugAgentsEnabled(),
+      "[video-gen/comfyui] LTX Director global_prompt:\n%s\nlocal_prompts:\n%s\nsegment_lengths=%s",
+      ltxDirectorPrompt.globalPrompt,
+      ltxDirectorPrompt.localPrompts,
+      JSON.stringify(ltxDirectorPrompt.segmentLengths),
     );
   }
 
   const queueResponse = await comfyUiVideoFetch(`${base}/prompt`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ prompt: replaceComfyUiVideoPlaceholders(workflow, replacements) }),
+    body: JSON.stringify({ prompt: resolvedWorkflow }),
     signal: request.signal,
   });
   const queueText = await queueResponse.text();

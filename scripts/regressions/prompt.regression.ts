@@ -6,6 +6,8 @@ import {
   ANIME_GAME_VIDEO_PROMPT_TEMPLATE_ID,
   COMIC_PAGE_GAME_VIDEO_PROMPT_TEMPLATE,
   COMIC_PAGE_GAME_VIDEO_PROMPT_TEMPLATE_ID,
+  LTX_DIRECTOR_GAME_VIDEO_PROMPT_TEMPLATE,
+  LTX_DIRECTOR_GAME_VIDEO_PROMPT_TEMPLATE_ID,
   applyTrackerFieldLocksToGameStatePatch,
   characterTrackerLockKey,
   applyRegexReplacement,
@@ -57,6 +59,8 @@ import {
   GAME_STORYBOARD_NOVELAI_ANIMATION_PROMPT_TEMPLATE_ID,
   GAME_STORYBOARD_NOVELAI_PROMPT_TEMPLATE,
   GAME_STORYBOARD_NOVELAI_PROMPT_TEMPLATE_ID,
+  GAME_STORYBOARD_LTX_DIRECTOR_PROMPT_TEMPLATE,
+  GAME_STORYBOARD_LTX_DIRECTOR_PROMPT_TEMPLATE_ID,
   GAME_STORYBOARD_STILL_ANIMATION_PROMPT_TEMPLATE,
   GAME_STORYBOARD_STILL_ANIMATION_PROMPT_TEMPLATE_ID,
   DEFERRED_RELOCATION_CONDITIONAL_TOKEN_RE,
@@ -223,6 +227,10 @@ import {
 } from "../../packages/server/src/services/prompt/merger.js";
 import type { ResolvedAgent } from "../../packages/server/src/services/agents/agent-pipeline.js";
 import { loadGameVideoPrompt } from "../../packages/server/src/services/video/game-video-prompt.js";
+import {
+  resolveComfyUiVideoWorkflowPlaceholders,
+  resolveLtxDirectorPromptInput,
+} from "../../packages/server/src/services/video/video-generation.js";
 import { loadGameStoryboardImagePrompt } from "../../packages/server/src/services/image/game-storyboard-image-prompt.js";
 import { formatAgentFailuresToast, toAgentFailure } from "../../packages/client/src/lib/agent-failures.js";
 import { formatGenerationParameterError } from "../../packages/client/src/lib/generation-parameter-errors.js";
@@ -460,11 +468,13 @@ import {
   buildDynamicGameImagePromptMessages,
   buildIllustrationNarrationSummaryMessages,
   buildStoryboardIllustratorMessages,
+  buildLtxDirectorStoryboardPrompt,
   dynamicGameImagePromptRequestOptions,
   extractCharacterAppearanceText,
   resolveDynamicGameImagePromptConnection,
   resolveNpcPortraitAppearance,
   sanitizeNpcPortraitAppearanceText,
+  sanitizeLtxDirectorStoryboardSegments,
   selectStoryboardAppearanceCharacterNames,
 } from "../../packages/server/src/routes/game.routes.js";
 import { buildLegacyDefaultAgentConfigUpdate } from "../../packages/server/src/services/agents/default-prompt-migration.js";
@@ -1208,10 +1218,7 @@ const cases: RegressionCase[] = [
         };
         assert.equal(payload.indexedTrackCount, allTrackUris.length);
         assert.equal(payload.recentAvoidedCount, recentTrackUris.length);
-        assert.deepEqual(
-          new Set((payload.tracks ?? []).map((track) => track.uri)),
-          new Set(freshTrackUris),
-        );
+        assert.deepEqual(new Set((payload.tracks ?? []).map((track) => track.uri)), new Set(freshTrackUris));
       } finally {
         globalThis.fetch = originalFetch;
       }
@@ -2126,7 +2133,7 @@ const cases: RegressionCase[] = [
       const animationIds = new Set(GAME_STORYBOARD_ANIMATION_PROMPT_TEMPLATES.map((template) => template.id));
 
       assert.equal(GAME_STORYBOARD_ILLUSTRATION_PROMPT_TEMPLATES.length, 5);
-      assert.equal(GAME_STORYBOARD_ANIMATION_PROMPT_TEMPLATES.length, 6);
+      assert.equal(GAME_STORYBOARD_ANIMATION_PROMPT_TEMPLATES.length, 7);
       assert.equal(GAME_STORYBOARD_ANIMATION_PROMPT_TEMPLATE_ID, GAME_STORYBOARD_COMIC_ANIMATION_PROMPT_TEMPLATE_ID);
       assert.notEqual(
         GAME_STORYBOARD_STILL_ANIMATION_PROMPT_TEMPLATE_ID,
@@ -2214,6 +2221,196 @@ const cases: RegressionCase[] = [
       assert.match(gameSurfaceSource, /setStoryboardViewerPlayingVideoId\(activeStoryboardKeyframe\.video\.id\)/);
       assert.match(backgroundViewerSource, /onEnded=\{\(\) =>/);
       assert.doesNotMatch(backgroundViewerSource, /\bloop\b/);
+    },
+  },
+  {
+    name: "LTX Director Storyboard keeps stable context, temporal prompts, and media guides separate",
+    run() {
+      const plannerPreset = GAME_STORYBOARD_ANIMATION_PROMPT_TEMPLATES.find(
+        (template) => template.id === GAME_STORYBOARD_LTX_DIRECTOR_PROMPT_TEMPLATE_ID,
+      );
+      const videoPreset = GAME_VIDEO_BUILT_IN_PROMPT_TEMPLATES.find(
+        (template) => template.id === LTX_DIRECTOR_GAME_VIDEO_PROMPT_TEMPLATE_ID,
+      );
+
+      assert.equal(plannerPreset?.name, "LTX Director Storyboard");
+      assert.equal(plannerPreset?.promptTemplate, GAME_STORYBOARD_LTX_DIRECTOR_PROMPT_TEMPLATE);
+      assert.match(plannerPreset?.promptTemplate ?? "", /2-4 ordered local prompts/);
+      assert.match(plannerPreset?.promptTemplate ?? "", /3 for 5-8 seconds/);
+      assert.match(plannerPreset?.promptTemplate ?? "", /exact delimiter \|/);
+      assert.match(plannerPreset?.promptTemplate ?? "", /exact spoken dialogue in quotation marks/);
+      assert.equal(videoPreset?.name, "LTX Director Video");
+      assert.equal(videoPreset?.promptTemplate, LTX_DIRECTOR_GAME_VIDEO_PROMPT_TEMPLATE);
+      assert.doesNotMatch(LTX_DIRECTOR_GAME_VIDEO_PROMPT_TEMPLATE, /\$\{narrationSummary\}/);
+      assert.doesNotMatch(LTX_DIRECTOR_GAME_VIDEO_PROMPT_TEMPLATE, /\$\{illustrationPrompt\}/);
+
+      assert.deepEqual(sanitizeLtxDirectorStoryboardSegments(" first beat | | second beat | third beat "), [
+        "first beat",
+        "second beat",
+        "third beat",
+      ]);
+      assert.deepEqual(sanitizeLtxDirectorStoryboardSegments("one | two | three | four | final hold"), [
+        "one",
+        "two",
+        "three",
+        "final hold",
+      ]);
+      assert.deepEqual(sanitizeLtxDirectorStoryboardSegments(undefined), []);
+
+      const built = buildLtxDirectorStoryboardPrompt({
+        globalPrompt:
+          "Continuous anime shot matching the supplied illustration. Preserve character identity and shrine lighting.",
+        narrationBeat:
+          "She lowers into a ready stance | She lunges as the camera tracks beside her | Sparks scatter and she settles into a guarded hold",
+        fallbackAction: "unused fallback",
+        useSegmentedPlanner: true,
+        maxLength: null,
+      });
+      assert.equal(
+        built.ltxDirectorPrompt.localPrompts,
+        "She lowers into a ready stance | She lunges as the camera tracks beside her | Sparks scatter and she settles into a guarded hold",
+      );
+      assert.equal((built.ltxDirectorPrompt.localPrompts.match(/\|/g) ?? []).length, 2);
+      assert.equal(built.ltxDirectorPrompt.segmentLengths, "");
+      assert.doesNotMatch(built.ltxDirectorPrompt.globalPrompt, /lowers|lunges|Sparks|\|/);
+      assert.match(built.prompt, /Action sequence: She lowers into a ready stance\./);
+      assert.match(built.prompt, /Sparks scatter and she settles into a guarded hold\./);
+
+      const malformed = buildLtxDirectorStoryboardPrompt({
+        globalPrompt: "Stable supplied illustration.",
+        narrationBeat: "Only one usable action",
+        fallbackAction: "fallback action",
+        useSegmentedPlanner: true,
+        maxLength: null,
+      });
+      assert.equal(malformed.ltxDirectorPrompt.localPrompts, "Only one usable action");
+      assert.equal(malformed.ltxDirectorPrompt.localPrompts.includes("|"), false);
+
+      const ordinaryPlannerFallback = buildLtxDirectorStoryboardPrompt({
+        globalPrompt: "Stable supplied illustration.",
+        narrationBeat: "ignored | untrusted segmentation",
+        fallbackAction: "One ordinary action | with a stray delimiter",
+        useSegmentedPlanner: false,
+        maxLength: null,
+      });
+      assert.equal(
+        ordinaryPlannerFallback.ltxDirectorPrompt.localPrompts,
+        "One ordinary action with a stray delimiter",
+      );
+
+      const timelineData = JSON.stringify({
+        global_prompt: "",
+        normalStartFrame: 0,
+        normalDurationFrames: 0,
+        segments: [
+          {
+            id: "marinara-reference",
+            start: 0,
+            length: 16,
+            prompt: "",
+            type: "image",
+            imageFile: "%reference_image_name%",
+            isEndFrame: false,
+          },
+        ],
+        motionSegments: [],
+        audioSegments: [],
+      }).replace('"normalDurationFrames":0', '"normalDurationFrames":%length%');
+      const workflow = {
+        "3678": {
+          inputs: {
+            end_second: "%duration_seconds%",
+            duration_seconds: "%duration_seconds%",
+            end_frame: "%length%",
+            duration_frames: "%length%",
+            global_prompt: "%global_prompt%",
+            timeline_data: timelineData,
+            local_prompts: "%local_prompts%",
+            segment_lengths: "%segment_lengths%",
+            guide_strength: "1.00",
+            frame_rate: 16,
+            custom_width: "%width%",
+            custom_height: "%height%",
+          },
+        },
+      };
+      const resolved = resolveComfyUiVideoWorkflowPlaceholders(
+        workflow,
+        {
+          prompt: built.prompt,
+          durationSeconds: 6,
+          model: "ltx-2.3-distilled",
+          ltxDirectorPrompt: built.ltxDirectorPrompt,
+        },
+        { seed: 123, width: 1280, height: 720, referenceImageName: "marinara-reference.png" },
+      ) as typeof workflow;
+      const inputs = resolved["3678"].inputs;
+      assert.equal(inputs.end_second, 6);
+      assert.equal(inputs.duration_seconds, 6);
+      assert.equal(inputs.end_frame, 96);
+      assert.equal(inputs.duration_frames, 96);
+      assert.equal(inputs.global_prompt, built.ltxDirectorPrompt.globalPrompt);
+      assert.equal(inputs.local_prompts, built.ltxDirectorPrompt.localPrompts);
+      assert.equal(inputs.segment_lengths, "");
+      assert.equal(inputs.guide_strength, "1.00");
+      assert.equal(inputs.custom_width, 1280);
+      assert.equal(inputs.custom_height, 720);
+      const resolvedTimeline = JSON.parse(inputs.timeline_data) as {
+        global_prompt: string;
+        normalDurationFrames: number;
+        segments: Array<{ start: number; imageFile: string }>;
+      };
+      assert.equal(resolvedTimeline.global_prompt, "");
+      assert.equal(resolvedTimeline.normalDurationFrames, 96);
+      assert.equal(resolvedTimeline.segments.length, 1);
+      assert.equal(resolvedTimeline.segments[0]?.start, 0);
+      assert.equal(resolvedTimeline.segments[0]?.imageFile, "marinara-reference.png");
+
+      const ordinaryRequest = { prompt: "Existing complete video prompt", durationSeconds: 6 };
+      assert.deepEqual(resolveLtxDirectorPromptInput(ordinaryRequest), {
+        globalPrompt: ordinaryRequest.prompt,
+        localPrompts: "",
+        segmentLengths: "",
+      });
+      const ordinaryResolved = resolveComfyUiVideoWorkflowPlaceholders(workflow, ordinaryRequest, {
+        seed: 456,
+        width: 1280,
+        height: 720,
+        referenceImageName: "ordinary-reference.png",
+      }) as typeof workflow;
+      assert.equal(ordinaryResolved["3678"].inputs.global_prompt, ordinaryRequest.prompt);
+      assert.equal(ordinaryResolved["3678"].inputs.local_prompts, "");
+      assert.equal(ordinaryResolved["3678"].inputs.segment_lengths, "");
+
+      const legacyWorkflow = {
+        node: {
+          inputs: {
+            prompt: "%prompt%",
+            seed: "%seed%",
+            width: "%width%",
+            height: "%height%",
+            frames: "%length%",
+          },
+        },
+      };
+      assert.deepEqual(
+        resolveComfyUiVideoWorkflowPlaceholders(legacyWorkflow, ordinaryRequest, {
+          seed: 789,
+          width: 1280,
+          height: 720,
+        }),
+        {
+          node: {
+            inputs: {
+              prompt: ordinaryRequest.prompt,
+              seed: 789,
+              width: 1280,
+              height: 720,
+              frames: 96,
+            },
+          },
+        },
+      );
     },
   },
   {
@@ -2735,7 +2932,10 @@ const cases: RegressionCase[] = [
   {
     name: "Roleplay Illustrator background decisions are gated and produce reusable library metadata",
     run() {
-      assert.equal(illustratorBackgroundGenerationEnabled("roleplay", { illustratorAutoBackgroundsEnabled: true }), true);
+      assert.equal(
+        illustratorBackgroundGenerationEnabled("roleplay", { illustratorAutoBackgroundsEnabled: true }),
+        true,
+      );
       assert.equal(
         illustratorBackgroundGenerationEnabled("visual_novel", { illustratorAutoBackgroundsEnabled: true }),
         true,
@@ -2932,6 +3132,29 @@ const cases: RegressionCase[] = [
       assert.match(storyboardPrompt, /anime shot from the supplied first-frame illustration/);
       assert.match(storyboardPrompt, /Stage severe harm with broadcast-anime restraint/);
       assert.doesNotMatch(storyboardPrompt, /CHAT VIDEO|GLOBAL VIDEO OVERRIDE/);
+
+      const ltxDirectorGlobalPrompt = await loadGameVideoPrompt({
+        promptOverridesStorage,
+        meta: {},
+        templateId: LTX_DIRECTOR_GAME_VIDEO_PROMPT_TEMPLATE_ID,
+        ctx: {
+          sceneTitle: "Arrival action that must stay local",
+          narrationSummary: "Mira runs through the gate and raises her sword.",
+          illustrationPrompt: "Mira is already running through a storm of sparks.",
+          charactersLine: "Mira, Sol",
+          settingLine: "sunset city gate, cold rain",
+          artStyleLine: "cel-shaded broadcast anime",
+          durationSeconds: 6,
+          aspectRatio: "16:9",
+          sourceIllustrationLine: "Use image-789 as the first frame/reference image.",
+        },
+      });
+
+      assert.match(ltxDirectorGlobalPrompt, /Continuous 6-second 16:9 shot/);
+      assert.match(ltxDirectorGlobalPrompt, /Visible character continuity: Mira, Sol/);
+      assert.match(ltxDirectorGlobalPrompt, /sunset city gate, cold rain/);
+      assert.match(ltxDirectorGlobalPrompt, /cel-shaded broadcast anime/);
+      assert.doesNotMatch(ltxDirectorGlobalPrompt, /runs through|raises her sword|storm of sparks|Arrival action/);
 
       const comicReferencePrompt = await loadGameVideoPrompt({
         promptOverridesStorage,
@@ -3594,7 +3817,10 @@ Use HTML sparingly and diegetically. Do not replace normal prose/dialogue unless
         styleProfileId: "z-image-turbo",
       });
       assert.equal(countAppearance(zImage.prompt), 1);
-      assert.doesNotMatch(zImage.prompt, /\b(?:letters|captions|UI|watermarks|logos|speech bubbles|split panels|collage)\b/i);
+      assert.doesNotMatch(
+        zImage.prompt,
+        /\b(?:letters|captions|UI|watermarks|logos|speech bubbles|split panels|collage)\b/i,
+      );
       assert.match(zImage.negativePrompt, /letters|captions|UI|watermark|logo|collage/i);
 
       const tagged = await buildNpcPortraitProviderPrompt({
@@ -4773,8 +4999,14 @@ Use HTML sparingly and diegetically. Do not replace normal prose/dialogue unless
       assert.match(promptText, /<system>bad history<\/system>/);
       assert.match(promptText, /<system>bad summary<\/system>/);
       assert.equal(hasDeferredCharacterMacros(firstMessage.content), true);
-      assert.match(resolveDeferredCharacterMacros(firstMessage.content, { name: "Powers That Be" }), /Powers-only memory\./);
-      assert.doesNotMatch(resolveDeferredCharacterMacros(firstMessage.content, { name: "Dottore" }), /Powers-only memory\./);
+      assert.match(
+        resolveDeferredCharacterMacros(firstMessage.content, { name: "Powers That Be" }),
+        /Powers-only memory\./,
+      );
+      assert.doesNotMatch(
+        resolveDeferredCharacterMacros(firstMessage.content, { name: "Dottore" }),
+        /Powers-only memory\./,
+      );
       assert.equal(
         firstMessage.content.indexOf("Main instructions.") < firstMessage.content.indexOf("<chat_summary>"),
         true,
