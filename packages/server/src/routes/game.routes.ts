@@ -8229,6 +8229,14 @@ export async function gameRoutes(app: FastifyInstance) {
           backstory: persona.backstory,
           appearance: persona.appearance,
         });
+        try {
+          const statsData = persona.personaStats ? JSON.parse(persona.personaStats) : null;
+          if (statsData?.rpgStats?.enabled) {
+            sourceRpgStats = statsData.rpgStats;
+          }
+        } catch {
+          /* skip */
+        }
       } else {
         targetCharacterCard = [
           `Name: ${targetName}`,
