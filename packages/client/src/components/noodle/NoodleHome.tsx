@@ -112,6 +112,7 @@ import {
   NoodleLogo,
   NoodleShell,
   NOODLE_BLUE,
+  NOODLE_PINK,
   NOODLE_ICON_SCOPE_CLASS,
   NOODLE_PERSONA_SWITCHER_PAGE_SIZE,
 } from "./NoodleShell";
@@ -428,9 +429,23 @@ function FieldLabel({ children, help }: { children: React.ReactNode; help?: Reac
   );
 }
 
-function Section({ title, help, children }: { title: string; help?: React.ReactNode; children: React.ReactNode }) {
+function Section({
+  title,
+  help,
+  children,
+  accent,
+}: {
+  title: string;
+  help?: React.ReactNode;
+  children: React.ReactNode;
+  /** Overrides `--noodle-blue` for this section, e.g. NoodleR's pink brand accent. */
+  accent?: string;
+}) {
   return (
-    <section className="border-b border-[var(--noodle-divider)] p-4 last:border-b-0">
+    <section
+      className="border-b border-[var(--noodle-divider)] p-4 last:border-b-0"
+      style={accent ? ({ "--noodle-blue": accent } as CSSProperties) : undefined}
+    >
       <h3 className="mb-3 flex items-center gap-2 text-xs font-semibold text-[var(--foreground)]">
         <Settings2 size={13} className="text-[var(--noodle-blue)]" />
         {title}
@@ -3077,6 +3092,7 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
           </Section>
 
           <Section
+            accent={NOODLE_PINK}
             title="NoodleR Access"
             help="Keeps private creator accounts isolated from the public Noodle timeline."
           >
@@ -3119,6 +3135,7 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
 
           {settings.enableNoodler && (
             <Section
+              accent={NOODLE_PINK}
               title="NoodleR Automation"
               help="Shared creative guidance for every generated NoodleR post, plus an at-a-glance schedule for all managed creators."
             >
@@ -3186,6 +3203,7 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
         onClose={() => setScheduleManagerOpen(false)}
         title="NoodleR schedules"
         width="max-w-2xl"
+        panelStyle={{ "--noodle-blue": NOODLE_PINK } as CSSProperties}
       >
         <div className="space-y-3">
           {(() => {
