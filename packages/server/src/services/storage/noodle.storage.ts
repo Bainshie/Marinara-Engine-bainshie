@@ -486,13 +486,38 @@ function updatePollMetadata(
     ? metadata.pollOptionIds.filter((id): id is string => typeof id === "string")
     : [];
   const usedOptionIds = new Set([...historicalOptionIds, ...(currentPoll?.options.map((option) => option.id) ?? [])]);
+  const currentOptions = currentPoll?.options ?? [];
+  const matchedCurrentOptionIds = new Set<string>();
+  const normalizeOptionLabel = (label: string) => label.trim().toLocaleLowerCase();
+  const retainedOptionIds =
+    generatedPoll?.options.map((option) => {
+      const matched = currentOptions.find(
+        (current) =>
+          !matchedCurrentOptionIds.has(current.id) &&
+          normalizeOptionLabel(current.label) === normalizeOptionLabel(option.label),
+      );
+      if (!matched) return null;
+      matchedCurrentOptionIds.add(matched.id);
+      return matched.id;
+    }) ?? [];
+  for (let index = 0; index < retainedOptionIds.length; index += 1) {
+    if (retainedOptionIds[index]) continue;
+    const samePosition = currentOptions[index];
+    const matched =
+      samePosition && !matchedCurrentOptionIds.has(samePosition.id)
+        ? samePosition
+        : currentOptions.find((current) => !matchedCurrentOptionIds.has(current.id));
+    if (!matched) continue;
+    matchedCurrentOptionIds.add(matched.id);
+    retainedOptionIds[index] = matched.id;
+  }
   let nextOptionNumber = 1;
   const nextPoll = generatedPoll
     ? {
         ...generatedPoll,
         options: generatedPoll.options.map((option, index) => {
-          const retainedOption = currentPoll?.options[index];
-          if (retainedOption) return { ...option, id: retainedOption.id };
+          const retainedOptionId = retainedOptionIds[index];
+          if (retainedOptionId) return { ...option, id: retainedOptionId };
           while (usedOptionIds.has(`option-${nextOptionNumber}`)) nextOptionNumber += 1;
           const id = `option-${nextOptionNumber}`;
           usedOptionIds.add(id);

@@ -433,7 +433,8 @@ export async function noodleRoutes(app: FastifyInstance) {
     if (!gated) return reply.code(404).send({ error: "NoodleR post not found" });
     if (parsed.data.type === "vote") {
       const poll = readNoodlePollFromMetadata(gated.post.metadata);
-      if (!poll?.options.some((option) => option.id === parsed.data.content)) {
+      const optionId = parsed.data.content?.trim() ?? "";
+      if (!poll?.options.some((option) => option.id === optionId)) {
         return reply.code(400).send({ error: "Choose a valid poll option." });
       }
     }

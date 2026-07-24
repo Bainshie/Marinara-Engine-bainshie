@@ -715,9 +715,9 @@ optional; an image or poll may stand alone without a body. A user may deliberate
 either attachment or both to one post.
 
 Literal **Post** publishes the user's title, body, image, poll, access, and PPV values.
-**Guide** may change title/body text only and must preserve the selected image and poll.
-The private text model remains title/body-only; this slice must not re-enable generated
-image prompts or generated polls.
+**Guide** may change title/body text only and must preserve the selected image, poll,
+access level, and PPV price. The private text model remains title/body-only; this slice
+must not re-enable generated image prompts or generated polls.
 
 Uploaded bytes use Slice 8b's post-owned NoodleR private-media namespace, never the
 public Noodle/global gallery. A draft keeps its local file or source URL in the client;
