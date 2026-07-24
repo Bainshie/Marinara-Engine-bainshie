@@ -1540,6 +1540,7 @@
   --marinara-editor-divider: var(--marinara-chat-chrome-panel-divider);
   --marinara-editor-text: var(--marinara-chat-chrome-panel-text);
   --marinara-editor-muted: var(--marinara-chat-chrome-panel-muted);
+
   background: transparent;
   color: var(--marinara-chat-chrome-panel-text);
 }
@@ -1596,6 +1597,7 @@
   --marinara-editor-divider: var(--marinara-chat-chrome-panel-divider);
   --marinara-editor-text: var(--marinara-chat-chrome-panel-text);
   --marinara-editor-muted: var(--marinara-chat-chrome-panel-muted);
+
   color: var(--marinara-chat-chrome-panel-text);
 }
 

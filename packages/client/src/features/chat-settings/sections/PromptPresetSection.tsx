@@ -68,10 +68,10 @@ export function PromptPresetSection({
         {showVariableEditor && (
           <button
             type="button"
-            aria-label="Edit preset variables"
+            aria-label={t("chat.settings.promptPreset.editVariables")}
             onClick={onEditVariables}
             className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-[var(--muted-foreground)] transition-colors hover:bg-[var(--accent)] hover:text-[var(--foreground)]"
-            title="Edit preset variables"
+            title={t("chat.settings.promptPreset.editVariables")}
           >
             <Pencil size="0.8125rem" />
           </button>

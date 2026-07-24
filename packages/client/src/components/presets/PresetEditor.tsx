@@ -2852,7 +2852,6 @@ function ExpandedEditorModal({
       clearTimeout(timeoutRef.current);
       timeoutRef.current = null;
     }
-    if (local !== value) onChange(local);
     onClose();
   };
 

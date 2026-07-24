@@ -3207,6 +3207,7 @@ export function ChatSettingsDrawer({
   }, []);
   useEffect(() => {
     setInlineResourceEditor(null);
+    setQuickPresetEditorOpen(false);
   }, [chat.id]);
   const handleAgentSuiteCloseGuardChange = useCallback((guard: (() => Promise<boolean>) | null) => {
     agentSuiteCloseGuardRef.current = guard;

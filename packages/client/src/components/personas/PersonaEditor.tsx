@@ -952,6 +952,7 @@ function createCharacterDataFromPersona(formData: PersonaFormData): CharacterDat
 
 export function PersonaEditor() {
   const personaId = useUIStore((s) => s.personaDetailId);
+  const personaInitialTab = useUIStore((s) => s.personaDetailInitialTab) as TabId | null;
   const closeDetail = useUIStore((s) => s.closePersonaDetail);
   const { data: allPersonas, isLoading } = usePersonas();
   const createCharacter = useCreateCharacter();
@@ -962,9 +963,10 @@ export function PersonaEditor() {
   const duplicatePersona = useDuplicatePersona();
   const { data: connectionsList } = useConnections();
 
-  const [activeTab, setActiveTab] = useState<TabId>(
-    () => (useUIStore.getState().personaDetailInitialTab as TabId | null) ?? "metadata",
-  );
+  const [activeTab, setActiveTab] = useState<TabId>(() => personaInitialTab ?? "metadata");
+  useEffect(() => {
+    setActiveTab(personaInitialTab ?? "metadata");
+  }, [personaId, personaInitialTab]);
   const [formData, setFormData] = useState<PersonaFormData | null>(null);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
   const [dirty, setDirty] = useState(false);

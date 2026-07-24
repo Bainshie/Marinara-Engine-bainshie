@@ -84,6 +84,7 @@
   "chat.settings.inlineLorebook.showMore": "Show {{count}} more",
   "chat.settings.inlineLorebook.title": "Edit {{name}} entries",
   "chat.settings.inlineLorebook.unknownCharacter": "Unknown character",
+  "chat.settings.promptPreset.editVariables": "Edit preset variables",
   "chat.settings.promptPreset.quickEdit.autoSave": "Edit sections and preset variables here. Changes save automatically when you leave a field.",
   "chat.settings.promptPreset.quickEdit.hide": "Hide preset editor",
   "chat.settings.promptPreset.quickEdit.loading": "Loading preset editor…",
