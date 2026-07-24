@@ -53,7 +53,6 @@ import {
   ImageIcon,
   Shield,
   ShieldCheck,
-  Shuffle,
 } from "lucide-react";
 import { useDeleteAgent } from "../../hooks/use-agents";
 import { useLorebooks, useEntriesAcrossLorebooks } from "../../hooks/use-lorebooks";
@@ -196,12 +195,6 @@ const PHASE_META: Record<AgentPhase, { label: string; color: string; icon: typeo
     description: "Runs after the main AI response. Can analyze and extract data from it.",
   },
 };
-
-type NarrativeDirectorMode = "natural" | "random";
-
-function normalizeNarrativeDirectorMode(value: unknown): NarrativeDirectorMode {
-  return value === "random" ? "random" : "natural";
-}
 
 function normalizeAgentMaxTokensInput(value: string): number | "" {
   if (value === "") return "";
@@ -532,7 +525,6 @@ export function AgentEditor() {
   const [localProseGuardianAvoid, setLocalProseGuardianAvoid] = useState(DEFAULT_PROSE_GUARDIAN_AVOID);
   const [localProseGuardianPrefer, setLocalProseGuardianPrefer] = useState("");
   const [localProseGuardianHoldForRewrite, setLocalProseGuardianHoldForRewrite] = useState(true);
-  const [localDirectorMode, setLocalDirectorMode] = useState<NarrativeDirectorMode>("natural");
   const [localSecretPlotEnabled, setLocalSecretPlotEnabled] = useState(false);
   const [localSecretPlotRunInterval, setLocalSecretPlotRunInterval] = useState(8);
   const [spotifyStatus, setSpotifyStatus] = useState<{
@@ -668,7 +660,6 @@ export function AgentEditor() {
       setLocalProseGuardianHoldForRewrite(
         (settings.holdForRewrite as boolean | undefined) ?? defaultSettings.holdForRewrite !== false,
       );
-      setLocalDirectorMode(normalizeNarrativeDirectorMode(settings.directorMode ?? defaultSettings.directorMode));
       setLocalSecretPlotEnabled(
         (settings.secretPlotEnabled as boolean | undefined) ?? defaultSettings.secretPlotEnabled === true,
       );
@@ -712,7 +703,6 @@ export function AgentEditor() {
       );
       setLocalProseGuardianPrefer(typeof defaultSettings.prefer === "string" ? defaultSettings.prefer : "");
       setLocalProseGuardianHoldForRewrite(defaultSettings.holdForRewrite !== false);
-      setLocalDirectorMode(normalizeNarrativeDirectorMode(defaultSettings.directorMode));
       setLocalSecretPlotEnabled(defaultSettings.secretPlotEnabled === true);
       setLocalSecretPlotRunInterval(normalizePositiveInteger(defaultSettings.secretPlotRunInterval, 8, 100));
       setLocalCustomCapabilities({});
@@ -763,7 +753,6 @@ export function AgentEditor() {
       setLocalProseGuardianAvoid(DEFAULT_PROSE_GUARDIAN_AVOID);
       setLocalProseGuardianPrefer("");
       setLocalProseGuardianHoldForRewrite(true);
-      setLocalDirectorMode("natural");
       setLocalSecretPlotEnabled(false);
       setLocalSecretPlotRunInterval(8);
       setLocalCustomCapabilities({});
@@ -1080,7 +1069,6 @@ export function AgentEditor() {
         ...(isContinuityAgent || isHtmlAgent ? { holdForRewrite: localProseGuardianHoldForRewrite } : {}),
         ...(isDirectorAgent
           ? {
-              directorMode: localDirectorMode,
               secretPlotEnabled: localSecretPlotEnabled,
               secretPlotRunInterval: localSecretPlotRunInterval,
             }
@@ -1150,7 +1138,6 @@ export function AgentEditor() {
     localProseGuardianAvoid,
     localProseGuardianPrefer,
     localProseGuardianHoldForRewrite,
-    localDirectorMode,
     localSecretPlotEnabled,
     localSecretPlotRunInterval,
     localImagePositivePrompt,
@@ -1258,7 +1245,6 @@ export function AgentEditor() {
       ...(isContinuityAgent || isHtmlAgent ? { holdForRewrite: localProseGuardianHoldForRewrite } : {}),
       ...(isDirectorAgent
         ? {
-            directorMode: localDirectorMode,
             secretPlotEnabled: localSecretPlotEnabled,
             secretPlotRunInterval: localSecretPlotRunInterval,
           }
@@ -2314,47 +2300,6 @@ export function AgentEditor() {
               <p className="mt-1 text-[0.625rem] text-[var(--muted-foreground)]">
                 The auditor proposes character card changes for manual approval only. It never applies edits by itself.
               </p>
-            </FieldGroup>
-          )}
-
-          {isDirectorAgent && (
-            <FieldGroup
-              label="Story Push Mode"
-              icon={<Shuffle size="0.875rem" className="text-[var(--primary)]" />}
-              help="Choose what Push Story should ask the Narrative Director to create when you arm it in chat."
-            >
-              <div className="grid grid-cols-2 gap-2 rounded-xl border border-[var(--border)] bg-[var(--secondary)]/60 p-1">
-                {[
-                  {
-                    id: "natural" as const,
-                    label: "Natural",
-                    description: "Advance existing tension, goals, or scenario threads.",
-                  },
-                  {
-                    id: "random" as const,
-                    label: "Random Event",
-                    description: "Introduce a plausible surprise, complication, or opportunity.",
-                  },
-                ].map((option) => (
-                  <button
-                    key={option.id}
-                    type="button"
-                    onClick={() => {
-                      setLocalDirectorMode(option.id);
-                      markDirty();
-                    }}
-                    className={cn(
-                      "rounded-lg px-3 py-2 text-left transition-all",
-                      localDirectorMode === option.id
-                        ? "bg-[var(--primary)]/15 text-[var(--foreground)] ring-1 ring-[var(--primary)]/40"
-                        : "text-[var(--muted-foreground)] hover:bg-[var(--accent)] hover:text-[var(--foreground)]",
-                    )}
-                  >
-                    <span className="block text-xs font-semibold">{option.label}</span>
-                    <span className="mt-0.5 block text-[0.625rem] leading-snug">{option.description}</span>
-                  </button>
-                ))}
-              </div>
             </FieldGroup>
           )}
 
