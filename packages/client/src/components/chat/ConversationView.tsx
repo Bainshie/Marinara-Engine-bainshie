@@ -1070,6 +1070,9 @@ export function ConversationView({
           if (!renderedMessageKeysRef.current.has(key)) {
             staggerTimersRef.current[key]?.forEach(clearTimeout);
             delete staggerTimersRef.current[key];
+            // Reveal fully so an interrupted stagger never leaves the message
+            // permanently truncated at a part boundary (#4039).
+            setVisiblePartCounts((prev) => ({ ...prev, [key]: count }));
             return;
           }
           setVisiblePartCounts((prev) => ({ ...prev, [key]: partIndex }));
@@ -1093,6 +1096,9 @@ export function ConversationView({
           if (!renderedMessageKeysRef.current.has(key)) {
             staggerTimersRef.current[key]?.forEach(clearTimeout);
             delete staggerTimersRef.current[key];
+            // Reveal fully so an interrupted stagger never leaves the message
+            // permanently truncated at a speaker-segment boundary (#4039).
+            setVisibleSegmentCounts((prev) => ({ ...prev, [key]: count }));
             return;
           }
           setVisibleSegmentCounts((prev) => ({ ...prev, [key]: segmentIndex }));
