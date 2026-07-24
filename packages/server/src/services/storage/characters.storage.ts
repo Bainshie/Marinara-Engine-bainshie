@@ -431,7 +431,10 @@ export function createCharactersStorage(db: DB) {
         await this.createVersionSnapshot(id, {
           source: options?.versionSource ?? "manual",
           reason: options?.versionReason ?? "",
-          createdAt: options?.updatedAt ?? null,
+          // Timestamp the snapshot with when the card being replaced was last
+          // saved (its own edit time), not when this newer save happens, so a
+          // restored version keeps its real date in history (#4040).
+          createdAt: existing.updatedAt ?? options?.updatedAt ?? null,
         });
       }
       const updatedAt = normalizeTimestampOverrides({
@@ -468,6 +471,21 @@ export function createCharactersStorage(db: DB) {
       if (!version) return null;
       const existing = await this.getById(characterId);
       if (!existing) return null;
+      // Snapshot the current card before overwriting it, so restoring an older
+      // version never permanently discards the newer one (git-style history,
+      // #4040). Skip when the current card already matches the target version.
+      const currentData = parseCharacterData(existing.data);
+      const alreadyMatches =
+        !characterDataChanged(currentData, version.data) &&
+        (existing.comment ?? "") === (version.comment ?? "") &&
+        (existing.avatarPath ?? null) === (version.avatarPath ?? null);
+      if (!alreadyMatches) {
+        await this.createVersionSnapshot(characterId, {
+          source: "restore",
+          reason: "Saved before restoring an earlier version",
+          createdAt: existing.updatedAt ?? null,
+        });
+      }
       await db
         .update(characters)
         .set({
@@ -822,6 +840,8 @@ export function createCharactersStorage(db: DB) {
         await this.createPersonaVersionSnapshot(id, {
           source: options?.versionSource ?? "manual",
           reason: options?.versionReason ?? "",
+          // Keep the replaced card's own edit time in history (#4040).
+          createdAt: existing.updatedAt ?? null,
         });
       }
       const sets: Record<string, unknown> = { updatedAt: now() };
@@ -858,6 +878,20 @@ export function createCharactersStorage(db: DB) {
       const existing = await this.getPersona(personaId);
       if (!existing) return null;
       const data = normalizePersonaSnapshot(version.data);
+      // Snapshot the current persona before overwriting so restoring an older
+      // version never discards the newer one (#4040), unless they already match.
+      const currentSnapshot = buildPersonaSnapshot(existing);
+      const alreadyMatches =
+        !personaSnapshotChanged(currentSnapshot, data) &&
+        (existing.comment ?? "") === (version.comment ?? "") &&
+        (existing.avatarPath ?? null) === (version.avatarPath ?? null);
+      if (!alreadyMatches) {
+        await this.createPersonaVersionSnapshot(personaId, {
+          source: "restore",
+          reason: "Saved before restoring an earlier version",
+          createdAt: existing.updatedAt ?? null,
+        });
+      }
       await db
         .update(personas)
         .set({

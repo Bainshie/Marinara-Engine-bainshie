@@ -3062,7 +3062,7 @@ function PersonaVersionHistoryPanel({
   const handleRestore = async (version: PersonaCardVersion) => {
     const confirmed = await showConfirmDialog({
       title: "Restore Persona Version",
-      message: `Restore ${currentData.name || "this persona"} to ${getPersonaVersionTitle(version)}? The current persona card will become exactly that saved version without creating another history entry.`,
+      message: `Restore ${currentData.name || "this persona"} to ${getPersonaVersionTitle(version)}? The current persona card is saved to version history first, so you can switch back to it later.`,
       confirmLabel: "Restore",
     });
     if (!confirmed) return;
@@ -3204,10 +3204,10 @@ function PersonaVersionHistoryPanel({
                       )}
                     </div>
                     <div className="grid gap-2 md:grid-cols-2">
-                      <div className="min-h-20 whitespace-pre-wrap rounded-lg bg-[var(--secondary)] p-2 text-xs leading-relaxed text-[var(--foreground)]">
+                      <div className="min-h-20 min-w-0 whitespace-pre-wrap break-words [overflow-wrap:anywhere] rounded-lg bg-[var(--secondary)] p-2 text-xs leading-relaxed text-[var(--foreground)]">
                         {currentValue || <span className="text-[var(--muted-foreground)]">Empty</span>}
                       </div>
-                      <div className="min-h-20 whitespace-pre-wrap rounded-lg bg-[var(--secondary)] p-2 text-xs leading-relaxed text-[var(--foreground)]">
+                      <div className="min-h-20 min-w-0 whitespace-pre-wrap break-words [overflow-wrap:anywhere] rounded-lg bg-[var(--secondary)] p-2 text-xs leading-relaxed text-[var(--foreground)]">
                         {savedValue || <span className="text-[var(--muted-foreground)]">Empty</span>}
                       </div>
                     </div>
