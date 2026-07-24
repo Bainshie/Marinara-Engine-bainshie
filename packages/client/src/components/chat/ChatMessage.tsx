@@ -1323,8 +1323,9 @@ export const ChatMessage = memo(function ChatMessage({
   }, []);
 
   // Translation
-  const { translate, translations, translating } = useTranslate();
+  const { translate, translations, translationSources, translating } = useTranslate();
   const translatedText = translations[message.id];
+  const translationSource = translationSources[message.id];
   const isTranslating = !!translating[message.id];
 
   // TTS
@@ -2013,8 +2014,11 @@ export const ChatMessage = memo(function ChatMessage({
     [activeChatMetadata],
   );
   // When enabled, the translation replaces the original in place instead of
-  // appearing below it.
-  const showTranslationOnly = translationDisplayOnly && !!translatedText && !isTranslating;
+  // appearing below it — but only while it matches the currently visible
+  // content, so switching swipes or editing never shows a stale translation
+  // in place of the real text.
+  const showTranslationOnly =
+    translationDisplayOnly && !!translatedText && !isTranslating && translationSource === message.content;
 
   const handleCopy = () => {
     copyToClipboard(message.content);

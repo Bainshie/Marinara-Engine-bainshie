@@ -2252,7 +2252,7 @@ export function ConversationInput({
             <div className="hidden sm:block">
               <QuickReplyMenu
                 actions={quickReplyActions}
-                disabled={!activeChatId || isReadingAttachments || (!hasInput && attachments.length === 0)}
+                disabled={!activeChatId || isReadingAttachments}
               />
             </div>
           )}
