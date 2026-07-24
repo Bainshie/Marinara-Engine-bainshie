@@ -681,8 +681,12 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
     confirmImagePrompts.mutate(
       { targetAccountId: imagePromptReview.accountId, prompts: overrides },
       {
-        onSuccess: () => {
+        onSuccess: ({ finalized }) => {
           setImagePromptReview(null);
+          if (finalized === 0) {
+            toast.error("No image was generated for that prompt.");
+            return;
+          }
           toast.success("NoodleR image generated.");
         },
         onError: (error) => toast.error(errorMessage(error, "Could not generate the reviewed image.")),
@@ -2331,7 +2335,10 @@ function StageProfileView({
                 type="checkbox"
                 checked={autoPosting.imagesEnabled}
                 onChange={(event) =>
-                  updateAutoPosting.mutate({ accountId: profile.id, imagesEnabled: event.target.checked })
+                  updateAutoPosting.mutate(
+                    { accountId: profile.id, imagesEnabled: event.target.checked },
+                    { onError: (error) => toast.error(errorMessage(error, "Could not update image generation.")) },
+                  )
                 }
                 className="h-5 w-5 accent-[var(--noodle-blue)]"
               />

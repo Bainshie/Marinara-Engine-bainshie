@@ -93,7 +93,10 @@ export async function refreshAllNoodlerCreatorsNow(db: DB): Promise<NoodlerRefre
       // Consume the slot only on a real post; busy/failed/skipped runs leave any explicit
       // schedule edit intact instead of burning the creator's next automatic slot.
       if (result.status === "generated") await noodle.claimAutoPostRunNow(account.id, nowIso);
-      return { accountId: account.id, status: result.status };
+      // "disabled"/"busy" are no-op refreshes, not failures; surface them as skipped so the
+      // client doesn't lump a busy creator in with a real generation/connection failure.
+      const status = result.status === "disabled" || result.status === "busy" ? "skipped" : result.status;
+      return { accountId: account.id, status };
     },
   );
 
