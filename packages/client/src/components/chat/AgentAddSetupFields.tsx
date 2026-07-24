@@ -37,7 +37,6 @@ export type MusicProvider = "spotify" | "youtube" | "custom";
 export type CustomMusicSource = "game-assets" | "folder";
 
 export type AgentAddSetupState = {
-  directorMode: "natural" | "random";
   secretPlotEnabled: boolean;
   secretPlotRunInterval: number;
   proseGuardianBanned: string;
@@ -257,7 +256,6 @@ export function buildInitialAgentAddSetupState({
   );
 
   return {
-    directorMode: settings.directorMode === "random" ? "random" : "natural",
     secretPlotEnabled:
       allowSecretPlot &&
       (typeof metadata.narrativeDirectorSecretPlotEnabled === "boolean"
@@ -350,7 +348,6 @@ export function applyAgentAddSetupToAgentSettings(
 ): Record<string, unknown> {
   const next = { ...settings };
   if (agentId === "director") {
-    next.directorMode = setup.directorMode;
     next.secretPlotEnabled = options?.allowSecretPlot === false ? false : setup.secretPlotEnabled;
     next.secretPlotRunInterval = setup.secretPlotRunInterval;
     delete next.runInterval;
@@ -416,7 +413,6 @@ export function buildAgentAddMetadataPatch(
   }
 
   if (agentId === "director") {
-    patch.narrativeDirectorMode = setup.directorMode;
     patch.narrativeDirectorSecretPlotEnabled = options?.allowSecretPlot === false ? false : setup.secretPlotEnabled;
     patch.narrativeDirectorSecretPlotRunInterval = setup.secretPlotRunInterval;
   }

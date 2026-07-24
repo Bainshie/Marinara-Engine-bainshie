@@ -379,8 +379,9 @@ export const GOOGLE_MODELS: KnownModel[] = [
   { id: "gemini-2.0-flash-lite-preview", name: "gemini-2.0-flash-lite-preview", context: 1000000, maxOutput: 8192 },
   { id: "gemini-2.0-flash-lite", name: "gemini-2.0-flash-lite", context: 1000000, maxOutput: 8192 },
   // Gemma
-  { id: "gemma-4-27b-it", name: "gemma-4-27b-it", context: 131072, maxOutput: 8192 },
-  { id: "gemma-4-12b-it", name: "gemma-4-12b-it", context: 131072, maxOutput: 8192 },
+  { id: "gemma-4-31b-it", name: "gemma-4-31b-it", context: 256000, maxOutput: 8192 },
+  { id: "gemma-4-26b-a4b-it", name: "gemma-4-26b-a4b-it", context: 256000, maxOutput: 8192 },
+  { id: "gemma-4-12b-it", name: "gemma-4-12b-it", context: 256000, maxOutput: 8192 },
   { id: "gemma-4-4b-it", name: "gemma-4-4b-it", context: 131072, maxOutput: 8192 },
   { id: "gemma-3n-e4b-it", name: "gemma-3n-e4b-it", context: 32768, maxOutput: 8192 },
   { id: "gemma-3n-e2b-it", name: "gemma-3n-e2b-it", context: 32768, maxOutput: 8192 },

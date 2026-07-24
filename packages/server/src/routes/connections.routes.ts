@@ -968,6 +968,12 @@ export async function connectionsRoutes(app: FastifyInstance) {
           pageToken = typeof pageJson.nextPageToken === "string" ? pageJson.nextPageToken : "";
           if (!pageToken) break;
         }
+        if (pageToken) {
+          // Never report a silently truncated catalog as success.
+          return reply.status(502).send({
+            error: "Google returned more model pages than expected; refusing to show a truncated list.",
+          });
+        }
         return { models: normalizeModelsResponse("google", { models: collected }) };
       }
 

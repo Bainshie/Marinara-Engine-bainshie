@@ -470,7 +470,7 @@ async function resolvePinnedPnpmRunner(root: string): Promise<PnpmRunner> {
   try {
     const { stdout } = await execFileAsync("pnpm", ["--version"], {
       cwd: root,
-      timeout: 10_000,
+      timeout: updateStepTimeout(10_000),
       shell,
     });
     if (stdout.trim() === pnpmVersion) {
@@ -513,11 +513,16 @@ function describePnpmFailure(err: unknown, args: string[], timeout: number): Err
       `"${step}" was stopped after ${Math.round(timeout / 1000)}s (signal ${execError.signal ?? "unknown"}). Slow devices can need this long for a full reinstall; try again or run the update manually.`,
     );
   } else {
-    parts.push(`"${step}" failed${typeof execError?.code === "number" ? ` with exit code ${execError.code}` : ""}.`);
+    parts.push(`"${step}" failed${execError?.code != null ? ` with code ${String(execError.code)}` : ""}.`);
   }
-  const outputTail = (execError?.stderr || execError?.stdout || "").trim().split("\n").slice(-8).join("\n").trim();
+  const outputTail = [execError?.stderr, execError?.stdout]
+    .filter((value): value is string => Boolean(value))
+    .flatMap((value) => value.trim().split(/\r?\n/).slice(-8))
+    .join("\n")
+    .slice(-600)
+    .trim();
   if (outputTail) {
-    parts.push(`Output: ${outputTail.slice(-600)}`);
+    parts.push(`Output: ${outputTail}`);
   }
   return new Error(parts.join(" "));
 }

@@ -359,7 +359,13 @@ export const ChatInput = memo(function ChatInput({
   const generateWithNarrativeDirector = useCallback(
     (params: Parameters<typeof generate>[0]) => {
       const directorMode = consumeNarrativeDirectorMode();
-      return generate(directorMode ? { ...params, narrativeDirectorMode: directorMode } : params);
+      if (!directorMode) return generate(params);
+      // Re-arm the chosen mode if the push never reaches a response, so a
+      // failed generation does not silently swallow the user's selection.
+      return generate({ ...params, narrativeDirectorMode: directorMode }).catch((error) => {
+        setPushStoryMode((current) => current ?? directorMode);
+        throw error;
+      });
     },
     [consumeNarrativeDirectorMode, generate],
   );
