@@ -3113,8 +3113,8 @@ function PrivatePostComposer({
       setGuideError("Apply or cancel the image crop before generating.");
       return;
     }
-    if (!body.trim()) {
-      setGuideError("A guided post needs a body.");
+    if (!body.trim() && !image && !poll) {
+      setGuideError("A guided post needs a body, image, or poll.");
       return;
     }
     if (

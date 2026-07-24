@@ -83,11 +83,17 @@ export type QuarantinedStorageTable = {
   }>;
 };
 
+export type RecoveredStorageTable = {
+  table: string;
+  source: "backup" | "fallback";
+};
+
 export type FileNativeStoreController = {
   flush: () => Promise<void>;
   close: () => Promise<void>;
   rootDir: string;
   getQuarantinedTables: () => QuarantinedStorageTable[];
+  getRecoveredTables: () => RecoveredStorageTable[];
 };
 
 export type FileNativeDB = {
@@ -916,6 +922,7 @@ class FileTableStore {
   private transactionIdleWaiters = new Set<() => void>();
   private pendingTransactionFlush = false;
   private quarantinedTables: QuarantinedStorageTable[] = [];
+  private recoveredTables: RecoveredStorageTable[] = [];
 
   constructor(
     private readonly rootDir: string,
@@ -1203,6 +1210,10 @@ class FileTableStore {
     }));
   }
 
+  getRecoveredTables() {
+    return this.recoveredTables.map((entry) => ({ ...entry }));
+  }
+
   private recordQuarantinedTable(table: string, files: QuarantinedFile[]) {
     const existing = this.quarantinedTables.find((entry) => entry.table === table);
     if (!existing) {
@@ -1336,6 +1347,10 @@ class FileTableStore {
       this.tables.set(table, normalized);
       counts[table] = normalized.length;
       if (recoveredFromBackup || recoveredFromFallback) {
+        this.recoveredTables.push({
+          table,
+          source: recoveredFromBackup ? "backup" : "fallback",
+        });
         this.backupRecoveredPaths.add(path);
         // Same self-heal: rewrite the corrupt main file from in-memory data on
         // the next flush, while suppressing .bak refresh for that write so a
@@ -1497,6 +1512,7 @@ export async function createFileNativeDB(testHooks?: FileNativeStoreTestHooks): 
     flush: () => store.flush(true, true),
     close: () => store.close(),
     getQuarantinedTables: () => store.getQuarantinedTables(),
+    getRecoveredTables: () => store.getRecoveredTables(),
   };
 
   let db: FileNativeDB;

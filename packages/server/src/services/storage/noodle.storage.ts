@@ -136,6 +136,7 @@ type NoodlerPrivateMediaRecoveryResult = {
   repairedClaims: number;
   removedClaims: number;
   quarantinedTables: string[];
+  recoveredTables: string[];
 };
 
 export class NoodlerPrivateMediaClaimError extends Error {
@@ -945,13 +946,18 @@ export function createNoodleStorage(db: DB) {
         .getQuarantinedTables()
         .map(({ table }) => table)
         .filter((table) => authoritativeTables.has(table));
-      if (quarantinedTables.length > 0) {
+      const recoveredTables = db._fileStore
+        .getRecoveredTables()
+        .map(({ table }) => table)
+        .filter((table) => authoritativeTables.has(table));
+      if (quarantinedTables.length > 0 || recoveredTables.length > 0) {
         return {
           trusted: false,
           complete: false,
           repairedClaims: 0,
           removedClaims: 0,
           quarantinedTables,
+          recoveredTables,
         };
       }
 
@@ -1030,6 +1036,7 @@ export function createNoodleStorage(db: DB) {
         repairedClaims,
         removedClaims,
         quarantinedTables: [],
+        recoveredTables: [],
       };
     },
 

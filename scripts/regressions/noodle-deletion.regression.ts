@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { DB } from "../../packages/server/src/db/connection.js";
@@ -8,7 +8,7 @@ import { createNoodleStorage } from "../../packages/server/src/services/storage/
 
 const storageDir = mkdtempSync(join(tmpdir(), "marinara-noodle-deletion-"));
 process.env.FILE_STORAGE_DIR = storageDir;
-const fileDb = await createFileNativeDB();
+let fileDb = await createFileNativeDB();
 const db = fileDb as unknown as DB;
 
 try {
@@ -70,6 +70,44 @@ try {
 
   await noodle.deletePost(post.id);
   assert.deepEqual(await noodle.listDigests(), []);
+
+  const privateSource = await noodle.upsertAccountFromProfile({
+    kind: "persona",
+    entityId: "recovery-regression-persona",
+    displayName: "Recovery Regression",
+  });
+  const privateAccount = await noodle.createPrivateAccount(privateSource.id, {
+    displayName: "Recovery Stage",
+    handle: "recovery_stage",
+    bio: "",
+    stagePersonality: "",
+    disclosureMode: "secret",
+  });
+  assert.ok(privateAccount);
+  const privateMedia = await noodle.createPrivateMediaAsset({
+    ownerAccountId: privateAccount.id,
+    storageKey: "recovery-regression.png",
+    contentType: "image/png",
+    byteLength: 16,
+  });
+  assert.ok(privateMedia);
+
+  await fileDb._fileStore.close();
+  const accountsPath = join(storageDir, "tables", "noodle_accounts.json");
+  writeFileSync(`${accountsPath}.bak`, "[]");
+  writeFileSync(accountsPath, "{");
+
+  fileDb = await createFileNativeDB();
+  const recoveredDb = fileDb as unknown as DB;
+  const recoveredNoodle = createNoodleStorage(recoveredDb);
+  assert.deepEqual(fileDb._fileStore.getRecoveredTables(), [{ table: "noodle_accounts", source: "backup" }]);
+  const recovery = await recoveredNoodle.reconcilePrivateMediaRelationships();
+  assert.equal(recovery.trusted, false, "backup recovery must disable destructive relationship cleanup");
+  assert.deepEqual(recovery.recoveredTables, ["noodle_accounts"]);
+  assert.ok(
+    await recoveredNoodle.getPrivateMediaAsset(privateMedia.id),
+    "media metadata must survive cross-table backup skew for manual reconciliation",
+  );
 } finally {
   await fileDb._fileStore.close();
   rmSync(storageDir, { recursive: true, force: true });

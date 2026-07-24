@@ -134,10 +134,15 @@ export async function noodleRoutes(app: FastifyInstance) {
   try {
     const recovery = await noodle.reconcilePrivateMediaRelationships(100);
     privateMediaRecoveryTrusted = recovery.trusted && recovery.complete;
-    if (!recovery.trusted) {
+    if (recovery.quarantinedTables.length > 0) {
       logger.error(
         { quarantinedTables: recovery.quarantinedTables },
         "[noodler] Private-media recovery skipped because authoritative storage is quarantined",
+      );
+    } else if (recovery.recoveredTables.length > 0) {
+      logger.warn(
+        { recoveredTables: recovery.recoveredTables },
+        "[noodler] Private-media recovery skipped because authoritative storage was recovered during startup",
       );
     } else if (!recovery.complete) {
       logger.warn(
