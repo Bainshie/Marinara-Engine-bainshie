@@ -33,7 +33,11 @@ import { resolveGameVideoRuntime } from "../services/video/game-video-runtime.js
 import { generateImage, saveImageToDisk } from "../services/image/image-generation.js";
 import { resolveConnectionImageDefaults } from "../services/image/image-generation-defaults.js";
 import { loadImageGenerationUserSettings } from "../services/image/image-generation-settings.js";
-import { compileImagePrompt } from "../services/image/image-prompt-compiler.js";
+import {
+  compileImagePrompt,
+  formatImageStylePromptGuidance,
+  resolveImageStyleGuidanceText,
+} from "../services/image/image-prompt-compiler.js";
 import {
   resolveImagePromptReviewSize,
   resolveReviewedImagePromptSubmission,
@@ -923,12 +927,27 @@ export async function galleryRoutes(app: FastifyInstance) {
     const selfiePositivePrompt = readTrimmedString(meta.selfiePositivePrompt) ?? selfieTags.join(", ").trim();
     const selfieNegativePrompt = readTrimmedString(meta.selfieNegativePrompt) ?? "";
     const promptOverridesStorage = createPromptOverridesStorage(app.db);
-    const selfieSystemPrompt = await resolveConversationSelfieSystemPrompt({
+    const imageSettings = await loadImageGenerationUserSettings(app.db);
+    const configuredStyleProfileId =
+      ((meta.gameSetupConfig as Record<string, unknown> | undefined)?.imageStyleProfileId as string | undefined) ??
+      (meta.imageStyleProfileId as string | undefined) ??
+      null;
+    const styleProfileId =
+      typeof configuredStyleProfileId === "string" && configuredStyleProfileId.trim()
+        ? configuredStyleProfileId.trim()
+        : imageSettings.styleProfiles.defaultProfileId;
+    // Style feeds the prompt-building model as guidance rather than being pasted
+    // verbatim into the final image prompt (#4028).
+    const styleGuidance = resolveImageStyleGuidanceText(imageSettings.styleProfiles, styleProfileId);
+    const baseSelfieSystemPrompt = await resolveConversationSelfieSystemPrompt({
       promptOverridesStorage,
       chatPromptTemplate: selfiePromptTemplate,
       appearance,
       charName: characterName,
     });
+    const selfieSystemPrompt = styleGuidance
+      ? `${baseSelfieSystemPrompt}${formatImageStylePromptGuidance(styleGuidance)}`
+      : baseSelfieSystemPrompt;
 
     const selfieAbortSignal = createResponseAbortSignal(reply, SCENE_VIDEO_GENERATION_TIMEOUT_MS, "Selfie generation");
     let promptRuntime;
@@ -1034,15 +1053,6 @@ export async function galleryRoutes(app: FastifyInstance) {
     }
 
     const imageDefaults = resolveConnectionImageDefaults(imageConn);
-    const imageSettings = await loadImageGenerationUserSettings(app.db);
-    const configuredStyleProfileId =
-      ((meta.gameSetupConfig as Record<string, unknown> | undefined)?.imageStyleProfileId as string | undefined) ??
-      (meta.imageStyleProfileId as string | undefined) ??
-      null;
-    const styleProfileId =
-      typeof configuredStyleProfileId === "string" && configuredStyleProfileId.trim()
-        ? configuredStyleProfileId.trim()
-        : imageSettings.styleProfiles.defaultProfileId;
     const selfieResolution = readTrimmedString(meta.selfieResolution) ?? "";
     const [selfieWidth, selfieHeight] = selfieResolution.split("x").map(Number) as [number, number];
     const width = Number.isSafeInteger(selfieWidth) && selfieWidth > 0 ? selfieWidth : imageSettings.selfie.width;
@@ -1054,6 +1064,7 @@ export async function galleryRoutes(app: FastifyInstance) {
       styleProfiles: imageSettings.styleProfiles,
       styleProfileId,
       imageDefaults,
+      omitProfileStyleText: true,
     });
     const imageModel = imageConn.model || "";
     const imageBaseUrl = imageConn.baseUrl || "https://image.pollinations.ai";
