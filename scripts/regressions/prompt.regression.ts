@@ -1950,7 +1950,7 @@ const cases: RegressionCase[] = [
       assert.match(gameSetupWizardSource, /gamePresentation === "anime"\s*\? COMIC_PAGE_GAME_VIDEO_PROMPT_TEMPLATE_ID/);
       assert.doesNotMatch(gameSetupWizardSource, /gameStoryboardUseDirectScenePrompt:\s*gamePresentation === "anime"/);
       assert.match(gameSetupWizardSource, /trimmedGameSystemPrompt !== effectiveGameSystemPrompt\.trim\(\)/);
-      assert.match(gameSetupWizardSource, /Reset to selected/);
+      assert.match(gameSetupWizardSource, /localizeUi\("ui\.game\.gamesetupwizard\.resetToSelected"\)/);
     },
   },
   {
@@ -2021,7 +2021,7 @@ const cases: RegressionCase[] = [
         "utf8",
       );
 
-      assert.match(drawerSource, /label="Use Campaign Art Style"/);
+      assert.match(drawerSource, /label=\{localizeUi\("ui\.chat\.chatsettingsdrawer\.useCampaignArtStyle"\)\}/);
       assert.match(drawerSource, /generatedArtStylePrompt: generatedCampaignArtStyle \|\| campaignArtStyle/);
       assert.match(gameSurfaceSource, /reviewImagePromptsBeforeSend/);
       assert.match(gameSurfaceSource, /previewTurnStoryboardPrompts\.mutateAsync\(payload\)/);
@@ -2234,11 +2234,14 @@ const cases: RegressionCase[] = [
       assert.match(COMIC_PAGE_GAME_VIDEO_PROMPT_TEMPLATE, /reveal a later consequence before its cause/);
       assert.match(drawerSource, /options=\{gameStoryboardIllustrationPromptOptions\}/);
       assert.match(drawerSource, /options=\{gameStoryboardAnimationPromptOptions\}/);
-      assert.match(drawerSource, /label="Illustration Planner"/);
-      assert.match(drawerSource, /label="Animation Planner"/);
-      assert.match(drawerSource, /label="Storyboard Illustration Prompt"/);
+      assert.match(drawerSource, /label=\{localizeUi\("ui\.chat\.chatsettingsdrawer\.illustrationPlanner"\)\}/);
+      assert.match(drawerSource, /label=\{localizeUi\("ui\.chat\.chatsettingsdrawer\.animationPlanner"\)\}/);
+      assert.match(
+        drawerSource,
+        /label=\{localizeUi\("ui\.chat\.chatsettingsdrawer\.storyboardIllustrationPrompt"\)\}/,
+      );
       assert.match(drawerSource, /options=\{gameStoryboardImagePromptOptions\}/);
-      assert.match(drawerSource, /label="Storyboard Video Prompt"/);
+      assert.match(drawerSource, /label=\{localizeUi\("ui\.chat\.chatsettingsdrawer\.storyboardVideoPrompt"\)\}/);
       assert.match(drawerSource, /kind="illustration"/);
       assert.match(drawerSource, /kind="animation"/);
       assert.match(drawerSource, /builtInTemplates\.map\(\(template\) =>/);
@@ -2248,12 +2251,18 @@ const cases: RegressionCase[] = [
         gameRouteSource,
         /storyboardImagePromptTemplateId: readTrimmedString\(meta\.gameStoryboardImagePromptTemplateId\)/,
       );
-      assert.match(drawerSource, /title="Edit Illustration Prompt Presets"/);
-      assert.match(drawerSource, /title="Edit Video Prompt Presets"/);
+      assert.match(
+        drawerSource,
+        /title=\{localizeUi\("ui\.chat\.chatsettingsdrawer\.editIllustrationPromptPresets"\)\}/,
+      );
+      assert.match(drawerSource, /title=\{localizeUi\("ui\.chat\.chatsettingsdrawer\.editVideoPromptPresets"\)\}/);
       const backgroundViewerStart = gameSurfaceSource.indexOf("const renderStoryboardBackgroundVisual");
       const backgroundViewerEnd = gameSurfaceSource.indexOf("const renderGameAssetsPanel", backgroundViewerStart);
       const backgroundViewerSource = gameSurfaceSource.slice(backgroundViewerStart, backgroundViewerEnd);
-      assert.match(backgroundControlsSource, /Replay background animation/);
+      assert.match(
+        backgroundControlsSource,
+        /localizeUi\("ui\.game\.storyboardbackgroundcontrols\.replayBackgroundAnimation"\)/,
+      );
       assert.match(gameSurfaceSource, /storyboardBackgroundAnimationPlaying/);
       assert.match(gameSurfaceSource, /storyboardViewerPlayingVideoId === activeStoryboardKeyframe\.video\.id/);
       assert.match(gameSurfaceSource, /video\.playbackRate = 1/);
@@ -2806,7 +2815,10 @@ const cases: RegressionCase[] = [
         new URL("../../packages/server/src/routes/game.routes.ts", import.meta.url),
         "utf8",
       );
-      assert.match(chatSettingsSource, /label="Use Storyboard Template"/u);
+      assert.match(
+        chatSettingsSource,
+        /label=\{localizeUi\("ui\.chat\.chatsettingsdrawer\.useStoryboardTemplate"\)\}/u,
+      );
       assert.doesNotMatch(chatSettingsSource, /Use Storyboard Prompt Directly|gameStoryboardUseDirectScenePrompt/u);
       assert.match(chatSettingsSource, /gameStoryboardUsePromptTemplate:\s*!gameStoryboardUsePromptTemplate/u);
       assert.doesNotMatch(gameSurfaceSource, /useGamePromptTemplate/u);
@@ -2927,7 +2939,7 @@ const cases: RegressionCase[] = [
       assert.match(preset?.promptTemplate ?? "", /\$\{aspectRatio\}/);
       assert.equal(animationPreset?.promptTemplate, GAME_STORYBOARD_NOVELAI_ANIMATION_PROMPT_TEMPLATE);
       assert.match(animationPreset?.promptTemplate ?? "", /\$\{durationSeconds\}-second/);
-      assert.match(drawerSource, /label="Use NovelAI Character Prompts"/);
+      assert.match(drawerSource, /label=\{localizeUi\("ui\.chat\.chatsettingsdrawer\.useNovelaiCharacterPrompts"\)\}/);
       assert.match(drawerSource, /builtInTemplates=\{GAME_STORYBOARD_ILLUSTRATION_PROMPT_TEMPLATES\}/);
       assert.match(drawerSource, /builtInTemplates=\{GAME_STORYBOARD_ANIMATION_PROMPT_TEMPLATES\}/);
       assert.match(gameRouteSource, /meta\.gameStoryboardUseNovelAiCharacterPrompts !== false/);
@@ -3076,7 +3088,7 @@ const cases: RegressionCase[] = [
         new URL("../../packages/server/src/routes/backgrounds.routes.ts", import.meta.url),
         "utf8",
       );
-      assert.match(drawerSource, /label="Generate Scene Backgrounds"/u);
+      assert.match(drawerSource, /label=\{localizeUi\("ui\.chat\.chatsettingsdrawer\.generateSceneBackgrounds"\)\}/u);
       assert.match(drawerSource, /renderIllustratorImageStyleSelect\(\)/u);
       assert.match(executorSource, /<illustrator_background_generation enabled="true">/u);
       assert.match(executorSource, /"generateBackground"/u);
