@@ -1460,7 +1460,13 @@ export function ChatArea() {
     }
     useTranslationStore
       .getState()
-      .seedFromMessages(messages as unknown as Array<{ id: string; extra?: string | Record<string, unknown> | null }>);
+      .seedFromMessages(
+        messages as unknown as Array<{
+          id: string;
+          content?: string;
+          extra?: string | Record<string, unknown> | null;
+        }>,
+      );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chat?.id, msgPageCount]);
 

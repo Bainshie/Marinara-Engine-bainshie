@@ -6,6 +6,8 @@ This file is the release-notes source of truth for Marinara Engine. Reuse these 
 
 ### Added
 
+- Added user-defined **Custom Quick Replies**: create your own buttons in **Settings → General → Quick replies** that each send a fixed message, macro, or `/slash` command from the quick replies menu beside Send, in both Conversation and Roleplay/Game input (#4024).
+- Added a **Show Only Translation** toggle to **Chat Settings → Translation** that displays just the translated text in place of the original once a message is translated, and rendered translated text through the same markdown pipeline as messages so bold, italics, and quotes format correctly (#4024).
 - Added an `AGENT_CALL_TIMEOUT_MS` override for agent LLM calls (trackers, HTML reformatter, and other agents). The previous fixed 5-minute cap cancelled slow local models mid-stream and then burned a second 5 minutes on the automatic invalid-JSON retry; the cap is now configurable from 10 seconds to 1 hour and documented next to `CHAT_GENERATION_TIMEOUT_MS` (#3958).
 
 - Added safe host-rendered contribution slots to Browser Personal Extensions. `marinara.ui.registerContribution(...)` can add themed top-bar buttons, Extensions menu items, and right-side panels containing bounded text, actions, inputs, selects, toggles, sliders, and color controls. Marinara validates and renders every descriptor while activation and form events return only to the exact-hash-approved sandbox Worker; extensions never receive host DOM, markup, styling, React, network, or direct API authority. The existing constrained `marinara.ui.showWindow(...)` window supports the expanded controls as well.

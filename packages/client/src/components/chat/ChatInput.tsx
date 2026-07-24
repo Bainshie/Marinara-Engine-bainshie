@@ -319,6 +319,7 @@ export const ChatInput = memo(function ChatInput({
   const showQuickReplyPostOnly = useUIStore((s) => s.showQuickReplyPostOnly);
   const showQuickReplyGuide = useUIStore((s) => s.showQuickReplyGuide);
   const showQuickReplyImpersonate = useUIStore((s) => s.showQuickReplyImpersonate);
+  const customQuickReplies = useUIStore((s) => s.customQuickReplies);
   const speechToTextEnabled = useUIStore((s) => s.speechToTextEnabled);
   const quoteFormat = useUIStore((s) => s.quoteFormat);
   const createMessage = useCreateMessage(activeChatId);
@@ -1327,6 +1328,19 @@ export const ChatInput = memo(function ChatInput({
     await runQuickSlashCommand(`/guided ${text}`, "Guided generation failed");
   }, [activeChatId, isInputBusy, requiresManualGuideTarget, hasPendingAttachments, runQuickSlashCommand]);
 
+  const sendCustomQuickReply = useCallback(
+    async (content: string) => {
+      const el = textareaRef.current;
+      if (!el || !activeChatId || isInputBusy || isReadingAttachments) return;
+      el.value = content;
+      resizeChatInputTextarea(el);
+      syncInputState(content);
+      setInputDraft(activeChatId, content);
+      await handleSend();
+    },
+    [activeChatId, isInputBusy, isReadingAttachments, syncInputState, setInputDraft, handleSend],
+  );
+
   const quickReplyActions = useMemo<QuickReplyAction[]>(() => {
     const actions: QuickReplyAction[] = [];
     const getPostOnlyDisabledReason = () => {
@@ -1384,6 +1398,25 @@ export const ChatInput = memo(function ChatInput({
         onSelect: handleImpersonateQuickButton,
       });
     }
+    for (const entry of customQuickReplies) {
+      const label = entry.label.trim() || entry.content.trim().slice(0, 24) || "Quick reply";
+      if (!entry.content.trim()) continue;
+      actions.push({
+        id: `custom-${entry.id}`,
+        label,
+        description: "Send a saved custom quick reply",
+        icon: <Sparkles size="0.875rem" />,
+        disabled: !activeChatId || isInputBusy || isReadingAttachments,
+        disabledReason: !activeChatId
+          ? "Select or create a chat first."
+          : isInputBusy
+            ? (inputBusyReason ?? undefined)
+            : isReadingAttachments
+              ? "Still reading attached files."
+              : undefined,
+        onSelect: () => sendCustomQuickReply(entry.content),
+      });
+    }
     return actions;
   }, [
     activeChatId,
@@ -1397,6 +1430,8 @@ export const ChatInput = memo(function ChatInput({
     showQuickReplyPostOnly,
     showQuickReplyGuide,
     showQuickReplyImpersonate,
+    customQuickReplies,
+    sendCustomQuickReply,
     handlePostOnlyButton,
     handleGuidedGenerationButton,
     handleImpersonateQuickButton,
