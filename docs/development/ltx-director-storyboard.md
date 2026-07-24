@@ -50,12 +50,13 @@ Apply the official guide across the complete LTX Director prompt rather than rep
 
 | LTX prompting element | Director input |
 | --- | --- |
-| shot type, scene, character appearance, lighting, palette, atmosphere, art style | stable global prompt |
-| chronological action and visible physical emotion | local prompts |
+| shot composition, scene, character appearance, lighting, palette, atmosphere, art style | supplied first-frame image |
+| continuous image-to-video mode | one-sentence global prompt |
+| chronological action and observable physical emotion | local prompts |
 | when and how the camera moves relative to the subject | relevant local prompt |
 | ambient sound, effects, music, or quoted dialogue | relevant local prompt |
 
-Across the global anchor and active local beat, favor flowing descriptive sentences and concrete cinematography. Keep the complete fallback prompt compact rather than mechanically duplicating all global details inside every beat.
+Across the global anchor and active local beat, favor 4-8 flowing descriptive sentences and concrete cinematography. Do not ask LTX to reproduce exact display text because the official prompting guide identifies readable text as unreliable. Keep the complete fallback prompt compact rather than mechanically duplicating image details inside every beat.
 
 Example:
 
@@ -65,19 +66,14 @@ She lowers into a ready stance as rain moves through her hair and the camera hol
 
 ### New LTX Director Video Prompt
 
-The new LTX Director Video template produces the stable global anchor. It should be short and contain only:
+The new LTX Director Video template produces a one-sentence global anchor identifying a continuous image-to-video shot from the supplied first frame.
 
-- continuity with the supplied first-frame illustration;
-- persistent visible character identity, face, hair, clothing, and equipment;
-- stable setting, weather, composition, lighting, palette, and art style;
-- constraints against identity drift, new subjects, costume changes, scene changes, and cuts.
-
-It must not include `narrationSummary`, pipe-delimited beats, timecodes, or the full `illustrationPrompt`. The reference image remains authoritative for precise visible detail, which avoids repeating a large T=0 action description in every temporal segment.
+It must not include character inventories, setting restatements, internal keyframe names or IDs, `narrationSummary`, pipe-delimited beats, timecodes, or the full `illustrationPrompt`. The reference image already supplies appearance, composition, setting, and visual style. Following the official [LTX image-to-video guide](https://docs.ltx.io/open-source-model/usage-guides/image-to-video), the local text therefore concentrates on motion, camera movement, and audio.
 
 Example:
 
 ```text
-Continuous anime shot matching the supplied first-frame illustration. Preserve the exact visible characters, faces, hair, clothing, equipment, shrine setting, rain, composition, lighting, palette, and cel-shaded art style throughout. Keep identity and scene continuity stable; do not add subjects, change costumes, cut, or reset the scene.
+Continuous image-to-video shot beginning from the supplied first frame.
 ```
 
 For `%prompt%` compatibility, the Storyboard route also composes one conventional LTX fallback prompt from this global anchor plus the ordered local beats. This fallback is concise, chronological, and contains the action, but it is separate from `global_prompt`. Legacy workflows therefore still receive a complete prompt when the new LTX templates are selected.

@@ -73,16 +73,8 @@ export const ANIME_GAME_VIDEO_PROMPT_TEMPLATE = [
   "- Avoid unrelated movement, new characters, duplicated subjects, morphing, costume changes, distorted anatomy, subtitles, captions, speech bubbles, UI, logos, and watermarks.",
 ].join("\n");
 
-export const LTX_DIRECTOR_GAME_VIDEO_PROMPT_TEMPLATE = [
-  "Continuous ${durationSeconds}-second ${aspectRatio} shot matching the supplied first-frame illustration.",
-  "${sourceIllustrationLine}",
-  "Visible character continuity: ${charactersLine}",
-  "Stable setting and atmosphere: ${settingLine}",
-  "Stable visual style: ${artStyleLine}",
-  "Treat the reference image as authoritative for the exact visible characters, faces, hair, clothing, anatomy, equipment, composition, textures, weather, lighting, palette, and art style.",
-  "Preserve those identities and scene conditions continuously while the separate local prompts control chronological action, camera movement, physical reactions, environmental changes, and audio.",
-  "Do not add subjects or props, change identity or costume, reset the pose or setting, introduce conflicting lighting, cut to another shot, add unrequested readable text, or drift from the supplied illustration.",
-].join("\n");
+export const LTX_DIRECTOR_GAME_VIDEO_PROMPT_TEMPLATE =
+  "Continuous image-to-video shot beginning from the supplied first frame.";
 
 export const GAME_VIDEO_BUILT_IN_PROMPT_TEMPLATES: AgentPromptTemplateOption[] = [
   {

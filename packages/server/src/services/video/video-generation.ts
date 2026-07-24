@@ -469,7 +469,10 @@ async function generateComfyUiVideo(baseUrl: string, request: VideoGenerationReq
     const ltxDirectorPrompt = resolveLtxDirectorPromptInput(request);
     logDebugOverride(
       request.debugMode === true || isDebugAgentsEnabled(),
-      "[video-gen/comfyui] LTX Director global_prompt:\n%s\nlocal_prompts:\n%s\nsegment_lengths=%s",
+      "[video-gen/comfyui] LTX Director duration_seconds=%d duration_frames=%d reference_image=%s\nglobal_prompt:\n%s\nlocal_prompts:\n%s\nsegment_lengths=%s",
+      request.durationSeconds,
+      Math.max(1, Math.round(request.durationSeconds * 16)),
+      referenceImageName ?? "(none)",
       ltxDirectorPrompt.globalPrompt,
       ltxDirectorPrompt.localPrompts,
       JSON.stringify(ltxDirectorPrompt.segmentLengths),
@@ -494,6 +497,11 @@ async function generateComfyUiVideo(baseUrl: string, request: VideoGenerationReq
   }
   const promptId = readString(asRecord(queued).prompt_id);
   if (!promptId) throw new Error(`ComfyUI video queue did not return a prompt_id: ${formatProviderError(queueText)}`);
+  logDebugOverride(
+    request.debugMode === true || isDebugAgentsEnabled(),
+    "[video-gen/comfyui] queued prompt_id=%s",
+    promptId,
+  );
 
   while (true) {
     await delayWithSignal(1000, request.signal);

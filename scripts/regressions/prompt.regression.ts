@@ -2243,7 +2243,12 @@ const cases: RegressionCase[] = [
       assert.equal(videoPreset?.promptTemplate, LTX_DIRECTOR_GAME_VIDEO_PROMPT_TEMPLATE);
       assert.doesNotMatch(LTX_DIRECTOR_GAME_VIDEO_PROMPT_TEMPLATE, /\$\{narrationSummary\}/);
       assert.doesNotMatch(LTX_DIRECTOR_GAME_VIDEO_PROMPT_TEMPLATE, /\$\{illustrationPrompt\}/);
-      assert.match(LTX_DIRECTOR_GAME_VIDEO_PROMPT_TEMPLATE, /unrequested readable text/);
+      assert.doesNotMatch(LTX_DIRECTOR_GAME_VIDEO_PROMPT_TEMPLATE, /\$\{sourceIllustrationLine\}/);
+      assert.doesNotMatch(LTX_DIRECTOR_GAME_VIDEO_PROMPT_TEMPLATE, /\$\{durationSeconds\}|\$\{aspectRatio\}/);
+      assert.doesNotMatch(LTX_DIRECTOR_GAME_VIDEO_PROMPT_TEMPLATE, /\$\{charactersLine\}|\$\{settingLine\}|\$\{artStyleLine\}/);
+      assert.match(plannerPreset?.promptTemplate ?? "", /4-8 descriptive sentences total/);
+      assert.match(plannerPreset?.promptTemplate ?? "", /one primary subject or object movement/);
+      assert.match(plannerPreset?.promptTemplate ?? "", /Do not ask LTX to render exact readable text/);
 
       assert.deepEqual(sanitizeLtxDirectorStoryboardSegments(" first beat | | second beat | third beat "), [
         "first beat",
@@ -3151,11 +3156,14 @@ const cases: RegressionCase[] = [
         },
       });
 
-      assert.match(ltxDirectorGlobalPrompt, /Continuous 6-second 16:9 shot/);
-      assert.match(ltxDirectorGlobalPrompt, /Visible character continuity: Mira, Sol/);
-      assert.match(ltxDirectorGlobalPrompt, /sunset city gate, cold rain/);
-      assert.match(ltxDirectorGlobalPrompt, /cel-shaded broadcast anime/);
-      assert.doesNotMatch(ltxDirectorGlobalPrompt, /runs through|raises her sword|storm of sparks|Arrival action/);
+      assert.equal(
+        ltxDirectorGlobalPrompt,
+        "Continuous image-to-video shot beginning from the supplied first frame.",
+      );
+      assert.doesNotMatch(
+        ltxDirectorGlobalPrompt,
+        /Mira|Sol|sunset|rain|cel-shaded|runs through|raises her sword|storm of sparks|Arrival action|image-789|6-second|16:9/,
+      );
 
       const comicReferencePrompt = await loadGameVideoPrompt({
         promptOverridesStorage,
