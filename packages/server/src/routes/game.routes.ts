@@ -47,6 +47,8 @@ import {
   buildPartyRecruitCardPrompt,
 } from "../services/game/gm-prompts.js";
 import { buildPartySystemPrompt } from "../services/game/party-prompts.js";
+import { normalizeNextSessionCampaignPlan, normalizeNextSessionNpcs } from "../services/game/next-session-plan.js";
+import { normalizeCharacterLookupName } from "../services/game/name-normalization.js";
 import { buildPromptMacroContext, resolveMacrosWithVariableSnapshot } from "../services/prompt/index.js";
 import { listPartySprites, readPreferredFullBodySpriteBase64 } from "../services/game/sprite.service.js";
 import {
@@ -156,11 +158,12 @@ import {
   type ModelAccessPolicy,
 } from "../services/generation/model-access-policy.js";
 import { postToDiscordWebhook } from "../services/discord-webhook.js";
-import { isDebugAgentsEnabled } from "../config/runtime-config.js";
+import { getGameDynamicImagePromptTimeoutMs, isDebugAgentsEnabled } from "../config/runtime-config.js";
 import type {
   GameActiveState,
   GameInitialSetupConnectionSnapshot,
   GameSetupConfig,
+  GameCampaignPlan,
   GameMap,
   GameNpc,
   GeneratedSceneVideo,
@@ -1285,7 +1288,7 @@ async function createDynamicGameImagePromptGenerator(args: {
           conn.provider,
         ),
         `Game dynamic ${request.kind} image prompt`,
-        GAME_DYNAMIC_IMAGE_PROMPT_TIMEOUT_MS,
+        getGameDynamicImagePromptTimeoutMs(),
       );
       const extraction = extractLeadingThinkingBlocks(result.content || "", parameters?.customThinkingTags);
       const raw = extraction.content.trim();
@@ -1926,16 +1929,6 @@ async function resolveGameImageConnectionId(
 
 function isTimeOfDayLabel(action: string): action is TimeOfDay {
   return ["dawn", "morning", "afternoon", "evening", "night", "midnight"].includes(action);
-}
-
-function normalizeCharacterLookupName(value: string): string {
-  return value
-    .normalize("NFKD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLocaleLowerCase()
-    .replace(/[^\p{L}\p{N}\p{M}]+/gu, " ")
-    .replace(/\s+/gu, " ")
-    .trim();
 }
 
 const CHARACTER_NAME_STOP_WORDS = new Set([
@@ -2678,7 +2671,42 @@ type SessionConclusionApplication = {
   updatedMorale: number;
   updatedCards: Array<Record<string, unknown>>;
   updatedCardCount: number;
+  nextSessionCampaignPlan: unknown;
+  nextSessionNamedNpcs: unknown;
 };
+
+function currentGameCampaignPlan(meta: Record<string, unknown>): GameCampaignPlan {
+  const blueprint =
+    meta.gameBlueprint && typeof meta.gameBlueprint === "object" && !Array.isArray(meta.gameBlueprint)
+      ? (meta.gameBlueprint as Record<string, unknown>)
+      : {};
+  return blueprint.campaignPlan && typeof blueprint.campaignPlan === "object" && !Array.isArray(blueprint.campaignPlan)
+    ? (blueprint.campaignPlan as GameCampaignPlan)
+    : {};
+}
+
+function buildSessionPlanMetadataUpdates(
+  meta: Record<string, unknown>,
+  conclusion: SessionConclusionApplication,
+): Record<string, unknown> {
+  const blueprint =
+    meta.gameBlueprint && typeof meta.gameBlueprint === "object" && !Array.isArray(meta.gameBlueprint)
+      ? (meta.gameBlueprint as Record<string, unknown>)
+      : {};
+  return {
+    gameBlueprint: {
+      ...blueprint,
+      campaignPlan: normalizeNextSessionCampaignPlan(
+        conclusion.nextSessionCampaignPlan,
+        currentGameCampaignPlan(meta),
+      ),
+    },
+    gameNpcs: normalizeNextSessionNpcs(
+      conclusion.nextSessionNamedNpcs,
+      Array.isArray(meta.gameNpcs) ? (meta.gameNpcs as GameNpc[]) : [],
+    ),
+  };
+}
 
 function applySessionConclusionPayload(
   parsedConclusion: Record<string, unknown>,
@@ -2713,6 +2741,12 @@ function applySessionConclusionPayload(
     },
   );
   const appliedCards = applyGeneratedGameCharacterCards(args.currentCards, parsedConclusion.characterCards);
+  const nextSessionPlan =
+    parsedConclusion.nextSessionPlan &&
+    typeof parsedConclusion.nextSessionPlan === "object" &&
+    !Array.isArray(parsedConclusion.nextSessionPlan)
+      ? (parsedConclusion.nextSessionPlan as Record<string, unknown>)
+      : {};
 
   return {
     summary,
@@ -2722,6 +2756,8 @@ function applySessionConclusionPayload(
     updatedMorale,
     updatedCards: appliedCards.cards,
     updatedCardCount: appliedCards.updatedCount,
+    nextSessionCampaignPlan: nextSessionPlan.campaignPlan,
+    nextSessionNamedNpcs: nextSessionPlan.namedNpcs,
   };
 }
 
@@ -3115,7 +3151,6 @@ const GAME_GENERATION_TIMEOUT_MS = 5 * 60 * 1000;
 const GAME_ASSET_GENERATION_TIMEOUT_MS = 45 * 60 * 1000;
 const GAME_SCENE_VIDEO_GENERATION_TIMEOUT_MS = 31 * 60 * 1000;
 const GAME_ILLUSTRATION_SUMMARY_TIMEOUT_MS = 60 * 1000;
-const GAME_DYNAMIC_IMAGE_PROMPT_TIMEOUT_MS = 45 * 1000;
 const GAME_STORYBOARD_ILLUSTRATOR_TIMEOUT_MS = 3 * 60 * 1000;
 const GAME_ASSET_PORTRAIT_CONCURRENCY = 2;
 const GAME_STORYBOARD_IMAGE_FRAME_CONCURRENCY = 4;
@@ -3359,6 +3394,8 @@ function buildSessionConclusionMessages(args: {
   currentPartyArcs: PartyArc[];
   currentMorale: number;
   currentCards: Array<Record<string, unknown>>;
+  currentCampaignPlan: GameCampaignPlan;
+  currentNpcs: GameNpc[];
   nextSessionRequest?: string | null;
 }): ChatMessage[] {
   const transcriptLabel = args.transcriptTruncated
@@ -3404,6 +3441,20 @@ function buildSessionConclusionMessages(args: {
     "Current character cards:",
     JSON.stringify(args.currentCards, null, 2),
     "",
+    "Current campaign plan (replace its next-arc material; do not repeat resolved hooks):",
+    JSON.stringify(args.currentCampaignPlan, null, 2),
+    "",
+    "Already known named NPCs (do not repeat these as new next-session NPCs):",
+    JSON.stringify(
+      args.currentNpcs.map((npc) => ({
+        name: npc.name,
+        description: npc.description,
+        location: npc.location,
+      })),
+      null,
+      2,
+    ),
+    "",
     "Update the full end-of-session continuity state in one pass.",
     args.transcriptTruncated
       ? "The transcript only trims the middle to fit the selected context window; the journal recap still covers the full session."
@@ -3434,6 +3485,8 @@ function fitSessionConclusionMessages(args: {
   currentPartyArcs: PartyArc[];
   currentMorale: number;
   currentCards: Array<Record<string, unknown>>;
+  currentCampaignPlan: GameCampaignPlan;
+  currentNpcs: GameNpc[];
   nextSessionRequest?: string | null;
   modelAccessPolicy: ModelAccessPolicy;
   maxTokens?: number;
@@ -3453,6 +3506,8 @@ function fitSessionConclusionMessages(args: {
     currentPartyArcs: args.currentPartyArcs,
     currentMorale: args.currentMorale,
     currentCards: args.currentCards,
+    currentCampaignPlan: args.currentCampaignPlan,
+    currentNpcs: args.currentNpcs,
     nextSessionRequest: args.nextSessionRequest,
   });
   let fit = fitMessagesToModelAccessContext({
@@ -3489,6 +3544,8 @@ function fitSessionConclusionMessages(args: {
       currentPartyArcs: args.currentPartyArcs,
       currentMorale: args.currentMorale,
       currentCards: args.currentCards,
+      currentCampaignPlan: args.currentCampaignPlan,
+      currentNpcs: args.currentNpcs,
       nextSessionRequest: args.nextSessionRequest,
     });
     fit = fitMessagesToModelAccessContext({
@@ -7157,6 +7214,8 @@ export async function gameRoutes(app: FastifyInstance) {
       const currentPartyArcs = Array.isArray(meta.gamePartyArcs) ? normalizePartyArcPayload(meta.gamePartyArcs) : [];
       const currentMorale = normalizeMoraleValue(meta.gameMorale, 50);
       const currentCards = (meta.gameCharacterCards as Array<Record<string, unknown>>) ?? [];
+      const currentCampaignPlan = currentGameCampaignPlan(meta);
+      const currentNpcs = Array.isArray(meta.gameNpcs) ? (meta.gameNpcs as GameNpc[]) : [];
 
       const { conn, baseUrl, defaultGenerationParameters } = await resolveConnection(
         connections,
@@ -7197,6 +7256,8 @@ export async function gameRoutes(app: FastifyInstance) {
         currentPartyArcs,
         currentMorale,
         currentCards,
+        currentCampaignPlan,
+        currentNpcs,
         nextSessionRequest: trimmedNextSessionRequest || null,
         modelAccessPolicy,
         maxTokens: conclusionOptions.maxTokens,
@@ -7280,6 +7341,7 @@ export async function gameRoutes(app: FastifyInstance) {
           gamePartyArcs: appliedConclusion.updatedPartyArcs,
           gamePreviousSessionSummaries: [...freshSummaries, appliedConclusion.summary],
           gameCharacterCards: appliedConclusion.updatedCards,
+          ...buildSessionPlanMetadataUpdates(freshMeta, appliedConclusion),
           ...buildMoraleMetadataUpdates(freshMeta, appliedConclusion.updatedMorale),
         };
       });
@@ -7402,7 +7464,6 @@ export async function gameRoutes(app: FastifyInstance) {
       const currentPartyArcs = Array.isArray(meta.gamePartyArcs) ? normalizePartyArcPayload(meta.gamePartyArcs) : [];
       const currentMorale = normalizeMoraleValue(meta.gameMorale, 50);
       const currentCards = (meta.gameCharacterCards as Array<Record<string, unknown>>) ?? [];
-
       let appliedConclusion: SessionConclusionApplication;
       try {
         const parsedConclusion = parseJSON(rawJson) as Record<string, unknown>;
@@ -7451,6 +7512,7 @@ export async function gameRoutes(app: FastifyInstance) {
           gamePartyArcs: appliedConclusion.updatedPartyArcs,
           gamePreviousSessionSummaries: [...freshSummaries, appliedConclusion.summary],
           gameCharacterCards: appliedConclusion.updatedCards,
+          ...buildSessionPlanMetadataUpdates(freshMeta, appliedConclusion),
           ...buildMoraleMetadataUpdates(freshMeta, appliedConclusion.updatedMorale),
         };
       });
@@ -7702,6 +7764,8 @@ export async function gameRoutes(app: FastifyInstance) {
     const currentPartyArcs = Array.isArray(meta.gamePartyArcs) ? normalizePartyArcPayload(meta.gamePartyArcs) : [];
     const currentMorale = normalizeMoraleValue(meta.gameMorale, 50);
     const currentCards = (meta.gameCharacterCards as Array<Record<string, unknown>>) ?? [];
+    const currentCampaignPlan = currentGameCampaignPlan(meta);
+    const currentNpcs = Array.isArray(meta.gameNpcs) ? (meta.gameNpcs as GameNpc[]) : [];
 
     const { conn, baseUrl, defaultGenerationParameters } = await resolveConnection(
       connections,
@@ -7745,6 +7809,8 @@ export async function gameRoutes(app: FastifyInstance) {
       currentPartyArcs,
       currentMorale,
       currentCards,
+      currentCampaignPlan,
+      currentNpcs,
       nextSessionRequest: existingNextSessionRequest,
       modelAccessPolicy,
       maxTokens: conclusionOptions.maxTokens,
@@ -7801,17 +7867,23 @@ export async function gameRoutes(app: FastifyInstance) {
       return;
     }
 
-    const nextSummaries = prevSummaries.map((existingSummary, index) =>
-      index === targetIndex ? appliedConclusion.summary : existingSummary,
-    );
-    await chats.updateMetadata(chatId, {
-      ...meta,
-      gameStoryArc: appliedConclusion.updatedStoryArc,
-      gamePlotTwists: appliedConclusion.updatedPlotTwists,
-      gamePartyArcs: appliedConclusion.updatedPartyArcs,
-      gamePreviousSessionSummaries: nextSummaries,
-      gameCharacterCards: appliedConclusion.updatedCards,
-      ...buildMoraleMetadataUpdates(meta, appliedConclusion.updatedMorale),
+    await chats.patchMetadata(chatId, (freshMeta) => {
+      const freshSummaries = normalizeStoredSessionSummaries(freshMeta.gamePreviousSessionSummaries);
+      if (!findSessionSummaryForNumber(freshSummaries, sessionNumber)) {
+        throw new Error("Session summary not found");
+      }
+      const nextSummaries = freshSummaries.map((existingSummary) =>
+        existingSummary.sessionNumber === sessionNumber ? appliedConclusion.summary : existingSummary,
+      );
+      return {
+        gameStoryArc: appliedConclusion.updatedStoryArc,
+        gamePlotTwists: appliedConclusion.updatedPlotTwists,
+        gamePartyArcs: appliedConclusion.updatedPartyArcs,
+        gamePreviousSessionSummaries: nextSummaries,
+        gameCharacterCards: appliedConclusion.updatedCards,
+        ...buildSessionPlanMetadataUpdates(freshMeta, appliedConclusion),
+        ...buildMoraleMetadataUpdates(freshMeta, appliedConclusion.updatedMorale),
+      };
     });
 
     const nextContent = `**Session ${sessionNumber} Concluded**\n\n${appliedConclusion.summary.summary}\n\n*Party Dynamics:* ${appliedConclusion.summary.partyDynamics}`;
@@ -7848,7 +7920,6 @@ export async function gameRoutes(app: FastifyInstance) {
     const currentPartyArcs = Array.isArray(meta.gamePartyArcs) ? normalizePartyArcPayload(meta.gamePartyArcs) : [];
     const currentMorale = normalizeMoraleValue(meta.gameMorale, 50);
     const currentCards = (meta.gameCharacterCards as Array<Record<string, unknown>>) ?? [];
-
     let appliedConclusion: SessionConclusionApplication;
     try {
       const parsedConclusion = parseJSON(rawJson) as Record<string, unknown>;
@@ -7877,17 +7948,23 @@ export async function gameRoutes(app: FastifyInstance) {
       return;
     }
 
-    const nextSummaries = prevSummaries.map((existingSummary, index) =>
-      index === targetIndex ? appliedConclusion.summary : existingSummary,
-    );
-    await chats.updateMetadata(chatId, {
-      ...meta,
-      gameStoryArc: appliedConclusion.updatedStoryArc,
-      gamePlotTwists: appliedConclusion.updatedPlotTwists,
-      gamePartyArcs: appliedConclusion.updatedPartyArcs,
-      gamePreviousSessionSummaries: nextSummaries,
-      gameCharacterCards: appliedConclusion.updatedCards,
-      ...buildMoraleMetadataUpdates(meta, appliedConclusion.updatedMorale),
+    await chats.patchMetadata(chatId, (freshMeta) => {
+      const freshSummaries = normalizeStoredSessionSummaries(freshMeta.gamePreviousSessionSummaries);
+      if (!findSessionSummaryForNumber(freshSummaries, sessionNumber)) {
+        throw new Error("Session summary not found");
+      }
+      const nextSummaries = freshSummaries.map((existingSummary) =>
+        existingSummary.sessionNumber === sessionNumber ? appliedConclusion.summary : existingSummary,
+      );
+      return {
+        gameStoryArc: appliedConclusion.updatedStoryArc,
+        gamePlotTwists: appliedConclusion.updatedPlotTwists,
+        gamePartyArcs: appliedConclusion.updatedPartyArcs,
+        gamePreviousSessionSummaries: nextSummaries,
+        gameCharacterCards: appliedConclusion.updatedCards,
+        ...buildSessionPlanMetadataUpdates(freshMeta, appliedConclusion),
+        ...buildMoraleMetadataUpdates(freshMeta, appliedConclusion.updatedMorale),
+      };
     });
 
     const conclusionHeader = `**Session ${sessionNumber} Concluded**`;

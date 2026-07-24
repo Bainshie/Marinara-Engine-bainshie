@@ -367,6 +367,20 @@ function normalizeHandle(name: string, fallback: string) {
   return base || "noodle";
 }
 
+function suffixedPublicHandle(base: string, suffixNumber: number): string {
+  const suffix = `_${suffixNumber}`;
+  return `${base.slice(0, Math.max(1, 36 - suffix.length))}${suffix}`;
+}
+
+function nextAvailablePublicHandle(base: string, reserved: ReadonlySet<string>): string {
+  if (!reserved.has(base)) return base;
+  for (let suffixNumber = 2; suffixNumber < Number.MAX_SAFE_INTEGER; suffixNumber += 1) {
+    const candidate = suffixedPublicHandle(base, suffixNumber);
+    if (!reserved.has(candidate)) return candidate;
+  }
+  throw new Error("Could not allocate a unique Noodle handle");
+}
+
 function normalizeAccountKind(kind: string): NoodleAccountKind {
   if (kind === "character" || kind === "random_user") return kind;
   return "persona";
@@ -600,6 +614,51 @@ function mapRefreshRun(row: RefreshRunRow): NoodleRefreshRun {
 
 export function createNoodleStorage(db: DB) {
   const settingsStore = createAppSettingsStorage(db);
+  let publicHandleReconciliation: Promise<void> | null = null;
+
+  const reconcilePublicHandles = () => {
+    if (publicHandleReconciliation) return publicHandleReconciliation;
+    publicHandleReconciliation = db
+      .transaction(async (tx) => {
+        const rows = await tx.select().from(noodleAccounts).where(eq(noodleAccounts.visibility, "public"));
+        const groups = new Map<string, AccountRow[]>();
+        for (const row of rows) {
+          const normalized = normalizeHandle(row.handle, row.entityId);
+          const group = groups.get(normalized);
+          if (group) group.push(row);
+          else groups.set(normalized, [row]);
+        }
+
+        const reserved = new Set(groups.keys());
+        for (const [base, group] of groups) {
+          group.sort(
+            (left, right) =>
+              String(left.createdAt).localeCompare(String(right.createdAt)) || left.id.localeCompare(right.id),
+          );
+          const keeper = group.find((row) => row.handle === base) ?? group[0]!;
+          for (const duplicate of group) {
+            if (duplicate.id === keeper.id) continue;
+            const handle = nextAvailablePublicHandle(base, reserved);
+            reserved.add(handle);
+            await tx
+              .update(noodleAccounts)
+              .set({ handle, updatedAt: now() })
+              .where(eq(noodleAccounts.id, duplicate.id));
+          }
+          if (keeper.handle !== base) {
+            await tx
+              .update(noodleAccounts)
+              .set({ handle: base, updatedAt: now() })
+              .where(eq(noodleAccounts.id, keeper.id));
+          }
+        }
+      })
+      .catch((error) => {
+        publicHandleReconciliation = null;
+        throw error;
+      });
+    return publicHandleReconciliation;
+  };
 
   const insertInteraction = async (
     postId: string,
@@ -860,6 +919,7 @@ export function createNoodleStorage(db: DB) {
     },
 
     async listAccounts(): Promise<NoodleAccount[]> {
+      await reconcilePublicHandles();
       const rows = await db
         .select()
         .from(noodleAccounts)
@@ -1069,6 +1129,7 @@ export function createNoodleStorage(db: DB) {
       /** Keep entity-owned identity fields current without replacing generated profile copy. */
       syncIdentity?: boolean;
     }): Promise<NoodleAccount> {
+      await reconcilePublicHandles();
       const existing = await this.getAccountByEntity(input.kind, input.entityId);
       if (existing) {
         return db.transaction(async (tx) => {
@@ -1099,31 +1160,38 @@ export function createNoodleStorage(db: DB) {
         });
       }
 
-      const timestamp = now();
-      const id = newId();
-      const displayName = input.displayName.trim() || (input.kind === "persona" ? "User" : "Character");
-      await db.insert(noodleAccounts).values({
-        id,
-        kind: input.kind,
-        entityId: input.entityId,
-        handle: normalizeHandle(displayName, input.entityId),
-        displayName,
-        bio: input.bio?.trim() ?? "",
-        avatarUrl: input.avatarUrl ?? null,
-        invited: String(input.invited ?? input.kind === "persona"),
-        settings: JSON.stringify({
-          ...emptyNoodleAccountSettings(),
-          profile: input.avatarCrop !== undefined ? { avatarCrop: input.avatarCrop } : {},
-        }),
-        visibility: "public",
-        publicAccountId: null,
-        createdAt: timestamp,
-        updatedAt: timestamp,
+      const id = await db.transaction(async (tx) => {
+        const timestamp = now();
+        const accountId = newId();
+        const displayName = input.displayName.trim() || (input.kind === "persona" ? "User" : "Character");
+        const publicRows = await tx.select().from(noodleAccounts).where(eq(noodleAccounts.visibility, "public"));
+        const reserved = new Set(publicRows.map((row) => normalizeHandle(row.handle, row.entityId)));
+        const handle = nextAvailablePublicHandle(normalizeHandle(displayName, input.entityId), reserved);
+        await tx.insert(noodleAccounts).values({
+          id: accountId,
+          kind: input.kind,
+          entityId: input.entityId,
+          handle,
+          displayName,
+          bio: input.bio?.trim() ?? "",
+          avatarUrl: input.avatarUrl ?? null,
+          invited: String(input.invited ?? input.kind === "persona"),
+          settings: JSON.stringify({
+            ...emptyNoodleAccountSettings(),
+            profile: input.avatarCrop !== undefined ? { avatarCrop: input.avatarCrop } : {},
+          }),
+          visibility: "public",
+          publicAccountId: null,
+          createdAt: timestamp,
+          updatedAt: timestamp,
+        });
+        return accountId;
       });
       return (await this.getAccountById(id))!;
     },
 
     async updateAccount(id: string, input: NoodleAccountUpdateInput): Promise<NoodleAccount | null> {
+      await reconcilePublicHandles();
       return db.transaction(async (tx) => {
         const rows = await tx
           .select()
@@ -1148,6 +1216,7 @@ export function createNoodleStorage(db: DB) {
     },
 
     async updateAccountProfile(id: string, input: NoodleAccountProfileUpdateInput): Promise<NoodleAccount | null> {
+      await reconcilePublicHandles();
       return db.transaction(async (tx) => {
         const rows = await tx
           .select()

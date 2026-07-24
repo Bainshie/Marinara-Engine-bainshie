@@ -131,6 +131,7 @@ export function ConversationMessageGrouped({
         isGrouped ? "mt-0" : "mt-3",
         isStreaming && "bg-[var(--secondary)]/20",
         multiSelectMode && isSelected && MESSAGE_SELECTION_SURFACE_CLASS,
+        hideActions && thinking && "max-sm:pb-8",
       )}
       onClick={handleMobileTap}
     >
