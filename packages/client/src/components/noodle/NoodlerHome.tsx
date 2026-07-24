@@ -2629,16 +2629,18 @@ function ViewerHub({
           <button type="button" onClick={onRetryAuthor} className="mt-3 min-h-10 rounded-md border border-[var(--noodle-divider)] px-3 text-xs font-bold hover:bg-[var(--accent)]">{localizeUi("capabilities.actions.tryAgain")}</button>
         </div>
       ) : (
-        <div className="border-b border-[var(--noodle-divider)] px-4 py-4">
-          <p className="text-sm font-semibold">{localizeUi("ui.noodle.viewerhub.thisPersonaHasNoLinkedNoodlerProfile")}</p>
-          <p className="mt-1 text-xs text-[var(--muted-foreground)]">{localizeUi("ui.noodle.viewerhub.createOneToAuthorFromThisTimeline")}</p>
-          {onCreateAuthorProfile && (
-            <button
-              type="button"
-              onClick={onCreateAuthorProfile}
-              className="mt-3 min-h-10 rounded-md border border-[var(--noodle-divider)] px-3 text-xs font-bold hover:bg-[var(--accent)]"
-            >{localizeUi("ui.noodle.noodlehome.createStageProfile")}</button>
-          )}
+        <div className="border-b border-[var(--noodle-divider)] px-4 py-8">
+          <div className="mx-auto flex max-w-sm flex-col items-center gap-2 rounded-xl border border-[var(--noodle-divider)] bg-[var(--accent)]/20 px-6 py-8 text-center">
+            <p className="text-sm font-semibold">{localizeUi("ui.noodle.viewerhub.thisPersonaHasNoLinkedNoodlerProfile")}</p>
+            <p className="text-xs text-[var(--muted-foreground)]">{localizeUi("ui.noodle.viewerhub.createOneToAuthorFromThisTimeline")}</p>
+            {onCreateAuthorProfile && (
+              <button
+                type="button"
+                onClick={onCreateAuthorProfile}
+                className="mt-2 min-h-10 rounded-md bg-[var(--noodle-accent)] px-4 text-xs font-bold text-zinc-950 transition-opacity hover:opacity-90"
+              >{localizeUi("ui.noodle.noodlehome.createStageProfile")}</button>
+            )}
+          </div>
         </div>
       )}
       <div className="border-b border-[var(--noodle-divider)] px-4 py-2">
@@ -2746,7 +2748,7 @@ function LockedPrivatePostCard({
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
             <span className="font-semibold">{profile.displayName}</span>
-            <span className="rounded-full border border-[var(--noodle-divider)] px-2 py-0.5 text-[0.68rem] font-bold text-[var(--muted-foreground)]">
+            <span className="rounded-full bg-[var(--noodle-accent)]/15 px-2 py-0.5 text-[0.68rem] font-bold text-[var(--noodle-accent)]">
               {localizeUi(`ui.noodle.postaccess.${post.access === "ppv" ? "ppv" : "subscriber"}`)}
             </span>
           </div>
