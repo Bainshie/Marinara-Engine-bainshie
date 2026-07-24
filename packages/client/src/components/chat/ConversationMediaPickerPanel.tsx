@@ -1,11 +1,12 @@
 import type { ReactNode } from "react";
 import { cn } from "../../lib/utils";
 import { EmojiPicker } from "../ui/EmojiPicker";
+import { KaomojiPicker } from "../ui/KaomojiPicker";
 import { GifPicker } from "../ui/GifPicker";
 import { StickerPicker } from "./StickerPicker";
 import { CustomEmojiTab } from "./CustomEmojiTab";
 
-export type ConversationMediaPickerTabId = "emoji" | "gifs" | "stickers" | "tools";
+export type ConversationMediaPickerTabId = "emoji" | "kaomoji" | "gifs" | "stickers" | "tools";
 export type ConversationMediaPickerTab = { id: ConversationMediaPickerTabId; label: string };
 
 interface ConversationMediaPickerPanelProps {
@@ -72,6 +73,7 @@ export function ConversationMediaPickerPanel({
             }}
           />
         )}
+        {activeTab === "kaomoji" && <KaomojiPicker embedded open onClose={onClose} onSelect={onEmojiSelect} />}
         {activeTab === "gifs" && <GifPicker embedded open onClose={onClose} onSelect={onGifSelect} />}
         {activeTab === "stickers" && <StickerPicker embedded open onClose={onClose} onSelect={onStickerSelect} />}
         {activeTab === "tools" && toolsContent}

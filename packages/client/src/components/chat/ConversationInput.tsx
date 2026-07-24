@@ -1756,6 +1756,7 @@ export function ConversationInput({
   const mobilePickerTabs = useMemo<ConversationMediaPickerTab[]>(() => {
     const tabs: ConversationMediaPickerTab[] = [
       { id: "emoji", label: "Emoji" },
+      { id: "kaomoji", label: "Kaomoji" },
       { id: "gifs", label: "GIFs" },
       { id: "stickers", label: "Stickers" },
     ];
