@@ -789,10 +789,6 @@ type AgentAddPreview = {
 
 type KnowledgeAgentType = "knowledge-retrieval" | "knowledge-router";
 
-function normalizeNarrativeDirectorMode(value: unknown): "natural" | "random" {
-  return value === "random" ? "random" : "natural";
-}
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === "object" && !Array.isArray(value);
 }
@@ -1698,9 +1694,6 @@ export function ChatSettingsDrawer({
   const directorDefaults = useMemo(
     () => mergeBuiltInAgentSettings("director", directorConfig?.settings),
     [directorConfig?.settings],
-  );
-  const narrativeDirectorMode = normalizeNarrativeDirectorMode(
-    metadata.narrativeDirectorMode ?? directorDefaults.directorMode,
   );
   const narrativeDirectorSecretPlotEnabled =
     typeof metadata.narrativeDirectorSecretPlotEnabled === "boolean"
@@ -6963,22 +6956,10 @@ export function ChatSettingsDrawer({
                           order={getRoleplayAgentSettingsOrder("director")}
                           onRemove={getRoleplayAgentMenuRemoveHandler("director", directorAgentMeta.name)}
                         >
-                          <AgentSettingsSegmentedControl
-                            value={narrativeDirectorMode}
-                            options={[
-                              {
-                                id: "natural",
-                                label: "Natural",
-                                description: "Push the existing plot forward.",
-                              },
-                              {
-                                id: "random",
-                                label: "Random Event",
-                                description: "Add a plausible surprise.",
-                              },
-                            ]}
-                            onChange={(mode) => updateMeta.mutate({ id: chat.id, narrativeDirectorMode: mode })}
-                          />
+                          <p className="rounded-lg bg-[var(--background)]/45 px-2.5 py-2 text-[0.625rem] text-[var(--muted-foreground)] ring-1 ring-[var(--border)]">
+                            Choose between a natural or random push each time from the Push Story button above the chat
+                            input.
+                          </p>
                           {supportsNarrativeDirectorSecretPlot && (
                             <div className="mt-2 space-y-2">
                               <AgentSettingsToggle
