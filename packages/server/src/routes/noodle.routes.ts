@@ -489,7 +489,11 @@ export async function noodleRoutes(app: FastifyInstance) {
       });
     }
     try {
-      const created = await noodle.createPrivateAccount(id, parsed.data.stageProfile);
+      const created = await noodle.createPrivateAccount(
+        id,
+        parsed.data.stageProfile,
+        settings.autoPostingDefaultIntensity,
+      );
       if (!created) return reply.code(404).send({ error: "Noodle account not found" });
       const profile = (await noodle.listNoodlerStageProfiles()).find((item) => item.id === created.id);
       if (!profile) throw new Error("Failed to load the created NoodleR stage profile.");
@@ -526,8 +530,11 @@ export async function noodleRoutes(app: FastifyInstance) {
               disclosureMode,
             }
           : {
+              // Never derive a hinted/secret alias from the public identity: normalization
+              // truncates to 36 chars, so `<handle>_stage` can collapse back to the exact
+              // public handle and leak it. Use a neutral placeholder instead.
               displayName: "New stage persona",
-              handle: `${publicAccount.handle}_stage`,
+              handle: "new_stage_persona",
               bio: "",
               stagePersonality: "",
               disclosureMode,
@@ -537,7 +544,11 @@ export async function noodleRoutes(app: FastifyInstance) {
         continue;
       }
       try {
-        const account = await noodle.createPrivateAccount(publicAccountId, stageProfile);
+        const account = await noodle.createPrivateAccount(
+          publicAccountId,
+          stageProfile,
+          settings.autoPostingDefaultIntensity,
+        );
         if (!account) {
           skipped.push(publicAccountId);
           continue;

@@ -90,7 +90,7 @@ import {
 } from "./NoodlePostCard";
 import { Avatar, NoodleShell, NOODLE_PERSONA_SWITCHER_PAGE_SIZE, NOODLE_PINK, useNoodleAccent } from "./NoodleShell";
 import { NoodleProfileSurface } from "./NoodleProfileSurface";
-import { NOODLE_AUTO_POST_INTENSITIES } from "./noodle-auto-post";
+import { NOODLE_AUTO_POST_INTENSITIES, summarizeRefreshOutcomes } from "./noodle-auto-post";
 import { NoodlerBulkCreateButton } from "./NoodlerBulkCreatePanel";
 import {
   ConversationMediaPickerPanel,
@@ -1111,18 +1111,8 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
               onClick={() =>
                 refreshAllNow.mutate(undefined, {
                   onSuccess: ({ outcomes }) => {
-                    const generated = outcomes.filter((o) => o.status === "generated").length;
-                    const skipped = outcomes.filter((o) => o.status === "skipped").length;
-                    const failed = outcomes.length - generated - skipped;
-                    if (outcomes.length === 0) {
-                      toast.success("No creators have automatic posting enabled.");
-                    } else if (failed === 0) {
-                      toast.success(`Generated ${generated} post${generated === 1 ? "" : "s"}.`);
-                    } else if (generated === 0) {
-                      toast.error(`All ${failed} creator${failed === 1 ? "" : "s"} failed to post (connection or provider error).`);
-                    } else {
-                      toast.error(`Generated ${generated}, ${failed} failed${skipped ? `, ${skipped} skipped` : ""}.`);
-                    }
+                    const { ok, message } = summarizeRefreshOutcomes(outcomes);
+                    (ok ? toast.success : toast.error)(message);
                   },
                   onError: (error) => toast.error(errorMessage(error, "Could not refresh NoodleR creators.")),
                 })
@@ -2629,7 +2619,7 @@ function ViewerHub({
           <button type="button" onClick={onRetryAuthor} className="mt-3 min-h-10 rounded-md border border-[var(--noodle-divider)] px-3 text-xs font-bold hover:bg-[var(--accent)]">Try again</button>
         </div>
       ) : (
-        <div className="border-b border-[var(--noodle-divider)] px-4 py-4">
+        <div className="flex flex-col items-center text-center border-b border-[var(--noodle-divider)] px-4 py-4">
           <p className="text-sm font-semibold">This persona has no linked NoodleR profile.</p>
           <p className="mt-1 text-xs text-[var(--muted-foreground)]">Create one to author from this timeline.</p>
           {onCreateAuthorProfile && (

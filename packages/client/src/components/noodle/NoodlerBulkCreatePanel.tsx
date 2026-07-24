@@ -4,6 +4,7 @@
 // ──────────────────────────────────────────────
 import { useState, type CSSProperties } from "react";
 import { Check, Loader2, Plus, Search, Users } from "lucide-react";
+import { toast } from "sonner";
 import type { NoodleIdentityDisclosure } from "@marinara-engine/shared";
 import { cn } from "../../lib/utils";
 import { useBulkCreateNoodlerStageProfiles, useNoodlerEligibleAccounts } from "../../hooks/use-noodle";
@@ -18,7 +19,7 @@ const DISCLOSURE_CHOICES: { value: NoodleIdentityDisclosure; label: string }[] =
 
 const eyebrowClass = "text-[0.625rem] font-bold uppercase tracking-[0.18em] text-[var(--muted-foreground)]";
 
-export function NoodlerBulkCreatePanel() {
+function NoodlerBulkCreatePanel() {
   const [search, setSearch] = useState("");
   const [kind, setKind] = useState<"all" | "character" | "persona">("all");
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -38,14 +39,30 @@ export function NoodlerBulkCreatePanel() {
     });
   };
 
+  // Derive "all selected" from membership of the currently-visible accounts, not counts —
+  // a size match can be true while the visible account is unchecked (stale filter selection).
+  const allVisibleSelected = accounts.length > 0 && accounts.every((a) => selected.has(a.id));
+
   const toggleAll = () => {
-    setSelected((prev) => (prev.size === accounts.length ? new Set() : new Set(accounts.map((a) => a.id))));
+    setSelected((prev) => {
+      const next = new Set(prev);
+      for (const a of accounts) {
+        if (allVisibleSelected) next.delete(a.id);
+        else next.add(a.id);
+      }
+      return next;
+    });
   };
 
   const create = () => {
     bulkCreate.mutate(
       { publicAccountIds: Array.from(selected), disclosureMode },
-      { onSuccess: () => setSelected(new Set()) },
+      {
+        // Keep the selection on failure so the user can retry.
+        onSuccess: () => setSelected(new Set()),
+        onError: (error) =>
+          toast.error(error instanceof Error ? error.message : "Could not create creators."),
+      },
     );
   };
 
@@ -87,6 +104,17 @@ export function NoodlerBulkCreatePanel() {
         <div className="mt-3 flex items-center justify-center gap-2 py-6 text-xs text-[var(--muted-foreground)]">
           <Loader2 size={14} className="animate-spin" /> Loading...
         </div>
+      ) : eligibleQuery.isError ? (
+        <div className="mt-3 flex flex-col items-center gap-2 py-6 text-center text-xs text-[var(--muted-foreground)]">
+          <span>Could not load eligible accounts.</span>
+          <button
+            type="button"
+            onClick={() => void eligibleQuery.refetch()}
+            className="rounded-md px-2 py-1 font-semibold text-[var(--noodle-accent)] hover:underline"
+          >
+            Retry
+          </button>
+        </div>
       ) : accounts.length === 0 ? (
         <p className="mt-3 py-4 text-center text-xs text-[var(--muted-foreground)]">
           No eligible accounts remain — every account already has a stage profile.
@@ -99,7 +127,7 @@ export function NoodlerBulkCreatePanel() {
               onClick={toggleAll}
               className="text-[0.68rem] font-semibold text-[var(--noodle-accent)] hover:underline"
             >
-              {selected.size === accounts.length ? "Deselect all" : "Select all"}
+              {allVisibleSelected ? "Deselect all" : "Select all"}
             </button>
             <span className="text-[0.68rem] text-[var(--muted-foreground)]">{selected.size} selected</span>
           </div>

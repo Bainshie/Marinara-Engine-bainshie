@@ -8,7 +8,7 @@ import { ChevronDown, RefreshCw } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { Modal } from "../ui/Modal";
 import { Avatar, NOODLE_PINK } from "./NoodleShell";
-import { NOODLE_AUTO_POST_INTENSITIES } from "./noodle-auto-post";
+import { NOODLE_AUTO_POST_INTENSITIES, summarizeRefreshOutcomes } from "./noodle-auto-post";
 import {
   useNoodle,
   useNoodlerAccounts,
@@ -52,10 +52,17 @@ export function NoodlerScheduleManagerModal({ open, onClose }: { open: boolean; 
   const applyBulkAutoPosting = async (patch: { enabled?: boolean; intensity?: NoodleAutoPostingIntensity }) => {
     const ids = selectedIds.size > 0 ? [...selectedIds] : creators.map((profile) => profile.id);
     if (ids.length === 0) return;
-    try {
-      await Promise.all(ids.map((accountId) => updateAutoPosting.mutateAsync({ accountId, ...patch })));
-    } catch (error) {
-      toast.error(errorMessage(error, "Could not update automatic posting."));
+    // Independent PATCHes can partially commit, so summarize settled results instead of
+    // reporting a blanket failure when only some siblings reject.
+    const results = await Promise.allSettled(
+      ids.map((accountId) => updateAutoPosting.mutateAsync({ accountId, ...patch })),
+    );
+    const failed = results.filter((result) => result.status === "rejected").length;
+    if (failed === 0) return;
+    if (failed === ids.length) {
+      toast.error("Could not update automatic posting.");
+    } else {
+      toast.error(`Updated ${ids.length - failed} of ${ids.length}; ${failed} failed.`);
     }
   };
 
@@ -65,7 +72,9 @@ export function NoodlerScheduleManagerModal({ open, onClose }: { open: boolean; 
   const defaultIntensityLabel =
     NOODLE_AUTO_POST_INTENSITIES.find((option) => option.value === defaultIntensity)?.label ?? "Low";
   const selectedCount = selectedIds.size;
-  const allSelected = creators.length > 0 && selectedCount === creators.length;
+  // Membership, not count: polling can swap a selected creator for another of the same
+  // roster length, which would falsely read as "all selected".
+  const allSelected = creators.length > 0 && creators.every((profile) => selectedIds.has(profile.id));
   const bulkBusy = updateAutoPosting.isPending;
 
   const saveSettings = (patch: { autoPostingScheduleEnabled?: boolean; autoPostingDefaultIntensity?: NoodleAutoPostingIntensity }) => {
@@ -130,8 +139,10 @@ export function NoodlerScheduleManagerModal({ open, onClose }: { open: boolean; 
                 disabled={refreshAllNow.isPending}
                 onClick={() =>
                   refreshAllNow.mutate(undefined, {
-                    onSuccess: (result) =>
-                      toast.success(`Refreshed ${result.outcomes.length} creator${result.outcomes.length === 1 ? "" : "s"}.`),
+                    onSuccess: ({ outcomes }) => {
+                      const { ok, message } = summarizeRefreshOutcomes(outcomes);
+                      (ok ? toast.success : toast.error)(message);
+                    },
                     onError: (error) => toast.error(errorMessage(error, "Could not refresh creators.")),
                   })
                 }

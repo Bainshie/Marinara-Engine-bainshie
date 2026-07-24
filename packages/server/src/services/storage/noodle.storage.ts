@@ -18,6 +18,7 @@ import {
   type NoodleAccountSettingsPatchInput,
   type NoodleAccountSubscription,
   type NoodleAccountUpdateInput,
+  type NoodleAutoPostingIntensity,
   type NoodleAvatarCrop,
   type NoodleAuthorSnapshot,
   type NoodleBootstrap,
@@ -795,13 +796,18 @@ export function createNoodleStorage(db: DB) {
     async createPrivateAccount(
       publicAccountId: string,
       stageProfile: NoodleStageProfileInput,
+      defaultIntensity: NoodleAutoPostingIntensity = 1,
     ): Promise<NoodleAccount | null> {
       const publicAccount = await this.getAccountById(publicAccountId);
       if (!publicAccount || (publicAccount.kind !== "persona" && publicAccount.kind !== "character")) return null;
       const timestamp = now();
       const id = newId();
+      const base = emptyNoodleAccountSettings();
       const accountSettings: NoodleAccountSettings = {
-        ...emptyNoodleAccountSettings(),
+        ...base,
+        // Seed the creator's cadence with the configured default so first-enable via any
+        // path (wizard, schedule manager, profile toggle) applies it consistently.
+        scheduler: { autoPosting: { ...defaultAutoPostingSettings(), intensity: defaultIntensity } },
         privacy: {
           identityDisclosure: stageProfile.disclosureMode,
           stagePersonality: stageProfile.stagePersonality,

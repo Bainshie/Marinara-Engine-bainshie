@@ -11,6 +11,7 @@ export const noodleCarryoverModeSchema = z.enum(["off", "conversation", "rolepla
 export const noodleCarryoverTargetSchema = z.enum(["conversation", "roleplay", "game"]);
 export const noodleThemeSchema = z.enum(["system", "light", "dark"]);
 export const noodleIdentityDisclosureSchema = z.enum(["open", "hinted", "secret"]);
+export const noodleAutoPostingIntensitySchema = z.union([z.literal(1), z.literal(3), z.literal(6)]);
 export const NOODLE_PRIVATE_POST_TITLE_MAX_LENGTH = 200;
 export const NOODLE_PRIVATE_POST_CONTENT_MAX_LENGTH = 4000;
 // Exact `Title:\n` + `\n\n` + `Body:\n` framing overhead from serializePrivatePostGuide.
@@ -105,9 +106,9 @@ export const noodleSettingsSchema = z.object({
   enableNoodler: z.boolean().default(DEFAULT_NOODLE_SETTINGS.enableNoodler),
   privateGenerationGuidance: z.string().max(4000).default(DEFAULT_NOODLE_SETTINGS.privateGenerationGuidance),
   autoPostingScheduleEnabled: z.boolean().default(DEFAULT_NOODLE_SETTINGS.autoPostingScheduleEnabled),
-  autoPostingDefaultIntensity: z
-    .union([z.literal(1), z.literal(3), z.literal(6)])
-    .default(DEFAULT_NOODLE_SETTINGS.autoPostingDefaultIntensity),
+  autoPostingDefaultIntensity: noodleAutoPostingIntensitySchema.default(
+    DEFAULT_NOODLE_SETTINGS.autoPostingDefaultIntensity,
+  ),
 });
 
 export const noodleSettingsUpdateSchema = noodleSettingsSchema.partial();
@@ -148,8 +149,6 @@ export const noodleAccountSocialSettingsSchema = z
     notificationsReadAt: z.string().datetime().optional(),
   })
   .strict();
-
-export const noodleAutoPostingIntensitySchema = z.union([z.literal(1), z.literal(3), z.literal(6)]);
 
 export const noodleAutoPostingSettingsSchema = z
   .object({
@@ -244,7 +243,13 @@ export const noodleStageProfileSchema = z.object(noodleStageProfileShape).strict
 export const noodlePrivateAccountCreateSchema = z.object({ stageProfile: noodleStageProfileSchema }).strict();
 export const noodleBulkPrivateAccountCreateSchema = z
   .object({
-    publicAccountIds: z.array(z.string().min(1)).min(1),
+    // Cap and dedupe so one accepted request can't fan out into unbounded or
+    // duplicated sequential create work, and each public account has exactly one outcome.
+    publicAccountIds: z
+      .array(z.string().min(1).max(64))
+      .min(1)
+      .max(100)
+      .refine((ids) => new Set(ids).size === ids.length, { message: "Duplicate account IDs are not allowed." }),
     disclosureMode: noodleIdentityDisclosureSchema,
   })
   .strict();
