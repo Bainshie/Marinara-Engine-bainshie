@@ -30,6 +30,9 @@ This file is the release-notes source of truth for Marinara Engine. Reuse these 
 
 ### Fixed
 
+- Moved the Natural/Random progression choice onto the **Push Story** button: clicking it now opens a Naturally/Randomly selector that arms the chosen mode for the next response, replacing the mode control previously buried in **Chat Settings → Agents → Narrative Director** (#4022).
+- Fetched the full Google Gemini model catalog in the connection editor by following the ListModels pagination, and refreshed the built-in Gemini/Gemma fallback list with the latest entries (#4021).
+- Gave in-app updates realistic install budgets on slow devices — update steps get four times as long on Android/Termux, where switching between stable and staging forces a near-full dependency reinstall — and update failures now report the failing pnpm step, timeouts, and the tail of the process output instead of an opaque `Command failed` (#4020).
 - Refreshed single- and multi-message deletion with the shared modal and control styling, including chroma-driven buttons, selection bars, checkboxes, and selected-message highlights instead of fixed destructive pink or red treatments.
 - Restored the immediate **Thinking…** placeholder in Roleplay and made Conversation and Roleplay expose one reasoning control as soon as the first reasoning chunk arrives. The existing Model Thoughts viewer now stays open and updates with the live reasoning stream, while completed messages retain their saved reasoning control (#3963).
 - Fixed Web Search (and other tools) returning empty or malformed parameters with GPT-5.6/5.5/5.4 and Codex models on the OpenAI Responses API. Streamed function-call arguments are keyed by the response item id rather than the call id, so the tool query is no longer dropped mid-stream (#4010).
