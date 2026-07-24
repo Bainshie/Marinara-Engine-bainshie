@@ -17,7 +17,7 @@ export type NoodlerPrivatePostMediaUpload = {
   extension: string;
 };
 
-export function stageUploadedPrivatePostMedia(
+function stageUploadedPrivatePostMedia(
   accountId: string,
   upload: NoodlerPrivatePostMediaUpload,
 ): { privateMediaPath: string; stagedMedia: StagedGalleryImage } {
@@ -32,6 +32,31 @@ export function stageUploadedPrivatePostMedia(
 /** Access-checked serving URL for a private post's generated image. */
 export function privatePostMediaUrl(postId: string): string {
   return `/api/noodle/noodler/posts/${encodeURIComponent(postId)}/media`;
+}
+
+/**
+ * Promote uploaded private media and persist its stable post-owned references as one
+ * compensating operation. A null result means the target disappeared before persistence.
+ */
+export async function persistPrivatePostWithUploadedMedia<T>(
+  accountId: string,
+  postId: string,
+  upload: NoodlerPrivatePostMediaUpload,
+  persist: (media: { imageUrl: string; privateMediaPath: string }) => Promise<T | null>,
+): Promise<T | null> {
+  const staged = stageUploadedPrivatePostMedia(accountId, upload);
+  try {
+    staged.stagedMedia.promote();
+    const result = await persist({
+      imageUrl: privatePostMediaUrl(postId),
+      privateMediaPath: staged.privateMediaPath,
+    });
+    if (result === null) staged.stagedMedia.compensate();
+    return result;
+  } catch (error) {
+    staged.stagedMedia.compensate();
+    throw error;
+  }
 }
 
 export function readPrivateMediaPath(post: Pick<NoodlerManagedPost, "metadata">): string | null {

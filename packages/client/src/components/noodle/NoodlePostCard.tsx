@@ -1440,7 +1440,7 @@ export function NoodlePostCard({
                 className="min-h-20 w-full resize-none rounded-lg border-0 bg-[var(--noodle-accent)]/5 px-3 py-2 text-[1rem] leading-6 text-[var(--foreground)] outline-none placeholder:text-[var(--muted-foreground)] focus:bg-[var(--noodle-accent)]/10"
                   placeholder="What's simmering, privately?"
                 />
-                {imageEditing && !poll && (
+                {imageEditing && (
                   <PostImageEditControls
                     post={post}
                     editing={imageEditing}
@@ -1464,8 +1464,8 @@ export function NoodlePostCard({
                     }
                     disabled={updatePostPending}
                     title="Edit poll"
-                    description={pollVotes.length > 0 ? "Changing this poll resets its votes." : undefined}
                     closeLabel="Cancel post editing"
+                    action={postEditActions}
                   />
                 )}
                 {!imageEditing && !editingExistingPoll && (

@@ -1,5 +1,5 @@
 import { Plus, Send, Smile, Trash2, X } from "lucide-react";
-import { useRef, useState } from "react";
+import { type ReactNode, useRef, useState } from "react";
 import { noodlePollInputSchema, type NoodlePollInput } from "@marinara-engine/shared";
 import { ConversationMediaPickerPanel } from "../chat/ConversationMediaPickerPanel";
 import { NoodleAnchoredPopover } from "./NoodlePostCard";
@@ -28,6 +28,7 @@ export function NoodlePollComposer({
   disabled = false,
   submitDisabled = false,
   modalOwned = false,
+  action,
 }: {
   value: NoodlePollInput | null;
   onChange: (poll: NoodlePollInput) => void;
@@ -40,6 +41,8 @@ export function NoodlePollComposer({
   disabled?: boolean;
   submitDisabled?: boolean;
   modalOwned?: boolean;
+  /** Replaces the built-in submit button when a parent owns the editor's shared actions. */
+  action?: ReactNode;
 }) {
   const poll = value ?? EMPTY_POLL;
   const [emojiOptionIndex, setEmojiOptionIndex] = useState<number | null>(null);
@@ -171,15 +174,17 @@ export function NoodlePollComposer({
             <Plus size={15} />
             Add option
           </button>
-          <button
-            type="button"
-            onClick={onSubmit}
-            disabled={disabled || submitDisabled || !noodlePollInputSchema.safeParse(value).success}
-            className="inline-flex h-9 items-center gap-1.5 rounded-full bg-[var(--noodle-accent)] px-5 text-xs font-bold text-zinc-950 transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40 [&_svg]:!text-zinc-950"
-          >
-            <Send size={14} />
-            {submitLabel}
-          </button>
+          {action ?? (
+            <button
+              type="button"
+              onClick={onSubmit}
+              disabled={disabled || submitDisabled || !noodlePollInputSchema.safeParse(value).success}
+              className="inline-flex h-9 items-center gap-1.5 rounded-full bg-[var(--noodle-accent)] px-5 text-xs font-bold text-zinc-950 transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40 [&_svg]:!text-zinc-950"
+            >
+              <Send size={14} />
+              {submitLabel}
+            </button>
+          )}
         </div>
       </div>
 

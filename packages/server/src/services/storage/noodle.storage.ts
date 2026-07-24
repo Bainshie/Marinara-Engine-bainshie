@@ -49,7 +49,7 @@ import {
 } from "@marinara-engine/shared";
 import type { DB } from "../../db/connection.js";
 import { isFileUniqueConstraintError } from "../../db/file-schema.js";
-import { isNoodlerHiddenFromViewer } from "../noodle/noodler-access.js";
+import { canViewNoodlerPost, isNoodlerHiddenFromViewer } from "../noodle/noodler-access.js";
 import { nextAutoPostRunAt } from "../noodle/noodle-autopost-cadence.js";
 import {
   noodleAccounts,
@@ -478,17 +478,34 @@ function mapManagedPost(row: PostRow): NoodlerManagedPost {
 function updatePollMetadata(
   metadata: Record<string, unknown>,
   pollUpdate: NoodlePollInput | null | undefined,
-): { metadata: Record<string, unknown>; changed: boolean } {
-  if (pollUpdate === undefined) return { metadata: { ...metadata }, changed: false };
+): Record<string, unknown> {
+  if (pollUpdate === undefined) return { ...metadata };
   const currentPoll = readNoodlePollFromMetadata(metadata);
-  const nextPoll = pollUpdate ? createNoodlePoll(pollUpdate) : null;
+  const generatedPoll = pollUpdate ? createNoodlePoll(pollUpdate) : null;
+  const historicalOptionIds = Array.isArray(metadata.pollOptionIds)
+    ? metadata.pollOptionIds.filter((id): id is string => typeof id === "string")
+    : [];
+  const usedOptionIds = new Set([...historicalOptionIds, ...(currentPoll?.options.map((option) => option.id) ?? [])]);
+  let nextOptionNumber = 1;
+  const nextPoll = generatedPoll
+    ? {
+        ...generatedPoll,
+        options: generatedPoll.options.map((option, index) => {
+          const retainedOption = currentPoll?.options[index];
+          if (retainedOption) return { ...option, id: retainedOption.id };
+          while (usedOptionIds.has(`option-${nextOptionNumber}`)) nextOptionNumber += 1;
+          const id = `option-${nextOptionNumber}`;
+          usedOptionIds.add(id);
+          nextOptionNumber += 1;
+          return { ...option, id };
+        }),
+      }
+    : null;
   const nextMetadata = { ...metadata };
   if (nextPoll) nextMetadata.poll = nextPoll;
   else delete nextMetadata.poll;
-  return {
-    metadata: nextMetadata,
-    changed: JSON.stringify(currentPoll) !== JSON.stringify(nextPoll),
-  };
+  nextMetadata.pollOptionIds = [...usedOptionIds];
+  return nextMetadata;
 }
 
 function mapSubscription(row: SubscriptionRow): NoodleAccountSubscription {
@@ -636,6 +653,51 @@ export function createNoodleStorage(db: DB) {
       if (!authorRows[0] || !currentPoll?.options.some((option) => option.id === optionId)) return null;
 
       const currentActor = mapAccount(actorRows[0]);
+      if (authorVisibility === "private") {
+        const currentAuthor = mapAccount(authorRows[0]);
+        if (
+          currentActor.kind !== "persona" ||
+          currentAuthor.publicAccountId === currentActor.id ||
+          isNoodlerHiddenFromViewer(currentAuthor, currentActor.id)
+        ) {
+          return null;
+        }
+        const currentPostView = mapPost(currentPost);
+        const subscriptionRows =
+          currentPostView.access === "public"
+            ? []
+            : await tx
+                .select()
+                .from(noodleAccountSubscriptions)
+                .where(
+                  and(
+                    eq(noodleAccountSubscriptions.viewerAccountId, currentActor.id),
+                    eq(noodleAccountSubscriptions.creatorAccountId, currentAuthor.id),
+                  ),
+                );
+        const unlockRows =
+          currentPostView.access === "ppv"
+            ? await tx
+                .select()
+                .from(noodlePostUnlocks)
+                .where(
+                  and(
+                    eq(noodlePostUnlocks.viewerAccountId, currentActor.id),
+                    eq(noodlePostUnlocks.postId, currentPostView.id),
+                  ),
+                )
+            : [];
+        if (
+          !canViewNoodlerPost({
+            post: currentPostView,
+            subscribed: subscriptionRows.length > 0,
+            unlockedPostIds: new Set(unlockRows.map((unlock) => unlock.postId)),
+            subscriptionIncludesPpv: currentAuthor.settings.privacy.access.subscriptionIncludesPpv,
+          })
+        ) {
+          return null;
+        }
+      }
       const existingVotes = await tx
         .select()
         .from(noodleInteractions)
@@ -1537,13 +1599,18 @@ export function createNoodleStorage(db: DB) {
     },
 
     async updatePost(id: string, input: NoodlePostUpdateInput): Promise<NoodlePost | null> {
-      const existing = await this.getPostById(id);
-      if (!existing) return null;
-      const pollUpdate = updatePollMetadata(existing.metadata, input.poll);
-      const nextMetadata = pollUpdate.metadata;
-      if (input.imageCrop === null) delete nextMetadata.imageCrop;
-      else if (input.imageCrop !== undefined) nextMetadata.imageCrop = input.imageCrop;
-      await db.transaction(async (tx) => {
+      const updated = await db.transaction(async (tx) => {
+        const postRows = await tx.select().from(noodlePosts).where(eq(noodlePosts.id, id));
+        const existing = postRows[0];
+        if (!existing) return false;
+        const authorRows = await tx
+          .select()
+          .from(noodleAccounts)
+          .where(and(eq(noodleAccounts.id, existing.authorAccountId), eq(noodleAccounts.visibility, "public")));
+        if (!authorRows[0]) return false;
+        const nextMetadata = updatePollMetadata(mapPost(existing).metadata, input.poll);
+        if (input.imageCrop === null) delete nextMetadata.imageCrop;
+        else if (input.imageCrop !== undefined) nextMetadata.imageCrop = input.imageCrop;
         await tx
           .update(noodlePosts)
           .set({
@@ -1560,12 +1627,9 @@ export function createNoodleStorage(db: DB) {
             updatedAt: now(),
           })
           .where(eq(noodlePosts.id, id));
-        if (pollUpdate.changed) {
-          await tx
-            .delete(noodleInteractions)
-            .where(and(eq(noodleInteractions.postId, id), eq(noodleInteractions.type, "vote")));
-        }
+        return true;
       });
+      if (!updated) return null;
       return this.getPostById(id);
     },
 
@@ -1603,29 +1667,34 @@ export function createNoodleStorage(db: DB) {
       input: NoodlePrivatePostUpdateInput,
       media?: { imageUrl: string; privateMediaPath: string },
     ): Promise<NoodlerManagedPost | null> {
-      const existing = await this.getPrivatePostById(id);
-      if (!existing) return null;
-      const pollUpdate = updatePollMetadata(existing.metadata, input.poll);
-      const nextMetadata = pollUpdate.metadata;
       const imageChanged = Boolean(media || input.removeImage);
-      if (imageChanged) {
-        for (const key of [
-          "privateMediaPath",
-          "imageGenerated",
-          "imageProvider",
-          "imageModel",
-          "imageStyleProfileId",
-          "imageGenerationFailed",
-          "imageGenerationError",
-          "imagePendingReview",
-        ]) {
-          delete nextMetadata[key];
+      const updated = await db.transaction(async (tx) => {
+        const postRows = await tx.select().from(noodlePosts).where(eq(noodlePosts.id, id));
+        const existing = postRows[0];
+        if (!existing) return false;
+        const authorRows = await tx
+          .select()
+          .from(noodleAccounts)
+          .where(and(eq(noodleAccounts.id, existing.authorAccountId), eq(noodleAccounts.visibility, "private")));
+        if (!authorRows[0]) return false;
+        const nextMetadata = updatePollMetadata(mapManagedPost(existing).metadata, input.poll);
+        if (imageChanged) {
+          for (const key of [
+            "privateMediaPath",
+            "imageGenerated",
+            "imageProvider",
+            "imageModel",
+            "imageStyleProfileId",
+            "imageGenerationFailed",
+            "imageGenerationError",
+            "imagePendingReview",
+          ]) {
+            delete nextMetadata[key];
+          }
         }
-      }
-      if (media) nextMetadata.privateMediaPath = media.privateMediaPath;
-      if (input.removeImage || input.imageCrop === null) delete nextMetadata.imageCrop;
-      else if (input.imageCrop !== undefined) nextMetadata.imageCrop = input.imageCrop;
-      await db.transaction(async (tx) => {
+        if (media) nextMetadata.privateMediaPath = media.privateMediaPath;
+        if (input.removeImage || input.imageCrop === null) delete nextMetadata.imageCrop;
+        else if (input.imageCrop !== undefined) nextMetadata.imageCrop = input.imageCrop;
         await tx
           .update(noodlePosts)
           .set({
@@ -1643,12 +1712,9 @@ export function createNoodleStorage(db: DB) {
             updatedAt: now(),
           })
           .where(eq(noodlePosts.id, id));
-        if (pollUpdate.changed) {
-          await tx
-            .delete(noodleInteractions)
-            .where(and(eq(noodleInteractions.postId, id), eq(noodleInteractions.type, "vote")));
-        }
+        return true;
       });
+      if (!updated) return null;
       return this.getPrivatePostById(id);
     },
 

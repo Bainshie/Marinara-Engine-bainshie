@@ -15,9 +15,8 @@ import { createConnectionsStorage } from "../storage/connections.storage.js";
 import { createNoodleStorage } from "../storage/noodle.storage.js";
 import { generatePrivatePost } from "./noodle-private-generation.service.js";
 import {
-  privatePostMediaUrl,
+  persistPrivatePostWithUploadedMedia,
   readPrivateMediaPath,
-  stageUploadedPrivatePostMedia,
   unlinkPrivateMedia,
   type NoodlerPrivatePostMediaUpload,
 } from "./noodle-private-media.js";
@@ -140,10 +139,8 @@ export async function createNoodlePrivatePost(
 
   const locked = await tryNoodlePrivateAccountOperation(input.targetAccountId, async () => {
     const postId = media ? newId() : undefined;
-    const staged = media ? stageUploadedPrivatePostMedia(input.targetAccountId, media) : null;
-    try {
-      staged?.stagedMedia.promote();
-      const post = await noodle.createPrivatePost({
+    const persist = (persistedMedia?: { imageUrl: string; privateMediaPath: string }) =>
+      noodle.createPrivatePost({
         id: postId,
         authorAccountId: input.targetAccountId,
         title: input.title,
@@ -151,22 +148,19 @@ export async function createNoodlePrivatePost(
         source: "manual",
         access: input.access,
         ppvPrice: input.access === "ppv" ? (input.ppvPrice ?? null) : null,
-        imageUrl: postId ? privatePostMediaUrl(postId) : null,
+        imageUrl: persistedMedia?.imageUrl ?? null,
         metadata: {
           ...(input.poll ? { poll: createNoodlePoll(input.poll) } : {}),
           ...(input.imageCrop ? { imageCrop: input.imageCrop } : {}),
-          ...(staged ? { privateMediaPath: staged.privateMediaPath } : {}),
+          ...(persistedMedia ? { privateMediaPath: persistedMedia.privateMediaPath } : {}),
         },
       });
-      if (!post) {
-        staged?.stagedMedia.compensate();
-        return { status: "private_account_not_found" } as const;
-      }
-      return { status: "created", post } as const;
-    } catch (error) {
-      staged?.stagedMedia.compensate();
-      throw error;
-    }
+    const post =
+      media && postId
+        ? await persistPrivatePostWithUploadedMedia(input.targetAccountId, postId, media, persist)
+        : await persist();
+    if (!post) return { status: "private_account_not_found" } as const;
+    return { status: "created", post } as const;
   });
   return locked.acquired ? locked.value : { status: "busy" };
 }
@@ -188,23 +182,13 @@ export async function updateNoodlePrivatePostWithMedia(
     const current = await noodle.getPrivatePostById(id);
     if (!current) return { status: "private_post_not_found" } as const;
     const oldPath = readPrivateMediaPath(current);
-    const staged = stageUploadedPrivatePostMedia(current.authorAccountId, media);
-    try {
-      staged.stagedMedia.promote();
-      const post = await noodle.updatePrivatePost(id, input, {
-        imageUrl: privatePostMediaUrl(id),
-        privateMediaPath: staged.privateMediaPath,
-      });
-      if (!post) {
-        staged.stagedMedia.compensate();
-        return { status: "private_post_not_found" } as const;
-      }
-      if (oldPath !== staged.privateMediaPath) unlinkPrivateMedia(oldPath);
-      return { status: "updated", post } as const;
-    } catch (error) {
-      staged.stagedMedia.compensate();
-      throw error;
-    }
+    const post = await persistPrivatePostWithUploadedMedia(current.authorAccountId, id, media, (persistedMedia) =>
+      noodle.updatePrivatePost(id, input, persistedMedia),
+    );
+    if (!post) return { status: "private_post_not_found" } as const;
+    const nextPath = readPrivateMediaPath(post);
+    if (oldPath !== nextPath) unlinkPrivateMedia(oldPath);
+    return { status: "updated", post } as const;
   });
   return locked.acquired ? locked.value : { status: "busy" };
 }

@@ -2881,18 +2881,17 @@ function PrivatePostComposer({
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
   const [pendingImage, setPendingImage] = useState<PendingPrivateImage | null>(null);
   const [imageUrlDraft, setImageUrlDraft] = useState("");
-  const [localOperation, setLocalOperation] = useState<"submission" | null>(null);
+  const [submitting, setSubmitting] = useState(false);
   const imageFileRef = useRef<HTMLInputElement | null>(null);
   const imageToolRef = useRef<HTMLDivElement | null>(null);
   const pollToolRef = useRef<HTMLDivElement | null>(null);
   const mediaToolRef = useRef<HTMLDivElement | null>(null);
   const coinToolRef = useRef<HTMLDivElement | null>(null);
   const composerBusyRef = useRef(false);
-  const draftRevisionRef = useRef(0);
   const { title, body, access, ppvPrice, image, poll } = draft;
   const hasDraft = pendingImage !== null || !isEmptyPrivatePostDraft(draft);
   const parsedPrice = Number(ppvPrice);
-  const composerBusy = localOperation !== null || manualPending || guidePending;
+  const composerBusy = submitting || manualPending || guidePending;
   composerBusyRef.current = composerBusy;
   const guide = serializePrivatePostGuide(title, body);
 
@@ -2907,15 +2906,11 @@ function PrivatePostComposer({
     onDraftChange(patch);
     return true;
   };
-  const finishOperation = (operation: "submission") => {
-    setLocalOperation((current) => (current === operation ? null : current));
-  };
   const discardPendingImage = () => {
     setPendingImage(null);
   };
 
   const clearDraft = () => {
-    draftRevisionRef.current += 1;
     onClearDraft();
     setPostError(null);
     setGuideError(null);
@@ -2928,7 +2923,6 @@ function PrivatePostComposer({
   };
   const discardDraft = () => {
     if (composerBusyRef.current) return;
-    draftRevisionRef.current += 1;
     onDiscardDraft();
     setPostError(null);
     setGuideError(null);
@@ -2941,7 +2935,6 @@ function PrivatePostComposer({
   };
   const removeImage = () => {
     if (!image || composerBusyRef.current) return;
-    draftRevisionRef.current += 1;
     onDraftChange({ image: null });
     setPendingImage(null);
   };
@@ -2976,7 +2969,6 @@ function PrivatePostComposer({
     if (composerBusyRef.current) return;
     const pending = pendingImage;
     if (!pending) return;
-    draftRevisionRef.current += 1;
     setAttachmentError(null);
     onDraftChange({ image: { source: pending.source, crop } });
     setPendingImage(null);
@@ -3043,16 +3035,15 @@ function PrivatePostComposer({
       return;
     }
     try {
-      draftRevisionRef.current += 1;
       composerBusyRef.current = true;
-      setLocalOperation("submission");
+      setSubmitting(true);
       setActiveTool(null);
       await onManualPost(submission());
       clearDraft();
     } catch (error) {
       setPostError(errorMessage(error, "Could not publish this post."));
     } finally {
-      finishOperation("submission");
+      setSubmitting(false);
     }
   };
 
@@ -3088,16 +3079,15 @@ function PrivatePostComposer({
       return;
     }
     try {
-      draftRevisionRef.current += 1;
       composerBusyRef.current = true;
-      setLocalOperation("submission");
+      setSubmitting(true);
       setActiveTool(null);
       await onGuidedPost(submission());
       clearDraft();
     } catch (error) {
       setGuideError(errorMessage(error, "Could not generate this post."));
     } finally {
-      finishOperation("submission");
+      setSubmitting(false);
     }
   };
 

@@ -28,8 +28,8 @@ import { createPromptOverridesStorage } from "../storage/prompt-overrides.storag
 import { formatNoodleMessagesForLog } from "./noodle-generation-log.js";
 import { generatePrivatePostImage } from "./noodle-private-images.service.js";
 import {
+  persistPrivatePostWithUploadedMedia,
   privatePostMediaUrl,
-  stageUploadedPrivatePostMedia,
   type NoodlerPrivatePostMediaUpload,
 } from "./noodle-private-media.js";
 import type { NoodleImagePromptReviewItem } from "./noodle-public-images.service.js";
@@ -317,21 +317,15 @@ export async function generatePrivatePost(
 
   if (input.media) {
     const postId = newId();
-    const staged = stageUploadedPrivatePostMedia(account.id, input.media);
-    try {
-      staged.stagedMedia.promote();
-      return {
-        post: await persist({
-          id: postId,
-          imageUrl: privatePostMediaUrl(postId),
-          metadata: { privateMediaPath: staged.privateMediaPath },
-        }),
-        imagePromptReview: null,
-      };
-    } catch (error) {
-      staged.stagedMedia.compensate();
-      throw error;
-    }
+    const post = await persistPrivatePostWithUploadedMedia(account.id, postId, input.media, (persistedMedia) =>
+      persist({
+        id: postId,
+        imageUrl: persistedMedia.imageUrl,
+        metadata: { privateMediaPath: persistedMedia.privateMediaPath },
+      }),
+    );
+    if (!post) throw new Error("Failed to persist the generated private NoodleR post.");
+    return { post, imagePromptReview: null };
   }
 
   if (!draftImagePrompt) return { post: await persist(), imagePromptReview: null };

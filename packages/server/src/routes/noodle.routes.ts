@@ -204,6 +204,44 @@ async function importNoodlerMedia(imageUrl: string): Promise<NoodlerMediaUpload>
   }
 }
 
+type DecodedNoodlerMediaRequest<T> =
+  | { success: true; data: T; media: NoodlerMediaUpload | undefined }
+  | { success: false; error: z.ZodError };
+
+async function decodeNoodlerMediaRequest<
+  WithMediaSchema extends z.ZodTypeAny,
+  WithoutMediaSchema extends z.ZodTypeAny,
+>(
+  req: FastifyRequest,
+  schemas: { withMedia: WithMediaSchema; withoutMedia: WithoutMediaSchema },
+): Promise<DecodedNoodlerMediaRequest<z.output<WithMediaSchema> | z.output<WithoutMediaSchema>>> {
+  let payload: unknown = req.body;
+  let media: NoodlerMediaUpload | undefined;
+  if (req.headers["content-type"]?.startsWith("multipart/form-data")) {
+    const multipart = await readNoodlerMultipart(req);
+    payload = multipart.payload;
+    media = multipart.media;
+  }
+
+  const parsedForUrl = schemas.withMedia.safeParse(payload);
+  const uploadedImageUrl =
+    parsedForUrl.success &&
+    typeof (parsedForUrl.data as { uploadedImageUrl?: unknown }).uploadedImageUrl === "string"
+      ? (parsedForUrl.data as { uploadedImageUrl: string }).uploadedImageUrl
+      : undefined;
+  if (uploadedImageUrl) {
+    if (media) {
+      throw new NoodlerMediaRequestError("Choose either an uploaded file or an image URL.", 400);
+    }
+    media = await importNoodlerMedia(uploadedImageUrl);
+  }
+
+  const parsed = (media ? schemas.withMedia : schemas.withoutMedia).safeParse(payload);
+  return parsed.success
+    ? { success: true, data: parsed.data, media }
+    : { success: false, error: parsed.error };
+}
+
 function sendNoodlerMediaError(reply: FastifyReply, error: unknown) {
   const tooLarge = (error as { code?: string }).code === "FST_REQ_FILE_TOO_LARGE";
   const statusCode =
@@ -461,27 +499,19 @@ export async function noodleRoutes(app: FastifyInstance) {
   app.post("/noodler/posts", async (req, reply) => {
     const settings = await noodle.getSettings();
     if (!settings.enableNoodler) return reply.code(404).send({ error: "Not Found" });
-    let payload: unknown = req.body;
-    let media: NoodlerMediaUpload | undefined;
+    let decoded: DecodedNoodlerMediaRequest<
+      z.output<typeof noodlePrivatePostCreateWithMediaSchema> | z.output<typeof noodlePrivatePostCreateSchema>
+    >;
     try {
-      if (req.headers["content-type"]?.startsWith("multipart/form-data")) {
-        const multipart = await readNoodlerMultipart(req);
-        payload = multipart.payload;
-        media = multipart.media;
-      }
-      const parsedForUrl = noodlePrivatePostCreateWithMediaSchema.safeParse(payload);
-      if (parsedForUrl.success && parsedForUrl.data.uploadedImageUrl) {
-        if (media) {
-          throw new NoodlerMediaRequestError("Choose either an uploaded file or an image URL.", 400);
-        }
-        media = await importNoodlerMedia(parsedForUrl.data.uploadedImageUrl);
-      }
+      decoded = await decodeNoodlerMediaRequest(req, {
+        withMedia: noodlePrivatePostCreateWithMediaSchema,
+        withoutMedia: noodlePrivatePostCreateSchema,
+      });
     } catch (error) {
       return sendNoodlerMediaError(reply, error);
     }
-    const parsed = (media ? noodlePrivatePostCreateWithMediaSchema : noodlePrivatePostCreateSchema).safeParse(payload);
-    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
-    const result = await createNoodlePrivatePost(app.db, parsed.data, media);
+    if (!decoded.success) return reply.code(400).send({ error: decoded.error.flatten() });
+    const result = await createNoodlePrivatePost(app.db, decoded.data, decoded.media);
     if (result.status === "created") return reply.code(201).send(result.post);
     if (result.status === "busy") {
       return reply.code(409).send({ error: "Another operation for this NoodleR account is already running." });
@@ -1215,29 +1245,21 @@ export async function noodleRoutes(app: FastifyInstance) {
   });
 
   app.post("/refresh", async (req, reply) => {
-    let payload: unknown = req.body;
-    let media: NoodlerMediaUpload | undefined;
+    let decoded: DecodedNoodlerMediaRequest<
+      z.output<typeof noodlePrivateGenerationRequestSchema> | z.output<typeof noodleGenerationRequestSchema>
+    >;
     try {
-      if (req.headers["content-type"]?.startsWith("multipart/form-data")) {
-        const multipart = await readNoodlerMultipart(req);
-        payload = multipart.payload;
-        media = multipart.media;
-      }
-      const parsedForUrl = noodlePrivateGenerationRequestSchema.safeParse(payload);
-      if (parsedForUrl.success && parsedForUrl.data.uploadedImageUrl) {
-        if (media) {
-          throw new NoodlerMediaRequestError("Choose either an uploaded file or an image URL.", 400);
-        }
-        media = await importNoodlerMedia(parsedForUrl.data.uploadedImageUrl);
-      }
+      decoded = await decodeNoodlerMediaRequest(req, {
+        withMedia: noodlePrivateGenerationRequestSchema,
+        withoutMedia: noodleGenerationRequestSchema,
+      });
     } catch (error) {
       return sendNoodlerMediaError(reply, error);
     }
-    const parsed = (media ? noodlePrivateGenerationRequestSchema : noodleGenerationRequestSchema).safeParse(payload);
-    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
-    if (parsed.data.mode === "private") {
+    if (!decoded.success) return reply.code(400).send({ error: decoded.error.flatten() });
+    if (decoded.data.mode === "private") {
       try {
-        const result = await generateNoodlePrivatePost(app.db, parsed.data, media);
+        const result = await generateNoodlePrivatePost(app.db, decoded.data, decoded.media);
         if (result.status === "generated") {
           return result.imagePromptReview
             ? { ...result.post, imagePromptReview: result.imagePromptReview }
@@ -1260,7 +1282,7 @@ export async function noodleRoutes(app: FastifyInstance) {
       }
     }
     const settings = await noodle.getSettings();
-    const connectionId = parsed.data.connectionId ?? settings.generationConnectionId;
+    const connectionId = decoded.data.connectionId ?? settings.generationConnectionId;
     if (!connectionId) return reply.code(400).send({ error: "Select a Noodle generation connection first." });
     const conn = await connections.getWithKey(connectionId);
     if (!conn) return reply.code(404).send({ error: "Noodle generation connection not found" });
@@ -1291,10 +1313,10 @@ export async function noodleRoutes(app: FastifyInstance) {
         imageConnection,
         imageCaptioning,
         settings,
-        personaId: parsed.data.personaId,
-        timeZone: normalizePromptTimeZone(parsed.data.timeZone),
-        debugMode: parsed.data.debugMode === true,
-        reviewImagePromptsBeforeSend: parsed.data.reviewImagePromptsBeforeSend === true,
+        personaId: decoded.data.personaId,
+        timeZone: normalizePromptTimeZone(decoded.data.timeZone),
+        debugMode: decoded.data.debugMode === true,
+        reviewImagePromptsBeforeSend: decoded.data.reviewImagePromptsBeforeSend === true,
       });
       if (!generated.ok) return reply.code(400).send({ error: generated.error });
       return generated.result;
