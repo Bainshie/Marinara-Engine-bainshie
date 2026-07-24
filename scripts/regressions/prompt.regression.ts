@@ -80,6 +80,7 @@ import {
   formatNoodleTimelineForPrompt,
   NOODLE_PERSONA_IDENTITY_INSTRUCTION,
 } from "../../packages/server/src/services/noodle/noodle-prompt.js";
+import { buildPartyRecruitCardPrompt } from "../../packages/server/src/services/game/gm-prompts.js";
 
 const personaA = {
   id: "noodle-account-a",
@@ -140,6 +141,27 @@ assert.match(formattedPersonaTimeline, /Persona A \(@persona_a; persona accountK
 assert.match(formattedPersonaTimeline, /Persona B \(@persona_b; persona accountKey=persona:persona-b\)/);
 assert.match(formattedPersonaTimeline, /replyId=reply-b.*accountKey=persona:persona-b/);
 assert.match(NOODLE_PERSONA_IDENTITY_INSTRUCTION, /separate user identity/);
+
+const regeneratedSheetPrompt = buildPartyRecruitCardPrompt({
+  targetCharacterName: "Nadia",
+  targetCharacterCard: "Name: Nadia\nPersonality: Resolute\nScenario: The flooded vault",
+  currentPartyNames: ["Alex", "Nadia"],
+  currentPartyCards: '[{"name":"Alex","class":"Warden"}]',
+  existingTargetCard: '{"name":"Nadia","class":"bad log output"}',
+  worldOverview: "A drowned city beneath a glass sea.",
+  storyArc: "Recover the seven tide keys.",
+  plotTwists: ["The cartographer serves the Leviathan."],
+  campaignHistory: '[{"sessionNumber":1,"summary":"The party opened the first lock."}]',
+  currentState: '{"location":"Flooded Vault"}',
+  language: "Polish",
+  purpose: "regenerate",
+});
+assert.match(regeneratedSheetPrompt, /Regenerate one clean JSON character card/u);
+assert.match(regeneratedSheetPrompt, /<existing_target_party_sheet>/u);
+assert.match(regeneratedSheetPrompt, /<campaign_history>/u);
+assert.match(regeneratedSheetPrompt, /Write every natural-language string value in Polish/u);
+assert.match(regeneratedSheetPrompt, /Scenario: The flooded vault/u);
+assert.doesNotMatch(regeneratedSheetPrompt, /A new companion is joining the party/u);
 
 const REGRESSION_AGENT_IDS = [
   "about-me-keeper",
@@ -2263,7 +2285,10 @@ const cases: RegressionCase[] = [
       assert.doesNotMatch(LTX_DIRECTOR_GAME_VIDEO_PROMPT_TEMPLATE, /\$\{illustrationPrompt\}/);
       assert.doesNotMatch(LTX_DIRECTOR_GAME_VIDEO_PROMPT_TEMPLATE, /\$\{sourceIllustrationLine\}/);
       assert.doesNotMatch(LTX_DIRECTOR_GAME_VIDEO_PROMPT_TEMPLATE, /\$\{durationSeconds\}|\$\{aspectRatio\}/);
-      assert.doesNotMatch(LTX_DIRECTOR_GAME_VIDEO_PROMPT_TEMPLATE, /\$\{charactersLine\}|\$\{settingLine\}|\$\{artStyleLine\}/);
+      assert.doesNotMatch(
+        LTX_DIRECTOR_GAME_VIDEO_PROMPT_TEMPLATE,
+        /\$\{charactersLine\}|\$\{settingLine\}|\$\{artStyleLine\}/,
+      );
       assert.match(plannerPreset?.promptTemplate ?? "", /4-8 descriptive sentences total/);
       assert.match(plannerPreset?.promptTemplate ?? "", /one primary subject or object movement/);
       assert.match(plannerPreset?.promptTemplate ?? "", /Do not ask LTX to render exact readable text/);
@@ -3174,10 +3199,7 @@ const cases: RegressionCase[] = [
         },
       });
 
-      assert.equal(
-        ltxDirectorGlobalPrompt,
-        "Continuous image-to-video shot beginning from the supplied first frame.",
-      );
+      assert.equal(ltxDirectorGlobalPrompt, "Continuous image-to-video shot beginning from the supplied first frame.");
       assert.doesNotMatch(
         ltxDirectorGlobalPrompt,
         /Mira|Sol|sunset|rain|cel-shaded|runs through|raises her sword|storm of sparks|Arrival action|image-789|6-second|16:9/,

@@ -8305,6 +8305,8 @@ export async function gameRoutes(app: FastifyInstance) {
     if (!partyNames.some((name) => characterNamesLikelyMatch(name, targetName))) {
       partyNames.unshift(targetName);
     }
+    const otherPartyCards =
+      targetCardIndex >= 0 ? currentCards.filter((_, index) => index !== targetCardIndex) : currentCards;
 
     const latestState = await stateStore.getLatest(input.chatId);
     const previousSessionSummaries = Array.isArray(meta.gamePreviousSessionSummaries)
@@ -8314,14 +8316,7 @@ export async function gameRoutes(app: FastifyInstance) {
       targetCharacterName: targetName,
       targetCharacterCard,
       currentPartyNames: Array.from(new Set(partyNames)),
-      currentPartyCards:
-        currentCards.length > 1
-          ? JSON.stringify(
-              currentCards.filter((_, index) => index !== targetCardIndex),
-              null,
-              2,
-            )
-          : null,
+      currentPartyCards: otherPartyCards.length > 0 ? JSON.stringify(otherPartyCards, null, 2) : null,
       existingTargetCard: existingTargetCard ? JSON.stringify(existingTargetCard, null, 2) : null,
       worldOverview: (meta.gameWorldOverview as string) || null,
       storyArc: (meta.gameStoryArc as string) || null,
@@ -8444,7 +8439,9 @@ export async function gameRoutes(app: FastifyInstance) {
     }
 
     const preservedRpgStats =
-      existingTargetCard?.rpgStats && typeof existingTargetCard.rpgStats === "object"
+      existingTargetCard?.rpgStats &&
+      typeof existingTargetCard.rpgStats === "object" &&
+      !Array.isArray(existingTargetCard.rpgStats)
         ? existingTargetCard.rpgStats
         : sourceRpgStats;
     const gameCard = {

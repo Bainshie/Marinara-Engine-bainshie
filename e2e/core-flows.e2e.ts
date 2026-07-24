@@ -2439,6 +2439,219 @@ test("game widget edits preserve their live numeric values", async ({ request },
   }
 });
 
+test("Game character sheet Retry remains a draft until Save", async ({ page, request }, testInfo) => {
+  const suffix = Date.now().toString(36);
+  const characterName = `Retry Sheet Character ${suffix}`;
+  const originalCard = {
+    name: characterName,
+    shortDescription: "Original saved sheet.",
+    class: "Scout",
+    abilities: ["Trail Sense"],
+    strengths: ["Patience"],
+    weaknesses: ["Deep water"],
+    extra: { oath: "Find the tide keys" },
+    rpgStats: {
+      attributes: [{ name: "WIS", value: 14 }],
+      hp: { value: 24, max: 24 },
+      pools: [{ name: "HP", value: 24, max: 24, color: "#a78bfa" }],
+    },
+  };
+  const regeneratedCard = {
+    name: characterName,
+    shortDescription: "A tide-wise scout shaped by the flooded vault.",
+    class: "Chronomancer",
+    abilities: ["Tide Step", "Read the Lost Hour"],
+    strengths: ["Calm under pressure"],
+    weaknesses: ["Overextends for the party"],
+    extra: { oath: "Recover every tide key" },
+    rpgStats: { hp: { value: 1, max: 1 } },
+  };
+  const providerRequests: Array<Record<string, unknown>> = [];
+  const providerServer = createServer((incoming, response) => {
+    const chunks: Buffer[] = [];
+    incoming.on("data", (chunk) => chunks.push(Buffer.from(chunk)));
+    incoming.on("end", () => {
+      const body = Buffer.concat(chunks).toString("utf8");
+      if (incoming.method !== "POST" || incoming.url !== "/v1/chat/completions") {
+        response.writeHead(404, { "Content-Type": "application/json" });
+        response.end(JSON.stringify({ error: "Unexpected test provider request" }));
+        return;
+      }
+      providerRequests.push(JSON.parse(body) as Record<string, unknown>);
+      response.writeHead(200, { "Content-Type": "application/json" });
+      response.end(
+        JSON.stringify({
+          id: `character-sheet-retry-${providerRequests.length}`,
+          object: "chat.completion",
+          created: Math.floor(Date.now() / 1000),
+          model: "character-sheet-retry-model",
+          choices: [
+            {
+              index: 0,
+              message: { role: "assistant", content: JSON.stringify(regeneratedCard) },
+              finish_reason: "stop",
+            },
+          ],
+          usage: { prompt_tokens: 100, completion_tokens: 80, total_tokens: 180 },
+        }),
+      );
+    });
+  });
+  await new Promise<void>((resolve) => providerServer.listen(0, "127.0.0.1", resolve));
+  const providerAddress = providerServer.address();
+  if (!providerAddress || typeof providerAddress === "string") {
+    throw new Error("Character sheet retry provider fixture did not bind to a TCP port");
+  }
+  const connectionResponse = await request.post("/api/connections", {
+    data: {
+      name: `Character Sheet Retry Provider ${suffix}`,
+      provider: "custom",
+      baseUrl: `http://127.0.0.1:${providerAddress.port}/v1`,
+      apiKey: "e2e-character-sheet-retry",
+      model: "character-sheet-retry-model",
+      maxContext: 128000,
+    },
+  });
+  expect(connectionResponse.ok()).toBeTruthy();
+  const connection = (await connectionResponse.json()) as { id: string };
+  const characterResponse = await request.post("/api/characters", {
+    data: {
+      data: {
+        name: characterName,
+        description: "A careful scout who reads the weather.",
+        personality: "Patient and observant.",
+        scenario: "Traveling through a drowned city.",
+      },
+    },
+  });
+  expect(characterResponse.ok()).toBeTruthy();
+  const character = (await characterResponse.json()) as { id: string };
+
+  const chatResponse = await request.post("/api/chats", {
+    data: {
+      name: `Character Sheet Retry Smoke ${suffix}`,
+      mode: "game",
+      characterIds: [character.id],
+      connectionId: connection.id,
+    },
+  });
+  expect(chatResponse.ok()).toBeTruthy();
+  const chat = (await chatResponse.json()) as { id: string };
+  const metadataResponse = await request.patch(`/api/chats/${chat.id}/metadata`, {
+    data: {
+      gameId: `character-sheet-retry-${suffix}`,
+      gameSessionStatus: "active",
+      gameSessionNumber: 1,
+      gameIntroPresented: true,
+      gamePartyCharacterIds: [character.id],
+      gameCharacterCards: [originalCard],
+      gameWorldOverview: "A drowned city beneath a glass sea.",
+      gameStoryArc: "Recover the seven tide keys before the Leviathan wakes.",
+      gamePlotTwists: ["The cartographer serves the Leviathan."],
+      gamePreviousSessionSummaries: [
+        { sessionNumber: 0, summary: "The party opened the first lock and found a broken tide compass." },
+      ],
+      gameSetupConfig: {
+        genre: "Fantasy",
+        setting: "A drowned city beneath a glass sea",
+        tone: "Adventurous",
+        difficulty: "Normal",
+        playerGoals: "Recover the seven tide keys",
+        gmMode: "standalone",
+        rating: "sfw",
+        partyCharacterIds: [character.id],
+        language: "English",
+      },
+    },
+  });
+  expect(metadataResponse.ok()).toBeTruthy();
+  expect(
+    (
+      await request.post(`/api/chats/${chat.id}/messages`, {
+        data: { role: "assistant", content: "The party reaches the first flooded vault." },
+      })
+    ).ok(),
+  ).toBeTruthy();
+
+  await page.addInitScript(
+    ({ activeChatId }) => {
+      localStorage.setItem("marinara-active-chat-id", activeChatId);
+      const stored = JSON.parse(localStorage.getItem("marinara-engine-ui") || '{"state":{}}') as {
+        state?: Record<string, unknown>;
+        version?: number;
+      };
+      localStorage.setItem(
+        "marinara-engine-ui",
+        JSON.stringify({
+          ...stored,
+          state: { ...(stored.state ?? {}), gameTutorialDisabled: true },
+          version: 82,
+        }),
+      );
+    },
+    { activeChatId: chat.id },
+  );
+
+  const readStoredCard = async () => {
+    const response = await request.get(`/api/chats/${chat.id}`);
+    const storedChat = (await response.json()) as { metadata: string | Record<string, unknown> };
+    const metadata =
+      typeof storedChat.metadata === "string"
+        ? (JSON.parse(storedChat.metadata) as Record<string, unknown>)
+        : storedChat.metadata;
+    return (metadata.gameCharacterCards as Array<Record<string, unknown>>)[0];
+  };
+
+  try {
+    await page.goto("/");
+    if (testInfo.project.name.includes("mobile")) {
+      await page.getByTitle("Open party members").click();
+    }
+    await page.getByTitle(`${characterName} - Click to open character sheet`).filter({ visible: true }).click();
+    const sheet = page.locator('[data-component="GameCharacterSheet"]');
+    await expect(sheet).toBeVisible();
+    await sheet.getByRole("button", { name: "Edit sheet" }).click();
+
+    const classInput = sheet.getByPlaceholder("Class or role");
+    await expect(classInput).toHaveValue("Scout");
+    await sheet.getByRole("button", { name: "Retry", exact: true }).click();
+    await expect(classInput).toHaveValue("Chronomancer");
+    expect((await readStoredCard())?.class).toBe("Scout");
+
+    await sheet.getByRole("button", { name: "Cancel", exact: true }).click();
+    await sheet.getByRole("button", { name: "Edit sheet" }).click();
+    await expect(classInput).toHaveValue("Scout");
+
+    await sheet.getByRole("button", { name: "Retry", exact: true }).click();
+    await expect(classInput).toHaveValue("Chronomancer");
+    await sheet.getByRole("button", { name: "Save sheet" }).click();
+    await expect(page.getByRole("heading", { name: characterName })).toHaveCount(0);
+    await expect.poll(async () => (await readStoredCard())?.class).toBe("Chronomancer");
+    expect((await readStoredCard())?.rpgStats).toEqual(originalCard.rpgStats);
+    expect(providerRequests).toHaveLength(2);
+    for (const providerRequest of providerRequests) {
+      expect(providerRequest).toMatchObject({
+        model: "character-sheet-retry-model",
+        stream: false,
+      });
+      const prompt = JSON.stringify(providerRequest.messages);
+      expect(prompt).toContain("A careful scout who reads the weather.");
+      expect(prompt).toContain("The party reaches the first flooded vault.");
+      expect(prompt).toContain("The party opened the first lock and found a broken tide compass.");
+      expect(prompt).toContain(`Regenerate only ${characterName}'s character sheet now.`);
+    }
+  } finally {
+    await Promise.all([
+      request.delete(`/api/chats/${chat.id}`).catch(() => undefined),
+      request.delete(`/api/characters/${character.id}`).catch(() => undefined),
+      request.delete(`/api/connections/${connection.id}`).catch(() => undefined),
+    ]);
+    await new Promise<void>((resolve, reject) => {
+      providerServer.close((error) => (error ? reject(error) : resolve()));
+    });
+  }
+});
+
 test("NPC avatar uploads accept Cyrillic character names", async ({ request }, testInfo) => {
   test.skip(!testInfo.project.name.includes("desktop"), "NPC avatar upload compatibility is covered on desktop.");
 

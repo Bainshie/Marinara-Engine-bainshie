@@ -447,6 +447,7 @@ export function GameCharacterSheet({
       onClick={onClose}
     >
       <div
+        data-component="GameCharacterSheet"
         className={cn(
           NEUTRAL_SURFACE_VARIABLES,
           "marinara-chat-popover relative flex max-h-[85vh] w-full max-w-2xl flex-col overflow-hidden rounded-xl border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--marinara-chat-chrome-panel-bg)] shadow-2xl supports-[height:100dvh]:max-h-[85dvh]",
