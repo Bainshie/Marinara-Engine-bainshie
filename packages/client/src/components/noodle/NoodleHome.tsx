@@ -3266,7 +3266,7 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
                         <button
                           type="button"
                           disabled={selectedCount === 0 || bulkBusy}
-                          onClick={() => applyBulkAutoPosting({ enabled: true, intensity: defaultIntensity })}
+                          onClick={() => applyBulkAutoPosting({ enabled: true })}
                           className="h-8 rounded-full bg-[var(--background)] px-3 text-xs font-semibold ring-1 ring-[var(--border)] hover:bg-[var(--accent)] disabled:opacity-40"
                         >
                           Enable
@@ -3356,9 +3356,7 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
                               disabled={updateNoodlerAutoPosting.isPending}
                               onChange={(event) =>
                                 updateNoodlerAutoPosting.mutate(
-                                  event.target.checked
-                                    ? { accountId: profile.id, enabled: true, intensity: defaultIntensity }
-                                    : { accountId: profile.id, enabled: false },
+                                  { accountId: profile.id, enabled: event.target.checked },
                                   {
                                     onError: (error) =>
                                       toast.error(errorMessage(error, "Could not update automatic posting.")),
