@@ -21,9 +21,11 @@ export const DEFAULT_CHAT_GENERATION_TIMEOUT_MS = 300_000;
 const MIN_CHAT_GENERATION_TIMEOUT_MS = 10_000;
 const MAX_CHAT_GENERATION_TIMEOUT_MS = 3_600_000;
 export const DEFAULT_AGENT_CALL_TIMEOUT_MS = 300_000;
+export const DEFAULT_GAME_DYNAMIC_IMAGE_PROMPT_TIMEOUT_MS = 45_000;
 const MAX_TIMEOUT_MS = 2_147_483_647;
 let lastInvalidChatGenerationTimeout: string | null = null;
 let lastInvalidAgentCallTimeout: string | null = null;
+let lastInvalidGameDynamicImagePromptTimeout: string | null = null;
 
 let envLoaded = false;
 // Keys that the .env file currently contributes to process.env. Tracked so a
@@ -488,6 +490,34 @@ export function getAgentCallTimeoutMs() {
     );
   }
   return DEFAULT_AGENT_CALL_TIMEOUT_MS;
+}
+
+/** Dynamic Game image-prompt LLM timeout. Read per request so .env hot reloads apply without a restart. */
+export function getGameDynamicImagePromptTimeoutMs() {
+  const raw = normalizeEnvValue(process.env.GAME_DYNAMIC_IMAGE_PROMPT_TIMEOUT_MS);
+  if (raw === null) return DEFAULT_GAME_DYNAMIC_IMAGE_PROMPT_TIMEOUT_MS;
+
+  const parsed = /^\d+$/.test(raw) ? Number(raw) : Number.NaN;
+  if (
+    Number.isSafeInteger(parsed) &&
+    parsed >= MIN_CHAT_GENERATION_TIMEOUT_MS &&
+    parsed <= MAX_CHAT_GENERATION_TIMEOUT_MS
+  ) {
+    lastInvalidGameDynamicImagePromptTimeout = null;
+    return parsed;
+  }
+
+  if (lastInvalidGameDynamicImagePromptTimeout !== raw) {
+    lastInvalidGameDynamicImagePromptTimeout = raw;
+    sharedLogger.warn(
+      "[runtime-config] Ignoring invalid GAME_DYNAMIC_IMAGE_PROMPT_TIMEOUT_MS=%s; expected %d-%d milliseconds, using %d",
+      raw,
+      MIN_CHAT_GENERATION_TIMEOUT_MS,
+      MAX_CHAT_GENERATION_TIMEOUT_MS,
+      DEFAULT_GAME_DYNAMIC_IMAGE_PROMPT_TIMEOUT_MS,
+    );
+  }
+  return DEFAULT_GAME_DYNAMIC_IMAGE_PROMPT_TIMEOUT_MS;
 }
 
 export function getMaxToolRounds() {

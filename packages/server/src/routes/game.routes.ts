@@ -156,7 +156,7 @@ import {
   type ModelAccessPolicy,
 } from "../services/generation/model-access-policy.js";
 import { postToDiscordWebhook } from "../services/discord-webhook.js";
-import { isDebugAgentsEnabled } from "../config/runtime-config.js";
+import { getGameDynamicImagePromptTimeoutMs, isDebugAgentsEnabled } from "../config/runtime-config.js";
 import type {
   GameActiveState,
   GameInitialSetupConnectionSnapshot,
@@ -1285,7 +1285,7 @@ async function createDynamicGameImagePromptGenerator(args: {
           conn.provider,
         ),
         `Game dynamic ${request.kind} image prompt`,
-        GAME_DYNAMIC_IMAGE_PROMPT_TIMEOUT_MS,
+        getGameDynamicImagePromptTimeoutMs(),
       );
       const extraction = extractLeadingThinkingBlocks(result.content || "", parameters?.customThinkingTags);
       const raw = extraction.content.trim();
@@ -3115,7 +3115,6 @@ const GAME_GENERATION_TIMEOUT_MS = 5 * 60 * 1000;
 const GAME_ASSET_GENERATION_TIMEOUT_MS = 45 * 60 * 1000;
 const GAME_SCENE_VIDEO_GENERATION_TIMEOUT_MS = 31 * 60 * 1000;
 const GAME_ILLUSTRATION_SUMMARY_TIMEOUT_MS = 60 * 1000;
-const GAME_DYNAMIC_IMAGE_PROMPT_TIMEOUT_MS = 45 * 1000;
 const GAME_STORYBOARD_ILLUSTRATOR_TIMEOUT_MS = 3 * 60 * 1000;
 const GAME_ASSET_PORTRAIT_CONCURRENCY = 2;
 const GAME_STORYBOARD_IMAGE_FRAME_CONCURRENCY = 4;
