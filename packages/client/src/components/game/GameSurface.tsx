@@ -47,6 +47,7 @@ import {
   useUpdateReputation,
   useTransitionGameState,
   useRecruitPartyMember,
+  useRegenerateCharacterSheet,
   useRemovePartyMember,
   gameKeys,
   patchChatMetadata,
@@ -2768,6 +2769,7 @@ function GameSurfaceComponent({
   const appliedCombatElementMessageIdsRef = useRef<Set<string>>(new Set());
   const interruptedInteractiveCommandKeysRef = useRef<Set<string>>(new Set());
   const recruitPartyMember = useRecruitPartyMember();
+  const regenerateCharacterSheet = useRegenerateCharacterSheet();
   const removePartyMember = useRemovePartyMember();
   const availableMaps = useMemo(() => (maps.length > 0 ? maps : currentMap ? [currentMap] : []), [currentMap, maps]);
   const viewedMap = useMemo(() => {
@@ -11911,6 +11913,16 @@ function GameSurfaceComponent({
         <GameCharacterSheet
           card={partyCards[characterSheetCharId]}
           onClose={closeCharacterSheet}
+          onRegenerate={async () => {
+            const result = await regenerateCharacterSheet.mutateAsync({
+              chatId: activeChatId,
+              characterId: characterSheetCharId,
+              characterName: partyCards[characterSheetCharId].title,
+              debugMode: useUIStore.getState().debugMode,
+            });
+            return result.gameCard;
+          }}
+          isRegenerating={regenerateCharacterSheet.isPending}
           onSave={(gameCard: GameCharacterSheetGameCard | undefined) =>
             handleSaveCharacterSheet(partyCards[characterSheetCharId].title, gameCard)
           }

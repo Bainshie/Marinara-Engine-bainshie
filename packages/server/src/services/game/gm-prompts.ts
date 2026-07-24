@@ -1249,6 +1249,7 @@ export function buildPartyRecruitCardPrompt(ctx: {
   worldOverview?: string | null;
   storyArc?: string | null;
   plotTwists?: string[] | null;
+  campaignHistory?: string | null;
   currentState?: string | null;
   recentTranscript?: string | null;
   language?: string | null;
@@ -1301,6 +1302,9 @@ export function buildPartyRecruitCardPrompt(ctx: {
   }
   if (ctx.plotTwists && ctx.plotTwists.length > 0) {
     sections.push(``, `<plot_twists>`, ...ctx.plotTwists, `</plot_twists>`);
+  }
+  if (ctx.campaignHistory?.trim()) {
+    sections.push(``, `<campaign_history>`, ctx.campaignHistory.trim(), `</campaign_history>`);
   }
   if (ctx.currentPartyCards?.trim()) {
     sections.push(``, `<existing_party_cards>`, ctx.currentPartyCards.trim(), `</existing_party_cards>`);
