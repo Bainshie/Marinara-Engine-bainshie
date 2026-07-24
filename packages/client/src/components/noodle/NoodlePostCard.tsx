@@ -1187,6 +1187,31 @@ export function NoodlePostCard({ post, ctx }: { post: NoodlePostCardModel; ctx: 
         </div>
       </div>
       <div>
+        {post.imageUrl ? (
+          <button
+            type="button"
+            onClick={() => setImageLightbox(createNoodleLightboxImage(post.id, post.imageUrl!, post.imagePrompt ?? ""))}
+            className="mt-3 block w-full overflow-hidden rounded-xl text-left ring-offset-[var(--background)] transition-opacity hover:opacity-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] focus-visible:ring-offset-2"
+            title={localizeUi("ui.noodle.noodlepostcard.openImage")}
+            aria-label={localizeUi("ui.noodle.noodlepostcard.openPostImage")}
+          >
+            <img
+              src={post.imageUrl}
+              alt={localizeUi("ui.noodle.post.imageBy", {
+                name: author?.displayName ?? localizeUi("ui.noodle.profile.fallbackUser"),
+              })}
+              className="max-h-96 w-full object-cover"
+            />
+          </button>
+        ) : post.imagePrompt ? (
+          <div className="mt-3 rounded-xl border border-[var(--noodle-accent)]/35 bg-[var(--noodle-accent)]/10 p-3 text-xs leading-5">
+            <span className="mb-1 flex items-center gap-1.5 font-semibold text-[var(--noodle-accent)]">
+              <ImageIcon size={13} />
+              {localizeUi("ui.noodle.noodlepostcard.imagePrompt")}
+            </span>
+            {post.imagePrompt}
+          </div>
+        ) : null}
         {ctx.postManagement && editingPostId === post.id ? (
           <div className="mt-2 space-y-2">
             {titleEditing && (
@@ -1252,32 +1277,6 @@ export function NoodlePostCard({ post, ctx }: { post: NoodlePostCardModel; ctx: 
             onOpenProfile={openProfile}
           />
         )}
-        {post.imageUrl ? (
-          <button
-            type="button"
-            onClick={() => setImageLightbox(createNoodleLightboxImage(post.id, post.imageUrl!, post.imagePrompt ?? ""))}
-            className="mt-3 block w-full overflow-hidden rounded-xl text-left ring-offset-[var(--background)] transition-opacity hover:opacity-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] focus-visible:ring-offset-2"
-            title={localizeUi("ui.noodle.noodlepostcard.openImage")}
-            aria-label={localizeUi("ui.noodle.noodlepostcard.openPostImage")}
-          >
-            <img
-              src={post.imageUrl}
-              alt={localizeUi("ui.noodle.post.imageBy", {
-                name: author?.displayName ?? localizeUi("ui.noodle.profile.fallbackUser"),
-              })}
-              className="max-h-96 w-full object-cover"
-            />
-          </button>
-        ) : post.imagePrompt ? (
-          <div className="mt-3 rounded-xl border border-[var(--noodle-accent)]/35 bg-[var(--noodle-accent)]/10 p-3 text-xs leading-5">
-            <span className="mb-1 flex items-center gap-1.5 font-semibold text-[var(--noodle-accent)]">
-              <ImageIcon size={13} />
-              {localizeUi("ui.noodle.noodlepostcard.imagePrompt")}
-            </span>
-            {post.imagePrompt}
-          </div>
-        ) : null}
-
         <div className="mt-3 flex max-w-md items-center justify-between gap-1">
           <button
             type="button"

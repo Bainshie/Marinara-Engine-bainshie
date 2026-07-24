@@ -125,7 +125,8 @@ export function useNoodlerPosts(accountId: string | null) {
 export function useNoodlerSubscribers(accountId: string | null) {
   return useQuery({
     queryKey: noodleKeys.privateSubscribers(accountId ?? "none"),
-    queryFn: () => api.get<NoodlerSubscriber[]>(`/noodle/noodler/accounts/${encodeURIComponent(accountId!)}/subscribers`),
+    queryFn: () =>
+      api.get<NoodlerSubscriber[]>(`/noodle/noodler/accounts/${encodeURIComponent(accountId!)}/subscribers`),
     enabled: Boolean(accountId),
     staleTime: 10_000,
   });
@@ -293,15 +294,18 @@ export function useToggleNoodlerSubscription() {
       subscribed: boolean;
     }) =>
       subscribed
-        ? api.delete<{ ok: true }>(
+        ? api.delete<NoodlerViewerScope>(
             `/noodle/noodler/accounts/${encodeURIComponent(creatorAccountId)}/subscribe?personaId=${encodeURIComponent(personaId)}`,
           )
-        : api.post(`/noodle/noodler/accounts/${encodeURIComponent(creatorAccountId)}/subscribe`, { personaId }),
-    onSuccess: (_result, input) =>
-      Promise.all([
-        qc.invalidateQueries({ queryKey: noodleKeys.viewer(input.personaId) }),
-        qc.invalidateQueries({ queryKey: noodleKeys.privateSubscribers(input.creatorAccountId) }),
-      ]),
+        : api.post<NoodlerViewerScope>(`/noodle/noodler/accounts/${encodeURIComponent(creatorAccountId)}/subscribe`, {
+            personaId,
+          }),
+    // Patch the viewer cache with the returned scope instead of refetching the whole feed,
+    // so revealed/re-locked posts flip in place without a reload-and-jump.
+    onSuccess: (scope, input) => {
+      qc.setQueryData(noodleKeys.viewer(input.personaId), scope);
+      return qc.invalidateQueries({ queryKey: noodleKeys.privateSubscribers(input.creatorAccountId) });
+    },
   });
 }
 
@@ -309,8 +313,8 @@ export function useUnlockNoodlerPost() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ postId, personaId }: { postId: string; personaId: string }) =>
-      api.post(`/noodle/noodler/posts/${encodeURIComponent(postId)}/unlock`, { personaId }),
-    onSuccess: (_result, input) => qc.invalidateQueries({ queryKey: noodleKeys.viewer(input.personaId) }),
+      api.post<NoodlerViewerScope>(`/noodle/noodler/posts/${encodeURIComponent(postId)}/unlock`, { personaId }),
+    onSuccess: (scope, input) => qc.setQueryData(noodleKeys.viewer(input.personaId), scope),
   });
 }
 
@@ -340,7 +344,11 @@ export function useRemoveNoodlerInteraction() {
 export function useUpdateNoodlerPost() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, accountId: _accountId, ...input }: { id: string; accountId: string } & NoodlePrivatePostUpdateInput) =>
+    mutationFn: ({
+      id,
+      accountId: _accountId,
+      ...input
+    }: { id: string; accountId: string } & NoodlePrivatePostUpdateInput) =>
       api.patch<NoodlerManagedPost>(`/noodle/noodler/posts/${encodeURIComponent(id)}`, input),
     onSuccess: (_post, input) => {
       return Promise.all([
@@ -435,8 +443,7 @@ export function useRunNoodlerAutoPostNow() {
 export function useRefreshAllNoodlerCreatorsNow() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: () =>
-      api.post<{ outcomes: NoodlerRefreshNowOutcome[] }>("/noodle/noodler/auto-post/refresh-now"),
+    mutationFn: () => api.post<{ outcomes: NoodlerRefreshNowOutcome[] }>("/noodle/noodler/auto-post/refresh-now"),
     onSuccess: () =>
       Promise.all([
         qc.invalidateQueries({ queryKey: noodleKeys.privateAccounts() }),
