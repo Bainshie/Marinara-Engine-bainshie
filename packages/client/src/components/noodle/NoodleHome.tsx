@@ -44,6 +44,7 @@ import {
   noodleTextMentionsHandle as textMentionsHandle,
   noodlePollInputSchema,
   PROFESSOR_MARI_ID,
+  readNoodlePollFromMetadata,
   type NoodleTextMention,
   type APIConnection,
   type NoodleAccount,
@@ -56,6 +57,7 @@ import {
   type NoodleRefreshSchedulerStatus,
   type NoodleSettingsUpdateInput,
 } from "@marinara-engine/shared";
+import { showConfirmDialog } from "../../lib/app-dialogs";
 import { cn, parseAvatarCropJson, type AvatarCropValue } from "../../lib/utils";
 import { useActivePersona, useCharacterGroups, useCharacters, usePersonas } from "../../hooks/use-characters";
 import { useConnections } from "../../hooks/use-connections";
@@ -603,6 +605,7 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
   const [postMenuId, setPostMenuId] = useState<string | null>(null);
   const [editingPostId, setEditingPostId] = useState<string | null>(null);
   const [editingPostContent, setEditingPostContent] = useState("");
+  const [editingPostPoll, setEditingPostPoll] = useState<NoodlePollInput | null>(null);
   const [editingReplyId, setEditingReplyId] = useState<string | null>(null);
   const [editingReplyContent, setEditingReplyContent] = useState("");
   const [confirmAction, setConfirmAction] = useState<NoodleConfirmAction | null>(null);
@@ -2008,7 +2011,9 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
   const startEditingPost = (post: NoodlePostCardModel) => {
     postImageEditor.reset();
     setEditingPostId(post.id);
-    setEditingPostContent(post.content);
+    const poll = readNoodlePollFromMetadata(post.metadata);
+    setEditingPostContent(poll && post.content.trim() === poll.question ? "" : post.content);
+    setEditingPostPoll(poll ? { question: poll.question, options: poll.options.map((option) => option.label) } : null);
     setPostMenuId(null);
   };
 
@@ -2016,12 +2021,15 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
     postImageEditor.reset();
     setEditingPostId(null);
     setEditingPostContent("");
+    setEditingPostPoll(null);
   };
 
   const saveEditedPost = async (post: NoodlePostCardModel) => {
     const content = editingPostContent.trim();
-    if (!content) {
-      toast.error("Posts cannot be empty.");
+    const existingPoll = readNoodlePollFromMetadata(post.metadata);
+    const validPoll = existingPoll ? noodlePollInputSchema.safeParse(editingPostPoll).success : false;
+    if (!content && !validPoll) {
+      toast.error("Posts need a body or poll.");
       return;
     }
     try {
@@ -2036,6 +2044,7 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
       await updatePost.mutateAsync({
         id: post.id,
         content,
+        ...(existingPoll && { poll: editingPostPoll }),
         ...(imageUpdate?.kind === "replace" && {
           imageUrl: replacementUrl,
           imagePrompt: null,
@@ -2285,7 +2294,7 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
     setActiveComposerTool(null);
   };
 
-  const openNoodlerVerification = () => {
+  const openNoodlerVerification = async () => {
     const hasUnsavedDraft =
       composerHasText ||
       Boolean(attachedImage) ||
@@ -2293,7 +2302,17 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
       Boolean(draftPoll) ||
       replyHasText ||
       Boolean(replyImageUrl);
-    if (hasUnsavedDraft && !window.confirm("Leave Noodle and discard your unsent post or reply?")) return;
+    if (
+      hasUnsavedDraft &&
+      !(await showConfirmDialog({
+        title: "Discard your Noodle draft?",
+        message: "Your unsent post or reply will be lost when you leave Noodle.",
+        confirmLabel: "Discard draft",
+        tone: "destructive",
+      }))
+    ) {
+      return;
+    }
     onNavigate({ mode: "verification" });
   };
 
@@ -3120,7 +3139,7 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
                 checked={settings.enableNoodler}
                 disabled={updateSettings.isPending}
                 onChange={(checked) => {
-                  if (checked) openNoodlerVerification();
+                  if (checked) void openNoodlerVerification();
                   else saveSettings({ enableNoodler: false });
                 }}
               />
@@ -3187,6 +3206,11 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
         editingPostId,
         editingPostContent,
         setEditingPostContent,
+        pollEditing: {
+          value: editingPostPoll,
+          setValue: setEditingPostPoll,
+        },
+        allowPollOnlyEdits: true,
         replyPostId,
         replyParentInteractionId,
         replyText,

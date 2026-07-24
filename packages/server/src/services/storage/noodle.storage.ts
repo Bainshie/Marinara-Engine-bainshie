@@ -3,6 +3,7 @@
 // ──────────────────────────────────────────────
 import { and, desc, eq, gt, inArray, isNull, lt } from "../../db/file-query.js";
 import {
+  createNoodlePoll,
   DEFAULT_NOODLE_SETTINGS,
   noodleAccountProfileSettingsSchema,
   noodleAccountPrivacySettingsSchema,
@@ -30,6 +31,7 @@ import {
   type NoodleCarryoverTarget,
   type NoodlePost,
   type NoodlePostAccess,
+  type NoodlePollInput,
   type NoodlePostUnlock,
   type NoodlePostUpdateInput,
   type NoodlePostSource,
@@ -541,6 +543,22 @@ function privateMediaIdFromPostImage(imageUrl: string | null): string | null {
   } catch {
     return null;
   }
+}
+
+function updatePollMetadata(
+  metadata: Record<string, unknown>,
+  pollUpdate: NoodlePollInput | null | undefined,
+): { metadata: Record<string, unknown>; changed: boolean } {
+  if (pollUpdate === undefined) return { metadata: { ...metadata }, changed: false };
+  const currentPoll = readNoodlePollFromMetadata(metadata);
+  const nextPoll = pollUpdate ? createNoodlePoll(pollUpdate) : null;
+  const nextMetadata = { ...metadata };
+  if (nextPoll) nextMetadata.poll = nextPoll;
+  else delete nextMetadata.poll;
+  return {
+    metadata: nextMetadata,
+    changed: JSON.stringify(currentPoll) !== JSON.stringify(nextPoll),
+  };
 }
 
 function mapSubscription(row: SubscriptionRow): NoodleAccountSubscription {
@@ -1851,23 +1869,33 @@ export function createNoodleStorage(db: DB) {
     async updatePost(id: string, input: NoodlePostUpdateInput): Promise<NoodlePost | null> {
       const existing = await this.getPostById(id);
       if (!existing) return null;
-      const nextMetadata = { ...existing.metadata };
+      const pollUpdate = updatePollMetadata(existing.metadata, input.poll);
+      const nextMetadata = pollUpdate.metadata;
       if (input.imageCrop === null) delete nextMetadata.imageCrop;
       else if (input.imageCrop !== undefined) nextMetadata.imageCrop = input.imageCrop;
-      await db
-        .update(noodlePosts)
-        .set({
-          ...(input.content !== undefined && { content: input.content.trim().slice(0, 4000) }),
-          ...(input.imageUrl !== undefined && { imageUrl: input.imageUrl }),
-          ...(input.imagePrompt !== undefined && { imagePrompt: input.imagePrompt }),
-          ...((input.imageUrl !== undefined || input.imagePrompt !== undefined) && {
-            imageClaimToken: null,
-            imageClaimLeaseUntil: null,
-          }),
-          ...(input.imageCrop !== undefined && { metadata: JSON.stringify(nextMetadata) }),
-          updatedAt: now(),
-        })
-        .where(eq(noodlePosts.id, id));
+      await db.transaction(async (tx) => {
+        await tx
+          .update(noodlePosts)
+          .set({
+            ...(input.content !== undefined && { content: input.content.trim().slice(0, 4000) }),
+            ...(input.imageUrl !== undefined && { imageUrl: input.imageUrl }),
+            ...(input.imagePrompt !== undefined && { imagePrompt: input.imagePrompt }),
+            ...((input.imageUrl !== undefined || input.imagePrompt !== undefined) && {
+              imageClaimToken: null,
+              imageClaimLeaseUntil: null,
+            }),
+            ...((input.imageCrop !== undefined || input.poll !== undefined) && {
+              metadata: JSON.stringify(nextMetadata),
+            }),
+            updatedAt: now(),
+          })
+          .where(eq(noodlePosts.id, id));
+        if (pollUpdate.changed) {
+          await tx
+            .delete(noodleInteractions)
+            .where(and(eq(noodleInteractions.postId, id), eq(noodleInteractions.type, "vote")));
+        }
+      });
       return this.getPostById(id);
     },
 
@@ -1909,20 +1937,30 @@ export function createNoodleStorage(db: DB) {
         (input.imageAssetId !== currentMediaId || (input.imageAssetId === null && existing.imageUrl !== null));
       const imageCropUpdate =
         input.imageCrop !== undefined ? input.imageCrop : input.imageAssetId !== undefined ? null : undefined;
-      const nextMetadata = { ...existing.metadata };
+      const pollUpdate = updatePollMetadata(existing.metadata, input.poll);
+      const nextMetadata = pollUpdate.metadata;
       if (imageCropUpdate === null) delete nextMetadata.imageCrop;
       else if (imageCropUpdate !== undefined) nextMetadata.imageCrop = imageCropUpdate;
       if (!imageChangeRequested) {
-      await db
-        .update(noodlePosts)
-        .set({
-          ...(input.title !== undefined && { title: input.title }),
-          ...(input.content !== undefined && { content: input.content.trim().slice(0, 4000) }),
-            ...(imageCropUpdate !== undefined && { metadata: JSON.stringify(nextMetadata) }),
-          updatedAt: now(),
-        })
-        .where(eq(noodlePosts.id, id));
-      return this.getPrivatePostById(id);
+        await db.transaction(async (tx) => {
+          await tx
+            .update(noodlePosts)
+            .set({
+              ...(input.title !== undefined && { title: input.title }),
+              ...(input.content !== undefined && { content: input.content.trim().slice(0, 4000) }),
+              ...((imageCropUpdate !== undefined || input.poll !== undefined) && {
+                metadata: JSON.stringify(nextMetadata),
+              }),
+              updatedAt: now(),
+            })
+            .where(eq(noodlePosts.id, id));
+          if (pollUpdate.changed) {
+            await tx
+              .delete(noodleInteractions)
+              .where(and(eq(noodleInteractions.postId, id), eq(noodleInteractions.type, "vote")));
+          }
+        });
+        return this.getPrivatePostById(id);
       }
 
       const previousMedia = await db
@@ -1973,6 +2011,11 @@ export function createNoodleStorage(db: DB) {
                   isNull(noodlerPrivateMedia.attachedPostId),
                 ),
               );
+          }
+          if (pollUpdate.changed) {
+            await tx
+              .delete(noodleInteractions)
+              .where(and(eq(noodleInteractions.postId, id), eq(noodleInteractions.type, "vote")));
           }
           await tx._fileStore.flush();
           const rows = await tx.select().from(noodlePosts).where(eq(noodlePosts.id, id));

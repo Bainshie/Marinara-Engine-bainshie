@@ -22,6 +22,8 @@ export function NoodlePollComposer({
   onClose,
   onSubmit,
   submitLabel,
+  title = "Create a poll",
+  description,
   closeLabel = "Close poll editor",
   disabled = false,
   submitDisabled = false,
@@ -32,6 +34,8 @@ export function NoodlePollComposer({
   onClose: () => void;
   onSubmit: () => void;
   submitLabel: string;
+  title?: string;
+  description?: string;
   closeLabel?: string;
   disabled?: boolean;
   submitDisabled?: boolean;
@@ -69,7 +73,10 @@ export function NoodlePollComposer({
     <>
       <div className="marinara-chat-popover space-y-3 rounded-2xl border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)] px-4 pb-4 pt-2 text-[var(--foreground)] shadow-2xl shadow-black/35">
         <div className="flex items-center justify-between gap-3">
-          <h2 className="text-lg font-bold">Create a poll</h2>
+          <div className="min-w-0">
+            <h2 className="text-lg font-bold">{title}</h2>
+            {description && <p className="mt-0.5 text-xs text-[var(--muted-foreground)]">{description}</p>}
+          </div>
           <button
             type="button"
             disabled={disabled}
@@ -128,7 +135,7 @@ export function NoodlePollComposer({
                   maxLength={120 - (emoji ? emoji.length + 1 : 0)}
                   disabled={disabled}
                   aria-label={`Poll answer ${index + 1}`}
-                  placeholder="Type your answer"
+                  placeholder={`Option ${index + 1}`}
                   onChange={(event) =>
                     onChange({
                       question: poll.question,

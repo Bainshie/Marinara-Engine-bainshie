@@ -78,6 +78,7 @@ import {
 import { useActivePersona, usePersonas } from "../../hooks/use-characters";
 import { useConnections } from "../../hooks/use-connections";
 import { ApiError } from "../../lib/api-client";
+import { showConfirmDialog } from "../../lib/app-dialogs";
 import { cn } from "../../lib/utils";
 import { useUIStore } from "../../stores/ui.store";
 import {
@@ -345,17 +346,23 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
       return next;
     });
   };
-  const confirmDiscardPrivatePostDrafts = () =>
-    Object.keys(privatePostDrafts).length === 0 || window.confirm("Discard unpublished NoodleR post drafts?");
-  const exitToPublic = () => {
-    if (!confirmDiscardPrivatePostDrafts()) return;
+  const confirmDiscardPrivatePostDrafts = async () =>
+    Object.keys(privatePostDrafts).length === 0 ||
+    showConfirmDialog({
+      title: "Discard NoodleR drafts?",
+      message: "Your unpublished NoodleR post drafts will be lost.",
+      confirmLabel: "Discard drafts",
+      tone: "destructive",
+    });
+  const exitToPublic = async () => {
+    if (!(await confirmDiscardPrivatePostDrafts())) return;
     for (const [profileId, draft] of Object.entries(privatePostDrafts))
       if (draft.image) deleteStagedImage.mutate({ accountId: profileId, imageId: draft.image.id });
     setPrivatePostDrafts({});
     onNavigate({ mode: "public", view: "home" });
   };
-  const openSettings = () => {
-    if (!confirmDiscardPrivatePostDrafts()) return;
+  const openSettings = async () => {
+    if (!(await confirmDiscardPrivatePostDrafts())) return;
     for (const [profileId, draft] of Object.entries(privatePostDrafts))
       if (draft.image) deleteStagedImage.mutate({ accountId: profileId, imageId: draft.image.id });
     setPrivatePostDrafts({});
@@ -430,7 +437,7 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
   // Returns false (and blocks navigation) when there is an unsaved create/edit draft the
   // user chose to keep. Covers both new drafts and changed edits so no surface silently
   // discards work.
-  const confirmDiscardProfileDraft = (): boolean => {
+  const confirmDiscardProfileDraft = async (): Promise<boolean> => {
     if (!profileDraft) return true;
     const editing = editingProfileId
       ? (accountsQuery.data?.find((profile) => profile.id === editingProfileId) ?? null)
@@ -445,10 +452,15 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
       };
       if (JSON.stringify(profileDraft) === JSON.stringify(savedDraft)) return true;
     }
-    return window.confirm("Discard unsaved profile changes?");
+    return showConfirmDialog({
+      title: "Discard profile changes?",
+      message: "Your unsaved stage profile changes will be lost.",
+      confirmLabel: "Discard changes",
+      tone: "destructive",
+    });
   };
-  const goToHub = () => {
-    if (!confirmDiscardProfileDraft()) return;
+  const goToHub = async () => {
+    if (!(await confirmDiscardProfileDraft())) return;
     setCreationStep(null);
     setProfileDraft(null);
     setEditingProfileId(null);
@@ -503,7 +515,12 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
   };
   const savePost = async (
     post: NoodlePostCardModel,
-    input: { title: string | null; content: string; image: NoodlePostImageUpdate | null },
+    input: {
+      title: string | null;
+      content: string;
+      image: NoodlePostImageUpdate | null;
+      poll?: NoodlePollInput | null;
+    },
   ) => {
     let stagedImageId: string | null = null;
     try {
@@ -519,6 +536,7 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
         accountId: post.authorAccountId,
         title: input.title,
         ...(input.content !== post.content.trim() && { content: input.content }),
+        ...(input.poll !== undefined && { poll: input.poll }),
         ...(input.image?.kind === "replace" && {
           imageAssetId: stagedImageId,
           imageCrop: input.image.crop,
@@ -536,8 +554,14 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
       throw error;
     }
   };
-  const deleteNoodlePost = (post: NoodlePostCardModel) => {
-    if (!window.confirm("Delete this NoodleR post along with its likes, reposts, and replies?")) return;
+  const deleteNoodlePost = async (post: NoodlePostCardModel) => {
+    const confirmed = await showConfirmDialog({
+      title: "Delete NoodleR post?",
+      message: "This also removes its likes, reposts, and replies.",
+      confirmLabel: "Delete post",
+      tone: "destructive",
+    });
+    if (!confirmed) return;
     deletePost.mutate(
       { id: post.id, accountId: post.authorAccountId },
       {
@@ -617,8 +641,8 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
     setSourceKind("all");
   };
 
-  const cancelCreateProfile = () => {
-    if (!confirmDiscardProfileDraft()) return;
+  const cancelCreateProfile = async () => {
+    if (!(await confirmDiscardProfileDraft())) return;
     const publicAccountId =
       navigation.mode === "private" && navigation.view === "create-profile"
         ? navigation.publicAccountId
@@ -649,8 +673,8 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
     });
   };
 
-  const closeProfileEditor = () => {
-    if (!confirmDiscardProfileDraft()) return;
+  const closeProfileEditor = async () => {
+    if (!(await confirmDiscardProfileDraft())) return;
     setProfileDraft(null);
     setPreviousDraft(null);
     setEditingProfileId(null);
@@ -1024,10 +1048,14 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
           isError={postsQuery.isError}
           onRetry={() => void postsQuery.refetch()}
           onEdit={() => beginEdit(selectedProfile)}
-          onDelete={() => {
-            if (!window.confirm(`Delete ${selectedProfile.displayName} and all of this NoodleR profile's posts?`)) {
-              return;
-            }
+          onDelete={async () => {
+            const confirmed = await showConfirmDialog({
+              title: `Delete ${selectedProfile.displayName}?`,
+              message: "This removes the stage profile and all of its NoodleR posts.",
+              confirmLabel: "Delete profile",
+              tone: "destructive",
+            });
+            if (!confirmed) return;
             deleteProfile.mutate(selectedProfile.id, {
               onSuccess: () => {
                   clearPrivatePostDraft(selectedProfile.id, true);

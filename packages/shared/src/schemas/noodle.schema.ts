@@ -375,10 +375,11 @@ export const noodlerRemoveInteractionSchema = noodlerPersonaIdSchema
   });
 
 export const noodlePostUpdateSchema = z.object({
-  content: z.string().trim().min(1).max(4000).optional(),
+  content: z.string().trim().max(4000).optional(),
   imageUrl: z.string().max(2000).nullable().optional(),
   imagePrompt: z.string().max(2000).nullable().optional(),
   imageCrop: noodlePostImageCropSchema.nullable().optional(),
+  poll: noodlePollInputSchema.nullable().optional(),
 });
 
 const noodlePrivatePostTitleValueSchema = z.string().trim().max(NOODLE_PRIVATE_POST_TITLE_MAX_LENGTH).nullable();
@@ -432,6 +433,7 @@ export const noodlePrivatePostUpdateSchema = z
     content: z.string().trim().max(NOODLE_PRIVATE_POST_CONTENT_MAX_LENGTH).optional(),
     imageAssetId: z.string().min(1).nullable().optional(),
     imageCrop: noodlePostImageCropSchema.nullable().optional(),
+    poll: noodlePollInputSchema.nullable().optional(),
   })
   .strict()
   .refine(
@@ -439,9 +441,10 @@ export const noodlePrivatePostUpdateSchema = z
       input.title !== undefined ||
       input.content !== undefined ||
       input.imageAssetId !== undefined ||
-      input.imageCrop !== undefined,
+      input.imageCrop !== undefined ||
+      input.poll !== undefined,
     {
-      message: "Provide a title, body, or image update.",
+      message: "Provide a title, body, image, or poll update.",
     },
   );
 

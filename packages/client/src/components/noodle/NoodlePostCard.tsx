@@ -31,6 +31,7 @@ import { createPortal } from "react-dom";
 import {
   canManageNoodleReply,
   findNoodleTextMentions,
+  noodlePollInputSchema,
   readNoodlePostImageCrop,
   readNoodlePollFromMetadata,
   type NoodleAccount,
@@ -38,6 +39,7 @@ import {
   type NoodleInteraction,
   type NoodleInteractionType,
   type NoodlePoll,
+  type NoodlePollInput,
   type NoodlePost,
   type NoodlePostImageCrop,
   type NoodleTextMention,
@@ -53,6 +55,7 @@ import type { ChatImage } from "../../hooks/use-gallery";
 import { Avatar, NOODLE_ICON_SCOPE_CLASS, useNoodleAccent } from "./NoodleShell";
 import { formatTime } from "./NoodleBrowserChrome";
 import { NoodleImageComposer } from "./NoodleImageComposer";
+import { NoodlePollComposer } from "./NoodlePollComposer";
 import { PostImageCropEditor, PostImageFrame } from "./PostImageCropEditor";
 
 const textareaClass =
@@ -225,34 +228,34 @@ function NoodlePollCard({
           const percentage = totalVotes > 0 ? Math.round((optionVotes / totalVotes) * 100) : 0;
           const selected = selectedOptionId === option.id;
           return (
-            <Fragment key={option.id}>
+            <div key={option.id} className="space-y-1.5">
               <button
-              type="button"
-              onClick={() => onVote(option.id)}
-              disabled={disabled || pending}
-              aria-pressed={selected}
-              aria-label={`${option.label}, ${optionVotes} ${optionVotes === 1 ? "vote" : "votes"}, ${percentage}%`}
-              className={cn(
-                "relative flex min-h-10 w-full items-center overflow-hidden rounded-lg border px-3 text-left text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-blue)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)] disabled:cursor-not-allowed",
-                selected
-                  ? "border-[var(--noodle-blue)] bg-[var(--noodle-blue)]/10"
-                  : "border-[var(--noodle-divider)] hover:border-[var(--noodle-blue)]/55 hover:bg-[var(--noodle-blue)]/5",
-              )}
-              data-noodle-poll-option={option.id}
-            >
-              <span
-                aria-hidden="true"
-                className="absolute inset-0 origin-left bg-[var(--noodle-blue)]/15 transition-transform duration-300 ease-out"
-                style={{ transform: `scaleX(${percentage / 100})` }}
-              />
-              <span className="relative flex min-w-0 flex-1 items-center gap-2">
-                {selected && <Check size={14} className="shrink-0 text-[var(--noodle-blue)]" />}
-                <span className="min-w-0 flex-1 break-words">{option.label}</span>
-                <span className="shrink-0 text-[var(--muted-foreground)]">{percentage}%</span>
-              </span>
+                type="button"
+                onClick={() => onVote(option.id)}
+                disabled={disabled || pending}
+                aria-pressed={selected}
+                aria-label={`${option.label}, ${optionVotes} ${optionVotes === 1 ? "vote" : "votes"}, ${percentage}%`}
+                className={cn(
+                  "relative flex min-h-10 w-full items-center overflow-hidden rounded-lg border px-3 text-left text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-blue)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)] disabled:cursor-not-allowed",
+                  selected
+                    ? "border-[var(--noodle-blue)] bg-[var(--noodle-blue)]/10"
+                    : "border-[var(--noodle-divider)] hover:border-[var(--noodle-blue)]/55 hover:bg-[var(--noodle-blue)]/5",
+                )}
+                data-noodle-poll-option={option.id}
+              >
+                <span
+                  aria-hidden="true"
+                  className="absolute inset-0 origin-left bg-[var(--noodle-blue)]/15 transition-transform duration-300 ease-out"
+                  style={{ transform: `scaleX(${percentage / 100})` }}
+                />
+                <span className="relative flex min-w-0 flex-1 items-center gap-2">
+                  {selected && <Check size={14} className="shrink-0 text-[var(--noodle-blue)]" />}
+                  <span className="min-w-0 flex-1 break-words">{option.label}</span>
+                  <span className="shrink-0 text-[var(--muted-foreground)]">{percentage}%</span>
+                </span>
               </button>
               {showVoters && optionVotes > 0 && (
-                <div className="flex flex-wrap gap-1 px-1" aria-label={`Voters for ${option.label}`}>
+                <div className="flex flex-wrap gap-1 px-2" aria-label={`Voters for ${option.label}`}>
                   {matchingVotes.map((vote) => {
                     const voterAccount = accountById.get(vote.actorAccountId) ?? null;
                     const voter = voterAccount ?? vote.actorSnapshot;
@@ -273,7 +276,7 @@ function NoodlePollCard({
                   })}
                 </div>
               )}
-            </Fragment>
+            </div>
           );
         })}
       </div>
@@ -622,8 +625,8 @@ function PostImageEditControls({
                 type="button"
                 onClick={() => editing.fileInputRef.current?.click()}
                 disabled={disabled || editing.loading}
-                title="Add image"
-                aria-label="Add image"
+                title="Attach replacement image"
+                aria-label="Attach replacement image"
                 className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[var(--noodle-divider)] text-[var(--noodle-blue)] transition-colors hover:bg-[var(--noodle-blue)]/10 disabled:opacity-50"
               >
                 <ImagePlus size={15} />
@@ -737,6 +740,11 @@ interface NoodlePostCardCtx {
   postManagement: boolean;
   /** Private-title editing. Public Noodle omits this capability and remains titleless. */
   titleEditing?: NoodlePostCardTitleEditingCap;
+  /** Existing-poll editing. Poll-less posts do not expose an add-poll path here. */
+  pollEditing?: {
+    value: NoodlePollInput | null;
+    setValue: React.Dispatch<React.SetStateAction<NoodlePollInput | null>>;
+  };
   /** Allow an empty edited body when the existing post has a poll. */
   allowPollOnlyEdits?: boolean;
   /** Navigate to an author/mention profile. Omit on hosts without profile navigation (NoodleR). */
@@ -764,7 +772,12 @@ interface NoodlePostCardControllerOptions {
   personaAccount: NoodleAccount | null;
   savePost: (
     post: NoodlePostCardModel,
-    input: { title: string | null; content: string; image: NoodlePostImageUpdate | null },
+    input: {
+      title: string | null;
+      content: string;
+      image: NoodlePostImageUpdate | null;
+      poll?: NoodlePollInput | null;
+    },
   ) => Promise<void>;
   deletePost: (post: NoodlePostCardModel) => void;
   reactToPost: (post: NoodlePostCardModel, type: "like" | "repost", active?: boolean) => void;
@@ -890,6 +903,7 @@ export function useNoodlePostCardController(options: NoodlePostCardControllerOpt
   const [editingPostId, setEditingPostId] = useState<string | null>(null);
   const [editingPostContent, setEditingPostContent] = useState("");
   const [editingPostTitle, setEditingPostTitle] = useState("");
+  const [editingPostPoll, setEditingPostPoll] = useState<NoodlePollInput | null>(null);
   const [replyPostId, setReplyPostId] = useState<string | null>(null);
   const [replyParentInteractionId, setReplyParentInteractionId] = useState<string | null>(null);
   const [replyText, setReplyText] = useState("");
@@ -914,6 +928,7 @@ export function useNoodlePostCardController(options: NoodlePostCardControllerOpt
     setEditingPostId(null);
     setEditingPostContent("");
     setEditingPostTitle("");
+    setEditingPostPoll(null);
     imageEditor.reset();
   };
   const reset = () => {
@@ -942,16 +957,21 @@ export function useNoodlePostCardController(options: NoodlePostCardControllerOpt
     setEditingPostId(post.id);
     setEditingPostTitle(post.title ?? "");
     setEditingPostContent(post.content);
+    const poll = readNoodlePollFromMetadata(post.metadata);
+    setEditingPostPoll(poll ? { question: poll.question, options: poll.options.map((option) => option.label) } : null);
     imageEditor.reset();
   };
   const saveEditedPost = (post: NoodlePostCardModel) => {
     const content = editingPostContent.trim();
-    if (!content && !(options.allowPollOnlyEdits && readNoodlePollFromMetadata(post.metadata))) return;
+    const existingPoll = readNoodlePollFromMetadata(post.metadata);
+    const validPoll = existingPoll ? noodlePollInputSchema.safeParse(editingPostPoll).success : false;
+    if (!content && !(options.allowPollOnlyEdits && validPoll)) return;
     void options
       .savePost(post, {
         title: editingPostTitle.trim() || null,
         content,
         image: imageEditor.update,
+        ...(existingPoll && { poll: editingPostPoll }),
       })
       .then(cancelEditingPost)
       .catch(() => {});
@@ -1016,6 +1036,10 @@ export function useNoodlePostCardController(options: NoodlePostCardControllerOpt
           maxLength: options.titleMaxLength,
         }
       : undefined,
+    pollEditing: {
+      value: editingPostPoll,
+      setValue: setEditingPostPoll,
+    },
     allowPollOnlyEdits: options.allowPollOnlyEdits,
   };
   return { ctx, reset };
@@ -1063,6 +1087,7 @@ export function NoodlePostCard({
     createInteractionPendingFor,
     updatePostPending,
     titleEditing,
+    pollEditing,
     imageEditing,
     media,
     replyManagement,
@@ -1304,6 +1329,9 @@ export function NoodlePostCard({
         )}
       </div>
     );
+    const editingExistingPoll = Boolean(poll && pollEditing);
+    const editingPollIsValid =
+      !editingExistingPoll || noodlePollInputSchema.safeParse(pollEditing?.value).success;
     const postEditActions = (
       <>
         <button
@@ -1318,7 +1346,8 @@ export function NoodlePostCard({
           onClick={() => saveEditedPost(post)}
           disabled={
             (!editingPostContent.trim() &&
-              !(ctx.allowPollOnlyEdits && readNoodlePollFromMetadata(post.metadata))) ||
+              !(ctx.allowPollOnlyEdits && editingPollIsValid && editingExistingPoll)) ||
+            !editingPollIsValid ||
             updatePostPending ||
             imageEditing?.loading ||
             Boolean(imageEditing?.cropSource)
@@ -1416,15 +1445,37 @@ export function NoodlePostCard({
                 className="min-h-20 w-full resize-none rounded-lg border-0 bg-[var(--noodle-blue)]/5 px-3 py-2 text-[1rem] leading-6 text-[var(--foreground)] outline-none placeholder:text-[var(--muted-foreground)] focus:bg-[var(--noodle-blue)]/10"
                   placeholder="What's simmering, privately?"
                 />
-                {imageEditing && (
+                {imageEditing && !poll && (
                   <PostImageEditControls
                     post={post}
                     editing={imageEditing}
                     disabled={updatePostPending}
-                    footer={postEditActions}
+                    footer={editingExistingPoll ? null : postEditActions}
                   />
                 )}
-                {!imageEditing && <div className="flex flex-wrap justify-end gap-2">{postEditActions}</div>}
+                {editingExistingPoll && pollEditing && (
+                  <NoodlePollComposer
+                    value={pollEditing.value}
+                    onChange={pollEditing.setValue}
+                    onClose={cancelEditingPost}
+                    onSubmit={() => saveEditedPost(post)}
+                    submitLabel={updatePostPending ? "Saving" : "Save"}
+                    submitDisabled={
+                      !editingPollIsValid ||
+                      (!editingPostContent.trim() && !pollEditing.value) ||
+                      updatePostPending ||
+                      Boolean(imageEditing?.loading) ||
+                      Boolean(imageEditing?.cropSource)
+                    }
+                    disabled={updatePostPending}
+                    title="Edit poll"
+                    description={pollVotes.length > 0 ? "Changing this poll resets its votes." : undefined}
+                    closeLabel="Cancel post editing"
+                  />
+                )}
+                {!imageEditing && !editingExistingPoll && (
+                  <div className="flex flex-wrap justify-end gap-2">{postEditActions}</div>
+                )}
               </div>
             ) : (
               <>
@@ -1440,7 +1491,7 @@ export function NoodlePostCard({
                   )}
               </>
             )}
-            {poll && (
+            {poll && editingPostId !== post.id && (
               <NoodlePollCard
                 poll={poll}
                 votes={pollVotes}

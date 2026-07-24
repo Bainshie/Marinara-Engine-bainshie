@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   noodleGeneratedRefreshSchema,
+  noodlePostUpdateSchema,
   noodlePollInputSchema,
+  noodlePrivatePostUpdateSchema,
 } from "../../packages/shared/src/schemas/noodle.schema.js";
 import {
   createNoodlePoll,
@@ -9,6 +14,9 @@ import {
   readNoodlePollFromMetadata,
 } from "../../packages/shared/src/utils/noodle-polls.js";
 import type { NoodleInteraction, NoodlePost } from "../../packages/shared/src/types/noodle.js";
+import type { DB } from "../../packages/server/src/db/connection.js";
+import { createFileNativeDB } from "../../packages/server/src/db/file-backed-store.js";
+import { createNoodleStorage } from "../../packages/server/src/services/storage/noodle.storage.js";
 
 const poll = createNoodlePoll({ question: "  Best pasta? ", options: [" Penne ", "Farfalle", "Gnocchi"] });
 assert.ok(poll);
@@ -52,6 +60,11 @@ assert.deepEqual(
 );
 assert.equal(noodlePollInputSchema.safeParse({ question: "Pick", options: ["Same", "same"] }).success, false);
 assert.equal(noodlePollInputSchema.safeParse({ question: "Pick", options: ["Only one"] }).success, false);
+assert.equal(noodlePostUpdateSchema.safeParse({ content: "", poll: { question: "Pick", options: ["A", "B"] } }).success, true);
+assert.equal(
+  noodlePrivatePostUpdateSchema.safeParse({ poll: { question: "Pick", options: ["A", "B"] } }).success,
+  true,
+);
 
 const generated = noodleGeneratedRefreshSchema.parse({
   posts: [
@@ -121,5 +134,82 @@ assert.equal(
   }).success,
   false,
 );
+
+const storageDir = mkdtempSync(join(tmpdir(), "marinara-noodle-poll-edit-"));
+process.env.FILE_STORAGE_DIR = storageDir;
+const fileDb = await createFileNativeDB();
+try {
+  const noodle = createNoodleStorage(fileDb as unknown as DB);
+  const author = await noodle.upsertAccountFromProfile({
+    kind: "character",
+    entityId: "poll-edit-author",
+    displayName: "Poll Edit Author",
+  });
+  const voter = await noodle.upsertAccountFromProfile({
+    kind: "persona",
+    entityId: "poll-edit-voter",
+    displayName: "Poll Edit Voter",
+  });
+  const publicPost = await noodle.createPost({
+    authorAccountId: author.id,
+    content: "",
+    metadata: { poll },
+  });
+  assert.ok(publicPost);
+  assert.ok(
+    await noodle.createInteraction(publicPost.id, {
+      actorAccountId: voter.id,
+      type: "vote",
+      content: "option-1",
+      parentInteractionId: null,
+    }),
+  );
+
+  await noodle.updatePost(publicPost.id, {
+    poll: { question: poll.question, options: poll.options.map((option) => option.label) },
+  });
+  assert.equal((await noodle.listInteractions([publicPost.id])).length, 1, "an unchanged poll must retain its votes");
+
+  const editedPublicPost = await noodle.updatePost(publicPost.id, {
+    poll: { question: "Best filled pasta?", options: ["Ravioli", "Tortellini"] },
+  });
+  assert.equal(readNoodlePollFromMetadata(editedPublicPost?.metadata)?.question, "Best filled pasta?");
+  assert.deepEqual(await noodle.listInteractions([publicPost.id]), [], "changing a poll must reset its votes");
+
+  const privateCreator = await noodle.createPrivateAccount(author.id, {
+    displayName: "Poll Edit Stage",
+    handle: "poll_edit_stage",
+    bio: "",
+    stagePersonality: "",
+    disclosureMode: "secret",
+  });
+  assert.ok(privateCreator);
+  const privatePost = await noodle.createPrivatePost({
+    authorAccountId: privateCreator.id,
+    content: "",
+    metadata: { poll },
+  });
+  assert.ok(privatePost);
+  assert.ok(
+    await noodle.createPrivateInteraction(privatePost.id, {
+      actorAccountId: voter.id,
+      type: "vote",
+      content: "option-2",
+      parentInteractionId: null,
+    }),
+  );
+  const editedPrivatePost = await noodle.updatePrivatePost(privatePost.id, {
+    poll: { question: "Choose again", options: ["One", "Two"] },
+  });
+  assert.equal(readNoodlePollFromMetadata(editedPrivatePost?.metadata)?.question, "Choose again");
+  assert.deepEqual(
+    await noodle.listPrivateInteractions([privatePost.id]),
+    [],
+    "changing a private poll must reset its votes",
+  );
+} finally {
+  await fileDb._fileStore.close();
+  rmSync(storageDir, { recursive: true, force: true });
+}
 
 console.info("Noodle poll regression passed.");

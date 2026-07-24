@@ -419,7 +419,13 @@ export async function noodleRoutes(app: FastifyInstance) {
     const existing = await noodle.getPrivatePostById(id);
     if (!existing) return reply.code(404).send({ error: "NoodleR post not found" });
     const nextContent = parsed.data.content === undefined ? existing.content : parsed.data.content;
-    if (!nextContent.trim() && !readNoodlePollFromMetadata(existing.metadata)) {
+    const nextPoll =
+      parsed.data.poll === undefined
+        ? readNoodlePollFromMetadata(existing.metadata)
+        : parsed.data.poll
+          ? createNoodlePoll(parsed.data.poll)
+          : null;
+    if (!nextContent.trim() && !nextPoll) {
       return reply.code(400).send({ error: "Posts need a body or poll." });
     }
     try {
@@ -1089,9 +1095,21 @@ export async function noodleRoutes(app: FastifyInstance) {
     }
     const parsed = noodlePostUpdateSchema.safeParse(req.body);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    const existing = await noodle.getPostById(id);
+    if (!existing) return reply.code(404).send({ error: "Noodle post not found" });
+    const nextContent = parsed.data.content === undefined ? existing.content : parsed.data.content;
+    const nextPoll =
+      parsed.data.poll === undefined
+        ? readNoodlePollFromMetadata(existing.metadata)
+        : parsed.data.poll
+          ? createNoodlePoll(parsed.data.poll)
+          : null;
+    if (!nextContent.trim() && !nextPoll) {
+      return reply.code(400).send({ error: "Posts need a body or poll." });
+    }
     let post = await noodle.updatePost(id, parsed.data);
     if (!post) return reply.code(404).send({ error: "Noodle post not found" });
-    if (parsed.data.content !== undefined) {
+    if (parsed.data.content !== undefined || parsed.data.poll !== undefined) {
       const mentionedAccounts = mentionedCharacterAccounts(await noodle.listAccounts(), post.content);
       post =
         (await noodle.updatePostMedia(post.id, {
@@ -1099,10 +1117,12 @@ export async function noodleRoutes(app: FastifyInstance) {
         })) ?? post;
       const digestId = post.metadata.activityDigestId;
       const author = await noodle.getAccountById(post.authorAccountId);
+      const poll = readNoodlePollFromMetadata(post.metadata);
+      const digestContent = post.content.trim() || poll?.question || "Shared a poll.";
       if (typeof digestId === "string" && digestId && author) {
         await noodle.updateDigest(digestId, {
           accountIds: [author.id, ...mentionedAccounts.map((mentionedAccount) => mentionedAccount.id)],
-          content: `${noodleDigestAccountLabel(author)} posted on Noodle: ${post.content}`,
+          content: `${noodleDigestAccountLabel(author)} posted on Noodle: ${digestContent}`,
         });
       }
     }
