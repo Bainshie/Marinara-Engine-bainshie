@@ -404,6 +404,8 @@ interface DocLanguageInfo {
 
 interface DocsLanguageStatus {
   active: string;
+  /** True once the user has explicitly stored a choice (even a broken one) */
+  configured: boolean;
   available: DocLanguageInfo[];
   integrity: {
     ok: boolean;
@@ -418,7 +420,13 @@ async function buildLanguageStatus(storage: AppSettingsStorage): Promise<DocsLan
   const [stored, known, base] = await Promise.all([
     readStoredDocsLanguage(storage),
     discoverDocLanguages(),
-    collectDocs(DOCS_DIR, ""),
+    // A missing/unreadable docs folder degrades to empty coverage instead of
+    // failing the whole status — the Settings row and Fix button must stay
+    // usable in exactly the broken-install case they exist to surface.
+    collectDocs(DOCS_DIR, "").catch((err) => {
+      logger.warn(err, "Failed to walk documentation folder for language status");
+      return [] as DocSummary[];
+    }),
   ]);
   const available = known.map((code) => {
     const labels = DOCS_LANGUAGE_LABELS[code] ?? { label: code, englishLabel: code };
@@ -433,6 +441,7 @@ async function buildLanguageStatus(storage: AppSettingsStorage): Promise<DocsLan
     stored.code !== null && stored.code !== DEFAULT_DOCS_LANGUAGE && !isInstalledLanguage(stored.code);
   return {
     active: stored.code && isInstalledLanguage(stored.code) ? stored.code : DEFAULT_DOCS_LANGUAGE,
+    configured: stored.present,
     available,
     integrity: { ok: !unknownLanguage && !activeRootMissing, unknownLanguage, activeRootMissing },
   };

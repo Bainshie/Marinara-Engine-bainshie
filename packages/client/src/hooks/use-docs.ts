@@ -98,6 +98,10 @@ export function useDocsSearch(query: string) {
       api.get<DocsSearchResponse>(`/docs/search?q=${encodeURIComponent(trimmed)}&lang=${encodeURIComponent(lang)}`),
     enabled: trimmed.length >= 2 && ready,
     staleTime: Infinity,
-    placeholderData: (previous) => previous,
+    // Carry the previous results across TERM changes only — queryKey[2] is the
+    // language dimension, and results from another language must never bleed
+    // into a freshly switched one.
+    placeholderData: (previous, previousQuery) =>
+      previousQuery?.queryKey[2] === lang ? previous : undefined,
   });
 }

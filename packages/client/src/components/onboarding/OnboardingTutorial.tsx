@@ -521,11 +521,14 @@ function OnboardingTutorialInner() {
   const [docsLanguagePick, setDocsLanguagePick] = useState<string | null>(null);
   const docsLanguageOptions = docsLanguageStatus?.available ?? [];
   const activeDocsLanguage = docsLanguageStatus?.active ?? "en";
-  // Pre-select the UI language when a matching docs language exists, else the active one.
+  // Pre-select the user's existing choice whenever one has been made, so an
+  // untouched picker is a guaranteed no-op on tutorial replays. Only on a
+  // genuinely fresh install (nothing configured yet) suggest the UI language.
   const uiLanguageBase = uiLanguage?.toLowerCase().split("-")[0] ?? "en";
-  const suggestedDocsLanguage = docsLanguageOptions.some((option) => option.code === uiLanguageBase)
-    ? uiLanguageBase
-    : activeDocsLanguage;
+  const suggestedDocsLanguage =
+    docsLanguageStatus?.configured || !docsLanguageOptions.some((option) => option.code === uiLanguageBase)
+      ? activeDocsLanguage
+      : uiLanguageBase;
   const effectiveDocsLanguagePick = docsLanguagePick ?? suggestedDocsLanguage;
 
   /**

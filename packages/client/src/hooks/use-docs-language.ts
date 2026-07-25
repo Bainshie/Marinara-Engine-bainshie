@@ -23,6 +23,8 @@ export interface DocLanguageInfo {
 export interface DocsLanguageStatus {
   /** Language the server is serving right now */
   active: string;
+  /** True once the user has explicitly stored a choice (even a broken one) */
+  configured: boolean;
   available: DocLanguageInfo[];
   integrity: {
     ok: boolean;
