@@ -46,7 +46,7 @@ export function ChatSettingsSection({
   };
 
   return (
-    <div className="border-b border-[var(--border)]" style={style}>
+    <div data-chat-settings-section={id} className="border-b border-[var(--border)]" style={style}>
       <div
         role="button"
         tabIndex={0}

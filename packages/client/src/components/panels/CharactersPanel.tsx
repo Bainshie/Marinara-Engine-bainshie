@@ -36,6 +36,7 @@ import {
   Tag,
   Hash,
   Star,
+  MessageCircle,
 } from "lucide-react";
 import { getCharacterTitle } from "../../lib/character-display";
 import { useUIStore, type CharacterLibrarySort } from "../../stores/ui.store";
@@ -1180,16 +1181,38 @@ export function CharactersPanel() {
                         )}
                       </div>
                       {!selectionMode && (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            void moveCharactersToFolder([memberId], null);
-                          }}
-                          className="rounded p-0.5 opacity-0 transition-all hover:bg-[var(--destructive)]/15 group-hover/member:opacity-100"
-                          title={localizeUi("ui.panels.characterspanel.removeFromFolder")}
-                        >
-                          <UserMinus size="0.6875rem" className="text-[var(--destructive)]" />
-                        </button>
+                        <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover/member:opacity-100 max-md:opacity-100">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              openModal("start-character-chat", {
+                                characterId: memberId,
+                                characterName: memberName,
+                              });
+                            }}
+                            className="mari-chrome-control mari-chrome-control--small flex h-6 min-h-6 w-6 items-center justify-center p-0"
+                            title={localizeUi("ui.panels.characterspanel.startNewChatWithValue1", {
+                              value1: memberName,
+                            })}
+                            aria-label={localizeUi("ui.panels.characterspanel.startNewChatWithValue1", {
+                              value1: memberName,
+                            })}
+                          >
+                            <MessageCircle size="0.6875rem" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              void moveCharactersToFolder([memberId], null);
+                            }}
+                            className="rounded p-0.5 transition-all hover:bg-[var(--destructive)]/15"
+                            title={localizeUi("ui.panels.characterspanel.removeFromFolder")}
+                          >
+                            <UserMinus size="0.6875rem" className="text-[var(--destructive)]" />
+                          </button>
+                        </div>
                       )}
                     </div>
                   );
@@ -1252,7 +1275,7 @@ export function CharactersPanel() {
         </div>
       )}
 
-      <div className="stagger-children flex min-h-8 flex-col gap-1 rounded-xl transition-colors">
+      <div className="flex min-h-8 shrink-0 flex-col gap-1 rounded-xl transition-colors">
         {visibleRootCharacters.map((char) => {
           const charName = char.parsed.name ?? "Unnamed";
           const charTitle = getCharacterTitle({ name: charName, comment: char.comment });
@@ -1267,6 +1290,7 @@ export function CharactersPanel() {
           return (
             <div
               key={char.id}
+              data-character-id={char.id}
               data-touch-drag-card="character"
               onClick={() => {
                 if (suppressCharacterClickRef.current) return;
@@ -1286,7 +1310,7 @@ export function CharactersPanel() {
               }}
               onDragEnd={() => setDraggedCharacterId(null)}
               className={cn(
-                "group relative flex touch-pan-y cursor-pointer items-center gap-2.5 rounded-xl p-2 transition-all hover:bg-[var(--sidebar-accent)]",
+                "group relative flex min-h-[4.5rem] shrink-0 touch-pan-y cursor-pointer items-center gap-2.5 rounded-xl p-2 transition-all hover:bg-[var(--sidebar-accent)] max-md:min-h-16",
                 selectionMode &&
                   isBulkSelected &&
                   "bg-[var(--marinara-chat-chrome-highlight-bg)] ring-1 ring-[var(--marinara-chat-chrome-button-border-active)]",
@@ -1350,8 +1374,9 @@ export function CharactersPanel() {
               </div>
 
               {/* Info */}
-              <div className={cn("min-w-0 flex-1", !selectionMode && "pr-16")}>
+              <div className={cn("min-w-0 flex-1", !selectionMode && "pr-[4.5rem] max-md:pr-16")}>
                 <div
+                  data-character-row-name
                   className="truncate text-sm font-medium"
                   style={
                     charNameColor
@@ -1388,7 +1413,7 @@ export function CharactersPanel() {
                   {formatEstimatedTokens(tokenEstimate)}
                 </div>
                 {charTags.length > 0 && (
-                  <div className="mt-0.5 flex flex-wrap gap-0.5">
+                  <div data-character-row-tags className="mt-0.5 flex flex-wrap gap-0.5">
                     {charTags.slice(0, 3).map((tag) => (
                       <span
                         key={tag}
@@ -1412,8 +1437,12 @@ export function CharactersPanel() {
 
               {/* Actions */}
               {!selectionMode && (
-                <div className="absolute right-2 top-1/2 -translate-y-1/2 flex shrink-0 items-center gap-0.5 rounded-lg bg-[var(--sidebar)] px-1 py-0.5 opacity-0 shadow-sm ring-1 ring-[var(--border)] transition-opacity group-hover:opacity-100 max-md:opacity-100">
+                <div
+                  data-character-row-actions
+                  className="absolute right-2 top-1/2 grid w-16 -translate-y-1/2 grid-cols-2 gap-0.5 rounded-lg bg-[var(--sidebar)] p-1 opacity-0 shadow-sm ring-1 ring-[var(--border)] transition-opacity group-hover:opacity-100 max-md:w-14 max-md:opacity-100"
+                >
                   <button
+                    type="button"
                     onClick={(e) => {
                       e.stopPropagation();
                       duplicateCharacter.mutate(char.id, {
@@ -1426,12 +1455,14 @@ export function CharactersPanel() {
                         },
                       });
                     }}
-                    className="mari-chrome-control mari-chrome-control--small p-1.5"
+                    className="mari-chrome-control mari-character-row-action flex w-full items-center justify-center"
                     title={localizeUi("ui.presets.sectionstab.duplicate")}
+                    aria-label={localizeUi("ui.presets.sectionstab.duplicate")}
                   >
-                    <Copy size="0.75rem" />
+                    <Copy className="h-4 w-4 shrink-0 max-md:h-3.5 max-md:w-3.5" />
                   </button>
                   <button
+                    type="button"
                     onClick={async (e) => {
                       e.stopPropagation();
                       if (
@@ -1448,10 +1479,31 @@ export function CharactersPanel() {
                       }
                       deleteCharacter.mutate(char.id);
                     }}
-                    className="mari-chrome-control mari-chrome-control--small p-1.5"
+                    className="mari-chrome-control mari-character-row-action flex w-full items-center justify-center"
                     title={localizeUi("lorebook.editor.batch.delete")}
+                    aria-label={localizeUi("lorebook.editor.batch.delete")}
                   >
-                    <Trash2 size="0.75rem" />
+                    <Trash2 className="h-4 w-4 shrink-0 max-md:h-3.5 max-md:w-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      openModal("start-character-chat", {
+                        characterId: char.id,
+                        characterName: charName,
+                      });
+                    }}
+                    className="mari-chrome-control mari-character-row-action col-span-2 flex w-full items-center justify-center gap-1 border-[var(--marinara-chat-chrome-button-border-active)] bg-[var(--marinara-chat-chrome-button-bg-active)] text-[0.625rem] font-semibold text-[var(--marinara-chat-chrome-button-text-active)] max-md:text-[0.5625rem]"
+                    title={localizeUi("ui.panels.characterspanel.startNewChatWithValue1", {
+                      value1: charName,
+                    })}
+                    aria-label={localizeUi("ui.panels.characterspanel.startNewChatWithValue1", {
+                      value1: charName,
+                    })}
+                  >
+                    <MessageCircle className="h-3.5 w-3.5 shrink-0 max-md:h-3 max-md:w-3" />
+                    {localizeUi("ui.panels.characterspanel.chat")}
                   </button>
                 </div>
               )}

@@ -3756,6 +3756,70 @@ Use HTML sparingly and diegetically. Do not replace normal prose/dialogue unless
     },
   },
   {
+    name: "custom-agent vector access injects semantic matches and recalled memories only when enabled",
+    async run() {
+      const vectorContext = {
+        semanticLorebookEntries: [
+          {
+            id: "lore-semantic-match",
+            content: "The hidden laboratory is beneath the abandoned opera house.",
+            semanticScore: 0.812,
+          },
+        ],
+        recalledMemories: ["Mari previously found a silver key inside Dottore's field journal."],
+      };
+      const enabledCapture = makeCapturingProvider("Vector context received.");
+      const enabledConfig = makeRegressionAgentConfig({
+        id: "custom:vector-reader",
+        type: "custom-vector-reader",
+        name: "Vector Reader",
+        promptTemplate: "Summarize the relevant prior context.",
+        settings: {
+          contextSize: 5,
+          maxTokens: 256,
+          resultType: "context_injection",
+          customCapabilities: { access_vectors: true },
+        },
+      });
+
+      await executeAgent(
+        enabledConfig as any,
+        makeRegressionAgentContext({ vectorContext }),
+        enabledCapture.provider as any,
+        "regression-model",
+      );
+      const enabledSystem = enabledCapture.calls[0]?.[0]?.content ?? "";
+      assert.match(enabledSystem, /<vector_context>/u);
+      assert.match(enabledSystem, /<semantic_lorebook_matches>/u);
+      assert.match(enabledSystem, /The hidden laboratory is beneath the abandoned opera house\./u);
+      assert.match(enabledSystem, /<recalled_chat_memories>/u);
+      assert.match(enabledSystem, /Mari previously found a silver key/u);
+
+      const disabledCapture = makeCapturingProvider("Ordinary context received.");
+      const disabledConfig = makeRegressionAgentConfig({
+        id: "custom:ordinary-reader",
+        type: "custom-ordinary-reader",
+        name: "Ordinary Reader",
+        promptTemplate: "Summarize the recent context.",
+        settings: {
+          contextSize: 5,
+          maxTokens: 256,
+          resultType: "context_injection",
+        },
+      });
+      await executeAgent(
+        disabledConfig as any,
+        makeRegressionAgentContext({ vectorContext }),
+        disabledCapture.provider as any,
+        "regression-model",
+      );
+      const disabledSystem = disabledCapture.calls[0]?.[0]?.content ?? "";
+      assert.doesNotMatch(disabledSystem, /<vector_context>/u);
+      assert.doesNotMatch(disabledSystem, /hidden laboratory/u);
+      assert.doesNotMatch(disabledSystem, /silver key/u);
+    },
+  },
+  {
     name: "agent current game state hides quest progress from non-quest agents",
     run() {
       const hiddenMoodKey = characterTrackerLockKey({ characterId: "mira", name: "Mira" }, 0, "mood");

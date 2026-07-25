@@ -57,8 +57,8 @@ const STEPS: TourStep[] = [
   },
   {
     target: "panel-bot-browser",
-    title: "Card Browser",
-    body: "The Card Browser lets you find and import downloadable character cards. Start here when you want new characters to add to your library.",
+    title: "Browser",
+    body: "The Browser lets you find and import downloadable character cards. Start here when you want new characters to add to your library.",
     side: "bottom",
     openPanel: "bot-browser",
     sprite: { src: "/sprites/mari/Mari_point_up_left.png", flip: true },
@@ -69,6 +69,14 @@ const STEPS: TourStep[] = [
     body: "Characters are who your AI is going to play or speak as. Create them, edit their descriptions, dialogue examples, organize them into folders, or make them pretty (I can also create those for you).",
     side: "bottom",
     openPanel: "characters",
+    sprite: { src: "/sprites/mari/Mari_point_up_left.png", flip: true },
+  },
+  {
+    target: "panel-personas",
+    title: "Personas",
+    body: "Personas define who you are in a chat. Give yourself a name, avatar, description, scenario details, and pretty colors, so characters know who they are speaking to.",
+    side: "bottom",
+    openPanel: "personas",
     sprite: { src: "/sprites/mari/Mari_point_up_left.png", flip: true },
   },
   {
@@ -101,14 +109,6 @@ const STEPS: TourStep[] = [
     body: "Agents add optional features without making the base app heavy. Open Download Agents here to browse and install image and video generation, trackers, writers, maps, audio and video calls, and various chat games, then enable the ones you want for each chat. You can update or uninstall them from the same catalog.",
     side: "bottom",
     openPanel: "agents",
-    sprite: { src: "/sprites/mari/Mari_point_up_left.png", flip: true },
-  },
-  {
-    target: "panel-personas",
-    title: "Personas",
-    body: "Personas define who you are in a chat. Give yourself a name, avatar, description, scenario details, and pretty colors, so characters know who they are speaking to.",
-    side: "bottom",
-    openPanel: "personas",
     sprite: { src: "/sprites/mari/Mari_point_up_left.png", flip: true },
   },
   {

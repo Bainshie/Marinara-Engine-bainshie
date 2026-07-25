@@ -9789,6 +9789,10 @@ function GameSurfaceComponent({
 
   // Does this chat need initial game creation?
   const needsCreation = !chatMeta.gameId;
+  const initialSetupPartyCharacterIds = useMemo(
+    () => getChatCharacterIds(chat.characterIds).filter((id) => id !== PROFESSOR_MARI_ID),
+    [chat.characterIds],
+  );
   const setupWizardDismissed = dismissedSetupWizardChatId === activeChatId;
   const canAutoDeleteEmptySetupChat = needsCreation && !isMessagesLoading && messages.length === 0;
   const shouldShowSetupWizard =
@@ -9888,6 +9892,7 @@ function GameSurfaceComponent({
             isLoading={createGame.isPending || gameSetup.isPending || generateSetupMapDraft.isPending}
             isDraftingMap={generateSetupMapDraft.isPending}
             characters={characters}
+            initialPartyCharacterIds={initialSetupPartyCharacterIds}
           />
         </Suspense>
         <GameJsonRepairModal

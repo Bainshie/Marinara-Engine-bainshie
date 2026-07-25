@@ -390,6 +390,19 @@ export interface AgentContext {
   writableLorebookIds: string[] | null;
   /** Chat summary text (if any) — helps agents avoid duplicating summarized info */
   chatSummary: string | null;
+  /**
+   * Semantic source material resolved for custom agents that opt into vector access.
+   * The runtime keeps this out of ordinary agent prompts and injects it only for
+   * agents with the `access_vectors` capability.
+   */
+  vectorContext?: {
+    recalledMemories: string[];
+    semanticLorebookEntries: Array<{
+      id: string;
+      content: string;
+      semanticScore?: number;
+    }>;
+  };
   /** Current-turn pre-generation injections, only present for agents that opt in */
   preGenInjections?: Array<{ agentType: string; agentName?: string; text: string }>;
   /** Current-turn parallel-phase results, only present for agents that opt in */
