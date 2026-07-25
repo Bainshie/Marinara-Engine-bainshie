@@ -24,6 +24,7 @@ import {
   isDocsPackInstalled,
   listInstalledDocsPacks,
   readInstalledDocsPackManifest,
+  reconcileActiveDocsPackOnBoot,
   removeOtherDocsPacks,
   sweepStaleDocsPackDirs,
   verifyDocsPackHashes,
@@ -518,7 +519,13 @@ export async function docsRoutes(app: FastifyInstance) {
 
   // Crashed installs leave .tmp-/.old- folders under doc-packs; clean them at
   // boot so a partial pack never lingers until someone finds the Fix button.
-  void sweepStaleDocsPackDirs().catch((err) => logger.warn(err, "Docs pack startup sweep failed"));
+  // Then, once per Engine build (i.e. after every update), refresh the selected
+  // language pack if its translations changed upstream — offline boots keep the
+  // installed pack and retry next start.
+  void sweepStaleDocsPackDirs()
+    .catch((err) => logger.warn(err, "Docs pack startup sweep failed"))
+    .then(() => reconcileActiveDocsPackOnBoot(storage))
+    .catch((err) => logger.warn(err, "Docs pack update check failed"));
 
   /** List available documentation files plus the on-disk docs folder path */
   app.get<{ Querystring: { lang?: string } }>("/", async (req, reply) => {

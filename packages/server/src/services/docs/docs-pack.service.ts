@@ -8,14 +8,24 @@
 // every file against the manifest. English is built into the repo and is never
 // downloaded or deleted. Only one downloaded language is kept on disk.
 // ──────────────────────────────────────────────
+import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { mkdir, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { APP_VERSION, DOCS_LANGUAGE_LABELS, DEFAULT_DOCS_LANGUAGE, normalizeDocsLanguage } from "@marinara-engine/shared";
+import { promisify } from "node:util";
+import {
+  APP_VERSION,
+  DOCS_LANGUAGE_LABELS,
+  DOCS_LANGUAGE_SETTINGS_KEY,
+  DEFAULT_DOCS_LANGUAGE,
+  normalizeDocsLanguage,
+} from "@marinara-engine/shared";
 import { logger } from "../../lib/logger.js";
-import { getDataDir } from "../../config/runtime-config.js";
+import { getDataDir, getMonorepoRoot } from "../../config/runtime-config.js";
 import { assertInsideDir, safeFetch } from "../../utils/security.js";
+
+const execFileAsync = promisify(execFile);
 
 /**
  * Base URL of the docs-i18n content branch. Overridable for forks and mirrors.
@@ -366,6 +376,94 @@ async function performInstall(language: string, progress: DocsPackInstallProgres
   } catch (err) {
     await rm(temporary, { recursive: true, force: true }).catch(() => undefined);
     throw err;
+  }
+}
+
+// ──────────────────────────────────────────────
+// Boot-time reconcile: after an Engine update, refresh the selected pack
+// ──────────────────────────────────────────────
+
+/** Marker recording which Engine build last checked the pack for upstream changes. */
+const BOOT_CHECK_SETTINGS_KEY = "docs-language-pack-boot-check";
+
+interface DocsPackSettingsStore {
+  get(key: string): Promise<string | null>;
+  set(key: string, value: string): Promise<void>;
+}
+
+/**
+ * Identity of the running Engine build. APP_VERSION alone misses staging git
+ * updates between releases, so the git HEAD is folded in when available
+ * (Docker images have no git and change APP_VERSION per pull instead).
+ */
+async function currentBuildKey(): Promise<string> {
+  try {
+    const { stdout } = await execFileAsync("git", ["rev-parse", "HEAD"], {
+      cwd: getMonorepoRoot(),
+      timeout: 5_000,
+    });
+    return `${APP_VERSION}:${stdout.trim().slice(0, 12)}`;
+  } catch {
+    return `${APP_VERSION}:nogit`;
+  }
+}
+
+/** True when both manifests describe the same file set with identical hashes. */
+export function docsPackManifestsMatch(a: DocsPackManifest, b: DocsPackManifest): boolean {
+  if (a.files.length !== b.files.length) return false;
+  const other = new Map(b.files.map((file) => [file.path, file.sha256]));
+  return a.files.every((file) => other.get(file.path) === file.sha256);
+}
+
+/**
+ * Once per Engine build (i.e. after every update), compare the selected
+ * language's installed pack against the docs-i18n branch and re-download it
+ * when the translations changed. A stored choice whose pack is missing
+ * (downgrade, data restore) is restored the same way. Failures keep the
+ * installed pack serving (or the per-file English fallback) and retry on the
+ * next start — mirroring how optional capability packages migrate on boot.
+ */
+export async function reconcileActiveDocsPackOnBoot(storage: DocsPackSettingsStore): Promise<void> {
+  const raw = await storage.get(DOCS_LANGUAGE_SETTINGS_KEY);
+  if (!raw) return;
+  let language: string | null = null;
+  try {
+    language = normalizeDocsLanguage((JSON.parse(raw) as { language?: unknown } | null)?.language);
+  } catch {
+    return; // corrupt setting is the Fix button's job, not the boot path's
+  }
+  if (!language || language === DEFAULT_DOCS_LANGUAGE || !(language in DOCS_LANGUAGE_LABELS)) return;
+
+  const buildKey = await currentBuildKey();
+  try {
+    const recorded = await storage.get(BOOT_CHECK_SETTINGS_KEY);
+    if (recorded && (JSON.parse(recorded) as { buildKey?: unknown } | null)?.buildKey === buildKey) {
+      return; // this build already checked — no network on routine restarts
+    }
+  } catch {
+    // Unreadable marker: fall through and re-check.
+  }
+
+  try {
+    await withDocsPackMutationLock(async () => {
+      const installed = await readInstalledDocsPackManifest(language);
+      if (installed) {
+        const pinnedBase = await resolvePinnedBase(docsPackBaseUrl());
+        const remoteBuffer = await fetchPackBytes(`${pinnedBase}/${language}/manifest.json`, MAX_MANIFEST_BYTES);
+        const remote = validateDocsPackManifest(JSON.parse(remoteBuffer.toString("utf8")), language);
+        if (!docsPackManifestsMatch(installed, remote)) {
+          logger.info("Documentation pack %s changed upstream; refreshing it after the update", language);
+          await installDocsPack(language);
+        }
+      } else {
+        logger.info("Documentation pack %s is missing for the stored choice; downloading it", language);
+        await installDocsPack(language);
+      }
+      await removeOtherDocsPacks(language);
+      await storage.set(BOOT_CHECK_SETTINGS_KEY, JSON.stringify({ buildKey, checkedAt: new Date().toISOString() }));
+    });
+  } catch (err) {
+    logger.warn(err, "Could not refresh documentation pack %s after the update; retrying next start", language);
   }
 }
 

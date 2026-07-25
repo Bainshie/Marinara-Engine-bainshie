@@ -31,6 +31,7 @@ const { normalizeDocsLanguage, DEFAULT_DOCS_LANGUAGE, DOCS_LANGUAGE_LABELS } = a
 const { resolvePhysical, supportedDocLanguages } = await import("../../packages/server/src/routes/docs.routes.ts");
 const {
   checkDocsPackConsistency,
+  docsPackManifestsMatch,
   docsPackRoot,
   validateDocsPackManifest,
   validateDocsPackPath,
@@ -133,6 +134,20 @@ try {
       { language: "es", files: [{ path: "FAQ.md", sha256: sha256("x"), bytes: 100 * 1024 * 1024 }] },
       "es",
     ),
+  );
+
+  // ── Manifest comparison drives the after-update refresh decision ──
+  const manifestA = { language: "es", files: [{ path: "FAQ.md", sha256: sha256("a"), bytes: 1 }] };
+  assert.equal(docsPackManifestsMatch(manifestA, { ...manifestA }), true);
+  assert.equal(
+    docsPackManifestsMatch(manifestA, { language: "es", files: [{ path: "FAQ.md", sha256: sha256("b"), bytes: 1 }] }),
+    false,
+    "a changed hash must trigger a refresh",
+  );
+  assert.equal(
+    docsPackManifestsMatch(manifestA, { language: "es", files: [...manifestA.files, { path: "new.md", sha256: sha256("c"), bytes: 1 }] }),
+    false,
+    "an added file must trigger a refresh",
   );
 
   // ── Consistency + hash verification detect truncation ──
