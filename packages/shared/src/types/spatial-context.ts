@@ -112,6 +112,8 @@ export interface ResolvedOwnerSpatialProjection {
   lorebookEntryIds: string[];
   destinations: SpatialDestination[];
   omittedDestinationCount: number;
+  /** Active map locations exposed as name-only breadcrumb paths for narrated travel. */
+  knownLocations?: Array<{ id: string; path: string }>;
 }
 
 export type SpatialDefinitionIssueCode =
