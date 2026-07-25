@@ -149,6 +149,7 @@ import { isLorebookScopeActiveForChat } from "../../lib/lorebook-scope";
 import { addSilentGreetingSwipes } from "../../lib/message-swipes";
 import { useUIStore } from "../../stores/ui.store";
 import { blurActiveChatFloatingUiControl, isDesktopShellNavigationTarget } from "../../lib/chat-floating-ui-events";
+import { useDialogFocusScope } from "../../hooks/use-dialog-focus-scope";
 import { useTouchFolderDrag } from "../../hooks/use-touch-folder-drag";
 import {
   useChatPresets,
@@ -2409,6 +2410,17 @@ export function ChatSettingsDrawer({
     greetings: GreetingOption[];
     selectedIndex: number;
   } | null>(null);
+  const greetingDialogRef = useRef<HTMLDivElement | null>(null);
+  useDialogFocusScope(firstMesConfirm !== null, greetingDialogRef);
+
+  useEffect(() => {
+    if (!firstMesConfirm) return;
+    const dismissGreetingDialog = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setFirstMesConfirm(null);
+    };
+    document.addEventListener("keydown", dismissGreetingDialog);
+    return () => document.removeEventListener("keydown", dismissGreetingDialog);
+  }, [firstMesConfirm]);
 
   const handleFirstMesConfirm = useCallback(async () => {
     if (!firstMesConfirm) return;
@@ -9462,6 +9474,8 @@ export function ChatSettingsDrawer({
           }}
         >
           <div
+            ref={greetingDialogRef}
+            tabIndex={-1}
             className="mari-chrome-token-scope relative mx-4 flex w-full max-w-sm flex-col rounded-xl bg-[var(--marinara-chat-chrome-panel-bg)] text-[var(--marinara-chat-chrome-panel-text)] shadow-2xl ring-1 ring-[var(--marinara-chat-chrome-panel-border)]"
             onPointerDown={(e) => e.stopPropagation()}
             onClick={(e) => e.stopPropagation()}

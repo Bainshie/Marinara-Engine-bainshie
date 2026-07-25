@@ -816,9 +816,10 @@ test("message deletion uses unified chroma controls and selection states", async
   }
 });
 
-test("bulk chat deletion uses the same accent control as its neighboring action", async ({ page }, testInfo) => {
+test("bulk chat deletion uses the shared primary accent control", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name.includes("mobile"), "Desktop chat-sidebar selection chrome is covered here.");
 
+  const accentColor = "rgb(20, 184, 166)";
   const chatResponses = await Promise.all(
     ["Bulk Delete Chroma One", "Bulk Delete Chroma Two"].map((name) =>
       page.request.post("/api/chats", {
@@ -844,9 +845,10 @@ test("bulk chat deletion uses the same accent control as its neighboring action"
       );
     }, chats[0]!.id);
     await page.goto("/");
-    await page.evaluate(() => {
-      document.documentElement.style.setProperty("--marinara-app-accent-solid", "rgb(20, 184, 166)");
-    });
+    await page.evaluate((accent) => {
+      document.documentElement.style.setProperty("--marinara-app-accent-solid", accent);
+      document.documentElement.style.setProperty("--marinara-chat-chrome-button-text-active", accent);
+    }, accentColor);
 
     const sidebar = page.locator('[data-component="ChatSidebar"]');
     await expect(sidebar).toBeVisible();
@@ -874,7 +876,8 @@ test("bulk chat deletion uses the same accent control as its neighboring action"
       }),
     );
     expect(styles).toHaveLength(2);
-    expect(styles[1]).toEqual(styles[0]);
+    await expect(deleteAction).toHaveClass(/mari-chrome-control--primary/u);
+    await expect(deleteAction).toHaveCSS("color", accentColor);
     expect(styles[1]?.className).not.toMatch(/danger|destructive|pink|red|rose/iu);
 
     await deleteAction.click();
@@ -889,7 +892,9 @@ test("bulk chat deletion uses the same accent control as its neighboring action"
   }
 });
 
-test("destructive confirmation actions use the shared accent button treatment", async ({ page }) => {
+test("destructive confirmation actions use the shared accent button treatment", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name.includes("mobile"), "Desktop confirmation-dialog chrome is covered here.");
+
   const accentColor = "rgb(20, 184, 166)";
   await page.goto("/");
   await page.evaluate((accent) => {

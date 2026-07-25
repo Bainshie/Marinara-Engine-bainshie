@@ -75,6 +75,7 @@ import {
   resolveActivePersonaCandidate,
   resolvePromptCharacterIdsForTarget,
   resolveCharacterNameMap,
+  resolveGroupGenerationMode,
   resolveRegenerationGameStateAnchor,
   resolveProviderTopK,
   resolveRoleplayChatSummary,
@@ -716,6 +717,13 @@ export async function registerDryRunRoute(app: FastifyInstance) {
         ? body.forCharacterId
         : null;
     const promptCharacterIds = resolvePromptCharacterIdsForTarget(characterIds, promptTargetCharacterId);
+    const promptGroupResponseOrder = (chatMeta.groupResponseOrder as string) ?? "sequential";
+    const dryRunGroupChatMode = resolveGroupGenerationMode(chatMode, chatMeta.groupChatMode);
+    const deferCharacterMacros =
+      characterIds.length > 1 &&
+      dryRunGroupChatMode === "individual" &&
+      (promptGroupResponseOrder !== "manual" || chatMode === "conversation") &&
+      !impersonate;
     const audienceCharacterIds = impersonate ? [] : promptTargetCharacterId ? [promptTargetCharacterId] : characterIds;
     if (audienceCharacterIds.length > 0) {
       const audience = new Set(audienceCharacterIds);
@@ -838,7 +846,6 @@ export async function registerDryRunRoute(app: FastifyInstance) {
       msg.content = msg.content.replace(/\n([ \t]*\n){2,}/g, "\n\n");
     }
     mappedMessages = resolveHistoryMessageMacros(mappedMessages);
-    const dryRunGroupChatMode = ((chatMeta.groupChatMode as string) ?? "merged") as string;
     const shouldPrefixGroupHistorySpeakers =
       chatMeta.groupSpeakerNamesInHistory === true &&
       characterIds.length > 1 &&
@@ -1278,6 +1285,7 @@ export async function registerDryRunRoute(app: FastifyInstance) {
         idleDuration: promptIdleDuration,
         impersonate,
         preserveImpersonatePresetSections: impersonate && effectivePresetSource === "impersonate",
+        deferCharacterMacros,
       };
 
       const assembled = await assemblePrompt(assemblerInput);
@@ -1462,7 +1470,13 @@ export async function registerDryRunRoute(app: FastifyInstance) {
     }
 
     const authorNotesRaw = typeof chatMeta.authorNotes === "string" ? chatMeta.authorNotes.trim() : "";
-    const authorNotes = authorNotesRaw ? resolveMacros(authorNotesRaw, promptMacroContext).trim() : "";
+    const authorNotes = authorNotesRaw
+      ? resolveMacros(
+          authorNotesRaw,
+          promptMacroContext,
+          deferCharacterMacros ? { deferCharacterMacros: "all" } : undefined,
+        ).trim()
+      : "";
     if (authorNotes) {
       const authorNotesDepth =
         typeof chatMeta.authorNotesDepth === "number" && Number.isFinite(chatMeta.authorNotesDepth)

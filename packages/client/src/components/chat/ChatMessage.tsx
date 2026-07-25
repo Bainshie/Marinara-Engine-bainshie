@@ -1115,7 +1115,7 @@ function renderContent(
         const lastFontClose = before.lastIndexOf("</font>");
         if (lastFontClose < lastFontOpen) return match;
       }
-      const highlightColor = dialogueColor ?? "white";
+      const highlightColor = safeColor(dialogueColor ?? "white");
       return `<${dialogueTag} style="color:${highlightColor}">${match}</${dialogueTag}>`;
     });
   })();
