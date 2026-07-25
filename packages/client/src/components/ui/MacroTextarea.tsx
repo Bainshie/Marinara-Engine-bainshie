@@ -257,6 +257,7 @@ export interface MacroTextareaProps {
   onKeyDown?: (event: ReactKeyboardEvent<HTMLTextAreaElement>) => void;
   rows?: number;
   title?: string;
+  ariaLabel?: string;
   placeholder?: string;
   className?: string;
   wrapperClassName?: string;
@@ -281,6 +282,7 @@ export function MacroTextarea({
   onKeyDown,
   rows = 6,
   title = "Edit text",
+  ariaLabel,
   placeholder,
   className,
   wrapperClassName,
@@ -338,6 +340,7 @@ export function MacroTextarea({
           onFocus={onFocus}
           onKeyDown={handleKeyDown}
           rows={rows}
+          aria-label={ariaLabel}
           placeholder={placeholder}
           spellCheck={spellCheck}
           className={cn(

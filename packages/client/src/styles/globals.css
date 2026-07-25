@@ -1817,6 +1817,11 @@
   color: var(--destructive);
 }
 
+.mari-editor-action--favorite[data-favorite="true"],
+.mari-editor-action--favorite:hover {
+  color: var(--marinara-editor-accent);
+}
+
 .mari-editor-status {
   display: inline-flex;
   align-items: center;

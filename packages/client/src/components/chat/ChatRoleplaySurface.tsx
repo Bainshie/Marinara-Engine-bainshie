@@ -862,6 +862,7 @@ function AuthorNotesButton({
     const handle = (e: PointerEvent) => {
       const target = e.target as Node;
       if (ref.current?.contains(target) || panelRef.current?.contains(target)) return;
+      if (target instanceof Element && target.closest("[data-macro-modal]")) return;
       // On mobile, the virtual keyboard opening can synthesise a pointer/mouse
       // event outside the panel that would otherwise close it mid-edit; don't
       // dismiss while a field inside the panel is focused. Mobile-only: on desktop

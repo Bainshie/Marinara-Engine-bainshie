@@ -1107,7 +1107,8 @@ export function CharactersPanel() {
                         {member.isFavorite && (
                           <div
                             aria-hidden="true"
-                            className="absolute -right-1 -top-1 flex h-3.5 w-3.5 items-center justify-center rounded-md bg-[var(--background)] text-amber-300 shadow-sm ring-1 ring-[var(--border)]"
+                            data-character-favorite-indicator="folder"
+                            className="absolute -right-1 -top-1 flex h-3.5 w-3.5 items-center justify-center rounded-md bg-[var(--background)] text-[var(--marinara-chat-chrome-accent)] shadow-sm ring-1 ring-[var(--border)]"
                           >
                             <Star size="0.5625rem" className="fill-current" />
                           </div>
@@ -1340,7 +1341,8 @@ export function CharactersPanel() {
                 {isFavorite && (
                   <div
                     aria-hidden="true"
-                    className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-md bg-[var(--background)] text-amber-300 shadow-sm ring-1 ring-[var(--border)]"
+                    data-character-favorite-indicator="panel"
+                    className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-md bg-[var(--background)] text-[var(--marinara-chat-chrome-accent)] shadow-sm ring-1 ring-[var(--border)]"
                   >
                     <Star size="0.625rem" className="fill-current" />
                   </div>
