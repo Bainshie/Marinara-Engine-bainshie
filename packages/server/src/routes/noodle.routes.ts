@@ -517,6 +517,10 @@ export async function noodleRoutes(app: FastifyInstance) {
     const parsed = noodleBulkPrivateAccountCreateSchema.safeParse(req.body ?? {});
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
     const { publicAccountIds, disclosureMode } = parsed.data;
+    const connectionId = settings.generationConnectionId;
+    if (!connectionId) return reply.code(400).send({ error: "Select a Noodle generation connection first." });
+    const connection = await connections.getWithKey(connectionId);
+    if (!connection) return reply.code(404).send({ error: "Noodle generation connection not found" });
     const created: string[] = [];
     const skipped: string[] = [];
     for (const publicAccountId of publicAccountIds) {
@@ -525,30 +529,18 @@ export async function noodleRoutes(app: FastifyInstance) {
         skipped.push(publicAccountId);
         continue;
       }
-      const stageProfile =
-        disclosureMode === "open"
-          ? {
-              displayName: publicAccount.displayName,
-              handle: publicAccount.handle,
-              bio: publicAccount.bio,
-              stagePersonality: "",
-              disclosureMode,
-            }
-          : {
-              // Never derive a hinted/secret alias from the public identity: normalization
-              // truncates to 36 chars, so `<handle>_stage` can collapse back to the exact
-              // public handle and leak it. Use a neutral placeholder instead.
-              displayName: "New stage persona",
-              handle: "new_stage_persona",
-              bio: "",
-              stagePersonality: "",
-              disclosureMode,
-            };
-      if (stageProfileContainsPublicIdentity(stageProfile, publicAccount)) {
-        skipped.push(publicAccountId);
-        continue;
-      }
       try {
+        // ponytail: sequential per-account LLM generation (up to 100). Correct but slow;
+        // add a small concurrency limit only if bulk latency becomes a real complaint.
+        const stageProfile = await generateNoodlerStageProfileDraft(app.db, {
+          request: { publicAccountId, disclosureMode, guidance: "" },
+          connection,
+        });
+        // Belt-and-braces: the generator already enforces leak protection, but keep the guard.
+        if (stageProfileContainsPublicIdentity(stageProfile, publicAccount)) {
+          skipped.push(publicAccountId);
+          continue;
+        }
         const account = await noodle.createPrivateAccount(
           publicAccountId,
           stageProfile,
@@ -560,11 +552,12 @@ export async function noodleRoutes(app: FastifyInstance) {
         }
         created.push(account.id);
       } catch (error) {
-        if (isFileUniqueConstraintError(error, "noodle_accounts", ["publicAccountId"])) {
-          skipped.push(publicAccountId);
-          continue;
+        if (!isFileUniqueConstraintError(error, "noodle_accounts", ["publicAccountId"])) {
+          logger.error(error, "[noodler] Bulk stage profile generation failed for %s", publicAccountId);
         }
-        throw error;
+        // Any per-account failure (generation or duplicate) skips that account, batch continues.
+        skipped.push(publicAccountId);
+        continue;
       }
     }
     const profiles = await noodle.listNoodlerStageProfiles();
