@@ -587,6 +587,7 @@ import {
 import {
   buildElevenLabsTextInput,
   detectTTSAudioMimeType,
+  resolveTTSAudioResponseContentType,
 } from "../../packages/server/src/routes/tts.routes.js";
 import {
   buildCommittedTrackerContextBlock,
@@ -1372,20 +1373,28 @@ const cases: RegressionCase[] = [
   {
     name: "TTS recognizes encoded audio when providers omit or mislabel the content type",
     run() {
-      assert.equal(
-        detectTTSAudioMimeType(new Uint8Array([0x49, 0x44, 0x33, 0x04, 0x00, 0x00])),
-        "audio/mpeg",
-      );
-      assert.equal(
-        detectTTSAudioMimeType(
-          new Uint8Array([0x52, 0x49, 0x46, 0x46, 0, 0, 0, 0, 0x57, 0x41, 0x56, 0x45]),
-        ),
-        "audio/wav",
-      );
-      assert.equal(
-        detectTTSAudioMimeType(new TextEncoder().encode('{"error":"provider failure"}')),
-        null,
-      );
+      const mpeg = new Uint8Array([0x49, 0x44, 0x33, 0x04, 0x00, 0x00]);
+      const wav = new Uint8Array([0x52, 0x49, 0x46, 0x46, 0, 0, 0, 0, 0x57, 0x41, 0x56, 0x45]);
+      const ogg = new Uint8Array([0x4f, 0x67, 0x67, 0x53]);
+      const flac = new Uint8Array([0x66, 0x4c, 0x61, 0x43]);
+      const webm = new Uint8Array([0x1a, 0x45, 0xdf, 0xa3]);
+      const mp4 = new Uint8Array([0, 0, 0, 0, 0x66, 0x74, 0x79, 0x70, 0, 0, 0, 0]);
+      const providerError = new TextEncoder().encode('{"error":"provider failure"}');
+
+      assert.equal(detectTTSAudioMimeType(mpeg), "audio/mpeg");
+      assert.equal(detectTTSAudioMimeType(wav), "audio/wav");
+      assert.equal(detectTTSAudioMimeType(ogg), "audio/ogg");
+      assert.equal(detectTTSAudioMimeType(flac), "audio/flac");
+      assert.equal(detectTTSAudioMimeType(webm), "audio/webm");
+      assert.equal(detectTTSAudioMimeType(mp4), "audio/mp4");
+      assert.equal(detectTTSAudioMimeType(providerError), null);
+
+      assert.equal(resolveTTSAudioResponseContentType(null, mpeg), "audio/mpeg");
+      assert.equal(resolveTTSAudioResponseContentType("audio/mpeg", providerError), "audio/mpeg");
+      assert.equal(resolveTTSAudioResponseContentType("application/octet-stream", wav), "audio/wav");
+      assert.equal(resolveTTSAudioResponseContentType("application/octet-stream", providerError), null);
+      assert.equal(resolveTTSAudioResponseContentType("application/json", providerError), null);
+      assert.equal(resolveTTSAudioResponseContentType("text/plain", ogg), "audio/ogg");
     },
   },
   {
