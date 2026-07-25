@@ -5366,6 +5366,7 @@
   "ui.noodle.noodlerbulkcreatepanel.couldNotCreateCreators": "Could not create creators.",
   "ui.noodle.noodlerbulkcreatepanel.couldNotLoadEligibleAccounts": "Could not load eligible accounts.",
   "ui.noodle.noodlerbulkcreatepanel.createCreatorsPaused": "Create creators (paused)",
+  "ui.noodle.noodlerbulkcreatepanel.createdValue1SkippedValue2": "Created {{value1}} · skipped {{value2}}",
   "ui.noodle.noodlerbulkcreatepanel.createdValue1SkippedValue2FailedValue3": "Created {{value1}} · skipped {{value2}} · failed {{value3}}",
   "ui.noodle.noodlerbulkcreatepanel.createValue1CreatorValue2Paused": "Create {{value1}} creator{{value2}} (paused)",
   "ui.noodle.noodlerbulkcreatepanel.deselectAll": "Deselect all",

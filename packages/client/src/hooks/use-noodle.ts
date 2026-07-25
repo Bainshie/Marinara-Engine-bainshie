@@ -165,13 +165,13 @@ export function useBulkCreateNoodlerStageProfiles() {
         input,
       ),
     onSuccess: (result) => {
-      const message = localizeUi("ui.noodle.noodlerbulkcreatepanel.createdValue1SkippedValue2FailedValue3", {
-        value1: result.created.length,
-        value2: result.skipped.length,
-        value3: result.failed?.length ?? 0,
-      });
-      if (result.failed?.length) toast.error(message);
-      else toast.success(message);
+      const failed = result.failed?.length ?? 0;
+      const counts = { value1: result.created.length, value2: result.skipped.length, value3: failed };
+      if (failed) {
+        toast.error(localizeUi("ui.noodle.noodlerbulkcreatepanel.createdValue1SkippedValue2FailedValue3", counts));
+      } else {
+        toast.success(localizeUi("ui.noodle.noodlerbulkcreatepanel.createdValue1SkippedValue2", counts));
+      }
       return Promise.all([
         qc.invalidateQueries({ queryKey: noodleKeys.privateAccounts() }),
         qc.invalidateQueries({ queryKey: noodleKeys.privateEligibleAccountsRoot() }),
