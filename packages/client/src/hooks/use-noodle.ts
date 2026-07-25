@@ -160,14 +160,18 @@ export function useBulkCreateNoodlerStageProfiles() {
   const { t: localizeUi } = useUiTranslation();
   return useMutation({
     mutationFn: (input: NoodleBulkPrivateAccountCreateInput) =>
-      api.post<{ created: NoodlerManagedStageProfile[]; skipped: string[] }>("/noodle/noodler/accounts/bulk", input),
+      api.post<{ created: NoodlerManagedStageProfile[]; skipped: string[]; failed?: string[] }>(
+        "/noodle/noodler/accounts/bulk",
+        input,
+      ),
     onSuccess: (result) => {
-      toast.success(
-        localizeUi("ui.noodle.noodlerbulkcreatepanel.createdValue1SkippedValue2", {
-          value1: result.created.length,
-          value2: result.skipped.length,
-        }),
-      );
+      const message = localizeUi("ui.noodle.noodlerbulkcreatepanel.createdValue1SkippedValue2FailedValue3", {
+        value1: result.created.length,
+        value2: result.skipped.length,
+        value3: result.failed?.length ?? 0,
+      });
+      if (result.failed?.length) toast.error(message);
+      else toast.success(message);
       return Promise.all([
         qc.invalidateQueries({ queryKey: noodleKeys.privateAccounts() }),
         qc.invalidateQueries({ queryKey: noodleKeys.privateEligibleAccountsRoot() }),
@@ -361,7 +365,9 @@ export function useToggleNoodlerSubscription() {
           }),
     // Patch the viewer cache with the returned scope instead of refetching the whole feed,
     // so revealed/re-locked posts flip in place without a reload-and-jump.
-    onSuccess: (scope, input) => {
+    onSuccess: async (scope, input) => {
+      // Cancel any in-flight viewer poll first, or it can land after us and restore the stale scope.
+      await qc.cancelQueries({ queryKey: noodleKeys.viewer(input.personaId) });
       qc.setQueryData(noodleKeys.viewer(input.personaId), scope);
       return qc.invalidateQueries({ queryKey: noodleKeys.privateSubscribers(input.creatorAccountId) });
     },
@@ -373,7 +379,11 @@ export function useUnlockNoodlerPost() {
   return useMutation({
     mutationFn: ({ postId, personaId }: { postId: string; personaId: string }) =>
       api.post<NoodlerViewerScope>(`/noodle/noodler/posts/${encodeURIComponent(postId)}/unlock`, { personaId }),
-    onSuccess: (scope, input) => qc.setQueryData(noodleKeys.viewer(input.personaId), scope),
+    onSuccess: async (scope, input) => {
+      // Cancel any in-flight viewer poll first, or it can land after us and restore the locked scope.
+      await qc.cancelQueries({ queryKey: noodleKeys.viewer(input.personaId) });
+      qc.setQueryData(noodleKeys.viewer(input.personaId), scope);
+    },
   });
 }
 

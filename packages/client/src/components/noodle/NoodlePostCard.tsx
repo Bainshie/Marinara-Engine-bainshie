@@ -592,7 +592,7 @@ interface NoodlePostCardImageEditingCap {
   restore: () => void;
 }
 
-function PostImageEditControls({
+export function PostImageEditControls({
   post,
   editing,
   disabled,

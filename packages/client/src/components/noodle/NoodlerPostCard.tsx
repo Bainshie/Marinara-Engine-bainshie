@@ -20,7 +20,9 @@ import {
 import { Fragment, useRef } from "react";
 import {
   canManageNoodleReply,
+  noodlePollInputSchema,
   readNoodlePollFromMetadata,
+  readNoodlePostImageCrop,
   type NoodleAccount,
   type NoodleInteraction,
 } from "@marinara-engine/shared";
@@ -44,10 +46,13 @@ import {
   NoodleTextContent,
   NoodleToolButton,
   NoodlerToolPopover,
+  PostImageEditControls,
   textareaClass,
   type NoodlePostCardCtx,
   type NoodlePostCardModel,
 } from "./NoodlePostCard";
+import { NoodlePollComposer } from "./NoodlePollComposer";
+import { PostImageFrame } from "./PostImageCropEditor";
 
 export function NoodlerPostCard({ post, ctx }: { post: NoodlePostCardModel; ctx: NoodlePostCardCtx }) {
   const { t: localizeUi } = useUiTranslation();
@@ -142,6 +147,9 @@ export function NoodlerPostCard({ post, ctx }: { post: NoodlePostCardModel; ctx:
   const replyMentionSuggestions = mentions?.replyMentionSuggestions ?? [];
   const selectReplyMention: (account: NoodleAccount) => void = mentions?.selectReplyMention ?? (() => {});
 
+  const { imageEditing, pollEditing } = ctx;
+  const isEditingPost = Boolean(ctx.postManagement) && editingPostId === post.id;
+  const imageCrop = readNoodlePostImageCrop(post.metadata);
   const postInteractions = post.interactions;
   const rootPostInteractions = postInteractions.filter((interaction) => !interaction.parentInteractionId);
   const poll = readNoodlePollFromMetadata(post.metadata);
@@ -188,6 +196,33 @@ export function NoodlerPostCard({ post, ctx }: { post: NoodlePostCardModel; ctx:
   const postRepostPending = reactionPendingFor(post.id, "repost");
   const postReplyPending = createInteractionPendingFor(post.id, "reply", replyParentInteractionId);
   const pollVotePending = createInteractionPendingFor(post.id, "vote");
+  const editingExistingPoll = Boolean(poll && pollEditing);
+  const editingPollIsValid = !editingExistingPoll || noodlePollInputSchema.safeParse(pollEditing?.value).success;
+  const saveEditDisabled =
+    (!editingPostContent.trim() && !(ctx.allowPollOnlyEdits && editingPollIsValid && editingExistingPoll)) ||
+    !editingPollIsValid ||
+    updatePostPending ||
+    Boolean(imageEditing?.loading) ||
+    Boolean(imageEditing?.cropSource);
+  const postEditActions = (
+    <>
+      <button
+        type="button"
+        onClick={cancelEditingPost}
+        className="h-8 rounded-full border border-[var(--noodle-divider)] px-4 text-xs font-semibold text-[var(--foreground)] transition-colors hover:bg-[var(--accent)]"
+      >
+        {localizeUi("chat.delete.dialog.cancel")}
+      </button>
+      <button
+        type="button"
+        onClick={() => saveEditedPost(post)}
+        disabled={saveEditDisabled}
+        className="h-8 rounded-full bg-[var(--noodle-accent)] px-4 text-xs font-bold text-zinc-950 transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        {updatePostPending ? localizeUi("ui.noodle.noodlehome.saving") : localizeUi("ui.noodle.noodlehome.save")}
+      </button>
+    </>
+  );
   const renderReplyComposer = (nested: boolean) => (
     <div
       data-component="NoodleView.ReplyComposer"
@@ -446,7 +481,8 @@ export function NoodlerPostCard({ post, ctx }: { post: NoodlePostCardModel; ctx:
         </div>
       </div>
       <div>
-        {post.imageUrl ? (
+        {/* The image editor renders its own preview while editing, so hide the read-only one. */}
+        {isEditingPost && imageEditing ? null : post.imageUrl ? (
           <button
             type="button"
             onClick={() => setImageLightbox(createNoodleLightboxImage(post.id, post.imageUrl!, post.imagePrompt ?? ""))}
@@ -454,13 +490,23 @@ export function NoodlerPostCard({ post, ctx }: { post: NoodlePostCardModel; ctx:
             title={localizeUi("ui.noodle.noodlepostcard.openImage")}
             aria-label={localizeUi("ui.noodle.noodlepostcard.openPostImage")}
           >
-            <img
-              src={post.imageUrl}
-              alt={localizeUi("ui.noodle.post.imageBy", {
-                name: author?.displayName ?? localizeUi("ui.noodle.profile.fallbackUser"),
-              })}
-              className="max-h-96 w-full object-cover"
-            />
+            {imageCrop ? (
+              <PostImageFrame
+                src={post.imageUrl}
+                crop={imageCrop}
+                alt={localizeUi("ui.noodle.post.imageBy", {
+                  name: author?.displayName ?? localizeUi("ui.noodle.profile.fallbackUser"),
+                })}
+              />
+            ) : (
+              <img
+                src={post.imageUrl}
+                alt={localizeUi("ui.noodle.post.imageBy", {
+                  name: author?.displayName ?? localizeUi("ui.noodle.profile.fallbackUser"),
+                })}
+                className="max-h-96 w-full object-cover"
+              />
+            )}
           </button>
         ) : post.imagePrompt ? (
           <div className="mt-3 rounded-xl border border-[var(--noodle-accent)]/35 bg-[var(--noodle-accent)]/10 p-3 text-xs leading-5">
@@ -471,7 +517,7 @@ export function NoodlerPostCard({ post, ctx }: { post: NoodlePostCardModel; ctx:
             {post.imagePrompt}
           </div>
         ) : null}
-        {ctx.postManagement && editingPostId === post.id ? (
+        {isEditingPost ? (
           <div className="mt-2 space-y-2">
             {titleEditing && (
               <label className="block space-y-1">
@@ -491,25 +537,33 @@ export function NoodlerPostCard({ post, ctx }: { post: NoodlePostCardModel; ctx:
               className={cn(textareaClass, "min-h-28")}
               placeholder={localizeUi("ui.noodle.noodlepostcard.editPost")}
             />
-            <div className="flex flex-wrap justify-end gap-2">
-              <button
-                type="button"
-                onClick={cancelEditingPost}
-                className="h-8 rounded-full border border-[var(--noodle-divider)] px-4 text-xs font-semibold text-[var(--foreground)] transition-colors hover:bg-[var(--accent)]"
-              >
-                {localizeUi("chat.delete.dialog.cancel")}
-              </button>
-              <button
-                type="button"
-                onClick={() => saveEditedPost(post)}
-                disabled={!editingPostContent.trim() || updatePostPending}
-                className="h-8 rounded-full bg-[var(--noodle-accent)] px-4 text-xs font-bold text-zinc-950 transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {updatePostPending
-                  ? localizeUi("ui.noodle.noodlehome.saving")
-                  : localizeUi("ui.noodle.noodlehome.save")}
-              </button>
-            </div>
+            {imageEditing && (
+              <PostImageEditControls
+                post={post}
+                editing={imageEditing}
+                disabled={updatePostPending}
+                footer={editingExistingPoll ? null : postEditActions}
+              />
+            )}
+            {editingExistingPoll && pollEditing && (
+              <NoodlePollComposer
+                value={pollEditing.value}
+                onChange={pollEditing.setValue}
+                onClose={cancelEditingPost}
+                onSubmit={() => saveEditedPost(post)}
+                submitLabel={
+                  updatePostPending ? localizeUi("ui.noodle.noodlehome.saving") : localizeUi("ui.noodle.noodlehome.save")
+                }
+                submitDisabled={saveEditDisabled}
+                disabled={updatePostPending}
+                title={localizeUi("ui.noodle.noodlehome.editPoll")}
+                closeLabel="Cancel post editing"
+                action={postEditActions}
+              />
+            )}
+            {!imageEditing && !editingExistingPoll && (
+              <div className="flex flex-wrap justify-end gap-2">{postEditActions}</div>
+            )}
           </div>
         ) : (
           <>
@@ -524,7 +578,7 @@ export function NoodlerPostCard({ post, ctx }: { post: NoodlePostCardModel; ctx:
             ) : null}
           </>
         )}
-        {poll && (
+        {poll && !isEditingPost && (
           <NoodlePollCard
             poll={poll}
             votes={pollVotes}

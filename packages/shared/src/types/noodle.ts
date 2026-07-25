@@ -249,7 +249,10 @@ export interface NoodlerPostView {
   imagePrompt: string | null;
   metadata: Record<string, unknown> | null;
   createdAt: string;
+  /** Empty for locked posts — use likeCount/replyCount for the teaser footer. */
   interactions: NoodleInteraction[];
+  likeCount: number;
+  replyCount: number;
 }
 
 export interface NoodlerViewerCreator {

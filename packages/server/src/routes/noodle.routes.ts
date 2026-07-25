@@ -341,8 +341,11 @@ export async function noodleRoutes(app: FastifyInstance) {
         }
       }
     }
+    // Counts are loaded for every post so locked teasers can show real engagement;
+    // the interaction records themselves stay redacted unless the post is viewable.
+    const allPostIds = [...postsByAccount.values()].flatMap((posts) => posts.map((post) => post.id));
     const interactionsByPostId = new Map<string, NoodlerPostView["interactions"]>();
-    for (const interaction of await noodle.listPrivateInteractions([...viewablePostIds])) {
+    for (const interaction of await noodle.listPrivateInteractions(allPostIds)) {
       const existing = interactionsByPostId.get(interaction.postId) ?? [];
       existing.push(interaction);
       interactionsByPostId.set(interaction.postId, existing);
@@ -355,6 +358,7 @@ export async function noodleRoutes(app: FastifyInstance) {
         subscribed,
         posts: posts.map((post): NoodlerPostView => {
           const locked = !viewablePostIds.has(post.id);
+          const interactions = interactionsByPostId.get(post.id) ?? [];
           return {
             id: post.id,
             authorAccountId: post.authorAccountId,
@@ -369,7 +373,9 @@ export async function noodleRoutes(app: FastifyInstance) {
             imagePrompt: locked ? null : post.imagePrompt,
             metadata: locked ? null : post.metadata,
             createdAt: post.createdAt,
-            interactions: interactionsByPostId.get(post.id) ?? [],
+            interactions: locked ? [] : interactions,
+            likeCount: interactions.filter((item) => item.type === "like").length,
+            replyCount: interactions.filter((item) => item.type === "reply").length,
           };
         }),
       };
@@ -753,6 +759,9 @@ export async function noodleRoutes(app: FastifyInstance) {
     if (!connection) return reply.code(404).send({ error: "Noodle generation connection not found" });
     const created: string[] = [];
     const skipped: string[] = [];
+    // Operational failures (provider/storage) are reported apart from expected exclusions
+    // so a provider outage cannot look like a batch of harmless skips.
+    const failed: string[] = [];
     for (const publicAccountId of publicAccountIds) {
       const publicAccount = await noodle.getAccountById(publicAccountId);
       if (!publicAccount) {
@@ -782,11 +791,12 @@ export async function noodleRoutes(app: FastifyInstance) {
         }
         created.push(account.id);
       } catch (error) {
-        if (!isFileUniqueConstraintError(error, "noodle_accounts", ["publicAccountId"])) {
-          logger.error(error, "[noodler] Bulk stage profile generation failed for %s", publicAccountId);
+        if (isFileUniqueConstraintError(error, "noodle_accounts", ["publicAccountId"])) {
+          skipped.push(publicAccountId);
+          continue;
         }
-        // Any per-account failure (generation or duplicate) skips that account, batch continues.
-        skipped.push(publicAccountId);
+        logger.error(error, "[noodler] Bulk stage profile generation failed for %s", publicAccountId);
+        failed.push(publicAccountId);
         continue;
       }
     }
@@ -794,6 +804,7 @@ export async function noodleRoutes(app: FastifyInstance) {
     return reply.code(201).send({
       created: profiles.filter((profile) => created.includes(profile.id)),
       skipped,
+      failed,
     });
   });
 

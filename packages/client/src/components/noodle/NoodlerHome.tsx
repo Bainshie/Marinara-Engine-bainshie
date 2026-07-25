@@ -100,7 +100,7 @@ import {
 } from "./NoodlePostCard";
 import { NoodlerPostCard } from "./NoodlerPostCard";
 import { NoodlerAgeGate } from "./NoodlerAgeGate";
-import { NOODLE_AUTO_POST_INTENSITIES } from "./noodle-auto-post";
+import { NOODLE_AUTO_POST_INTENSITIES, summarizeRefreshOutcomes } from "./noodle-auto-post";
 import { NoodlerBulkCreateButton } from "./NoodlerBulkCreatePanel";
 import {
   Avatar,
@@ -1288,25 +1288,10 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
                 onClick={() =>
                   refreshAllNow.mutate(undefined, {
                     onSuccess: ({ outcomes }) => {
-                      const generated = outcomes.filter((o) => o.status === "generated").length;
-                      const skipped = outcomes.filter((o) => o.status === "skipped").length;
-                      const failed = outcomes.length - generated - skipped;
-                      if (outcomes.length === 0) {
-                        toast.success(localizeUi("ui.noodle.noodlerhome.noCreatorsHaveAutomaticPostingEnabled"));
-                      } else if (failed === 0) {
-                        toast.success(localizeUi("ui.noodle.refresh.generatedPosts", { count: generated }));
-                      } else if (generated === 0) {
-                        toast.error(localizeUi("ui.noodle.refresh.allCreatorsFailed", { count: failed }));
-                      } else {
-                        toast.error(
-                          localizeUi(
-                            skipped
-                              ? "ui.noodle.refresh.partialFailureWithSkipped"
-                              : "ui.noodle.refresh.partialFailure",
-                            { generated, failed, skipped },
-                          ),
-                        );
-                      }
+                      const summary = summarizeRefreshOutcomes(outcomes);
+                      const message = localizeUi(summary.key, summary.params);
+                      if (summary.ok) toast.success(message);
+                      else toast.error(message);
                     },
                     onError: (error) =>
                       toast.error(
@@ -3048,7 +3033,7 @@ function LockedPrivatePostCard({
   onOpenProfile,
 }: {
   post: Pick<NoodlerPostView, "id" | "access" | "ppvPrice" | "createdAt" | "title" | "imageUrl"> &
-    Partial<Pick<NoodlerPostView, "interactions">>; // controller-locked managed posts carry no interactions
+    Partial<Pick<NoodlerPostView, "likeCount" | "replyCount">>; // controller-locked managed posts carry no counts
   profile: NoodlerStageProfile;
   controllerOnly?: boolean;
   subscribed: boolean;
@@ -3060,9 +3045,8 @@ function LockedPrivatePostCard({
   onOpenProfile?: (accountId: string) => void;
 }) {
   const { t: localizeUi } = useUiTranslation();
-  const interactions = post.interactions ?? [];
-  const likeCount = interactions.filter((i) => i.type === "like").length;
-  const replyCount = interactions.filter((i) => i.type === "reply").length;
+  const likeCount = post.likeCount ?? 0;
+  const replyCount = post.replyCount ?? 0;
   const openProfile = onOpenProfile ? () => onOpenProfile(profile.id) : undefined;
   return (
     <article className="border-b border-[var(--noodle-divider)] px-4 py-4 transition-colors hover:bg-[var(--accent)]/35">
@@ -3133,7 +3117,7 @@ function LockedPrivatePostCard({
             onClick={() => onUnlock(post.id)}
             className="mt-3 inline-flex min-h-10 items-center gap-2 rounded-md bg-[var(--noodle-accent)] px-4 text-xs font-bold text-zinc-950 disabled:cursor-not-allowed disabled:opacity-50 [&_svg]:!text-zinc-950"
           >
-            <Coins size={14} /> 0 · <Eye size={14} /> {localizeUi("ui.noodle.lockedprivatepostcard.unlock")}
+            <Coins size={14} /> {post.ppvPrice ?? 0} · <Eye size={14} /> {localizeUi("ui.noodle.lockedprivatepostcard.unlock")}
           </button>
         ) : (
           <button
