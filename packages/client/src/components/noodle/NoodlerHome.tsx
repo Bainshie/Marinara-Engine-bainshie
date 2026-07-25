@@ -2895,6 +2895,7 @@ function ViewerHub({
                     subscriptionPending={togglePending}
                     onUnlock={onUnlock}
                     onToggleSubscription={onToggleSubscription}
+                    onOpenProfile={postCardCtx.openAuthorProfile}
                   />
                 ) : (
                   <NoodlerPostCard
@@ -2940,6 +2941,7 @@ function LockedPrivatePostCard({
   onUnlock,
   onToggleSubscription,
   onManage,
+  onOpenProfile,
 }: {
   post: Pick<NoodlerPostView, "id" | "access" | "ppvPrice" | "createdAt" | "title" | "imageUrl"> &
     Partial<Pick<NoodlerPostView, "interactions">>; // controller-locked managed posts carry no interactions
@@ -2951,19 +2953,36 @@ function LockedPrivatePostCard({
   onUnlock: (postId: string) => void;
   onToggleSubscription: (creatorAccountId: string, subscribed: boolean) => void;
   onManage?: () => void;
+  onOpenProfile?: (accountId: string) => void;
 }) {
   const { t: localizeUi } = useUiTranslation();
   const interactions = post.interactions ?? [];
   const likeCount = interactions.filter((i) => i.type === "like").length;
   const replyCount = interactions.filter((i) => i.type === "reply").length;
+  const openProfile = onOpenProfile ? () => onOpenProfile(profile.id) : undefined;
   return (
     <article className="border-b border-[var(--noodle-divider)] px-4 py-4 transition-colors hover:bg-[var(--accent)]/35">
       {/* Author row */}
       <div className="flex gap-3">
-        <ProfileInitial profile={profile} />
+        <button
+          type="button"
+          onClick={openProfile}
+          disabled={!openProfile}
+          className="h-fit rounded-full text-left transition-opacity enabled:hover:opacity-80 disabled:cursor-default"
+          title={openProfile ? localizeUi("ui.noodle.noodlehome.viewValue1", { value1: profile.handle }) : undefined}
+        >
+          <ProfileInitial profile={profile} />
+        </button>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-            <span className="font-semibold">{profile.displayName}</span>
+            <button
+              type="button"
+              onClick={openProfile}
+              disabled={!openProfile}
+              className="font-semibold transition-colors enabled:hover:text-[var(--noodle-accent)] disabled:cursor-default"
+            >
+              {profile.displayName}
+            </button>
             <span className="rounded-full bg-[var(--noodle-accent)]/15 px-2 py-0.5 text-[0.68rem] font-bold text-[var(--noodle-accent)]">
               {localizeUi(`ui.noodle.postaccess.${post.access === "ppv" ? "ppv" : "subscriber"}`)}
             </span>
