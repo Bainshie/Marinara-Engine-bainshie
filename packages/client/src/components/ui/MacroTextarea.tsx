@@ -14,7 +14,7 @@ import { SUPPORTED_MACROS } from "@marinara-engine/shared";
 
 import { cn } from "../../lib/utils";
 import { handleTextareaTab } from "../../lib/textarea-editing";
-import { useTranslation as useUiTranslation } from "react-i18next";
+import { Trans, useTranslation as useUiTranslation } from "react-i18next";
 
 type MacroDefinition = (typeof SUPPORTED_MACROS)[number];
 
@@ -216,7 +216,17 @@ function MacrosReferenceModal({ open, onClose }: MacrosReferenceModalProps) {
           </div>
           <div className="max-h-[calc(88vh-4rem)] space-y-4 overflow-y-auto p-4 supports-[height:100dvh]:max-h-[calc(88dvh-4rem)]">
             <section className="rounded-xl border border-[var(--border)] bg-[var(--secondary)] p-3 text-xs text-[var(--muted-foreground)]">
-              <p>{localizeUi("ui.agents.agenteditor.use")} <code className="text-[var(--foreground)]">{"{{macro}}"}</code> {localizeUi("ui.ui.macrosreferencemodal.anywhereInPromptFieldsConditionalBlocksCanCombineChecks")} <code className="text-[var(--foreground)]">||</code> {localizeUi("ui.ui.macrosreferencemodal.orAnd")} <code className="text-[var(--foreground)]">&&</code> {localizeUi("ui.ui.macrosreferencemodal.and")}</p>
+              <p>
+                <Trans
+                  i18nKey="ui.ui.macrosreferencemodal.macroUsageGuidance"
+                  values={{ example: "{{macro}}" }}
+                  components={{
+                    macro: <code className="text-[var(--foreground)]" />,
+                    or: <code className="text-[var(--foreground)]" />,
+                    and: <code className="text-[var(--foreground)]" />,
+                  }}
+                />
+              </p>
               <div className="mt-3 grid gap-2 md:grid-cols-2">
                 <div className="rounded-lg border border-[var(--border)] bg-[var(--background)] p-2">
                   <p className="font-semibold text-[var(--foreground)]">{localizeUi("ui.ui.macrosreferencemodal.conditionalBlock")}</p>

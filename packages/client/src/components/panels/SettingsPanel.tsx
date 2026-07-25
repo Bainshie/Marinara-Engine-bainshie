@@ -6298,8 +6298,11 @@ function ImportButton({
         const previews = await inspectCharacterFilesForEmbeddedLorebooks([file]);
         const preview = previews[0];
         if (preview) {
-          importEmbeddedLorebook = window.confirm(localizeUi("ui.panels.importbutton.value1IncludesAnEmbeddedLorebookWithValue2EntrValue3", { value1: preview.name ?? file.name, value2: preview.embeddedLorebookEntries, value3:
-              preview.embeddedLorebookEntries === 1 ?localizeUi("ui.panels.importbutton.y") :localizeUi("ui.panels.importbutton.ies") }),
+          importEmbeddedLorebook = window.confirm(
+            localizeUi("ui.panels.importbutton.embeddedLorebookImportPrompt", {
+              name: preview.name ?? file.name,
+              count: preview.embeddedLorebookEntries,
+            }),
           );
         }
       }
@@ -7280,7 +7283,9 @@ function AdvancedSettings() {
                 />
                 {confirmAction === "all"
                   ?localizeUi("ui.panels.advancedsettings.deleteAllSupportedDataCategoriesExceptProfessorMariThere")
-                  :localizeUi("ui.panels.advancedsettings.deleteValue1SelectedDataCategorValue2ThereIsNo", { value1: selectedScopes.length, value2: selectedScopes.length === 1 ?localizeUi("ui.panels.importbutton.y") :localizeUi("ui.panels.importbutton.ies") })}
+                  : localizeUi("ui.panels.advancedsettings.deleteSelectedDataCategories", {
+                      count: selectedScopes.length,
+                    })}
               </div>
               <div className="flex flex-col gap-2">
                 <button
