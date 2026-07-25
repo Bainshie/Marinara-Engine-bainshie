@@ -293,13 +293,10 @@ export async function noodleRoutes(app: FastifyInstance) {
     return account?.visibility === "public" ? account : null;
   }
 
-  app.get("/noodler/viewer", async (req, reply) => {
-    const settings = await noodle.getSettings();
-    if (!settings.enableNoodler) return reply.code(404).send({ error: "Not Found" });
-    const parsed = noodlerViewerPersonaSchema.safeParse(req.query);
-    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
-    const viewer = await resolveViewerPersona(parsed.data.personaId);
-    if (!viewer) return reply.code(404).send({ error: "Noodle persona not found" });
+  // Shared viewer-scope builder: also returned from the unlock/subscribe mutations so the
+  // client can patch its cache in place instead of refetching the whole feed (avoids the
+  // reload-and-jump when a post is revealed).
+  async function buildViewerScope(viewer: NonNullable<Awaited<ReturnType<typeof resolveViewerPersona>>>) {
     const [accounts, profiles, subscriptions, unlocks] = await Promise.all([
       noodle.listPrivateAccounts(),
       noodle.listNoodlerStageProfiles(),
@@ -342,8 +339,11 @@ export async function noodleRoutes(app: FastifyInstance) {
         }
       }
     }
+    // Counts are loaded for every post so locked teasers can show real engagement;
+    // the interaction records themselves stay redacted unless the post is viewable.
+    const allPostIds = [...postsByAccount.values()].flatMap((posts) => posts.map((post) => post.id));
     const interactionsByPostId = new Map<string, NoodlerPostView["interactions"]>();
-    for (const interaction of await noodle.listPrivateInteractions([...viewablePostIds])) {
+    for (const interaction of await noodle.listPrivateInteractions(allPostIds)) {
       const existing = interactionsByPostId.get(interaction.postId) ?? [];
       existing.push(interaction);
       interactionsByPostId.set(interaction.postId, existing);
@@ -356,24 +356,39 @@ export async function noodleRoutes(app: FastifyInstance) {
         subscribed,
         posts: posts.map((post): NoodlerPostView => {
           const locked = !viewablePostIds.has(post.id);
+          const interactions = interactionsByPostId.get(post.id) ?? [];
           return {
             id: post.id,
             authorAccountId: post.authorAccountId,
             access: post.access,
             ppvPrice: post.ppvPrice,
             locked,
-            title: locked ? null : post.title,
+            // Locked posts still surface title, image, and engagement counts (Patreon-style
+            // teaser); only the body text and image prompt stay hidden until unlocked.
+            title: post.title,
             content: locked ? null : post.content,
-            imageUrl: locked ? null : post.imageUrl,
+            imageUrl: post.imageUrl,
             imagePrompt: locked ? null : post.imagePrompt,
             metadata: locked ? null : post.metadata,
             createdAt: post.createdAt,
-            interactions: locked ? [] : (interactionsByPostId.get(post.id) ?? []),
+            interactions: locked ? [] : interactions,
+            likeCount: interactions.filter((item) => item.type === "like").length,
+            replyCount: interactions.filter((item) => item.type === "reply").length,
           };
         }),
       };
     });
     return { viewer, creators };
+  }
+
+  app.get("/noodler/viewer", async (req, reply) => {
+    const settings = await noodle.getSettings();
+    if (!settings.enableNoodler) return reply.code(404).send({ error: "Not Found" });
+    const parsed = noodlerViewerPersonaSchema.safeParse(req.query);
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    const viewer = await resolveViewerPersona(parsed.data.personaId);
+    if (!viewer) return reply.code(404).send({ error: "Noodle persona not found" });
+    return await buildViewerScope(viewer);
   });
 
   async function resolveReadablePrivatePost(personaId: string, postId: string) {
@@ -575,7 +590,7 @@ export async function noodleRoutes(app: FastifyInstance) {
     }
     const subscription = await noodle.subscribe(viewer.id, creator.id);
     if (!subscription) return reply.code(400).send({ error: "Could not subscribe to this stage profile" });
-    return reply.code(201).send(subscription);
+    return reply.code(201).send(await buildViewerScope(viewer));
   });
 
   app.delete("/noodler/accounts/:id/subscribe", async (req, reply) => {
@@ -587,7 +602,7 @@ export async function noodleRoutes(app: FastifyInstance) {
     if (!viewer) return reply.code(404).send({ error: "Noodle persona not found" });
     const { id } = req.params as { id: string };
     await noodle.unsubscribe(viewer.id, id);
-    return { ok: true };
+    return await buildViewerScope(viewer);
   });
 
   app.get("/noodler/accounts/:id/subscribers", async (req, reply) => {
@@ -640,7 +655,7 @@ export async function noodleRoutes(app: FastifyInstance) {
     }
     const unlock = await noodle.unlockPost(viewer.id, post.id);
     if (!unlock) return reply.code(400).send({ error: "Could not unlock this post" });
-    return reply.code(201).send(unlock);
+    return reply.code(201).send(await buildViewerScope(viewer));
   });
 
   app.get<{ Querystring: { limit?: string; offset?: string; search?: string; kind?: string } }>(
@@ -736,38 +751,33 @@ export async function noodleRoutes(app: FastifyInstance) {
     const parsed = noodleBulkPrivateAccountCreateSchema.safeParse(req.body ?? {});
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
     const { publicAccountIds, disclosureMode } = parsed.data;
+    const connectionId = settings.generationConnectionId;
+    if (!connectionId) return reply.code(400).send({ error: "Select a Noodle generation connection first." });
+    const connection = await connections.getWithKey(connectionId);
+    if (!connection) return reply.code(404).send({ error: "Noodle generation connection not found" });
     const created: string[] = [];
     const skipped: string[] = [];
+    // Operational failures (provider/storage) are reported apart from expected exclusions
+    // so a provider outage cannot look like a batch of harmless skips.
+    const failed: string[] = [];
     for (const publicAccountId of publicAccountIds) {
       const publicAccount = await noodle.getAccountById(publicAccountId);
       if (!publicAccount) {
         skipped.push(publicAccountId);
         continue;
       }
-      const stageProfile =
-        disclosureMode === "open"
-          ? {
-              displayName: publicAccount.displayName,
-              handle: publicAccount.handle,
-              bio: publicAccount.bio,
-              stagePersonality: "",
-              disclosureMode,
-            }
-          : {
-              // Never derive a hinted/secret alias from the public identity: normalization
-              // truncates to 36 chars, so `<handle>_stage` can collapse back to the exact
-              // public handle and leak it. Use a neutral placeholder instead.
-              displayName: "New stage persona",
-              handle: "new_stage_persona",
-              bio: "",
-              stagePersonality: "",
-              disclosureMode,
-            };
-      if (stageProfileContainsPublicIdentity(stageProfile, publicAccount)) {
-        skipped.push(publicAccountId);
-        continue;
-      }
       try {
+        // ponytail: sequential per-account LLM generation (up to 100). Correct but slow;
+        // add a small concurrency limit only if bulk latency becomes a real complaint.
+        const stageProfile = await generateNoodlerStageProfileDraft(app.db, {
+          request: { publicAccountId, disclosureMode, guidance: "" },
+          connection,
+        });
+        // Belt-and-braces: the generator already enforces leak protection, but keep the guard.
+        if (stageProfileContainsPublicIdentity(stageProfile, publicAccount)) {
+          skipped.push(publicAccountId);
+          continue;
+        }
         const account = await noodle.createPrivateAccount(
           publicAccountId,
           stageProfile,
@@ -783,13 +793,16 @@ export async function noodleRoutes(app: FastifyInstance) {
           skipped.push(publicAccountId);
           continue;
         }
-        throw error;
+        logger.error(error, "[noodler] Bulk stage profile generation failed for %s", publicAccountId);
+        failed.push(publicAccountId);
+        continue;
       }
     }
     const profiles = await noodle.listNoodlerStageProfiles();
     return reply.code(201).send({
       created: profiles.filter((profile) => created.includes(profile.id)),
       skipped,
+      failed,
     });
   });
 

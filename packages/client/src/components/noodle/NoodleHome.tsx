@@ -2843,8 +2843,22 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
                     </div>
                   )}
                   {scheduler.lastError && (
-                    <p className="mt-1 line-clamp-2 leading-5 text-[var(--noodle-accent)]" title={scheduler.lastError}>{localizeUi("ui.noodle.noodlehome.waiting")} {scheduler.lastError}
-                    </p>
+                    <div
+                      className="mt-2 flex gap-2 rounded-md bg-[var(--destructive)]/10 px-2.5 py-2 leading-5 text-[var(--foreground)]"
+                      role="alert"
+                    >
+                      <AlertTriangle className="mt-0.5 shrink-0 text-[var(--destructive)]" size={14} />
+                      <div className="min-w-0">
+                        <p className="line-clamp-3">{scheduler.lastError}</p>
+                        {scheduler.nextAttemptAt && (
+                          <p className="mt-1 text-[var(--muted-foreground)]">
+                            {localizeUi("ui.noodle.scheduler.retryAt", {
+                              time: formatNoodleRefreshTime(scheduler.nextAttemptAt, scheduler.timezone),
+                            })}
+                          </p>
+                        )}
+                      </div>
+                    </div>
                   )}
                 </div>
               )}
@@ -3887,14 +3901,19 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
                     onClick={triggerRefresh}
                     disabled={refreshNoodle.isPending || !settings || imagePromptReviewItems.length > 0}
                     className="flex h-9 w-full items-center justify-center gap-2 rounded-full text-sm font-bold text-[var(--noodle-accent)] transition-colors hover:bg-[var(--noodle-accent)]/10 disabled:cursor-not-allowed disabled:opacity-50"
-                    title={localizeUi("ui.noodle.noodlehome.refreshTimeline")}
+                    title={scheduler?.lastError ?? localizeUi("ui.noodle.noodlehome.refreshTimeline")}
                     aria-label={localizeUi("ui.noodle.noodlehome.refreshTimeline")}
                   >
-                    {refreshNoodle.isPending ? (
-                      <Loader2 size={17} className="!text-[var(--noodle-accent)] animate-spin" />
-                    ) : (
-                      <RefreshCw size={17} className="!text-[var(--noodle-accent)]" />
-                    )}
+                    <span className="relative inline-flex">
+                      {refreshNoodle.isPending ? (
+                        <Loader2 size={17} className="!text-[var(--noodle-accent)] animate-spin" />
+                      ) : (
+                        <RefreshCw size={17} className="!text-[var(--noodle-accent)]" />
+                      )}
+                      {scheduler?.lastError && (
+                        <span className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-[var(--destructive)]" />
+                      )}
+                    </span>
                     {refreshNoodle.isPending ?localizeUi("ui.noodle.noodlehome.refreshing") :localizeUi("ui.noodle.noodlehome.refreshTimeline")}
                   </button>
                 </div>

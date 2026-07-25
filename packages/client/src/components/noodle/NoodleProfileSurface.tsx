@@ -91,7 +91,7 @@ export function NoodleProfileSurface<TTab extends string = NoodleProfileTab>({
   const hasBanner = Boolean(banner) || decorativeBanner;
   const resolvedTabs = tabs ?? (profileTabs as Array<{ id: TTab; label: ReactNode; ariaLabel?: string }>);
   return (
-    <div className="border-b border-[var(--noodle-divider)]">
+    <div className="relative border-b border-[var(--noodle-divider)]">
       {mobileHeader}
       {banner && <><button
         type="button"
