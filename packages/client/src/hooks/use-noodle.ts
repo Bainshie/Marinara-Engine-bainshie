@@ -160,14 +160,18 @@ export function useBulkCreateNoodlerStageProfiles() {
   const { t: localizeUi } = useUiTranslation();
   return useMutation({
     mutationFn: (input: NoodleBulkPrivateAccountCreateInput) =>
-      api.post<{ created: NoodlerManagedStageProfile[]; skipped: string[] }>("/noodle/noodler/accounts/bulk", input),
+      api.post<{ created: NoodlerManagedStageProfile[]; skipped: string[]; failed?: string[] }>(
+        "/noodle/noodler/accounts/bulk",
+        input,
+      ),
     onSuccess: (result) => {
-      toast.success(
-        localizeUi("ui.noodle.noodlerbulkcreatepanel.createdValue1SkippedValue2", {
-          value1: result.created.length,
-          value2: result.skipped.length,
-        }),
-      );
+      const failed = result.failed?.length ?? 0;
+      const counts = { value1: result.created.length, value2: result.skipped.length, value3: failed };
+      if (failed) {
+        toast.error(localizeUi("ui.noodle.noodlerbulkcreatepanel.createdValue1SkippedValue2FailedValue3", counts));
+      } else {
+        toast.success(localizeUi("ui.noodle.noodlerbulkcreatepanel.createdValue1SkippedValue2", counts));
+      }
       return Promise.all([
         qc.invalidateQueries({ queryKey: noodleKeys.privateAccounts() }),
         qc.invalidateQueries({ queryKey: noodleKeys.privateEligibleAccountsRoot() }),
@@ -353,15 +357,20 @@ export function useToggleNoodlerSubscription() {
       subscribed: boolean;
     }) =>
       subscribed
-        ? api.delete<{ ok: true }>(
+        ? api.delete<NoodlerViewerScope>(
             `/noodle/noodler/accounts/${encodeURIComponent(creatorAccountId)}/subscribe?personaId=${encodeURIComponent(personaId)}`,
           )
-        : api.post(`/noodle/noodler/accounts/${encodeURIComponent(creatorAccountId)}/subscribe`, { personaId }),
-    onSuccess: (_result, input) =>
-      Promise.all([
-        qc.invalidateQueries({ queryKey: noodleKeys.viewer(input.personaId) }),
-        qc.invalidateQueries({ queryKey: noodleKeys.privateSubscribers(input.creatorAccountId) }),
-      ]),
+        : api.post<NoodlerViewerScope>(`/noodle/noodler/accounts/${encodeURIComponent(creatorAccountId)}/subscribe`, {
+            personaId,
+          }),
+    // Patch the viewer cache with the returned scope instead of refetching the whole feed,
+    // so revealed/re-locked posts flip in place without a reload-and-jump.
+    onSuccess: async (scope, input) => {
+      // Cancel any in-flight viewer poll first, or it can land after us and restore the stale scope.
+      await qc.cancelQueries({ queryKey: noodleKeys.viewer(input.personaId) });
+      qc.setQueryData(noodleKeys.viewer(input.personaId), scope);
+      return qc.invalidateQueries({ queryKey: noodleKeys.privateSubscribers(input.creatorAccountId) });
+    },
   });
 }
 
@@ -369,8 +378,12 @@ export function useUnlockNoodlerPost() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ postId, personaId }: { postId: string; personaId: string }) =>
-      api.post(`/noodle/noodler/posts/${encodeURIComponent(postId)}/unlock`, { personaId }),
-    onSuccess: (_result, input) => qc.invalidateQueries({ queryKey: noodleKeys.viewer(input.personaId) }),
+      api.post<NoodlerViewerScope>(`/noodle/noodler/posts/${encodeURIComponent(postId)}/unlock`, { personaId }),
+    onSuccess: async (scope, input) => {
+      // Cancel any in-flight viewer poll first, or it can land after us and restore the locked scope.
+      await qc.cancelQueries({ queryKey: noodleKeys.viewer(input.personaId) });
+      qc.setQueryData(noodleKeys.viewer(input.personaId), scope);
+    },
   });
 }
 
@@ -527,8 +540,7 @@ export function useRunNoodlerAutoPostNow() {
 export function useRefreshAllNoodlerCreatorsNow() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: () =>
-      api.post<{ outcomes: NoodlerRefreshNowOutcome[] }>("/noodle/noodler/auto-post/refresh-now"),
+    mutationFn: () => api.post<{ outcomes: NoodlerRefreshNowOutcome[] }>("/noodle/noodler/auto-post/refresh-now"),
     onSuccess: () =>
       Promise.all([
         qc.invalidateQueries({ queryKey: noodleKeys.privateAccounts() }),

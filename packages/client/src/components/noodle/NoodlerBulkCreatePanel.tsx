@@ -2,14 +2,14 @@
 // NoodleR: bulk-create stage profiles from eligible public accounts.
 // Mounted in the NoodleR hub right sidebar and (in a Modal) from settings.
 // ──────────────────────────────────────────────
-import { useState, type CSSProperties } from "react";
+import { useState } from "react";
 import { Check, Loader2, Plus, Search, Users } from "lucide-react";
 import { toast } from "sonner";
 import type { NoodleIdentityDisclosure } from "@marinara-engine/shared";
 import { cn } from "../../lib/utils";
 import { useBulkCreateNoodlerStageProfiles, useNoodlerEligibleAccounts } from "../../hooks/use-noodle";
 import { Modal } from "../ui/Modal";
-import { NOODLE_PINK } from "./NoodleShell";
+import { getNoodleAccentStyle, NOODLE_PINK } from "./NoodleShell";
 import { useTranslation as useUiTranslation } from "react-i18next";
 
 const DISCLOSURE_CHOICES: { value: NoodleIdentityDisclosure; label: string }[] = [
@@ -224,7 +224,7 @@ export function NoodlerBulkCreateButton({ label = "Bulk-create creators" }: { la
         onClose={() => setOpen(false)}
         title={localizeUi("ui.noodle.noodlerbulkcreatepanel.bulkCreateCreators")}
         width="max-w-md"
-        panelStyle={{ "--noodle-accent": NOODLE_PINK } as CSSProperties}
+        panelStyle={getNoodleAccentStyle(NOODLE_PINK)}
       >
         <NoodlerBulkCreatePanel />
       </Modal>

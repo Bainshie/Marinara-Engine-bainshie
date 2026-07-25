@@ -3,11 +3,11 @@
 // bulk actions, and inline per-creator schedule editing (cadence, images,
 // reschedule, run-now) — no navigation away from the modal.
 // ──────────────────────────────────────────────
-import { useState, type CSSProperties } from "react";
+import { useState } from "react";
 import { ChevronDown, RefreshCw } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { Modal } from "../ui/Modal";
-import { Avatar, NOODLE_PINK } from "./NoodleShell";
+import { Avatar, getNoodleAccentStyle, NOODLE_PINK } from "./NoodleShell";
 import { NOODLE_AUTO_POST_INTENSITIES, summarizeRefreshOutcomes } from "./noodle-auto-post";
 import {
   useNoodle,
@@ -89,7 +89,7 @@ export function NoodlerScheduleManagerModal({ open, onClose }: { open: boolean; 
       onClose={onClose}
       title={localizeUi("ui.noodle.noodlerschedulemanagermodal.noodlerSchedules")}
       width="max-w-2xl"
-      panelStyle={{ "--noodle-accent": NOODLE_PINK } as CSSProperties}
+      panelStyle={getNoodleAccentStyle(NOODLE_PINK)}
     >
       <div className="space-y-3">
         <details className="group rounded-lg bg-[var(--secondary)] ring-1 ring-[var(--border)]" open>
