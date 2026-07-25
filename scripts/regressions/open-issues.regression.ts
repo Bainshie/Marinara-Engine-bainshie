@@ -1368,8 +1368,8 @@ assert.match(
 );
 assert.match(
   conversationGenerationSource,
-  /resolveIllustratorImageSize\(\s*imageSettings\.illustration,\s*illData\.aspectRatio/u,
-  "automatic Illustrator generation should use the same orientation resolver as manual Gallery generation",
+  /resolveIllustratorImageSize\(\s*requestChatMode === "game" \? imageSettings\.game : imageSettings\.illustration,\s*illData\.aspectRatio/u,
+  "automatic Illustrator generation should use the Game scene canvas in Game mode and preserve the shared orientation resolver",
 );
 assert.match(professorMariHomeSource, /Math\.min\(textarea\.scrollHeight, 128\)/u);
 assert.equal(

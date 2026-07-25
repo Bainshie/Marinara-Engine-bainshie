@@ -795,7 +795,9 @@ function ConversationQuickSetup({ chat, onFinish }: ChatSetupWizardProps) {
   const metadata = useMemo(() => {
     return readChatMetadata(chat);
   }, [chat]);
-  const [commandsEnabled, setCommandsEnabled] = useState(() => metadata.characterCommands !== false);
+  const [commandsEnabled, setCommandsEnabled] = useState(
+    () => metadata.conversationSetupComplete === true && metadata.characterCommands !== false,
+  );
   const [conversationCommandToggles, setConversationCommandToggles] = useState<
     Partial<Record<ConversationCommandKey, boolean>>
   >(() => readConversationCommandToggles(metadata.conversationCommandToggles));

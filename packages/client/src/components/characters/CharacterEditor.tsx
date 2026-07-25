@@ -1353,6 +1353,12 @@ function ConvoTab({
       onAboutMeChange={(v) => updateExtension("aboutMe", v)}
       behavior={ext.convoBehavior as ConvoBehaviorConfig | undefined}
       onBehaviorChange={(b) => updateExtension("convoBehavior", b)}
+      imageInstructions={(ext.conversationImageInstructions as string) ?? ""}
+      onImageInstructionsChange={(value) => updateExtension("conversationImageInstructions", value)}
+      applyImageInstructionsToNoodle={ext.applyConversationImageInstructionsToNoodle === true}
+      onApplyImageInstructionsToNoodleChange={(value) =>
+        updateExtension("applyConversationImageInstructionsToNoodle", value)
+      }
     />
   );
 }

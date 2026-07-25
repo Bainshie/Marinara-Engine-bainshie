@@ -451,6 +451,7 @@ export function GameSetupWizard({
   const [rating, setRating] = useState<"sfw" | "nsfw">("sfw");
   const [useLocalScene, setUseLocalScene] = useState(true);
   const [enableSpriteGeneration, setEnableSpriteGeneration] = useState(false);
+  const [enableAgents, setEnableAgents] = useState(false);
   const [enableSpotifyDj, setEnableSpotifyDj] = useState(false);
   const [gameSpotifySourceType, setGameSpotifySourceType] = useState<GameSpotifySourceType>("liked");
   const [gameSpotifyPlaylistId, setGameSpotifyPlaylistId] = useState("");
@@ -831,9 +832,9 @@ export function GameSetupWizard({
 
   const canStart = !!gmConnectionId;
   const normalizedLanguage = normalizeGameLanguage(language);
-  const illustratorEnabled = illustratorInstalled && enableSpriteGeneration;
-  const musicDjEnabled = musicDjInstalled && enableSpotifyDj;
-  const lorebookKeeperEnabled = lorebookKeeperInstalled && enableLorebookKeeper;
+  const illustratorEnabled = enableAgents && illustratorInstalled && enableSpriteGeneration;
+  const musicDjEnabled = enableAgents && musicDjInstalled && enableSpotifyDj;
+  const lorebookKeeperEnabled = enableAgents && lorebookKeeperInstalled && enableLorebookKeeper;
   const storyboardIllustrationsEnabled = illustratorEnabled && enableStoryboardIllustrations;
   const storyboardAnimationsEnabled = storyboardIllustrationsEnabled && enableStoryboardAnimations && !!videoConnectionId;
 
@@ -982,6 +983,12 @@ export function GameSetupWizard({
         config.enableSpriteGeneration === true ||
         config.gameStoryboardAutoIllustrationsEnabled === true ||
         config.gameStoryboardAutoGenerationEnabled === true;
+      setEnableAgents(
+        visualGenerationEnabled ||
+          config.enableSpotifyDj === true ||
+          config.enableLorebookKeeper === true ||
+          Boolean(config.spatialMapInstructions?.trim()),
+      );
       setEnableSpriteGeneration(visualGenerationEnabled);
       setImageConnectionId(config.imageConnectionId ?? null);
       setVideoConnectionId(config.videoConnectionId ?? null);
@@ -1085,7 +1092,9 @@ export function GameSetupWizard({
         difficulty,
         combatStyle,
         spatialMapInstructions:
-          hierarchicalMapsInstalled && draftSpatialMap ? spatialMapInstructions.trim() || undefined : undefined,
+          enableAgents && hierarchicalMapsInstalled && draftSpatialMap
+            ? spatialMapInstructions.trim() || undefined
+            : undefined,
         rating,
         gmMode,
         gmCharacterId: gmMode === "character" && gmCharacterId ? gmCharacterId : undefined,
@@ -1101,6 +1110,8 @@ export function GameSetupWizard({
           ? enableStoryboardIllustrations
           : undefined,
         gameStoryboardAutoGenerationEnabled: storyboardAnimationsEnabled || undefined,
+        gameStoryboardsEnabled:
+          illustratorEnabled && (enableStoryboardIllustrations || storyboardAnimationsEnabled) ? true : undefined,
         gameStoryboardKeyframeCount: illustratorEnabled ? storyboardKeyframeCount : undefined,
         gameGmPromptTemplateId: gamePresentation === "anime" ? ANIME_GAME_PROMPT_TEMPLATE_ID : null,
         gameStoryboardAnimationPromptTemplateId:
@@ -1157,7 +1168,7 @@ export function GameSetupWizard({
         },
       },
       gameName.trim() || undefined,
-      hierarchicalMapsInstalled && draftSpatialMap
+      enableAgents && hierarchicalMapsInstalled && draftSpatialMap
         ? {
             size: spatialMapDraftSize,
             groundingMode: spatialMapGroundingMode,
@@ -1934,7 +1945,49 @@ export function GameSetupWizard({
                   )
                 )}
 
-                {musicDjInstalled && (
+                {!installedAgentsLoading && hasInstalledAgents && (
+                  <button
+                    type="button"
+                    onClick={() => setEnableAgents((enabled) => !enabled)}
+                    className={cn(
+                      "flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2.5 text-left transition-all",
+                      enableAgents
+                        ? "bg-[var(--primary)]/10 ring-1 ring-[var(--primary)]/30"
+                        : "bg-[var(--secondary)] ring-1 ring-transparent hover:ring-[var(--border)]",
+                    )}
+                  >
+                    <span className="flex min-w-0 flex-1 items-center gap-2.5">
+                      <Sparkles
+                        size={14}
+                        className={enableAgents ? "text-[var(--primary)]" : "text-[var(--muted-foreground)]"}
+                      />
+                      <span className="min-w-0">
+                        <span className="block text-xs font-medium text-[var(--foreground)]">
+                          {localizeUi("ui.chat.chatsettingsdrawer.enableAgents")}
+                        </span>
+                        <span className="block text-[0.575rem] text-[var(--muted-foreground)]">
+                          {localizeUi("ui.game.gamesetupwizard.enableAgentsDescription")}
+                        </span>
+                      </span>
+                    </span>
+                    <span
+                      aria-hidden="true"
+                      className={cn(
+                        "h-5 w-9 shrink-0 rounded-full p-0.5 transition-colors",
+                        enableAgents ? "bg-[var(--primary)]" : "bg-[var(--muted-foreground)]/50",
+                      )}
+                    >
+                      <span
+                        className={cn(
+                          "block h-4 w-4 rounded-full bg-white transition-transform",
+                          enableAgents && "translate-x-3.5",
+                        )}
+                      />
+                    </span>
+                  </button>
+                )}
+
+                {enableAgents && musicDjInstalled && (
                   <div>
                   <button
                     type="button"
@@ -2047,7 +2100,7 @@ export function GameSetupWizard({
                             />
                           )}
                           {spotifyPlaylistsQuery.isError && (
-                            <span className="text-[0.5625rem] text-amber-400/90">{localizeUi("ui.game.gamesetupwizard.connectSpotifyInTheMusicDjAgentToLoad")}</span>
+                            <span className="text-[0.5625rem] text-[var(--primary)]">{localizeUi("ui.game.gamesetupwizard.connectSpotifyInTheMusicDjAgentToLoad")}</span>
                           )}
                         </label>
                       )}
@@ -2068,7 +2121,7 @@ export function GameSetupWizard({
                   </div>
                 )}
 
-                {lorebookKeeperInstalled && (
+                {enableAgents && lorebookKeeperInstalled && (
                   <button
                     type="button"
                     onClick={() => setEnableLorebookKeeper((prev) => !prev)}
@@ -2105,7 +2158,7 @@ export function GameSetupWizard({
                   </button>
                 )}
 
-                {illustratorInstalled && (
+                {enableAgents && illustratorInstalled && (
                   <div>
                   <button
                     type="button"
@@ -2404,7 +2457,7 @@ export function GameSetupWizard({
 
             {/* Preferences */}
             <div>
-              <label className="mb-1.5 block text-xs font-medium text-[var(--foreground)]">{localizeUi("ui.game.gamesetupwizard.additionalPreferences")}</label>
+              <label className="mb-1.5 block text-xs font-medium text-[var(--foreground)]">{localizeUi("ui.game.gamesetupwizard.additionalPreferencesOptional")}</label>
               <textarea
                 value={preferences}
                 onChange={(e) => setPreferences(e.target.value)}
@@ -2501,8 +2554,10 @@ export function GameSetupWizard({
                 </div>
               </div>
             </div>
+          </>
+        )}
 
-            {hierarchicalMapsInstalled && (
+        {step === 5 && enableAgents && hierarchicalMapsInstalled && (
               <div>
                 <label className="mb-1.5 block text-xs font-medium text-[var(--foreground)]">
                   <MapIcon size={12} className="mr-1 inline" />{localizeUi("ui.game.gamesetupwizard.hierarchicalWorldMap")}</label>
@@ -2623,8 +2678,6 @@ export function GameSetupWizard({
                   </div>
                 )}
               </div>
-            )}
-          </>
         )}
 
         {step === 5 && (

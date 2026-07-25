@@ -1525,7 +1525,12 @@
 }
 
 .mari-settings-search-header {
+  height: auto;
+  min-height: 3.8125rem;
+  flex: 0 0 auto;
+  flex-direction: column;
   flex-wrap: nowrap;
+  align-items: stretch;
   background: transparent;
 }
 

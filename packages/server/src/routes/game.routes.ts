@@ -228,6 +228,7 @@ import {
   GAME_NARRATION_SUMMARIZER,
   GAME_IMAGE_PROMPT_DIRECTOR,
   GAME_STORYBOARD_ILLUSTRATION_DIRECTOR,
+  GAME_STORYBOARD_ANIMATION_DIRECTOR,
   loadPrompt,
   renderTemplate,
   type GameStoryboardIllustratorCtx,
@@ -1536,10 +1537,7 @@ async function buildStoryboardGalleryAnimatePrompt(args: {
   debugMode?: boolean;
 }): Promise<StoryboardGalleryAnimatePrompt> {
   const sourceDescription = `storyboard keyframe ${args.frameIndex + 1} (${args.galleryImage.id})`;
-  const narrationSummary = compactVideoPromptText(
-    args.plannedFrame.narrationBeat,
-    args.promptLimits.narrationSummary,
-  );
+  const narrationSummary = compactVideoPromptText(args.plannedFrame.narrationBeat, args.promptLimits.narrationSummary);
   if (!narrationSummary) {
     throw new Error("Storyboard keyframe is missing its planned animation prompt.");
   }
@@ -1640,6 +1638,7 @@ const gameSetupConfigSchema = z.object({
   videoConnectionId: z.string().optional(),
   gameStoryboardAutoIllustrationsEnabled: z.boolean().optional(),
   gameStoryboardAutoGenerationEnabled: z.boolean().optional(),
+  gameStoryboardsEnabled: z.boolean().optional(),
   gameStoryboardKeyframeCount: z
     .number()
     .int()
@@ -2637,10 +2636,7 @@ function buildSessionPlanMetadataUpdates(
   return {
     gameBlueprint: {
       ...blueprint,
-      campaignPlan: normalizeNextSessionCampaignPlan(
-        conclusion.nextSessionCampaignPlan,
-        currentGameCampaignPlan(meta),
-      ),
+      campaignPlan: normalizeNextSessionCampaignPlan(conclusion.nextSessionCampaignPlan, currentGameCampaignPlan(meta)),
     },
     gameNpcs: normalizeNextSessionNpcs(
       conclusion.nextSessionNamedNpcs,
@@ -5521,8 +5517,19 @@ async function loadStoryboardIllustratorSystemPrompt(args: {
   const selectedTemplate =
     options.find((template) => template.id === templateId) ??
     builtInTemplates.find((template) => template.id === fallbackTemplateId);
+  if (templateId === fallbackTemplateId) {
+    return loadPrompt(
+      args.promptOverridesStorage,
+      args.generateVideos ? GAME_STORYBOARD_ANIMATION_DIRECTOR : GAME_STORYBOARD_ILLUSTRATION_DIRECTOR,
+      args.ctx,
+    );
+  }
   if (!selectedTemplate?.promptTemplate.trim()) {
-    return loadPrompt(args.promptOverridesStorage, GAME_STORYBOARD_ILLUSTRATION_DIRECTOR, args.ctx);
+    return loadPrompt(
+      args.promptOverridesStorage,
+      args.generateVideos ? GAME_STORYBOARD_ANIMATION_DIRECTOR : GAME_STORYBOARD_ILLUSTRATION_DIRECTOR,
+      args.ctx,
+    );
   }
   const declared = GAME_STORYBOARD_ILLUSTRATION_DIRECTOR.variables.map((variable) => variable.name);
   return renderTemplate(selectedTemplate.promptTemplate, args.ctx, declared);
@@ -6124,11 +6131,13 @@ export async function gameRoutes(app: FastifyInstance) {
     );
     const storyboardIllustrationsPreference =
       parsedCreateGameInput.setupConfig.gameStoryboardAutoIllustrationsEnabled !== false;
+    const storyboardsEnabledPreference = parsedCreateGameInput.setupConfig.gameStoryboardsEnabled !== false;
     const visualGenerationEnabled =
       parsedCreateGameInput.setupConfig.enableSpriteGeneration === true ||
       parsedCreateGameInput.setupConfig.gameStoryboardAutoIllustrationsEnabled === true ||
       parsedCreateGameInput.setupConfig.gameStoryboardAutoGenerationEnabled === true;
     const storyboardIllustrationsEnabled =
+      storyboardsEnabledPreference &&
       visualGenerationEnabled &&
       (storyboardIllustrationsPreference ||
         parsedCreateGameInput.setupConfig.gameStoryboardAutoGenerationEnabled === true);
@@ -6143,6 +6152,9 @@ export async function gameRoutes(app: FastifyInstance) {
         ? storyboardIllustrationsEnabled
         : parsedCreateGameInput.setupConfig.gameStoryboardAutoIllustrationsEnabled,
       gameStoryboardAutoGenerationEnabled: storyboardAnimationsEnabled || undefined,
+      gameStoryboardsEnabled:
+        parsedCreateGameInput.setupConfig.gameStoryboardsEnabled ??
+        (storyboardIllustrationsEnabled || storyboardAnimationsEnabled),
       gameStoryboardKeyframeCount: storyboardKeyframeCount,
       enableCustomWidgets:
         parsedCreateGameInput.setupConfig.enableCustomWidgets !== false || customHudWidgets.length > 0,
@@ -6258,8 +6270,13 @@ export async function gameRoutes(app: FastifyInstance) {
       enableSpriteGeneration: setupConfig.enableSpriteGeneration || false,
       gameImageConnectionId: setupConfig.imageConnectionId || null,
       gameVideoConnectionId: setupConfig.videoConnectionId || null,
+      gameSceneVideosEnabled: false,
       gameStoryboardAutoIllustrationsEnabled: setupConfig.gameStoryboardAutoIllustrationsEnabled !== false,
       gameStoryboardAutoGenerationEnabled: setupConfig.gameStoryboardAutoGenerationEnabled === true,
+      gameStoryboardsEnabled:
+        setupConfig.gameStoryboardsEnabled ??
+        (setupConfig.gameStoryboardAutoIllustrationsEnabled === true ||
+          setupConfig.gameStoryboardAutoGenerationEnabled === true),
       gameStoryboardKeyframeCount: storyboardKeyframeCount,
       gameGmPromptTemplateId: setupConfig.gameGmPromptTemplateId || null,
       gameStoryboardAnimationPromptTemplateId: setupConfig.gameStoryboardAnimationPromptTemplateId || null,
@@ -10695,6 +10712,9 @@ export async function gameRoutes(app: FastifyInstance) {
       const sourceSections = normalizeStoryboardSections(input.sections, sourceNarration);
 
       const meta = parseMeta(chat.metadata);
+      if (meta.gameStoryboardsEnabled === false) {
+        return reply.status(400).send({ error: "Storyboards are disabled for this game." });
+      }
       const storyboardDurationSeconds = normalizeStoryboardDuration(
         input.durationSeconds ?? meta.gameStoryboardAnimationDurationSeconds,
         GAME_STORYBOARD_ANIMATION_DURATION_SECONDS_DEFAULT,
@@ -10855,8 +10875,8 @@ export async function gameRoutes(app: FastifyInstance) {
               const frame = asStoryboardRecord(rawFrame);
               return Boolean(
                 compactStoryboardText(frame.narrationBeat, 1200) ||
-                  compactStoryboardText(frame.imagePrompt, 6500) ||
-                  compactStoryboardText(frame.mangaPanelPrompt, 5000),
+                compactStoryboardText(frame.imagePrompt, 6500) ||
+                compactStoryboardText(frame.mangaPanelPrompt, 5000),
               );
             });
           if (!hasRenderableKeyframe) {
@@ -10898,7 +10918,7 @@ export async function gameRoutes(app: FastifyInstance) {
       const imgDefaults = resolveConnectionImageDefaults(imgConn);
       const imgFallback = await resolveImageConnectionFallback(connections, imgConn.id);
       const imageSettings = await loadImageGenerationUserSettings(app.db);
-      const backgroundSize: ImageGenerationSize = imageSettings.background;
+      const backgroundSize = imageSettings.game;
       const styleProfiles = imageSettings.styleProfiles;
       const genre = (setupCfg?.genre as string) || "";
       const setting = (setupCfg?.setting as string) || "";
@@ -11411,6 +11431,9 @@ export async function gameRoutes(app: FastifyInstance) {
     if (!chat) return reply.status(404).send({ error: "Chat not found" });
 
     const meta = parseMeta(chat.metadata);
+    if (meta.gameSceneVideosEnabled === false) {
+      return reply.status(400).send({ error: "Scene videos are disabled for this game." });
+    }
     const videoConnectionId = await resolveGameVideoConnectionId(meta, connections);
     if (!videoConnectionId) {
       return reply.status(400).send({ error: "No video generation connection is configured for this game." });
@@ -11650,8 +11673,10 @@ export async function gameRoutes(app: FastifyInstance) {
     if (!imgConn) return { items: [] };
 
     const imageSettings = await loadImageGenerationUserSettings(app.db);
-    const backgroundSize: ImageGenerationSize = input.imageSizes?.background ?? imageSettings.background;
-    const portraitSize: ImageGenerationSize = input.imageSizes?.portrait ?? imageSettings.portrait;
+    const backgroundSize: ImageGenerationSize =
+      input.imageSizes?.background ?? imageSettings.background;
+    const portraitSize: ImageGenerationSize =
+      input.imageSizes?.portrait ?? imageSettings.portrait;
     const styleProfiles = imageSettings.styleProfiles;
 
     const imgModel = imgConn.model || "";
@@ -12086,8 +12111,10 @@ export async function gameRoutes(app: FastifyInstance) {
         .getLatest(input.chatId)
         .catch(() => null);
       const imageSettings = await loadImageGenerationUserSettings(app.db);
-      const backgroundSize: ImageGenerationSize = input.imageSizes?.background ?? imageSettings.background;
-      const portraitSize: ImageGenerationSize = input.imageSizes?.portrait ?? imageSettings.portrait;
+      const backgroundSize: ImageGenerationSize =
+        input.imageSizes?.background ?? imageSettings.background;
+      const portraitSize: ImageGenerationSize =
+        input.imageSizes?.portrait ?? imageSettings.portrait;
       const styleProfiles = imageSettings.styleProfiles;
       const promptOverridesStorage = createPromptOverridesStorage(app.db);
       const promptOverrideById = new Map(

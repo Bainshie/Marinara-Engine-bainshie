@@ -45,6 +45,7 @@ import { SmoothFolderContent } from "../ui/SmoothFolderContent";
 import { TouchDragHandle } from "../ui/TouchDragHandle";
 import { useLocalizedUiText } from "../../localization/use-localized-ui-text";
 import { useTranslation as useUiTranslation } from "react-i18next";
+import { PanelLoadMoreBar } from "./PanelLoadMoreBar";
 
 type PersonaRow = {
   id: string;
@@ -1089,7 +1090,7 @@ export function PersonasPanel() {
                   className={cn(
                     "flex h-5 w-5 shrink-0 items-center justify-center rounded border-2 transition-colors",
                     isBulkSelected
-                      ? "border-emerald-400 bg-emerald-400 text-white"
+                      ? "border-[var(--marinara-chat-chrome-button-border-active)] bg-[var(--marinara-chat-chrome-button-bg-active)] text-[var(--marinara-chat-chrome-button-text-active)]"
                       : "border-[var(--muted-foreground)]/40 bg-[var(--secondary)] text-transparent",
                   )}
                   aria-label={
@@ -1223,16 +1224,14 @@ export function PersonasPanel() {
       </div>
 
       {!clientOnlyPersonaFilterActive && personaPages.hasNextPage && (
-        <button
-          type="button"
-          onClick={() => void personaPages.fetchNextPage()}
+        <PanelLoadMoreBar
+          onLoadMore={() => void personaPages.fetchNextPage()}
           disabled={personaPages.isFetchingNextPage}
-          className="mari-chrome-control mari-chrome-control--primary justify-center text-xs"
         >
           {personaPages.isFetchingNextPage
             ? localizeUi("ui.characters.characterlibraryview.loading")
             : localizeUi("ui.panels.characterspanel.loadMoreValue1Loaded", { value1: rawList.length })}
-        </button>
+        </PanelLoadMoreBar>
       )}
 
       {selectionMode && (

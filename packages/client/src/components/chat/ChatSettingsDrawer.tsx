@@ -53,6 +53,7 @@ import {
   ShieldCheck,
   Loader2,
   Wrench,
+  Map as MapIcon,
 } from "lucide-react";
 import {
   ROLEPLAY_POPOVER_CLOSE_BUTTON,
@@ -448,32 +449,6 @@ function resolveSelectedGameStoryboardPromptTemplateId(
   return fallback;
 }
 
-function createGameStoryboardCustomPromptTemplate(
-  existingTemplates: AgentPromptTemplateOption[],
-  kind: GameStoryboardPromptTemplateKind,
-  sourceTemplate?: AgentPromptTemplateOption,
-): AgentPromptTemplateOption {
-  const usedIds = new Set([
-    ...GAME_STORYBOARD_BUILT_IN_PROMPT_TEMPLATE_IDS,
-    ...existingTemplates.map((template) => template.id),
-  ]);
-  const sourceName = sourceTemplate?.name?.trim() || "Storyboard Prompt";
-  return {
-    id: getUniqueGameStoryboardPromptTemplateId(
-      `custom-${kind}-${sourceName}-${Date.now().toString(36)}`,
-      usedIds,
-      `custom-${kind}-storyboard-prompt`,
-    ),
-    name: `Custom ${sourceName}`,
-    description: sourceTemplate?.description ?? "",
-    promptTemplate:
-      sourceTemplate?.promptTemplate ??
-      (kind === "animation"
-        ? GAME_STORYBOARD_ANIMATION_PROMPT_TEMPLATES[0]!.promptTemplate
-        : GAME_STORYBOARD_ILLUSTRATION_PROMPT_TEMPLATES[0]!.promptTemplate),
-  };
-}
-
 const GAME_VIDEO_BUILT_IN_PROMPT_TEMPLATE_IDS = new Set(
   GAME_VIDEO_BUILT_IN_PROMPT_TEMPLATES.map((template) => template.id),
 );
@@ -523,27 +498,6 @@ function resolveSelectedGameVideoPromptTemplateId(value: unknown, options: Agent
   return GAME_VIDEO_PROMPT_TEMPLATE_ID;
 }
 
-function createGameVideoCustomPromptTemplate(
-  existingTemplates: AgentPromptTemplateOption[],
-  sourceTemplate?: AgentPromptTemplateOption,
-): AgentPromptTemplateOption {
-  const usedIds = new Set([
-    ...GAME_VIDEO_BUILT_IN_PROMPT_TEMPLATE_IDS,
-    ...existingTemplates.map((template) => template.id),
-  ]);
-  const sourceName = sourceTemplate?.name?.trim() || "Game Video Prompt";
-  return {
-    id: getUniqueGameVideoPromptTemplateId(
-      `custom-${sourceName}-${Date.now().toString(36)}`,
-      usedIds,
-      "custom-game-video-prompt",
-    ),
-    name: `Custom ${sourceName}`,
-    description: sourceTemplate?.description ?? "",
-    promptTemplate: sourceTemplate?.promptTemplate ?? GAME_VIDEO_BUILT_IN_PROMPT_TEMPLATES[0]!.promptTemplate,
-  };
-}
-
 const GAME_STORYBOARD_IMAGE_BUILT_IN_PROMPT_TEMPLATE_IDS = new Set(
   GAME_STORYBOARD_IMAGE_BUILT_IN_PROMPT_TEMPLATES.map((template) => template.id),
 );
@@ -556,28 +510,6 @@ function normalizeGameStoryboardImagePromptTemplates(value: unknown): AgentPromp
       id: getUniqueGameVideoPromptTemplateId(template.id, usedIds, "custom-storyboard-image-prompt"),
     }))
     .slice(0, 20);
-}
-
-function createGameStoryboardImageCustomPromptTemplate(
-  existingTemplates: AgentPromptTemplateOption[],
-  sourceTemplate?: AgentPromptTemplateOption,
-): AgentPromptTemplateOption {
-  const usedIds = new Set([
-    ...GAME_STORYBOARD_IMAGE_BUILT_IN_PROMPT_TEMPLATE_IDS,
-    ...existingTemplates.map((template) => template.id),
-  ]);
-  const sourceName = sourceTemplate?.name?.trim() || "Storyboard Illustration";
-  return {
-    id: getUniqueGameVideoPromptTemplateId(
-      `custom-${sourceName}-${Date.now().toString(36)}`,
-      usedIds,
-      "custom-storyboard-image-prompt",
-    ),
-    name: `Custom ${sourceName}`,
-    description: sourceTemplate?.description ?? "",
-    promptTemplate:
-      sourceTemplate?.promptTemplate ?? GAME_STORYBOARD_IMAGE_BUILT_IN_PROMPT_TEMPLATES[0]!.promptTemplate,
-  };
 }
 
 function renderRoleplayAgentMenuIcon(agentId: string, variant: "card" | "chip" = "card"): React.ReactNode {
@@ -756,7 +688,7 @@ const CHAT_SETTINGS_ORDER = {
   connection: -1300,
   promptPreset: -1200,
   advancedParameters: -1100,
-  combatStyle: -1050,
+  combatStyle: -475,
   persona: -1000,
   characters: -900,
   cardTheming: -850,
@@ -1764,6 +1696,15 @@ export function ChatSettingsDrawer({
     "classic";
   const gameStoryboardAutoIllustrationsEnabled = metadata.gameStoryboardAutoIllustrationsEnabled === true;
   const gameStoryboardAutoAnimationsEnabled = metadata.gameStoryboardAutoGenerationEnabled === true;
+  const gameSceneVideosEnabled =
+    metadata.gameSceneVideosEnabled === true ||
+    (metadata.gameSceneVideosEnabled !== false &&
+      typeof metadata.gameVideoConnectionId === "string" &&
+      metadata.gameVideoConnectionId.trim().length > 0);
+  const gameStoryboardsEnabled =
+    metadata.gameStoryboardsEnabled === true ||
+    (metadata.gameStoryboardsEnabled !== false &&
+      (gameStoryboardAutoIllustrationsEnabled || gameStoryboardAutoAnimationsEnabled));
   const gameStoryboardUseNovelAiCharacterPrompts = metadata.gameStoryboardUseNovelAiCharacterPrompts !== false;
   const selectedGameGmPromptTemplateId = useMemo(() => {
     const selected = typeof metadata.gameGmPromptTemplateId === "string" ? metadata.gameGmPromptTemplateId.trim() : "";
@@ -1821,20 +1762,6 @@ export function ChatSettingsDrawer({
       ),
     [configuredGameStoryboardAnimationPromptTemplateId, gameStoryboardPromptTemplates],
   );
-  const customGameStoryboardIllustrationPromptTemplates = useMemo(
-    () =>
-      gameStoryboardIllustrationPromptOptions.filter(
-        (template) => !GAME_STORYBOARD_BUILT_IN_PROMPT_TEMPLATE_IDS.has(template.id),
-      ),
-    [gameStoryboardIllustrationPromptOptions],
-  );
-  const customGameStoryboardAnimationPromptTemplates = useMemo(
-    () =>
-      gameStoryboardAnimationPromptOptions.filter(
-        (template) => !GAME_STORYBOARD_BUILT_IN_PROMPT_TEMPLATE_IDS.has(template.id),
-      ),
-    [gameStoryboardAnimationPromptOptions],
-  );
   const selectedGameStoryboardIllustrationPromptTemplateId = useMemo(
     () =>
       resolveSelectedGameStoryboardPromptTemplateId(
@@ -1866,92 +1793,6 @@ export function ChatSettingsDrawer({
     },
     [chat.id, updateMeta],
   );
-  const updateGameStoryboardPromptTemplates = useCallback(
-    (templates: AgentPromptTemplateOption[]) => {
-      const normalized = normalizeGameStoryboardPromptTemplates(templates);
-      const illustrationIds = new Set(
-        getGameStoryboardPromptTemplateOptions(
-          normalized,
-          "illustration",
-          configuredGameStoryboardAnimationPromptTemplateId,
-        ).map((template) => template.id),
-      );
-      const animationIds = new Set(
-        getGameStoryboardPromptTemplateOptions(
-          normalized,
-          "animation",
-          configuredGameStoryboardAnimationPromptTemplateId,
-        ).map((template) => template.id),
-      );
-      updateMeta.mutate({
-        id: chat.id,
-        gameStoryboardPromptTemplates: normalized,
-        ...(illustrationIds.has(selectedGameStoryboardIllustrationPromptTemplateId)
-          ? {}
-          : { gameStoryboardIllustrationPromptTemplateId: null }),
-        ...(animationIds.has(selectedGameStoryboardAnimationPromptTemplateId)
-          ? {}
-          : { gameStoryboardAnimationPromptTemplateId: null }),
-      });
-    },
-    [
-      chat.id,
-      configuredGameStoryboardAnimationPromptTemplateId,
-      selectedGameStoryboardAnimationPromptTemplateId,
-      selectedGameStoryboardIllustrationPromptTemplateId,
-      updateMeta,
-    ],
-  );
-  const addGameStoryboardPromptTemplate = useCallback(
-    (kind: GameStoryboardPromptTemplateKind, sourceTemplateId: string) => {
-      const promptOptions =
-        kind === "animation" ? gameStoryboardAnimationPromptOptions : gameStoryboardIllustrationPromptOptions;
-      const source =
-        promptOptions.find((option) => option.id === sourceTemplateId) ??
-        (kind === "animation"
-          ? GAME_STORYBOARD_ANIMATION_PROMPT_TEMPLATES[0]
-          : GAME_STORYBOARD_ILLUSTRATION_PROMPT_TEMPLATES[0]);
-      updateGameStoryboardPromptTemplates([
-        ...gameStoryboardPromptTemplates,
-        createGameStoryboardCustomPromptTemplate(gameStoryboardPromptTemplates, kind, source),
-      ]);
-    },
-    [
-      gameStoryboardAnimationPromptOptions,
-      gameStoryboardIllustrationPromptOptions,
-      gameStoryboardPromptTemplates,
-      updateGameStoryboardPromptTemplates,
-    ],
-  );
-  const patchGameStoryboardPromptTemplate = useCallback(
-    (
-      templateId: string,
-      patch: Partial<Pick<AgentPromptTemplateOption, "name" | "description" | "promptTemplate">>,
-    ) => {
-      updateGameStoryboardPromptTemplates(
-        gameStoryboardPromptTemplates.map((template) =>
-          template.id === templateId ? { ...template, ...patch } : template,
-        ),
-      );
-    },
-    [gameStoryboardPromptTemplates, updateGameStoryboardPromptTemplates],
-  );
-  const removeGameStoryboardPromptTemplate = useCallback(
-    async (templateId: string) => {
-      const template = gameStoryboardPromptTemplates.find((entry) => entry.id === templateId);
-      const ok = await showConfirmDialog({
-        title: localizeUi("ui.chat.chatsettingsdrawer.removeStoryboardPrompt"),
-        message: localizeUi("ui.chat.chatsettingsdrawer.removeValue1FromThisChat", {
-          value1: template?.name ?? localizeUi("ui.chat.chatsettingsdrawer.thisPrompt"),
-        }),
-        confirmLabel: localizeUi("settings.notifications.customSound.actions.remove"),
-        tone: "destructive",
-      });
-      if (!ok) return;
-      updateGameStoryboardPromptTemplates(gameStoryboardPromptTemplates.filter((entry) => entry.id !== templateId));
-    },
-    [gameStoryboardPromptTemplates, updateGameStoryboardPromptTemplates, localizeUi],
-  );
   const gameStoryboardImagePromptTemplates = useMemo(
     () => normalizeGameStoryboardImagePromptTemplates(metadata.gameStoryboardImagePromptTemplates),
     [metadata.gameStoryboardImagePromptTemplates],
@@ -1978,66 +1819,6 @@ export function ChatSettingsDrawer({
       });
     },
     [chat.id, updateMeta],
-  );
-  const updateGameStoryboardImagePromptTemplates = useCallback(
-    (templates: AgentPromptTemplateOption[]) => {
-      const normalized = normalizeGameStoryboardImagePromptTemplates(templates);
-      const availableIds = new Set([
-        ...GAME_STORYBOARD_IMAGE_BUILT_IN_PROMPT_TEMPLATE_IDS,
-        ...normalized.map((template) => template.id),
-      ]);
-      updateMeta.mutate({
-        id: chat.id,
-        gameStoryboardImagePromptTemplates: normalized,
-        ...(availableIds.has(selectedGameStoryboardImagePromptTemplateId)
-          ? {}
-          : { gameStoryboardImagePromptTemplateId: null }),
-      });
-    },
-    [chat.id, selectedGameStoryboardImagePromptTemplateId, updateMeta],
-  );
-  const addGameStoryboardImagePromptTemplate = useCallback(
-    (sourceTemplateId: string) => {
-      const source =
-        gameStoryboardImagePromptOptions.find((option) => option.id === sourceTemplateId) ??
-        GAME_STORYBOARD_IMAGE_BUILT_IN_PROMPT_TEMPLATES[0];
-      updateGameStoryboardImagePromptTemplates([
-        ...gameStoryboardImagePromptTemplates,
-        createGameStoryboardImageCustomPromptTemplate(gameStoryboardImagePromptTemplates, source),
-      ]);
-    },
-    [gameStoryboardImagePromptOptions, gameStoryboardImagePromptTemplates, updateGameStoryboardImagePromptTemplates],
-  );
-  const patchGameStoryboardImagePromptTemplate = useCallback(
-    (
-      templateId: string,
-      patch: Partial<Pick<AgentPromptTemplateOption, "name" | "description" | "promptTemplate">>,
-    ) => {
-      updateGameStoryboardImagePromptTemplates(
-        gameStoryboardImagePromptTemplates.map((template) =>
-          template.id === templateId ? { ...template, ...patch } : template,
-        ),
-      );
-    },
-    [gameStoryboardImagePromptTemplates, updateGameStoryboardImagePromptTemplates],
-  );
-  const removeGameStoryboardImagePromptTemplate = useCallback(
-    async (templateId: string) => {
-      const template = gameStoryboardImagePromptTemplates.find((entry) => entry.id === templateId);
-      const ok = await showConfirmDialog({
-        title: localizeUi("ui.chat.chatsettingsdrawer.removeStoryboardIllustrationPrompt"),
-        message: localizeUi("ui.chat.chatsettingsdrawer.removeValue1FromThisChat", {
-          value1: template?.name ?? localizeUi("ui.chat.chatsettingsdrawer.thisPrompt"),
-        }),
-        confirmLabel: localizeUi("settings.notifications.customSound.actions.remove"),
-        tone: "destructive",
-      });
-      if (!ok) return;
-      updateGameStoryboardImagePromptTemplates(
-        gameStoryboardImagePromptTemplates.filter((entry) => entry.id !== templateId),
-      );
-    },
-    [gameStoryboardImagePromptTemplates, updateGameStoryboardImagePromptTemplates, localizeUi],
   );
   const gameVideoPromptTemplates = useMemo(
     () => normalizeGameVideoPromptTemplates(metadata.gameVideoPromptTemplates),
@@ -2078,63 +1859,6 @@ export function ChatSettingsDrawer({
       });
     },
     [chat.id, selectedGameVideoPromptTemplateId, updateMeta],
-  );
-  const updateGameVideoPromptTemplates = useCallback(
-    (templates: AgentPromptTemplateOption[]) => {
-      const normalized = normalizeGameVideoPromptTemplates(templates);
-      const availableIds = new Set([
-        ...GAME_VIDEO_BUILT_IN_PROMPT_TEMPLATE_IDS,
-        ...normalized.map((template) => template.id),
-      ]);
-      updateMeta.mutate({
-        id: chat.id,
-        gameVideoPromptTemplates: normalized,
-        ...(availableIds.has(selectedGameVideoPromptTemplateId) ? {} : { gameVideoPromptTemplateId: null }),
-        ...(availableIds.has(selectedGameStoryboardVideoPromptTemplateId)
-          ? {}
-          : { gameStoryboardVideoPromptTemplateId: null }),
-      });
-    },
-    [chat.id, selectedGameStoryboardVideoPromptTemplateId, selectedGameVideoPromptTemplateId, updateMeta],
-  );
-  const addGameVideoPromptTemplate = useCallback(
-    (sourceTemplateId: string) => {
-      const source =
-        gameVideoPromptOptions.find((option) => option.id === sourceTemplateId) ??
-        GAME_VIDEO_BUILT_IN_PROMPT_TEMPLATES[0];
-      updateGameVideoPromptTemplates([
-        ...gameVideoPromptTemplates,
-        createGameVideoCustomPromptTemplate(gameVideoPromptTemplates, source),
-      ]);
-    },
-    [gameVideoPromptOptions, gameVideoPromptTemplates, updateGameVideoPromptTemplates],
-  );
-  const patchGameVideoPromptTemplate = useCallback(
-    (
-      templateId: string,
-      patch: Partial<Pick<AgentPromptTemplateOption, "name" | "description" | "promptTemplate">>,
-    ) => {
-      updateGameVideoPromptTemplates(
-        gameVideoPromptTemplates.map((template) => (template.id === templateId ? { ...template, ...patch } : template)),
-      );
-    },
-    [gameVideoPromptTemplates, updateGameVideoPromptTemplates],
-  );
-  const removeGameVideoPromptTemplate = useCallback(
-    async (templateId: string) => {
-      const template = gameVideoPromptTemplates.find((entry) => entry.id === templateId);
-      const ok = await showConfirmDialog({
-        title: localizeUi("ui.chat.chatsettingsdrawer.removeGameVideoPrompt"),
-        message: localizeUi("ui.chat.chatsettingsdrawer.removeValue1FromThisChat", {
-          value1: template?.name ?? localizeUi("ui.chat.chatsettingsdrawer.thisPrompt"),
-        }),
-        confirmLabel: localizeUi("settings.notifications.customSound.actions.remove"),
-        tone: "destructive",
-      });
-      if (!ok) return;
-      updateGameVideoPromptTemplates(gameVideoPromptTemplates.filter((entry) => entry.id !== templateId));
-    },
-    [gameVideoPromptTemplates, updateGameVideoPromptTemplates, localizeUi],
   );
   const updateIllustratorPromptConnection = useCallback(
     (connectionId: string) => {
@@ -2675,24 +2399,34 @@ export function ChatSettingsDrawer({
   const [firstMesConfirm, setFirstMesConfirm] = useState<{
     charId: string;
     charName: string;
-    message: string;
-    alternateGreetings: string[];
+    greetings: string[];
+    selectedIndex: number;
   } | null>(null);
 
   const handleFirstMesConfirm = useCallback(async () => {
     if (!firstMesConfirm) return;
-    const msg = await createMessage.mutateAsync({
-      role: "assistant",
-      content: firstMesConfirm.message,
-      characterId: firstMesConfirm.charId,
-    });
-    // Add alternate greetings as swipes on the first message
-    if (msg?.id && firstMesConfirm.alternateGreetings.length > 0) {
-      await addSilentGreetingSwipes(chat.id, msg.id, firstMesConfirm.alternateGreetings);
-      qc.invalidateQueries({ queryKey: chatKeys.messages(chat.id) });
+    const selectedGreeting = firstMesConfirm.greetings[firstMesConfirm.selectedIndex];
+    if (!selectedGreeting) return;
+    try {
+      const msg = await createMessage.mutateAsync({
+        role: "assistant",
+        content: selectedGreeting,
+        characterId: firstMesConfirm.charId,
+      });
+      const remainingGreetings = firstMesConfirm.greetings.filter(
+        (_greeting, index) => index !== firstMesConfirm.selectedIndex,
+      );
+      if (msg?.id && remainingGreetings.length > 0) {
+        await addSilentGreetingSwipes(chat.id, msg.id, remainingGreetings);
+      }
+      await qc.invalidateQueries({ queryKey: chatKeys.messages(chat.id) });
+      setFirstMesConfirm(null);
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : localizeUi("ui.chat.chatsettingsdrawer.failedToAddSelectedGreeting"),
+      );
     }
-    setFirstMesConfirm(null);
-  }, [firstMesConfirm, createMessage, chat.id, qc]);
+  }, [firstMesConfirm, createMessage, chat.id, qc, localizeUi]);
 
   // ── Mutations ──
   const syncGamePartyMetadata = (nextCharacterIds: string[]) => {
@@ -2758,12 +2492,16 @@ export function ChatSettingsDrawer({
               const parsed = typeof char.data === "string" ? JSON.parse(char.data) : char.data;
               const firstMes = (parsed as { first_mes?: string }).first_mes;
               const altGreetings = (parsed as { alternate_greetings?: string[] }).alternate_greetings ?? [];
-              if (firstMes) {
+              const greetings = [firstMes, ...altGreetings]
+                .filter((greeting): greeting is string => typeof greeting === "string")
+                .map((greeting) => greeting.trim())
+                .filter(Boolean);
+              if (greetings.length > 0) {
                 setFirstMesConfirm({
                   charId,
                   charName: charName(char),
-                  message: firstMes,
-                  alternateGreetings: altGreetings,
+                  greetings,
+                  selectedIndex: 0,
                 });
               }
             } catch {
@@ -4552,6 +4290,7 @@ export function ChatSettingsDrawer({
           {/* Party (game mode) */}
           {isGame && (
             <Section
+              id="game-party"
               style={{ order: CHAT_SETTINGS_ORDER.persona }}
               label={localizeUi("ui.chat.chatsettingsdrawer.party")}
               icon={<Users size="0.875rem" />}
@@ -4850,6 +4589,7 @@ export function ChatSettingsDrawer({
           {/* Persona */}
           {!isGame && (
             <Section
+              id={`${chatMode}-persona`}
               style={{ order: CHAT_SETTINGS_ORDER.persona }}
               label={localizeUi("ui.characters.cardlibrarydetailcard.persona")}
               icon={<User size="0.875rem" />}
@@ -5023,6 +4763,7 @@ export function ChatSettingsDrawer({
           {/* Characters — only show added ones + add button */}
           {!isGame && (
             <Section
+              id={`${chatMode}-characters`}
               style={{ order: CHAT_SETTINGS_ORDER.characters }}
               label={localizeUi("navigation.topbar.characters")}
               icon={<Users size="0.875rem" />}
@@ -5305,6 +5046,7 @@ export function ChatSettingsDrawer({
           {/* Card Theming — only shown when an active character ships creator-notes CSS */}
           {activeCardsHaveCss && (
             <Section
+              id={`${chatMode}-card-theming`}
               style={{ order: CHAT_SETTINGS_ORDER.cardTheming }}
               label={localizeUi("ui.chat.chatsettingsdrawer.cardTheming")}
               icon={<Paintbrush size="0.875rem" />}
@@ -5360,6 +5102,7 @@ export function ChatSettingsDrawer({
           {/* Scoped Regex Scripts — only shown when a chat character has scoped scripts */}
           {chatScopedRegexGroups.length > 0 && (
             <Section
+              id={`${chatMode}-scoped-regex`}
               style={{ order: CHAT_SETTINGS_ORDER.scopedRegex }}
               label={localizeUi("ui.chat.chatsettingsdrawer.scopedRegexScripts")}
               icon={<Regex size="0.875rem" />}
@@ -5464,6 +5207,7 @@ export function ChatSettingsDrawer({
           {/* Every existing and new multi-character chat gets this section. Missing mode metadata means Grouped. */}
           {chatCharIds.length > 1 && modeCapabilities.supportsGroupChatControls && (
             <Section
+              id={`${chatMode}-group-chat`}
               style={{ order: CHAT_SETTINGS_ORDER.groupChat }}
               label={localizeUi("ui.chat.chatsettingsdrawer.groupChat")}
               icon={<Users size="0.875rem" />}
@@ -5746,6 +5490,7 @@ export function ChatSettingsDrawer({
           {/* Autonomous Messaging — conversation mode only */}
           {isConversation && (
             <Section
+              id="conversation-autonomous-messaging"
               label={localizeUi("ui.chat.chatsettingsdrawer.autonomousMessaging")}
               icon={<Bot size="0.875rem" />}
               help={localizeUi("ui.chat.chatsettingsdrawer.charactersCanMessageYouUnpromptedBasedOnTheirPersonality")}
@@ -6008,6 +5753,7 @@ export function ChatSettingsDrawer({
           {/* Conversation feature packages expose commands and settings as soon as they are installed. */}
           {isConversation && (
             <Section
+              id="conversation-agents"
               style={{ order: CHAT_SETTINGS_ORDER.agents }}
               label={localizeUi("navigation.topbar.agents")}
               icon={<Sparkles size="0.875rem" />}
@@ -6296,6 +6042,7 @@ export function ChatSettingsDrawer({
           {/* Connected Roleplay — conversation mode: link to a roleplay or game chat */}
           {isConversation && (
             <Section
+              id="conversation-connected-chats"
               style={{ order: CHAT_SETTINGS_ORDER.connectedChat }}
               label={localizeUi("ui.chat.chatsettingsdrawer.connectedChats")}
               icon={<ArrowRightLeft size="0.875rem" />}
@@ -6420,6 +6167,7 @@ export function ChatSettingsDrawer({
           {/* Connected Conversation — roleplay mode: linked OOC chat + optional in-world DM command */}
           {isRoleplayMode && (
             <Section
+              id="roleplay-connected-chats"
               style={{ order: CHAT_SETTINGS_ORDER.connectedChat }}
               label={localizeUi("ui.chat.chatsettingsdrawer.connectedChats")}
               icon={<ArrowRightLeft size="0.875rem" />}
@@ -6511,6 +6259,7 @@ export function ChatSettingsDrawer({
           {/* Connected Conversation — game mode: show linked OOC chat */}
           {isGame && chat.connectedChatId && (
             <Section
+              id="game-connected-chats"
               style={{ order: CHAT_SETTINGS_ORDER.connectedChat }}
               label={localizeUi("ui.chat.chatsettingsdrawer.connectedChats")}
               icon={<ArrowRightLeft size="0.875rem" />}
@@ -6561,6 +6310,7 @@ export function ChatSettingsDrawer({
           {/* Connect to Conversation — game mode without existing link */}
           {chatMode === "game" && !chat.connectedChatId && (
             <Section
+              id="game-connected-chats"
               style={{ order: CHAT_SETTINGS_ORDER.connectedChat }}
               label={localizeUi("ui.chat.chatsettingsdrawer.connectedChats")}
               icon={<ArrowRightLeft size="0.875rem" />}
@@ -6662,6 +6412,7 @@ export function ChatSettingsDrawer({
           {/* Agents */}
           {modeCapabilities.sharedSections.includes("agents") && !isConversation && (
             <Section
+              id={`${chatMode}-agents`}
               style={{ order: CHAT_SETTINGS_ORDER.agents }}
               label={localizeUi("navigation.topbar.agents")}
               icon={<Sparkles size="0.875rem" />}
@@ -8172,6 +7923,25 @@ export function ChatSettingsDrawer({
                         "ui.chat.chatsettingsdrawer.autoGenerateSceneIllustrationsNpcPortraitsAndLocationBackgrounds",
                       )}
                     >
+                      <button
+                        type="button"
+                        onClick={openGenerationSettings}
+                        className="mari-chat-option-field flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-[var(--secondary)]/60"
+                        title={localizeUi("ui.chat.chatsettingsdrawer.openSettingsGenerations")}
+                      >
+                        <Settings2 size="0.8125rem" className="shrink-0 text-[var(--primary)]" />
+                        <span className="min-w-0 flex-1">
+                          <span className="block text-[0.6875rem] font-medium text-[var(--foreground)]">
+                            {localizeUi("ui.chat.chatsettingsdrawer.imageGenerationSettings")}
+                          </span>
+                          <span className="mt-0.5 block text-[0.59375rem] leading-snug text-[var(--muted-foreground)]">
+                            {localizeUi(
+                              "ui.chat.chatsettingsdrawer.adjustGenerationBehaviorImageSizesAndStylesInSettings",
+                            )}
+                          </span>
+                        </span>
+                        <ChevronRight size="0.75rem" className="shrink-0 text-[var(--muted-foreground)]" />
+                      </button>
                       <AgentSettingsToggle
                         label={localizeUi("ui.chat.chatsettingsdrawer.gameIllustrator")}
                         description={
@@ -8259,55 +8029,80 @@ export function ChatSettingsDrawer({
                               })
                             }
                           />
-                          <label className="flex flex-col gap-1">
-                            <span className="flex items-center justify-between gap-2 text-[0.625rem] font-medium text-[var(--muted-foreground)]">
-                              <span>{localizeUi("ui.chat.chatsettingsdrawer.campaignArtStyle")}</span>
-                              {generatedCampaignArtStyle &&
-                                generatedCampaignArtStyle !== campaignArtStyleDraft.trim() && (
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setCampaignArtStyleDraft(generatedCampaignArtStyle);
-                                      updateMeta.mutate({
-                                        id: chat.id,
-                                        gameSetupConfig: {
-                                          ...gameSetupConfig,
-                                          artStylePrompt: generatedCampaignArtStyle,
-                                        },
-                                      });
-                                    }}
-                                    className="rounded px-1.5 py-0.5 text-[0.5625rem] text-[var(--primary)] transition-colors hover:bg-[var(--primary)]/10"
-                                  >
-                                    {localizeUi("ui.chat.chatsettingsdrawer.restoreSetupStyle")}
-                                  </button>
+                          {useCampaignArtStyle && (
+                            <label className="flex flex-col gap-1">
+                              <span className="flex items-center justify-between gap-2 text-[0.625rem] font-medium text-[var(--muted-foreground)]">
+                                <span>{localizeUi("ui.chat.chatsettingsdrawer.campaignArtStyle")}</span>
+                                {generatedCampaignArtStyle &&
+                                  generatedCampaignArtStyle !== campaignArtStyleDraft.trim() && (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setCampaignArtStyleDraft(generatedCampaignArtStyle);
+                                        updateMeta.mutate({
+                                          id: chat.id,
+                                          gameSetupConfig: {
+                                            ...gameSetupConfig,
+                                            artStylePrompt: generatedCampaignArtStyle,
+                                          },
+                                        });
+                                      }}
+                                      className="rounded px-1.5 py-0.5 text-[0.5625rem] text-[var(--primary)] transition-colors hover:bg-[var(--primary)]/10"
+                                    >
+                                      {localizeUi("ui.chat.chatsettingsdrawer.restoreSetupStyle")}
+                                    </button>
+                                  )}
+                              </span>
+                              <textarea
+                                value={campaignArtStyleDraft}
+                                onChange={(event) => setCampaignArtStyleDraft(event.target.value)}
+                                onBlur={() => {
+                                  const nextArtStyle = campaignArtStyleDraft.trim();
+                                  if (nextArtStyle === campaignArtStyle) return;
+                                  updateMeta.mutate({
+                                    id: chat.id,
+                                    gameSetupConfig: {
+                                      ...gameSetupConfig,
+                                      artStylePrompt: nextArtStyle,
+                                      generatedArtStylePrompt: generatedCampaignArtStyle || campaignArtStyle,
+                                    },
+                                  });
+                                }}
+                                placeholder={localizeUi(
+                                  "ui.chat.chatsettingsdrawer.leaveBlankToUseOnlyTheSelectedImageStyle",
                                 )}
+                                rows={3}
+                                maxLength={500}
+                                className="min-h-[4.75rem] w-full resize-y rounded-lg border border-[var(--border)] bg-[var(--background)] px-2.5 py-2 text-xs leading-relaxed text-[var(--foreground)] outline-none transition-colors placeholder:text-[var(--muted-foreground)]/40 focus:border-[var(--primary)]/50"
+                              />
+                              <span className="text-[0.5625rem] leading-snug text-[var(--muted-foreground)]">
+                                {localizeUi("ui.chat.chatsettingsdrawer.generatedDuringGameSetupEditOrClearItHere")}
+                              </span>
+                            </label>
+                          )}
+                          <label className="flex flex-col gap-1">
+                            <span className="text-[0.625rem] font-medium text-[var(--muted-foreground)]">
+                              {localizeUi("ui.chat.chatsettingsdrawer.sceneImageInstructions")}
                             </span>
                             <textarea
-                              value={campaignArtStyleDraft}
-                              onChange={(event) => setCampaignArtStyleDraft(event.target.value)}
+                              value={gameImagePromptInstructionsDraft}
+                              onChange={(e) => setGameImagePromptInstructionsDraft(e.target.value)}
                               onBlur={() => {
-                                const nextArtStyle = campaignArtStyleDraft.trim();
-                                if (nextArtStyle === campaignArtStyle) return;
-                                updateMeta.mutate({
-                                  id: chat.id,
-                                  gameSetupConfig: {
-                                    ...gameSetupConfig,
-                                    artStylePrompt: nextArtStyle,
-                                    generatedArtStylePrompt: generatedCampaignArtStyle || campaignArtStyle,
-                                  },
-                                });
+                                const stored = (metadata.gameImagePromptInstructions as string) ?? "";
+                                if (gameImagePromptInstructionsDraft !== stored) {
+                                  updateMeta.mutate({
+                                    id: chat.id,
+                                    gameImagePromptInstructions: gameImagePromptInstructionsDraft.trim() || null,
+                                  });
+                                }
                               }}
                               placeholder={localizeUi(
-                                "ui.chat.chatsettingsdrawer.leaveBlankToUseOnlyTheSelectedImageStyle",
+                                "ui.chat.chatsettingsdrawer.eGDottoreSMaskCompletelyCoversHisEyes",
                               )}
                               rows={3}
-                              maxLength={500}
-                              disabled={!useCampaignArtStyle}
-                              className="min-h-[4.75rem] w-full resize-y rounded-lg border border-[var(--border)] bg-[var(--background)] px-2.5 py-2 text-xs leading-relaxed text-[var(--foreground)] outline-none transition-colors placeholder:text-[var(--muted-foreground)]/40 focus:border-[var(--primary)]/50 disabled:cursor-not-allowed disabled:opacity-50"
+                              maxLength={1200}
+                              className="min-h-[4.75rem] w-full resize-y rounded-lg border border-[var(--border)] bg-[var(--background)] px-2.5 py-2 text-xs leading-relaxed text-[var(--foreground)] outline-none transition-colors placeholder:text-[var(--muted-foreground)]/40 focus:border-[var(--primary)]/50"
                             />
-                            <span className="text-[0.5625rem] leading-snug text-[var(--muted-foreground)]">
-                              {localizeUi("ui.chat.chatsettingsdrawer.generatedDuringGameSetupEditOrClearItHere")}
-                            </span>
                           </label>
                           <AgentSettingsToggle
                             label={localizeUi("ui.chat.agentaddsetupfields.attachCardAppearance")}
@@ -8335,95 +8130,99 @@ export function ChatSettingsDrawer({
                               })
                             }
                           />
-                          <label className="flex flex-col gap-1">
-                            <span className="text-[0.625rem] font-medium text-[var(--muted-foreground)]">
-                              {localizeUi("ui.chat.chatsettingsdrawer.sceneImageInstructions")}
-                            </span>
-                            <textarea
-                              value={gameImagePromptInstructionsDraft}
-                              onChange={(e) => setGameImagePromptInstructionsDraft(e.target.value)}
-                              onBlur={() => {
-                                const stored = (metadata.gameImagePromptInstructions as string) ?? "";
-                                if (gameImagePromptInstructionsDraft !== stored) {
-                                  updateMeta.mutate({
-                                    id: chat.id,
-                                    gameImagePromptInstructions: gameImagePromptInstructionsDraft.trim() || null,
-                                  });
-                                }
-                              }}
-                              placeholder={localizeUi(
-                                "ui.chat.chatsettingsdrawer.eGDottoreSMaskCompletelyCoversHisEyes",
-                              )}
-                              rows={3}
-                              maxLength={1200}
-                              className="min-h-[4.75rem] w-full resize-y rounded-lg border border-[var(--border)] bg-[var(--background)] px-2.5 py-2 text-xs leading-relaxed text-[var(--foreground)] outline-none transition-colors placeholder:text-[var(--muted-foreground)]/40 focus:border-[var(--primary)]/50"
-                            />
-                          </label>
                         </div>
                       )}
                     </AgentSettingsCard>
                   )}
 
-                  {isGame && (
+                  {isGame && illustratorInstalled && (
                     <AgentSettingsCard
                       icon={<Film size="0.75rem" className="mt-0.5 text-[var(--primary)]" />}
                       title={localizeUi("ui.chat.chatsettingsdrawer.sceneVideos")}
                       description={localizeUi("ui.chat.chatsettingsdrawer.generateMp4SceneVideosFromGameIllustrations")}
                     >
-                      <label className="flex flex-col gap-1">
-                        <span className="text-[0.625rem] font-medium text-[var(--foreground)]">
-                          {localizeUi("ui.chat.chatsettingsdrawer.videoConnection")}
-                        </span>
-                        <select
-                          value={(metadata.gameVideoConnectionId as string) ?? ""}
-                          onChange={(e) =>
-                            updateMeta.mutate({ id: chat.id, gameVideoConnectionId: e.target.value || null })
-                          }
-                          className="w-full rounded-lg border border-[var(--border)] bg-[var(--background)] px-2.5 py-2 text-xs text-[var(--foreground)] outline-none transition-colors focus:border-[var(--primary)]/50"
-                        >
-                          <option value="">{localizeUi("ui.chat.chatsettingsdrawer.selectVideoConnection")}</option>
-                          {(videoConnectionsList ?? []).map((c: { id: string; name: string; model?: string }) => (
-                            <option key={c.id} value={c.id}>
-                              {c.name}
-                              {c.model ? localizeUi("ui.chat.chatsettingsdrawer.value1", { value1: c.model }) : ""}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                      {videoConnectionsList.length === 0 && (
-                        <p className="text-[0.625rem] text-amber-700 dark:text-amber-400/80">
-                          {localizeUi("ui.chat.chatsettingsdrawer.noVideoGenerationConnectionsFoundAddOneInSettings")}
-                        </p>
-                      )}
-                      <GamePromptTemplateSelect
-                        label={localizeUi("ui.chat.chatsettingsdrawer.gameVideoPrompt")}
+                      <AgentSettingsToggle
+                        label={localizeUi("ui.chat.chatsettingsdrawer.enableSceneVideos")}
                         description={localizeUi(
-                          "ui.chat.chatsettingsdrawer.usedForGameSceneVideosAndStoryboardKeyframeClips",
+                          "ui.chat.chatsettingsdrawer.showSceneVideoControlsAndAllowManualVideoGeneration",
                         )}
-                        options={gameVideoPromptOptions}
-                        selectedId={selectedGameVideoPromptTemplateId}
-                        fallbackId={GAME_VIDEO_PROMPT_TEMPLATE_ID}
-                        onChange={updateGameVideoPromptSelection}
+                        enabled={gameSceneVideosEnabled}
+                        onToggle={() =>
+                          updateMeta.mutate({
+                            id: chat.id,
+                            gameSceneVideosEnabled: !gameSceneVideosEnabled,
+                          })
+                        }
                       />
-                      <GameProviderPromptLibrary
-                        title={localizeUi("ui.chat.chatsettingsdrawer.editVideoPromptPresets")}
-                        description={localizeUi("ui.chat.chatsettingsdrawer.builtInGameVideoPresetsAreReadOnlyAdd")}
-                        emptyDescription="Add a copy, edit it here, then choose it from the Game Video or Storyboard Video Prompt selector above."
-                        builtInTemplates={GAME_VIDEO_BUILT_IN_PROMPT_TEMPLATES}
-                        customTemplates={gameVideoPromptTemplates}
-                        customFallbackName="Custom Game Video Prompt"
-                        promptPlaceholder="Write the game video prompt template..."
-                        onAddTemplate={addGameVideoPromptTemplate}
-                        onPatchTemplate={patchGameVideoPromptTemplate}
-                        onRemoveTemplate={removeGameVideoPromptTemplate}
-                      />
-                      <p className="text-[0.625rem] text-[var(--muted-foreground)]">
-                        {localizeUi("ui.chat.chatsettingsdrawer.sceneVideosUseTheLatestGeneratedSceneIllustrationAs")}
-                      </p>
+                      {gameSceneVideosEnabled && (
+                        <>
+                          <button
+                            type="button"
+                            onClick={openGenerationSettings}
+                            className="mari-chat-option-field flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-[var(--secondary)]/60"
+                            title={localizeUi("ui.chat.chatsettingsdrawer.openSettingsGenerations")}
+                          >
+                            <Settings2 size="0.8125rem" className="shrink-0 text-[var(--primary)]" />
+                            <span className="min-w-0 flex-1">
+                              <span className="block text-[0.6875rem] font-medium text-[var(--foreground)]">
+                                {localizeUi("ui.chat.chatsettingsdrawer.videoGenerationSettings")}
+                              </span>
+                              <span className="mt-0.5 block text-[0.59375rem] leading-snug text-[var(--muted-foreground)]">
+                                {localizeUi(
+                                  "ui.chat.chatsettingsdrawer.adjustVideoModelsSizesAndPromptOverridesInSettings",
+                                )}
+                              </span>
+                            </span>
+                            <ChevronRight size="0.75rem" className="shrink-0 text-[var(--muted-foreground)]" />
+                          </button>
+                          <label className="flex flex-col gap-1">
+                            <span className="text-[0.625rem] font-medium text-[var(--foreground)]">
+                              {localizeUi("ui.chat.chatsettingsdrawer.videoConnection")}
+                            </span>
+                            <select
+                              value={(metadata.gameVideoConnectionId as string) ?? ""}
+                              onChange={(e) =>
+                                updateMeta.mutate({ id: chat.id, gameVideoConnectionId: e.target.value || null })
+                              }
+                              className="w-full rounded-lg border border-[var(--border)] bg-[var(--background)] px-2.5 py-2 text-xs text-[var(--foreground)] outline-none transition-colors focus:border-[var(--primary)]/50"
+                            >
+                              <option value="">{localizeUi("ui.chat.chatsettingsdrawer.selectVideoConnection")}</option>
+                              {(videoConnectionsList ?? []).map((c: { id: string; name: string; model?: string }) => (
+                                <option key={c.id} value={c.id}>
+                                  {c.name}
+                                  {c.model ? localizeUi("ui.chat.chatsettingsdrawer.value1", { value1: c.model }) : ""}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                          {videoConnectionsList.length === 0 && (
+                            <p className="text-[0.625rem] text-amber-700 dark:text-amber-400/80">
+                              {localizeUi(
+                                "ui.chat.chatsettingsdrawer.noVideoGenerationConnectionsFoundAddOneInSettings",
+                              )}
+                            </p>
+                          )}
+                          <GamePromptTemplateSelect
+                            label={localizeUi("ui.chat.chatsettingsdrawer.gameVideoPrompt")}
+                            description={localizeUi(
+                              "ui.chat.chatsettingsdrawer.usedForGameSceneVideosAndStoryboardKeyframeClips",
+                            )}
+                            options={gameVideoPromptOptions}
+                            selectedId={selectedGameVideoPromptTemplateId}
+                            fallbackId={GAME_VIDEO_PROMPT_TEMPLATE_ID}
+                            onChange={updateGameVideoPromptSelection}
+                          />
+                          <p className="text-[0.625rem] text-[var(--muted-foreground)]">
+                            {localizeUi(
+                              "ui.chat.chatsettingsdrawer.sceneVideosUseTheLatestGeneratedSceneIllustrationAs",
+                            )}
+                          </p>
+                        </>
+                      )}
                     </AgentSettingsCard>
                   )}
 
-                  {isGame && (
+                  {isGame && illustratorInstalled && (
                     <AgentSettingsCard
                       icon={<PanelsTopLeft size="0.75rem" className="mt-0.5 text-[var(--primary)]" />}
                       title={localizeUi("ui.chat.chatsettingsdrawer.storyboards")}
@@ -8431,329 +8230,315 @@ export function ChatSettingsDrawer({
                         "ui.chat.chatsettingsdrawer.createKeyframeMediaForCompletedGmTurnsAndFollow",
                       )}
                     >
-                      <div className="flex items-start gap-2 rounded-lg border border-[var(--border)] bg-[var(--background)]/60 px-3 py-2 text-[0.625rem] leading-relaxed text-[var(--muted-foreground)]">
-                        <Image size="0.75rem" className="mt-0.5 shrink-0 text-[var(--primary)]" />
-                        <p>{localizeUi("ui.chat.chatsettingsdrawer.recommendedUseAStrongStateOfTheArtImage")}</p>
-                      </div>
                       <AgentSettingsToggle
-                        label={localizeUi("ui.chat.chatsettingsdrawer.automaticStoryboardIllustrations")}
+                        label={localizeUi("ui.chat.chatsettingsdrawer.enableStoryboards")}
                         description={localizeUi(
-                          "ui.chat.chatsettingsdrawer.automaticallyCreateStillKeyframeIllustrationsAfterCompletedGmTurns",
+                          "ui.chat.chatsettingsdrawer.showStoryboardControlsAndAllowAutomaticKeyframeMedia",
                         )}
-                        enabled={gameStoryboardAutoIllustrationsEnabled}
-                        onToggle={() => {
-                          const nextEnabled = !gameStoryboardAutoIllustrationsEnabled;
-                          updateMeta.mutate({
-                            id: chat.id,
-                            gameStoryboardAutoIllustrationsEnabled: nextEnabled,
-                            ...(nextEnabled ? {} : { gameStoryboardAutoGenerationEnabled: false }),
-                          });
-                        }}
-                      />
-                      <AgentSettingsToggle
-                        label={localizeUi("ui.chat.chatsettingsdrawer.automaticStoryboardAnimations")}
-                        description={localizeUi(
-                          "ui.chat.chatsettingsdrawer.alsoGenerateMp4ClipsForEachStoryboardKeyframeRequires",
-                        )}
-                        enabled={gameStoryboardAutoAnimationsEnabled}
-                        onToggle={() => {
-                          const nextEnabled = !gameStoryboardAutoAnimationsEnabled;
-                          updateMeta.mutate({
-                            id: chat.id,
-                            gameStoryboardAutoGenerationEnabled: nextEnabled,
-                            ...(nextEnabled ? { gameStoryboardAutoIllustrationsEnabled: true } : {}),
-                          });
-                        }}
-                      />
-                      <AgentSettingsToggle
-                        label={localizeUi("ui.chat.chatsettingsdrawer.useNovelaiCharacterPrompts")}
-                        description={localizeUi(
-                          "ui.chat.chatsettingsdrawer.forOfficialNovelaiV4V45StoryboardsSendVisible",
-                        )}
-                        enabled={gameStoryboardUseNovelAiCharacterPrompts}
+                        enabled={gameStoryboardsEnabled}
                         onToggle={() =>
                           updateMeta.mutate({
                             id: chat.id,
-                            gameStoryboardUseNovelAiCharacterPrompts: !gameStoryboardUseNovelAiCharacterPrompts,
+                            gameStoryboardsEnabled: !gameStoryboardsEnabled,
+                            ...(!gameStoryboardsEnabled
+                              ? {}
+                              : {
+                                  gameStoryboardAutoIllustrationsEnabled: false,
+                                  gameStoryboardAutoGenerationEnabled: false,
+                                }),
                           })
                         }
                       />
-                      <div className="space-y-2 rounded-lg bg-[var(--background)]/75 px-3 py-2 ring-1 ring-[var(--border)]">
-                        <div className="flex items-center justify-between gap-3">
-                          <div className="min-w-0">
+                      {gameStoryboardsEnabled && (
+                        <>
+                          <div className="flex items-start gap-2 rounded-lg border border-[var(--border)] bg-[var(--background)]/60 px-3 py-2 text-[0.625rem] leading-relaxed text-[var(--muted-foreground)]">
+                            <Image size="0.75rem" className="mt-0.5 shrink-0 text-[var(--primary)]" />
+                            <p>{localizeUi("ui.chat.chatsettingsdrawer.recommendedUseAStrongStateOfTheArtImage")}</p>
+                          </div>
+                          <AgentSettingsToggle
+                            label={localizeUi("ui.chat.chatsettingsdrawer.automaticStoryboardIllustrations")}
+                            description={localizeUi(
+                              "ui.chat.chatsettingsdrawer.automaticallyCreateStillKeyframeIllustrationsAfterCompletedGmTurns",
+                            )}
+                            enabled={gameStoryboardAutoIllustrationsEnabled}
+                            onToggle={() => {
+                              const nextEnabled = !gameStoryboardAutoIllustrationsEnabled;
+                              updateMeta.mutate({
+                                id: chat.id,
+                                gameStoryboardAutoIllustrationsEnabled: nextEnabled,
+                                ...(nextEnabled ? {} : { gameStoryboardAutoGenerationEnabled: false }),
+                              });
+                            }}
+                          />
+                          <AgentSettingsToggle
+                            label={localizeUi("ui.chat.chatsettingsdrawer.automaticStoryboardAnimations")}
+                            description={localizeUi(
+                              "ui.chat.chatsettingsdrawer.alsoGenerateMp4ClipsForEachStoryboardKeyframeRequires",
+                            )}
+                            enabled={gameStoryboardAutoAnimationsEnabled}
+                            onToggle={() => {
+                              const nextEnabled = !gameStoryboardAutoAnimationsEnabled;
+                              updateMeta.mutate({
+                                id: chat.id,
+                                gameStoryboardAutoGenerationEnabled: nextEnabled,
+                                ...(nextEnabled ? { gameStoryboardAutoIllustrationsEnabled: true } : {}),
+                              });
+                            }}
+                          />
+                          <AgentSettingsToggle
+                            label={localizeUi("ui.chat.chatsettingsdrawer.useNovelaiCharacterPrompts")}
+                            description={localizeUi(
+                              "ui.chat.chatsettingsdrawer.forOfficialNovelaiV4V45StoryboardsSendVisible",
+                            )}
+                            enabled={gameStoryboardUseNovelAiCharacterPrompts}
+                            onToggle={() =>
+                              updateMeta.mutate({
+                                id: chat.id,
+                                gameStoryboardUseNovelAiCharacterPrompts: !gameStoryboardUseNovelAiCharacterPrompts,
+                              })
+                            }
+                          />
+                          <div className="space-y-2 rounded-lg bg-[var(--background)]/75 px-3 py-2 ring-1 ring-[var(--border)]">
+                            <div className="flex items-center justify-between gap-3">
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-1 text-[0.625rem] font-medium text-[var(--foreground)]">
+                                  {localizeUi("ui.chat.chatsettingsdrawer.keyframesPerTurn")}
+                                  <HelpTooltip
+                                    text={localizeUi(
+                                      "ui.chat.chatsettingsdrawer.controlsHowManyStoryboardIllustrationsArePlannedForEach",
+                                    )}
+                                  />
+                                </div>
+                                <p className="mt-0.5 text-[0.5625rem] leading-snug text-[var(--muted-foreground)]">
+                                  {localizeUi(
+                                    "ui.chat.chatsettingsdrawer.usedForAutomaticIllustrationsManualStoryboardsAndAnimationSource",
+                                  )}
+                                </p>
+                              </div>
+                              <span className="shrink-0 rounded-full bg-[var(--secondary)] px-2 py-0.5 text-[0.625rem] tabular-nums text-[var(--foreground)] ring-1 ring-[var(--border)]">
+                                {gameStoryboardKeyframeCount}
+                              </span>
+                            </div>
+                            <input
+                              type="range"
+                              min={GAME_STORYBOARD_KEYFRAME_COUNT_MIN}
+                              max={GAME_STORYBOARD_KEYFRAME_COUNT_MAX}
+                              step={1}
+                              value={gameStoryboardKeyframeCount}
+                              onChange={(event) =>
+                                updateMeta.mutate({
+                                  id: chat.id,
+                                  gameStoryboardKeyframeCount: normalizeGameStoryboardKeyframeCount(event.target.value),
+                                })
+                              }
+                              className="h-7 w-full cursor-pointer accent-[var(--primary)]"
+                              aria-label={localizeUi("ui.chat.chatsettingsdrawer.storyboardKeyframesPerTurn")}
+                            />
+                            <div className="flex justify-between text-[0.5625rem] text-[var(--muted-foreground)]">
+                              <span>{GAME_STORYBOARD_KEYFRAME_COUNT_MIN}</span>
+                              <span>{GAME_STORYBOARD_KEYFRAME_COUNT_MAX}</span>
+                            </div>
+                          </div>
+                          <div
+                            className={cn(
+                              "grid gap-2 rounded-lg bg-[var(--background)]/75 px-3 py-2 ring-1 ring-[var(--border)] sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center",
+                              !gameStoryboardAutoAnimationsEnabled && "opacity-60",
+                            )}
+                          >
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-1 text-[0.625rem] font-medium text-[var(--foreground)]">
+                                {localizeUi("ui.chat.chatsettingsdrawer.animationClipDuration")}
+                                <HelpTooltip
+                                  text={localizeUi(
+                                    "ui.chat.chatsettingsdrawer.controlsTheDurationOfEachStoryboardMp4ClipIn",
+                                  )}
+                                />
+                              </div>
+                              <p className="mt-0.5 text-[0.5625rem] leading-snug text-[var(--muted-foreground)]">
+                                {gameStoryboardAnimationDurationConfigured
+                                  ? localizeUi("ui.chat.chatsettingsdrawer.usedForEachGeneratedStoryboardAnimationClip")
+                                  : localizeUi(
+                                      "ui.chat.chatsettingsdrawer.usesTheValue1SecondStoryboardDefaultUntilSet",
+                                      {
+                                        value1: GAME_STORYBOARD_ANIMATION_DURATION_SECONDS_DEFAULT,
+                                      },
+                                    )}
+                              </p>
+                            </div>
+                            <div className="flex flex-wrap items-center gap-1.5 sm:justify-end">
+                              <div className="grid grid-cols-[minmax(0,4rem)_auto] items-center gap-1.5">
+                                <DraftNumberInput
+                                  value={gameStoryboardAnimationDurationSeconds}
+                                  min={GAME_STORYBOARD_ANIMATION_DURATION_SECONDS_MIN}
+                                  max={GAME_STORYBOARD_ANIMATION_DURATION_SECONDS_MAX}
+                                  disabled={!gameStoryboardAutoAnimationsEnabled}
+                                  onCommit={commitGameStoryboardAnimationDuration}
+                                  className="min-w-0 rounded-md border border-[var(--border)] bg-[var(--secondary)] px-2 py-1 text-xs text-[var(--foreground)] outline-none transition-colors focus:border-[var(--primary)]/50 disabled:cursor-not-allowed disabled:opacity-70"
+                                  ariaLabel="Storyboard animation clip duration in seconds"
+                                />
+                                <span className="text-[0.625rem] text-[var(--muted-foreground)]">
+                                  {localizeUi("ui.noodle.stageprofileview.s")}
+                                </span>
+                              </div>
+                              {gameStoryboardAnimationDurationConfigured ? (
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    updateMeta.mutate({
+                                      id: chat.id,
+                                      gameStoryboardAnimationDurationSeconds: null,
+                                    })
+                                  }
+                                  className="rounded-md border border-[var(--border)] px-2 py-1 text-[0.625rem] text-[var(--muted-foreground)] transition-colors hover:border-[var(--primary)]/40 hover:text-[var(--foreground)] disabled:cursor-not-allowed disabled:opacity-60"
+                                >
+                                  {localizeUi("ui.chat.chatsettingsdrawer.useStoryboardDefault")}
+                                </button>
+                              ) : (
+                                <span className="rounded-md bg-[var(--secondary)]/70 px-2 py-1 text-[0.625rem] text-[var(--muted-foreground)] ring-1 ring-[var(--border)]">
+                                  {localizeUi("ui.chat.chatsettingsdrawer.storyboardDefault")}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          <div className="space-y-1">
                             <div className="flex items-center gap-1 text-[0.625rem] font-medium text-[var(--foreground)]">
-                              {localizeUi("ui.chat.chatsettingsdrawer.keyframesPerTurn")}
+                              {localizeUi("ui.chat.chatsettingsdrawer.viewerDisplay")}
                               <HelpTooltip
                                 text={localizeUi(
-                                  "ui.chat.chatsettingsdrawer.controlsHowManyStoryboardIllustrationsArePlannedForEach",
+                                  "ui.chat.chatsettingsdrawer.floatingKeepsTheDraggableStoryboardPanelBackgroundPlacesThe",
                                 )}
                               />
                             </div>
-                            <p className="mt-0.5 text-[0.5625rem] leading-snug text-[var(--muted-foreground)]">
-                              {localizeUi(
-                                "ui.chat.chatsettingsdrawer.usedForAutomaticIllustrationsManualStoryboardsAndAnimationSource",
-                              )}
-                            </p>
-                          </div>
-                          <span className="shrink-0 rounded-full bg-[var(--secondary)] px-2 py-0.5 text-[0.625rem] tabular-nums text-[var(--foreground)] ring-1 ring-[var(--border)]">
-                            {gameStoryboardKeyframeCount}
-                          </span>
-                        </div>
-                        <input
-                          type="range"
-                          min={GAME_STORYBOARD_KEYFRAME_COUNT_MIN}
-                          max={GAME_STORYBOARD_KEYFRAME_COUNT_MAX}
-                          step={1}
-                          value={gameStoryboardKeyframeCount}
-                          onChange={(event) =>
-                            updateMeta.mutate({
-                              id: chat.id,
-                              gameStoryboardKeyframeCount: normalizeGameStoryboardKeyframeCount(event.target.value),
-                            })
-                          }
-                          className="h-7 w-full cursor-pointer accent-[var(--primary)]"
-                          aria-label={localizeUi("ui.chat.chatsettingsdrawer.storyboardKeyframesPerTurn")}
-                        />
-                        <div className="flex justify-between text-[0.5625rem] text-[var(--muted-foreground)]">
-                          <span>{GAME_STORYBOARD_KEYFRAME_COUNT_MIN}</span>
-                          <span>{GAME_STORYBOARD_KEYFRAME_COUNT_MAX}</span>
-                        </div>
-                      </div>
-                      <div
-                        className={cn(
-                          "grid gap-2 rounded-lg bg-[var(--background)]/75 px-3 py-2 ring-1 ring-[var(--border)] sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center",
-                          !gameStoryboardAutoAnimationsEnabled && "opacity-60",
-                        )}
-                      >
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-1 text-[0.625rem] font-medium text-[var(--foreground)]">
-                            {localizeUi("ui.chat.chatsettingsdrawer.animationClipDuration")}
-                            <HelpTooltip
-                              text={localizeUi(
-                                "ui.chat.chatsettingsdrawer.controlsTheDurationOfEachStoryboardMp4ClipIn",
-                              )}
-                            />
-                          </div>
-                          <p className="mt-0.5 text-[0.5625rem] leading-snug text-[var(--muted-foreground)]">
-                            {gameStoryboardAnimationDurationConfigured
-                              ? localizeUi("ui.chat.chatsettingsdrawer.usedForEachGeneratedStoryboardAnimationClip")
-                              : localizeUi("ui.chat.chatsettingsdrawer.usesTheValue1SecondStoryboardDefaultUntilSet", {
-                                  value1: GAME_STORYBOARD_ANIMATION_DURATION_SECONDS_DEFAULT,
-                                })}
-                          </p>
-                        </div>
-                        <div className="flex flex-wrap items-center gap-1.5 sm:justify-end">
-                          <div className="grid grid-cols-[minmax(0,4rem)_auto] items-center gap-1.5">
-                            <DraftNumberInput
-                              value={gameStoryboardAnimationDurationSeconds}
-                              min={GAME_STORYBOARD_ANIMATION_DURATION_SECONDS_MIN}
-                              max={GAME_STORYBOARD_ANIMATION_DURATION_SECONDS_MAX}
-                              disabled={!gameStoryboardAutoAnimationsEnabled}
-                              onCommit={commitGameStoryboardAnimationDuration}
-                              className="min-w-0 rounded-md border border-[var(--border)] bg-[var(--secondary)] px-2 py-1 text-xs text-[var(--foreground)] outline-none transition-colors focus:border-[var(--primary)]/50 disabled:cursor-not-allowed disabled:opacity-70"
-                              ariaLabel="Storyboard animation clip duration in seconds"
-                            />
-                            <span className="text-[0.625rem] text-[var(--muted-foreground)]">
-                              {localizeUi("ui.noodle.stageprofileview.s")}
-                            </span>
-                          </div>
-                          {gameStoryboardAnimationDurationConfigured ? (
-                            <button
-                              type="button"
-                              onClick={() =>
+                            <AgentSettingsSegmentedControl<GameStoryboardViewerDisplayMode>
+                              value={gameStoryboardViewerDisplayMode}
+                              options={[
+                                {
+                                  id: "floating",
+                                  label: "Floating",
+                                  description: "Draggable panel above the game.",
+                                },
+                                {
+                                  id: "background",
+                                  label: "Background",
+                                  description: "Visual layer behind controls.",
+                                },
+                              ]}
+                              onChange={(mode) =>
                                 updateMeta.mutate({
                                   id: chat.id,
-                                  gameStoryboardAnimationDurationSeconds: null,
+                                  gameStoryboardViewerDisplayMode: mode === "floating" ? null : mode,
                                 })
                               }
-                              className="rounded-md border border-[var(--border)] px-2 py-1 text-[0.625rem] text-[var(--muted-foreground)] transition-colors hover:border-[var(--primary)]/40 hover:text-[var(--foreground)] disabled:cursor-not-allowed disabled:opacity-60"
-                            >
-                              {localizeUi("ui.chat.chatsettingsdrawer.useStoryboardDefault")}
-                            </button>
-                          ) : (
-                            <span className="rounded-md bg-[var(--secondary)]/70 px-2 py-1 text-[0.625rem] text-[var(--muted-foreground)] ring-1 ring-[var(--border)]">
-                              {localizeUi("ui.chat.chatsettingsdrawer.storyboardDefault")}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-1 text-[0.625rem] font-medium text-[var(--foreground)]">
-                          {localizeUi("ui.chat.chatsettingsdrawer.viewerDisplay")}
-                          <HelpTooltip
-                            text={localizeUi(
-                              "ui.chat.chatsettingsdrawer.floatingKeepsTheDraggableStoryboardPanelBackgroundPlacesThe",
-                            )}
-                          />
-                        </div>
-                        <AgentSettingsSegmentedControl<GameStoryboardViewerDisplayMode>
-                          value={gameStoryboardViewerDisplayMode}
-                          options={[
-                            {
-                              id: "floating",
-                              label: "Floating",
-                              description: "Draggable panel above the game.",
-                            },
-                            {
-                              id: "background",
-                              label: "Background",
-                              description: "Visual layer behind controls.",
-                            },
-                          ]}
-                          onChange={(mode) =>
-                            updateMeta.mutate({
-                              id: chat.id,
-                              gameStoryboardViewerDisplayMode: mode === "floating" ? null : mode,
-                            })
-                          }
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <div>
-                          <p className="text-[0.6875rem] font-semibold text-[var(--foreground)]">
-                            {localizeUi("ui.chat.chatsettingsdrawer.storyboardPlanners")}
-                          </p>
-                          <p className="mt-0.5 text-[0.5625rem] leading-snug text-[var(--muted-foreground)]">
-                            {localizeUi("ui.chat.chatsettingsdrawer.plannersSplitACompletedGmTurnIntoOrderedKeyframes")}
-                          </p>
-                        </div>
-                        <div className="grid gap-2 md:grid-cols-2">
-                          <div className="space-y-2 rounded-lg bg-[var(--secondary)]/35 p-2 ring-1 ring-[var(--border)]">
-                            <p className="text-[0.625rem] font-semibold text-[var(--foreground)]">
-                              {localizeUi("ui.chat.chatsettingsdrawer.stillStoryboards")}
-                            </p>
-                            <GamePromptTemplateSelect
-                              label={localizeUi("ui.chat.chatsettingsdrawer.illustrationPlanner")}
-                              description={localizeUi(
-                                "ui.chat.chatsettingsdrawer.plansFinishedStillKeyframesAndWritesTheirImageDescriptions",
-                              )}
-                              options={gameStoryboardIllustrationPromptOptions}
-                              selectedId={selectedGameStoryboardIllustrationPromptTemplateId}
-                              fallbackId={GAME_STORYBOARD_ILLUSTRATION_PROMPT_TEMPLATE_ID}
-                              onChange={(promptTemplateId) =>
-                                updateGameStoryboardPromptSelection(
-                                  "gameStoryboardIllustrationPromptTemplateId",
-                                  promptTemplateId,
-                                )
-                              }
-                            />
-                            <GameStoryboardPromptLibrary
-                              kind="illustration"
-                              builtInTemplates={GAME_STORYBOARD_ILLUSTRATION_PROMPT_TEMPLATES}
-                              customTemplates={customGameStoryboardIllustrationPromptTemplates}
-                              onAddTemplate={addGameStoryboardPromptTemplate}
-                              onPatchTemplate={patchGameStoryboardPromptTemplate}
-                              onRemoveTemplate={removeGameStoryboardPromptTemplate}
                             />
                           </div>
-                          <div className="space-y-2 rounded-lg bg-[var(--secondary)]/35 p-2 ring-1 ring-[var(--border)]">
-                            <p className="text-[0.625rem] font-semibold text-[var(--foreground)]">
-                              {localizeUi("ui.chat.chatsettingsdrawer.animatedStoryboards")}
-                            </p>
-                            <GamePromptTemplateSelect
-                              label={localizeUi("ui.chat.chatsettingsdrawer.animationPlanner")}
+                          <div className="space-y-2">
+                            <div>
+                              <p className="text-[0.6875rem] font-semibold text-[var(--foreground)]">
+                                {localizeUi("ui.chat.chatsettingsdrawer.storyboardPlanners")}
+                              </p>
+                              <p className="mt-0.5 text-[0.5625rem] leading-snug text-[var(--muted-foreground)]">
+                                {localizeUi(
+                                  "ui.chat.chatsettingsdrawer.plannersSplitACompletedGmTurnIntoOrderedKeyframes",
+                                )}
+                              </p>
+                            </div>
+                            <div className="grid items-stretch gap-2 md:grid-cols-2">
+                              <div className="h-full space-y-2 rounded-lg bg-[var(--secondary)]/35 p-2 ring-1 ring-[var(--border)]">
+                                <p className="text-[0.625rem] font-semibold text-[var(--foreground)]">
+                                  {localizeUi("ui.chat.chatsettingsdrawer.stillStoryboards")}
+                                </p>
+                                <GamePromptTemplateSelect
+                                  label={localizeUi("ui.chat.chatsettingsdrawer.illustrationPlanner")}
+                                  description={localizeUi(
+                                    "ui.chat.chatsettingsdrawer.plansFinishedStillKeyframesAndWritesTheirImageDescriptions",
+                                  )}
+                                  options={gameStoryboardIllustrationPromptOptions}
+                                  selectedId={selectedGameStoryboardIllustrationPromptTemplateId}
+                                  fallbackId={GAME_STORYBOARD_ILLUSTRATION_PROMPT_TEMPLATE_ID}
+                                  onChange={(promptTemplateId) =>
+                                    updateGameStoryboardPromptSelection(
+                                      "gameStoryboardIllustrationPromptTemplateId",
+                                      promptTemplateId,
+                                    )
+                                  }
+                                />
+                              </div>
+                              <div className="h-full space-y-2 rounded-lg bg-[var(--secondary)]/35 p-2 ring-1 ring-[var(--border)]">
+                                <p className="text-[0.625rem] font-semibold text-[var(--foreground)]">
+                                  {localizeUi("ui.chat.chatsettingsdrawer.animatedStoryboards")}
+                                </p>
+                                <GamePromptTemplateSelect
+                                  label={localizeUi("ui.chat.chatsettingsdrawer.animationPlanner")}
+                                  description={localizeUi(
+                                    "ui.chat.chatsettingsdrawer.plansAnimationReadySourceImagesAndAMotionDirection",
+                                  )}
+                                  options={gameStoryboardAnimationPromptOptions}
+                                  selectedId={selectedGameStoryboardAnimationPromptTemplateId}
+                                  fallbackId={GAME_STORYBOARD_ANIMATION_PROMPT_TEMPLATE_ID}
+                                  onChange={(promptTemplateId) =>
+                                    updateGameStoryboardPromptSelection(
+                                      "gameStoryboardAnimationPromptTemplateId",
+                                      promptTemplateId,
+                                    )
+                                  }
+                                />
+                              </div>
+                            </div>
+                          </div>
+                          <div className="space-y-2">
+                            <div>
+                              <p className="text-[0.6875rem] font-semibold text-[var(--foreground)]">
+                                {localizeUi("ui.chat.chatsettingsdrawer.finalGenerationPrompts")}
+                              </p>
+                              <p className="mt-0.5 text-[0.5625rem] leading-snug text-[var(--muted-foreground)]">
+                                {localizeUi(
+                                  "ui.chat.chatsettingsdrawer.theseFormatEachPlannerResultIntoTheFinalRequest",
+                                )}
+                              </p>
+                            </div>
+                            <AgentSettingsToggle
+                              label={localizeUi("ui.chat.chatsettingsdrawer.useStoryboardTemplate")}
                               description={localizeUi(
-                                "ui.chat.chatsettingsdrawer.plansAnimationReadySourceImagesAndAMotionDirection",
+                                "ui.chat.chatsettingsdrawer.offBypassesTheStoryboardPromptTemplateWhileKeepingFinal",
                               )}
-                              options={gameStoryboardAnimationPromptOptions}
-                              selectedId={selectedGameStoryboardAnimationPromptTemplateId}
-                              fallbackId={GAME_STORYBOARD_ANIMATION_PROMPT_TEMPLATE_ID}
-                              onChange={(promptTemplateId) =>
-                                updateGameStoryboardPromptSelection(
-                                  "gameStoryboardAnimationPromptTemplateId",
-                                  promptTemplateId,
-                                )
+                              enabled={gameStoryboardUsePromptTemplate}
+                              onToggle={() =>
+                                updateMeta.mutate({
+                                  id: chat.id,
+                                  gameStoryboardUsePromptTemplate: !gameStoryboardUsePromptTemplate,
+                                })
                               }
                             />
-                            <GameStoryboardPromptLibrary
-                              kind="animation"
-                              builtInTemplates={GAME_STORYBOARD_ANIMATION_PROMPT_TEMPLATES}
-                              customTemplates={customGameStoryboardAnimationPromptTemplates}
-                              onAddTemplate={addGameStoryboardPromptTemplate}
-                              onPatchTemplate={patchGameStoryboardPromptTemplate}
-                              onRemoveTemplate={removeGameStoryboardPromptTemplate}
-                            />
+                            <div className="grid gap-2 md:grid-cols-2">
+                              <GamePromptTemplateSelect
+                                label={localizeUi("ui.chat.chatsettingsdrawer.storyboardIllustrationPrompt")}
+                                description={localizeUi(
+                                  "ui.chat.chatsettingsdrawer.formatsEachPlannedKeyframeIntoTheFinalPromptSent",
+                                )}
+                                options={gameStoryboardImagePromptOptions}
+                                selectedId={selectedGameStoryboardImagePromptTemplateId}
+                                fallbackId={GAME_STORYBOARD_IMAGE_PROMPT_TEMPLATE_ID}
+                                onChange={updateGameStoryboardImagePromptSelection}
+                              />
+                              <GamePromptTemplateSelect
+                                label={localizeUi("ui.chat.chatsettingsdrawer.storyboardVideoPrompt")}
+                                description={localizeUi(
+                                  "ui.chat.chatsettingsdrawer.combinesTheGeneratedKeyframeAndMotionPlanIntoThe",
+                                )}
+                                options={gameVideoPromptOptions}
+                                selectedId={selectedGameStoryboardVideoPromptTemplateId}
+                                fallbackId={selectedGameVideoPromptTemplateId}
+                                onChange={updateGameStoryboardVideoPromptSelection}
+                              />
+                            </div>
                           </div>
-                        </div>
-                      </div>
-                      <div className="space-y-2">
-                        <div>
-                          <p className="text-[0.6875rem] font-semibold text-[var(--foreground)]">
-                            {localizeUi("ui.chat.chatsettingsdrawer.finalGenerationPrompts")}
+                          <p className="text-[0.625rem] leading-relaxed text-[var(--muted-foreground)]">
+                            {localizeUi(
+                              "ui.chat.chatsettingsdrawer.flowTheSelectedPlannerCreatesEachKeyframePlanStoryboard",
+                            )}
                           </p>
-                          <p className="mt-0.5 text-[0.5625rem] leading-snug text-[var(--muted-foreground)]">
-                            {localizeUi("ui.chat.chatsettingsdrawer.theseFormatEachPlannerResultIntoTheFinalRequest")}
-                          </p>
-                        </div>
-                        <AgentSettingsToggle
-                          label={localizeUi("ui.chat.chatsettingsdrawer.useStoryboardTemplate")}
-                          description={localizeUi(
-                            "ui.chat.chatsettingsdrawer.offBypassesTheStoryboardPromptTemplateWhileKeepingFinal",
-                          )}
-                          enabled={gameStoryboardUsePromptTemplate}
-                          onToggle={() =>
-                            updateMeta.mutate({
-                              id: chat.id,
-                              gameStoryboardUsePromptTemplate: !gameStoryboardUsePromptTemplate,
-                            })
-                          }
-                        />
-                        <div className="grid gap-2 md:grid-cols-2">
-                          <GamePromptTemplateSelect
-                            label={localizeUi("ui.chat.chatsettingsdrawer.storyboardIllustrationPrompt")}
-                            description={localizeUi(
-                              "ui.chat.chatsettingsdrawer.formatsEachPlannedKeyframeIntoTheFinalPromptSent",
-                            )}
-                            options={gameStoryboardImagePromptOptions}
-                            selectedId={selectedGameStoryboardImagePromptTemplateId}
-                            fallbackId={GAME_STORYBOARD_IMAGE_PROMPT_TEMPLATE_ID}
-                            onChange={updateGameStoryboardImagePromptSelection}
-                          />
-                          <GamePromptTemplateSelect
-                            label={localizeUi("ui.chat.chatsettingsdrawer.storyboardVideoPrompt")}
-                            description={localizeUi(
-                              "ui.chat.chatsettingsdrawer.combinesTheGeneratedKeyframeAndMotionPlanIntoThe",
-                            )}
-                            options={gameVideoPromptOptions}
-                            selectedId={selectedGameStoryboardVideoPromptTemplateId}
-                            fallbackId={selectedGameVideoPromptTemplateId}
-                            onChange={updateGameStoryboardVideoPromptSelection}
-                          />
-                        </div>
-                        <div className="grid gap-2 md:grid-cols-2">
-                          <GameProviderPromptLibrary
-                            title={localizeUi("ui.chat.chatsettingsdrawer.editIllustrationPromptPresets")}
-                            description={localizeUi(
-                              "ui.chat.chatsettingsdrawer.builtInStoryboardIllustrationPromptsAreReadOnlyAdd",
-                            )}
-                            emptyDescription="Add a copy, edit it here, then choose it from Storyboard Illustration Prompt above."
-                            builtInTemplates={GAME_STORYBOARD_IMAGE_BUILT_IN_PROMPT_TEMPLATES}
-                            customTemplates={gameStoryboardImagePromptTemplates}
-                            customFallbackName="Custom Storyboard Illustration Prompt"
-                            promptPlaceholder="Write the storyboard illustration prompt template..."
-                            onAddTemplate={addGameStoryboardImagePromptTemplate}
-                            onPatchTemplate={patchGameStoryboardImagePromptTemplate}
-                            onRemoveTemplate={removeGameStoryboardImagePromptTemplate}
-                          />
-                          <GameProviderPromptLibrary
-                            title={localizeUi("ui.chat.chatsettingsdrawer.editStoryboardVideoPromptPresets")}
-                            description={localizeUi("ui.chat.chatsettingsdrawer.builtInVideoPromptsAreReadOnlyAddA")}
-                            emptyDescription="Add a copy, edit it here, then choose it from Storyboard Video Prompt above."
-                            builtInTemplates={GAME_VIDEO_BUILT_IN_PROMPT_TEMPLATES}
-                            customTemplates={gameVideoPromptTemplates}
-                            customFallbackName="Custom Game Video Prompt"
-                            promptPlaceholder="Write the storyboard video prompt template..."
-                            onAddTemplate={addGameVideoPromptTemplate}
-                            onPatchTemplate={patchGameVideoPromptTemplate}
-                            onRemoveTemplate={removeGameVideoPromptTemplate}
-                          />
-                        </div>
-                      </div>
-                      <p className="text-[0.625rem] leading-relaxed text-[var(--muted-foreground)]">
-                        {localizeUi(
-                          "ui.chat.chatsettingsdrawer.flowTheSelectedPlannerCreatesEachKeyframePlanStoryboard",
-                        )}
-                      </p>
+                        </>
+                      )}
                     </AgentSettingsCard>
                   )}
 
@@ -8767,6 +8552,42 @@ export function ChatSettingsDrawer({
                               {gameAgentPool.map((agent) => {
                                 const active = activeAgentIds.includes(agent.id);
                                 const knowledgeAgentType = isKnowledgeAgentType(agent.id) ? agent.id : null;
+                                if (agent.id === "hierarchical-maps" && mapsPackage) {
+                                  return (
+                                    <div key={agent.id} data-chat-agent-entry={agent.id} className="space-y-1.5">
+                                      <AgentSettingsCard
+                                        icon={<MapIcon size="0.75rem" className="mt-0.5 text-[var(--primary)]" />}
+                                        title={agent.name}
+                                        description={agent.description}
+                                      >
+                                        <CapabilityElement
+                                          packageId={mapsPackage.id}
+                                          view="settings"
+                                          capabilityProps={{
+                                            chatId: chat.id,
+                                            debugMode,
+                                            enabledForChat: mapsPackageEnabledForChat,
+                                            onEnabledForChatChange: async (enabled: boolean) => {
+                                              const current = readLatestActiveAgentIds();
+                                              const nextActiveAgentIds = enabled
+                                                ? Array.from(new Set([...current, mapsPackage.id]))
+                                                : current.filter((id) => id !== mapsPackage.id);
+                                              await updateMeta.mutateAsync({
+                                                id: chat.id,
+                                                ...(enabled ? { enableAgents: true } : {}),
+                                                activeAgentIds: nextActiveAgentIds,
+                                              });
+                                            },
+                                            confirmAction: showConfirmDialog,
+                                            onDirtyChange: setEditorDirty,
+                                            onOpenLorebook: openLorebookDetail,
+                                          }}
+                                          className="block overflow-hidden rounded-lg"
+                                        />
+                                      </AgentSettingsCard>
+                                    </div>
+                                  );
+                                }
                                 return (
                                   <div key={agent.id} data-chat-agent-entry={agent.id} className="space-y-1.5">
                                     <button
@@ -8868,32 +8689,6 @@ export function ChatSettingsDrawer({
                                           onReset={resetIllustratorAvatarReferences}
                                         />
                                       </AgentSettingsCard>
-                                    )}
-                                    {active && agent.id === "hierarchical-maps" && mapsPackage && (
-                                      <CapabilityElement
-                                        packageId={mapsPackage.id}
-                                        view="settings"
-                                        capabilityProps={{
-                                          chatId: chat.id,
-                                          debugMode,
-                                          enabledForChat: mapsPackageEnabledForChat,
-                                          onEnabledForChatChange: async (enabled: boolean) => {
-                                            const current = readLatestActiveAgentIds();
-                                            const nextActiveAgentIds = enabled
-                                              ? Array.from(new Set([...current, mapsPackage.id]))
-                                              : current.filter((id) => id !== mapsPackage.id);
-                                            await updateMeta.mutateAsync({
-                                              id: chat.id,
-                                              ...(enabled ? { enableAgents: true } : {}),
-                                              activeAgentIds: nextActiveAgentIds,
-                                            });
-                                          },
-                                          confirmAction: showConfirmDialog,
-                                          onDirtyChange: setEditorDirty,
-                                          onOpenLorebook: openLorebookDetail,
-                                        }}
-                                        className="block overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--background)]/45"
-                                      />
                                     )}
                                   </div>
                                 );
@@ -9045,7 +8840,7 @@ export function ChatSettingsDrawer({
                                                 onDirtyChange: setEditorDirty,
                                                 onOpenLorebook: openLorebookDetail,
                                               }}
-                                              className="mt-2 block overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--background)]/45"
+                                              className="mt-2 block overflow-hidden rounded-lg"
                                             />
                                           )}
                                         </div>
@@ -9095,6 +8890,7 @@ export function ChatSettingsDrawer({
 
           {isGame && (
             <Section
+              id="game-widgets"
               style={{ order: CHAT_SETTINGS_ORDER.widgets }}
               label={localizeUi("ui.chat.chatsettingsdrawer.widgets")}
               icon={<Puzzle size="0.875rem" />}
@@ -9146,6 +8942,7 @@ export function ChatSettingsDrawer({
           {/* Memory Recall — conversation mode: placed before Function Calling by section order */}
           {isConversation && import.meta.env.VITE_MARINARA_LITE !== "true" && (
             <Section
+              id="conversation-memory-recall"
               style={{ order: CHAT_SETTINGS_ORDER.memoryRecall }}
               label={localizeUi("ui.chat.chatsettingsdrawer.memoryRecall")}
               icon={<Brain size="0.875rem" />}
@@ -9158,6 +8955,7 @@ export function ChatSettingsDrawer({
           {/* Automatic Summarization — conversation mode only. Opens a modal to edit per-day and per-week summaries. */}
           {isConversation && (
             <Section
+              id="conversation-automatic-summarization"
               label={localizeUi("ui.chat.chatsettingsdrawer.automaticSummarization")}
               icon={<CalendarClock size="0.875rem" />}
               help={localizeUi("ui.chat.chatsettingsdrawer.toHelpKeepTheRequestContextLowTheConversation")}
@@ -9272,6 +9070,7 @@ export function ChatSettingsDrawer({
           {/* Memory Recall — roleplay/game modes: placed before Function Calling by section order */}
           {!isConversation && import.meta.env.VITE_MARINARA_LITE !== "true" && (
             <Section
+              id={`${chatMode}-memory-recall`}
               style={{ order: CHAT_SETTINGS_ORDER.memoryRecall }}
               label={localizeUi("ui.chat.chatsettingsdrawer.memoryRecall")}
               icon={<Brain size="0.875rem" />}
@@ -9657,35 +9456,79 @@ export function ChatSettingsDrawer({
             onPointerDown={(e) => e.stopPropagation()}
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center gap-2 border-b border-[var(--border)] px-4 py-3">
+            <div className="flex items-center gap-2 border-b border-[var(--marinara-chat-chrome-panel-divider)] px-4 py-3">
               <MessageCircle size="0.875rem" className="text-[var(--muted-foreground)]" />
               <span className="text-sm font-semibold text-[var(--foreground)]">
-                {localizeUi("ui.characters.dialoguetab.firstMessage")}
+                {localizeUi("ui.chat.chatsettingsdrawer.chooseGreeting")}
               </span>
             </div>
-            <div className="px-4 py-3">
-              <p className="text-sm text-[var(--foreground)]">
-                {localizeUi("ui.characters.metadatatab.add")} <strong>{firstMesConfirm.charName}</strong>
-                {localizeUi("ui.chat.chatsettingsdrawer.sFirstMessageToTheChat")}
+            <div className="min-h-0 px-4 py-3">
+              <p className="text-xs leading-relaxed text-[var(--muted-foreground)]">
+                {localizeUi("ui.chat.chatsettingsdrawer.chooseGreetingForValue1", {
+                  value1: firstMesConfirm.charName,
+                })}
               </p>
-              <p className="mt-2 max-h-32 overflow-y-auto rounded-lg bg-[var(--accent)]/50 px-3 py-2 text-xs leading-relaxed text-[var(--muted-foreground)]">
-                {firstMesConfirm.message.length > 300
-                  ? firstMesConfirm.message.slice(0, 300) + "\u2026"
-                  : firstMesConfirm.message}
-              </p>
+              <div className="mt-3 max-h-[min(50dvh,22rem)] space-y-2 overflow-y-auto pr-1">
+                {firstMesConfirm.greetings.map((greeting, index) => {
+                  const selected = index === firstMesConfirm.selectedIndex;
+                  return (
+                    <button
+                      key={`${index}:${greeting.slice(0, 32)}`}
+                      type="button"
+                      onClick={() =>
+                        setFirstMesConfirm((current) => (current ? { ...current, selectedIndex: index } : current))
+                      }
+                      aria-pressed={selected}
+                      className={cn(
+                        "mari-chat-option-field w-full rounded-lg px-3 py-2.5 text-left transition-colors",
+                        selected && "mari-chat-option-field--active",
+                      )}
+                    >
+                      <span className="flex items-center justify-between gap-2">
+                        <span className="text-[0.6875rem] font-semibold text-[var(--foreground)]">
+                          {index === 0
+                            ? localizeUi("ui.characters.dialoguetab.firstMessage")
+                            : localizeUi("ui.characters.dialoguetab.alternateGreetingValue1", {
+                                value1: index,
+                              })}
+                        </span>
+                        <span
+                          className={cn(
+                            "flex h-4 w-4 shrink-0 items-center justify-center rounded-full border",
+                            selected
+                              ? "border-[var(--marinara-chat-chrome-button-border-active)] bg-[var(--marinara-chat-chrome-button-bg-active)] text-[var(--marinara-chat-chrome-button-text-active)]"
+                              : "border-[var(--marinara-chat-chrome-button-border)] text-transparent",
+                          )}
+                        >
+                          {selected && <Check size="0.625rem" />}
+                        </span>
+                      </span>
+                      <span className="mt-1 block whitespace-pre-wrap text-[0.6875rem] leading-relaxed text-[var(--muted-foreground)]">
+                        {greeting.length > 500
+                          ? localizeUi("ui.chat.chatsettingsdrawer.value1_30f5501", { value1: greeting.slice(0, 500) })
+                          : greeting}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
-            <div className="flex justify-end gap-2 border-t border-[var(--border)] px-4 py-3">
+            <div className="flex justify-end gap-2 border-t border-[var(--marinara-chat-chrome-panel-divider)] px-4 py-3">
               <button
                 onClick={() => setFirstMesConfirm(null)}
-                className="rounded-lg px-3 py-1.5 text-xs font-medium text-[var(--muted-foreground)] transition-colors hover:bg-[var(--accent)]"
+                disabled={createMessage.isPending}
+                className="mari-chrome-control mari-chrome-control--small text-xs"
               >
                 {localizeUi("onboarding.actions.skip")}
               </button>
               <button
                 onClick={handleFirstMesConfirm}
-                className="rounded-lg bg-[var(--primary)] px-3 py-1.5 text-xs font-medium text-[var(--primary-foreground)] transition-colors hover:opacity-90"
+                disabled={createMessage.isPending}
+                className="mari-chrome-control mari-chrome-control--small mari-chrome-control--selected text-xs"
               >
-                {localizeUi("ui.chat.chatsettingsdrawer.addMessage")}
+                {createMessage.isPending
+                  ? localizeUi("ui.chat.chatsettingsdrawer.adding")
+                  : localizeUi("ui.chat.chatsettingsdrawer.addSelectedGreeting")}
               </button>
             </div>
           </div>
@@ -10480,269 +10323,6 @@ function GamePromptTemplateSelect({
   );
 }
 
-function GameStoryboardPromptLibrary({
-  kind,
-  builtInTemplates,
-  customTemplates,
-  onAddTemplate,
-  onPatchTemplate,
-  onRemoveTemplate,
-}: {
-  kind: GameStoryboardPromptTemplateKind;
-  builtInTemplates: AgentPromptTemplateOption[];
-  customTemplates: AgentPromptTemplateOption[];
-  onAddTemplate: (kind: GameStoryboardPromptTemplateKind, sourceTemplateId: string) => void;
-  onPatchTemplate: (
-    templateId: string,
-    patch: Partial<Pick<AgentPromptTemplateOption, "name" | "description" | "promptTemplate">>,
-  ) => void;
-  onRemoveTemplate: (templateId: string) => void | Promise<void>;
-}) {
-  const { t: localizeUi } = useUiTranslation();
-  const [open, setOpen] = useState(false);
-  const laneLabel = kind === "animation" ? "Animation" : "Illustration";
-
-  return (
-    <div className="rounded-lg bg-[var(--background)]/45 ring-1 ring-[var(--border)]">
-      <button
-        type="button"
-        onClick={() => setOpen((value) => !value)}
-        className="flex w-full items-center gap-2 px-2.5 py-2 text-left transition-colors hover:bg-[var(--accent)]/55"
-        aria-expanded={open}
-      >
-        <FileText size="0.75rem" className="shrink-0 text-[var(--primary)]" />
-        <span className="min-w-0 flex-1 text-[0.6875rem] font-semibold text-[var(--foreground)]">
-          {localizeUi("ui.noodle.noodlepostcard.edit")} {laneLabel}{" "}
-          {localizeUi("ui.chat.gamestoryboardpromptlibrary.plannerPresets")}
-        </span>
-        <span className="rounded-md bg-[var(--secondary)] px-1.5 py-0.5 text-[0.5625rem] text-[var(--muted-foreground)] ring-1 ring-[var(--border)]">
-          {customTemplates.length} {localizeUi("ui.agents.toolcard.custom")}
-        </span>
-        <ChevronDown
-          size="0.6875rem"
-          className={cn("shrink-0 text-[var(--muted-foreground)] transition-transform", open && "rotate-180")}
-        />
-      </button>
-      {open && (
-        <div className="space-y-2 border-t border-[var(--border)] px-2.5 py-2.5">
-          <p className="text-[0.625rem] leading-relaxed text-[var(--muted-foreground)]">
-            {localizeUi("ui.chat.gamestoryboardpromptlibrary.builtIn")} {laneLabel.toLowerCase()}{" "}
-            {localizeUi("ui.chat.gamestoryboardpromptlibrary.plannerPresetsAreReadOnlyAddACopyHere")}
-          </p>
-          <div className="flex flex-wrap gap-1.5">
-            {builtInTemplates.map((template) => (
-              <button
-                key={template.id}
-                type="button"
-                onClick={() => onAddTemplate(kind, template.id)}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--secondary)] px-2.5 py-1.5 text-[0.625rem] font-medium text-[var(--foreground)] ring-1 ring-[var(--border)] transition-colors hover:bg-[var(--accent)]"
-              >
-                <Plus size="0.6875rem" />
-                {localizeUi("lorebook.editor.batch.copy")} {template.name}
-              </button>
-            ))}
-          </div>
-          {customTemplates.length === 0 ? (
-            <p className="rounded-lg bg-[var(--secondary)]/55 px-2.5 py-2 text-[0.625rem] leading-relaxed text-[var(--muted-foreground)] ring-1 ring-[var(--border)]">
-              {localizeUi("ui.chat.gamestoryboardpromptlibrary.addACopyEditItHereThenChooseIt")}{" "}
-              {laneLabel.toLowerCase()} {localizeUi("ui.chat.gamestoryboardpromptlibrary.plannerAbove")}
-            </p>
-          ) : (
-            <div className="space-y-2">
-              {customTemplates.map((template, index) => (
-                <div
-                  key={template.id}
-                  className="space-y-2 rounded-lg bg-[var(--secondary)]/65 p-2 ring-1 ring-[var(--border)]"
-                >
-                  <div className="flex items-center gap-2">
-                    <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-[var(--background)] text-[0.625rem] font-semibold text-[var(--muted-foreground)] ring-1 ring-[var(--border)]">
-                      {index + 1}
-                    </span>
-                    <input
-                      defaultValue={template.name}
-                      onBlur={(event) => {
-                        const next = event.target.value.trim() || "Custom Storyboard Prompt";
-                        if (next !== template.name) onPatchTemplate(template.id, { name: next });
-                      }}
-                      className="min-w-0 flex-1 rounded-md bg-[var(--background)] px-2 py-1.5 text-xs text-[var(--foreground)] ring-1 ring-[var(--border)] placeholder:text-[var(--muted-foreground)] focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
-                      placeholder={localizeUi("ui.chat.gamestoryboardpromptlibrary.promptName")}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => void onRemoveTemplate(template.id)}
-                      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-[var(--muted-foreground)] transition-colors hover:bg-[var(--destructive)]/15 hover:text-[var(--destructive)]"
-                      title={localizeUi("ui.chat.gamestoryboardpromptlibrary.removePrompt")}
-                      aria-label={localizeUi("ui.chat.gamestoryboardpromptlibrary.removePrompt")}
-                    >
-                      <Trash2 size="0.75rem" />
-                    </button>
-                  </div>
-                  <input
-                    defaultValue={template.description ?? ""}
-                    onBlur={(event) => {
-                      const next = event.target.value.trim();
-                      if (next !== (template.description ?? "")) {
-                        onPatchTemplate(template.id, { description: next });
-                      }
-                    }}
-                    className="w-full rounded-md bg-[var(--background)] px-2 py-1.5 text-[0.6875rem] text-[var(--foreground)] ring-1 ring-[var(--border)] placeholder:text-[var(--muted-foreground)] focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
-                    placeholder={localizeUi("ui.chat.gamestoryboardpromptlibrary.shortDescription")}
-                  />
-                  <textarea
-                    defaultValue={template.promptTemplate}
-                    onBlur={(event) => {
-                      const next = event.target.value.trim();
-                      if (next && next !== template.promptTemplate) {
-                        onPatchTemplate(template.id, { promptTemplate: next });
-                      }
-                    }}
-                    rows={7}
-                    className="min-h-[9rem] w-full resize-y rounded-md bg-[var(--background)] px-2.5 py-2 font-mono text-[0.6875rem] leading-relaxed text-[var(--foreground)] ring-1 ring-[var(--border)] placeholder:text-[var(--muted-foreground)] focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
-                    placeholder={localizeUi(
-                      "ui.chat.gamestoryboardpromptlibrary.writeTheStoryboardValue1PromptTemplate",
-                      { value1: laneLabel.toLowerCase() },
-                    )}
-                  />
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function GameProviderPromptLibrary({
-  title,
-  description,
-  emptyDescription,
-  builtInTemplates,
-  customTemplates,
-  customFallbackName,
-  promptPlaceholder,
-  onAddTemplate,
-  onPatchTemplate,
-  onRemoveTemplate,
-}: {
-  title: string;
-  description: string;
-  emptyDescription: string;
-  builtInTemplates: AgentPromptTemplateOption[];
-  customTemplates: AgentPromptTemplateOption[];
-  customFallbackName: string;
-  promptPlaceholder: string;
-  onAddTemplate: (sourceTemplateId: string) => void;
-  onPatchTemplate: (
-    templateId: string,
-    patch: Partial<Pick<AgentPromptTemplateOption, "name" | "description" | "promptTemplate">>,
-  ) => void;
-  onRemoveTemplate: (templateId: string) => void | Promise<void>;
-}) {
-  const { t: localizeUi } = useUiTranslation();
-  const [open, setOpen] = useState(false);
-
-  return (
-    <div className="rounded-lg bg-[var(--background)]/45 ring-1 ring-[var(--border)]">
-      <button
-        type="button"
-        onClick={() => setOpen((value) => !value)}
-        className="flex w-full items-center gap-2 px-2.5 py-2 text-left transition-colors hover:bg-[var(--accent)]/55"
-        aria-expanded={open}
-      >
-        <FileText size="0.75rem" className="shrink-0 text-[var(--primary)]" />
-        <span className="min-w-0 flex-1 text-[0.6875rem] font-semibold text-[var(--foreground)]">{title}</span>
-        <span className="rounded-md bg-[var(--secondary)] px-1.5 py-0.5 text-[0.5625rem] text-[var(--muted-foreground)] ring-1 ring-[var(--border)]">
-          {customTemplates.length} {localizeUi("ui.agents.toolcard.custom")}
-        </span>
-        <ChevronDown
-          size="0.6875rem"
-          className={cn("shrink-0 text-[var(--muted-foreground)] transition-transform", open && "rotate-180")}
-        />
-      </button>
-      {open && (
-        <div className="space-y-2 border-t border-[var(--border)] px-2.5 py-2.5">
-          <p className="text-[0.625rem] leading-relaxed text-[var(--muted-foreground)]">{description}</p>
-          <div className="flex flex-wrap gap-1.5">
-            {builtInTemplates.map((template) => (
-              <button
-                key={template.id}
-                type="button"
-                onClick={() => onAddTemplate(template.id)}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--secondary)] px-2.5 py-1.5 text-[0.625rem] font-medium text-[var(--foreground)] ring-1 ring-[var(--border)] transition-colors hover:bg-[var(--accent)]"
-              >
-                <Plus size="0.6875rem" />
-                {localizeUi("lorebook.editor.batch.copy")} {template.name}
-              </button>
-            ))}
-          </div>
-          {customTemplates.length === 0 ? (
-            <p className="rounded-lg bg-[var(--secondary)]/55 px-2.5 py-2 text-[0.625rem] leading-relaxed text-[var(--muted-foreground)] ring-1 ring-[var(--border)]">
-              {emptyDescription}
-            </p>
-          ) : (
-            <div className="space-y-2">
-              {customTemplates.map((template, index) => (
-                <div
-                  key={template.id}
-                  className="space-y-2 rounded-lg bg-[var(--secondary)]/65 p-2 ring-1 ring-[var(--border)]"
-                >
-                  <div className="flex items-center gap-2">
-                    <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-[var(--background)] text-[0.625rem] font-semibold text-[var(--muted-foreground)] ring-1 ring-[var(--border)]">
-                      {index + 1}
-                    </span>
-                    <input
-                      defaultValue={template.name}
-                      onBlur={(event) => {
-                        const next = event.target.value.trim() || customFallbackName;
-                        if (next !== template.name) onPatchTemplate(template.id, { name: next });
-                      }}
-                      className="min-w-0 flex-1 rounded-md bg-[var(--background)] px-2 py-1.5 text-xs text-[var(--foreground)] ring-1 ring-[var(--border)] placeholder:text-[var(--muted-foreground)] focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
-                      placeholder={localizeUi("ui.chat.gamestoryboardpromptlibrary.promptName")}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => void onRemoveTemplate(template.id)}
-                      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-[var(--muted-foreground)] transition-colors hover:bg-[var(--destructive)]/15 hover:text-[var(--destructive)]"
-                      title={localizeUi("ui.chat.gamestoryboardpromptlibrary.removePrompt")}
-                      aria-label={localizeUi("ui.chat.gamestoryboardpromptlibrary.removePrompt")}
-                    >
-                      <Trash2 size="0.75rem" />
-                    </button>
-                  </div>
-                  <input
-                    defaultValue={template.description ?? ""}
-                    onBlur={(event) => {
-                      const next = event.target.value.trim();
-                      if (next !== (template.description ?? "")) {
-                        onPatchTemplate(template.id, { description: next });
-                      }
-                    }}
-                    className="w-full rounded-md bg-[var(--background)] px-2 py-1.5 text-[0.6875rem] text-[var(--foreground)] ring-1 ring-[var(--border)] placeholder:text-[var(--muted-foreground)] focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
-                    placeholder={localizeUi("ui.chat.gamestoryboardpromptlibrary.shortDescription")}
-                  />
-                  <textarea
-                    defaultValue={template.promptTemplate}
-                    onBlur={(event) => {
-                      const next = event.target.value.trim();
-                      if (next && next !== template.promptTemplate) {
-                        onPatchTemplate(template.id, { promptTemplate: next });
-                      }
-                    }}
-                    rows={7}
-                    className="min-h-[9rem] w-full resize-y rounded-md bg-[var(--background)] px-2.5 py-2 font-mono text-[0.6875rem] leading-relaxed text-[var(--foreground)] ring-1 ring-[var(--border)] placeholder:text-[var(--muted-foreground)] focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
-                    placeholder={promptPlaceholder}
-                  />
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
 // Sprite display slider
 function SpriteRangeSlider({
   label,
@@ -11113,6 +10693,7 @@ function ConversationNotesSection({ chatId }: { chatId: string }) {
 
   return (
     <Section
+      id="conversation-notes"
       label={localizeUi("ui.chat.conversationnotessection.conversationNotes")}
       icon={<StickyNote size="0.875rem" />}
       count={notes.length}

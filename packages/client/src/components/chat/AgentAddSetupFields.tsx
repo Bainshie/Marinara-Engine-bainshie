@@ -1182,7 +1182,7 @@ function MusicDjSetupFields({
                 />
               )}
               {spotifyPlaylistsQuery.isError && (
-                <span className="text-[0.5625rem] text-amber-400/90">{localizeUi("ui.chat.musicdjsetupfields.connectSpotifyInTheMusicDjAgentToLoad")}</span>
+                <span className="text-[0.5625rem] text-[var(--primary)]">{localizeUi("ui.chat.musicdjsetupfields.connectSpotifyInTheMusicDjAgentToLoad")}</span>
               )}
             </label>
           )}

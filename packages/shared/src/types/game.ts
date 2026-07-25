@@ -203,6 +203,8 @@ export interface GameSetupConfig {
   gameStoryboardAutoIllustrationsEnabled?: boolean;
   /** Automatically create storyboard keyframe videos after completed GM turns. */
   gameStoryboardAutoGenerationEnabled?: boolean;
+  /** Master switch for Game Mode storyboard controls and automatic generation. */
+  gameStoryboardsEnabled?: boolean;
   /** Target number of storyboard keyframes to create per completed GM turn. */
   gameStoryboardKeyframeCount?: number;
   /** Selected built-in or chat-local GM prompt template. */

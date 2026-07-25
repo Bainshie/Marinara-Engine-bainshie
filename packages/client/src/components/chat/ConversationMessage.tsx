@@ -168,6 +168,7 @@ export const ConversationMessage = memo(function ConversationMessage({
   const chatFontColor = useUIStore((s) => s.chatFontColor);
   const showMessageNumbers = useUIStore((s) => s.showMessageNumbers);
   const quoteFormat = useUIStore((s) => s.quoteFormat);
+  const conversationAvatarShape = useUIStore((s) => s.conversationAvatarShape);
 
   // ── Translation ──
   const { translate, translations, translating } = useTranslate();
@@ -725,6 +726,7 @@ export const ConversationMessage = memo(function ConversationMessage({
     displayName: headerDisplayName,
     avatarUrl,
     avatarCropStyle,
+    avatarCornerClass: conversationAvatarShape === "square" ? "rounded-lg" : "rounded-full",
     nameColor,
     onOpenAboutMe,
     mentionNames,

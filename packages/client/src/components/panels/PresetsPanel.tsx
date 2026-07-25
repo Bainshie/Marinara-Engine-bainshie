@@ -820,7 +820,7 @@ export function PresetsPanel() {
                     : "border-[var(--muted-foreground)]/40 bg-[var(--secondary)] text-transparent",
                 )}
               >
-                <Check size="0.75rem" />
+                {isBulkSelected && <Check size="0.75rem" />}
               </div>
             )}
             <div className="mari-panel-gradient-surface mari-panel-gradient--presets relative flex h-10 w-10 shrink-0 items-center justify-center rounded-xl shadow-sm">

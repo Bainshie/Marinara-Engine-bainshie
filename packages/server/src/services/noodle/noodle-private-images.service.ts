@@ -1,8 +1,4 @@
-import type {
-  NoodleAccount,
-  NoodleIdentityDisclosure,
-  NoodleSettings,
-} from "@marinara-engine/shared";
+import type { NoodleAccount, NoodleIdentityDisclosure, NoodleSettings } from "@marinara-engine/shared";
 import type { DB } from "../../db/connection.js";
 import { logger, logDebugOverride } from "../../lib/logger.js";
 import { newId } from "../../utils/id-generator.js";
@@ -21,7 +17,7 @@ import { createConnectionsStorage } from "../storage/connections.storage.js";
 import { createPromptOverridesStorage } from "../storage/prompt-overrides.storage.js";
 import { loadPrompt, NOODLE_IMAGE_POST } from "../prompt-overrides/index.js";
 import { generateNoodleImageWithRetry } from "./noodle-image-retry.js";
-import { characterAppearanceFromRow } from "./noodle-public-images.service.js";
+import { characterAppearanceFromRow, characterNoodleImageContextFromRow } from "./noodle-public-images.service.js";
 import type { NoodleImagePromptReviewItem, ReviewedNoodleImagePrompt } from "./noodle-public-images.service.js";
 import { characterNameFromRow } from "./noodle-public-support.js";
 
@@ -73,6 +69,8 @@ export async function generatePrivatePostImage(input: {
   );
 
   let characterDescription = "";
+  let characterImageInstructions = "";
+  let characterPersonality = "";
   let referenceImages: string[] | undefined;
   // Identity protection applies to reference selection: only an OPEN disclosure may draw
   // on the linked public identity's appearance. Hinted/secret creators get no identifying
@@ -81,32 +79,35 @@ export async function generatePrivatePostImage(input: {
     input.disclosureMode === "open" && input.linkedPublicAccount?.kind === "character"
       ? input.linkedPublicAccount
       : null;
-  if (
-    referenceCharacter &&
-    (input.settings.imageGenerationIncludeDescriptions || input.settings.imageGenerationUseAvatarReferences)
-  ) {
+  if (referenceCharacter) {
     const row = await input.characters.getById(referenceCharacter.entityId);
     if (row) {
-      const referenceResolution = await resolveIllustratorCharacterReferences({
-        charactersStore: input.characters,
-        chatCharacters: [
-          {
-            id: row.id,
-            name: referenceCharacter.displayName || characterNameFromRow(row),
-            avatarPath: row.avatarPath ?? null,
-            appearance: characterAppearanceFromRow(row),
-          },
-        ],
-        persona: null,
-        requestedNames: [input.account.displayName],
-        promptText: [input.account.displayName, input.postContent, input.draftPrompt].join("\n"),
-        maxReferences: 6,
-      });
-      if (input.settings.imageGenerationIncludeDescriptions && referenceResolution.appearanceBlock) {
-        characterDescription = referenceResolution.appearanceBlock;
-      }
-      if (input.settings.imageGenerationUseAvatarReferences && referenceResolution.referenceImages.length > 0) {
-        referenceImages = Array.from(new Set(referenceResolution.referenceImages)).slice(0, 6);
+      const imageContext = characterNoodleImageContextFromRow(row);
+      characterPersonality = imageContext.personality;
+      characterImageInstructions = imageContext.imageInstructions;
+
+      if (input.settings.imageGenerationIncludeDescriptions || input.settings.imageGenerationUseAvatarReferences) {
+        const referenceResolution = await resolveIllustratorCharacterReferences({
+          charactersStore: input.characters,
+          chatCharacters: [
+            {
+              id: row.id,
+              name: referenceCharacter.displayName || characterNameFromRow(row),
+              avatarPath: row.avatarPath ?? null,
+              appearance: characterAppearanceFromRow(row),
+            },
+          ],
+          persona: null,
+          requestedNames: [input.account.displayName],
+          promptText: [input.account.displayName, input.postContent, input.draftPrompt].join("\n"),
+          maxReferences: 6,
+        });
+        if (input.settings.imageGenerationIncludeDescriptions && referenceResolution.appearanceBlock) {
+          characterDescription = referenceResolution.appearanceBlock;
+        }
+        if (input.settings.imageGenerationUseAvatarReferences && referenceResolution.referenceImages.length > 0) {
+          referenceImages = Array.from(new Set(referenceResolution.referenceImages)).slice(0, 6);
+        }
       }
     }
   }
@@ -117,6 +118,8 @@ export async function generatePrivatePostImage(input: {
     draftPrompt: input.draftPrompt,
     userInstructions: input.settings.imageGenerationPrompt,
     characterDescription,
+    characterImageInstructions,
+    characterPersonality,
   });
   const compiledPrompt = compileImagePrompt({
     kind: "illustration",
@@ -207,15 +210,17 @@ export function createPrivateNoodleImagesService(db: DB) {
     async generateReviewedImages(input: {
       prompts: ReviewedNoodleImagePrompt[];
       debugMode: boolean;
-    }): Promise<
-      { ok: true; finalized: number } | { ok: false; error: "missing_connection"; message: string }
-    > {
+    }): Promise<{ ok: true; finalized: number } | { ok: false; error: "missing_connection"; message: string }> {
       const settings = await noodle.getSettings();
       const imageConnection = settings.imageGenerationConnectionId
         ? await connections.getWithKey(settings.imageGenerationConnectionId)
         : await connections.getDefaultForImageGeneration();
       if (!imageConnection) {
-        return { ok: false, error: "missing_connection", message: "Select a Noodle image generation connection first." };
+        return {
+          ok: false,
+          error: "missing_connection",
+          message: "Select a Noodle image generation connection first.",
+        };
       }
 
       let finalized = 0;
@@ -293,7 +298,11 @@ export function createPrivateNoodleImagesService(db: DB) {
         // now-stale appearance policy, so discard it and finalize as failed rather than publish it.
         const fresh = await noodle.getPrivateAccountById(claimed.authorAccountId);
         const freshDisclosure = fresh?.settings.privacy.identityDisclosure ?? "secret";
-        if (!fresh || freshDisclosure !== disclosureMode || (fresh.publicAccountId ?? null) !== (account.publicAccountId ?? null)) {
+        if (
+          !fresh ||
+          freshDisclosure !== disclosureMode ||
+          (fresh.publicAccountId ?? null) !== (account.publicAccountId ?? null)
+        ) {
           image.stagedMedia?.compensate();
           await noodle.finalizePostImageClaim(claimed.id, claimToken, {
             imageUrl: null,

@@ -10,6 +10,7 @@ import {
   getDefaultChatChromeTextColor,
   getDefaultChatTextColor,
   getTrackerPanelWidthForProfile,
+  type ConversationAvatarShape,
   type ConversationMessageStyle,
   type GameDialogueDisplayMode,
   type RoleplayAvatarStyle,
@@ -478,7 +479,7 @@ const SETTINGS_SECTIONS: readonly SettingsSectionMeta[] = [
     tab: "advanced",
     label: "Backup & Export",
     description: "Backups and manual export tools.",
-    aliases: ["backup", "export", "download", "archive"],
+    aliases: ["backup", "export", "download", "archive", "automatic", "scheduled"],
   },
   {
     id: "danger-zone",
@@ -761,6 +762,14 @@ const SETTINGS_SEARCHABLE_CONTROLS: readonly SettingsSearchableControlMeta[] = [
     kind: "Input",
   },
   {
+    id: "image-game-size",
+    sectionId: "image-generation",
+    label: "Game scene image size",
+    description: "Set the default dimensions for generated Game scene illustrations.",
+    aliases: ["image", "resolution", "canvas", "game", "illustrator"],
+    kind: "Input",
+  },
+  {
     id: "image-portrait-size",
     sectionId: "image-generation",
     label: "Portrait image size",
@@ -918,6 +927,14 @@ const SETTINGS_SEARCHABLE_CONTROLS: readonly SettingsSearchableControlMeta[] = [
     label: "Chat Layout",
     description: "Switch Conversation messages between linear rows and bubbles.",
     aliases: ["conversation", "bubbles", "linear"],
+    kind: "Button group",
+  },
+  {
+    id: "conversation-avatar-shape",
+    sectionId: "chat-display",
+    label: "Avatar Shape",
+    description: "Choose circular or square avatars in Conversation mode.",
+    aliases: ["conversation", "avatar", "circle", "square"],
     kind: "Button group",
   },
   {
@@ -1142,6 +1159,14 @@ const SETTINGS_SEARCHABLE_CONTROLS: readonly SettingsSearchableControlMeta[] = [
     label: "Debug mode",
     description: "Log model payloads in the server console.",
     aliases: ["debug", "logs", "prompt", "console"],
+    kind: "Toggle",
+  },
+  {
+    id: "automatic-backups",
+    sectionId: "backup-export",
+    label: "Automatic backups",
+    description: "Keep one scheduled full backup and replace it after each successful run.",
+    aliases: ["backup", "daily", "weekly", "monthly", "scheduled"],
     kind: "Toggle",
   },
 ] as const;
@@ -1540,6 +1565,8 @@ const GAME_ASSET_CATEGORIES = [
 
 const VIDEO_PROMPT_TEMPLATE_KEYS = [
   "game.video",
+  "game.storyboardIllustrationDirector",
+  "game.storyboardAnimationDirector",
   "conversation.callVideo.idle",
   "conversation.callVideo.talking",
   "conversation.callVideo.laughing",
@@ -2317,7 +2344,7 @@ export function SettingsPanel() {
   return (
     <div className="mari-settings-panel-chrome flex h-full flex-col overflow-hidden">
       <div className="mari-editor-header mari-settings-search-header">
-        <div className="flex items-center gap-2">
+        <div className="flex w-full items-center gap-2">
           <label className="relative min-w-0 flex-1">
             <Search
               size="0.875rem"
@@ -3234,6 +3261,9 @@ function ImageGenerationSettings() {
   const imageIllustrationWidth = useUIStore((s) => s.imageIllustrationWidth);
   const imageIllustrationHeight = useUIStore((s) => s.imageIllustrationHeight);
   const setImageIllustrationDimensions = useUIStore((s) => s.setImageIllustrationDimensions);
+  const imageGameWidth = useUIStore((s) => s.imageGameWidth);
+  const imageGameHeight = useUIStore((s) => s.imageGameHeight);
+  const setImageGameDimensions = useUIStore((s) => s.setImageGameDimensions);
   const imagePortraitWidth = useUIStore((s) => s.imagePortraitWidth);
   const imagePortraitHeight = useUIStore((s) => s.imagePortraitHeight);
   const setImagePortraitDimensions = useUIStore((s) => s.setImagePortraitDimensions);
@@ -3266,6 +3296,14 @@ function ImageGenerationSettings() {
           width={imageIllustrationWidth}
           height={imageIllustrationHeight}
           onCommit={setImageIllustrationDimensions}
+        />
+        <ImageDimensionRow
+          controlId="image-game-size"
+          label={localizeUi("settings.controls.gameGeneration.label")}
+          help={localizeUi("settings.controls.gameGeneration.help")}
+          width={imageGameWidth}
+          height={imageGameHeight}
+          onCommit={setImageGameDimensions}
         />
         <ImageDimensionRow
           controlId="image-portrait-size"
@@ -3850,6 +3888,8 @@ function AppearanceSettings() {
   const setChatFontSize = useUIStore((s) => s.setChatFontSize);
   const conversationMessageStyle = useUIStore((s) => s.conversationMessageStyle);
   const setConversationMessageStyle = useUIStore((s) => s.setConversationMessageStyle);
+  const conversationAvatarShape = useUIStore((s) => s.conversationAvatarShape);
+  const setConversationAvatarShape = useUIStore((s) => s.setConversationAvatarShape);
   const weatherEffects = useUIStore((s) => s.weatherEffects);
   const setWeatherEffects = useUIStore((s) => s.setWeatherEffects);
   const trackerPanelEnabled = useUIStore((s) => s.trackerPanelEnabled);
@@ -4335,16 +4375,30 @@ function AppearanceSettings() {
               {conversationMessageStyle === "bubble" ? (
                 <div className="space-y-1.5">
                   <div className="flex justify-end">
-                    <div className="mari-message-bubble texting-bubble texting-bubble-user max-w-[78%] rounded-2xl px-3 py-1.5 text-xs shadow-sm">{localizeUi("ui.panels.appearancesettings.heyHowSItGoing")}</div>
+                    <div className="mari-message-bubble texting-bubble texting-bubble-user max-w-[78%] rounded-2xl px-3 py-1.5 text-xs shadow-sm">
+                      {localizeUi("ui.panels.appearancesettings.heyHowSItGoing")}
+                    </div>
                   </div>
                   <div className="flex items-end gap-1.5 justify-start">
-                    <div className="h-5 w-5 shrink-0 rounded-full bg-[var(--accent)]" />
-                    <div className="mari-message-bubble texting-bubble texting-bubble-other max-w-[78%] rounded-2xl px-3 py-1.5 text-xs shadow-sm">{localizeUi("ui.panels.appearancesettings.prettyGoodThanks")}</div>
+                    <div
+                      className={cn(
+                        "h-5 w-5 shrink-0 bg-[var(--accent)]",
+                        conversationAvatarShape === "square" ? "rounded-md" : "rounded-full",
+                      )}
+                    />
+                    <div className="mari-message-bubble texting-bubble texting-bubble-other max-w-[78%] rounded-2xl px-3 py-1.5 text-xs shadow-sm">
+                      {localizeUi("ui.panels.appearancesettings.prettyGoodThanks")}
+                    </div>
                   </div>
                 </div>
               ) : (
                 <div className="flex gap-2 text-xs">
-                  <div className="h-6 w-6 shrink-0 rounded-full bg-[var(--accent)]" />
+                  <div
+                    className={cn(
+                      "h-6 w-6 shrink-0 bg-[var(--accent)]",
+                      conversationAvatarShape === "square" ? "rounded-md" : "rounded-full",
+                    )}
+                  />
                   <div className="min-w-0 flex-1">
                     <div className="mb-0.5 flex items-baseline gap-2">
                       <span className="font-semibold">{localizeUi("ui.panels.appearancesettings.character")}</span>
@@ -4357,6 +4411,51 @@ function AppearanceSettings() {
                   </div>
                 </div>
               )}
+            </div>
+          </div>
+          <div
+            id={getSettingsControlAnchorId("conversation-avatar-shape")}
+            className="flex scroll-mt-3 flex-col gap-2 rounded-lg border border-[var(--border)]/70 bg-[var(--secondary)]/25 p-3"
+          >
+            <div>
+              <div className="text-xs font-medium">
+                {localizeUi("ui.panels.appearancesettings.conversationAvatarShape")}
+              </div>
+              <p className="mt-0.5 text-[0.625rem] text-[var(--muted-foreground)]">
+                {localizeUi("ui.panels.appearancesettings.conversationAvatarShapeDescription")}
+              </p>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              {(
+                [
+                  {
+                    id: "circle" as ConversationAvatarShape,
+                    label: localizeUi("ui.panels.appearancesettings.circularAvatars"),
+                    cornerClass: "rounded-full",
+                  },
+                  {
+                    id: "square" as ConversationAvatarShape,
+                    label: localizeUi("ui.panels.appearancesettings.squareAvatars"),
+                    cornerClass: "rounded-md",
+                  },
+                ] as const
+              ).map((option) => (
+                <button
+                  key={option.id}
+                  type="button"
+                  onClick={() => setConversationAvatarShape(option.id)}
+                  className={cn(
+                    "flex min-h-10 items-center justify-center gap-2 rounded-lg border px-3 py-2 text-xs font-semibold transition-all",
+                    conversationAvatarShape === option.id
+                      ? "border-[var(--primary)] bg-[var(--primary)]/10 ring-1 ring-[var(--primary)]"
+                      : "border-[var(--border)] bg-[var(--background)]/35 hover:border-[var(--primary)]/40",
+                  )}
+                  aria-pressed={conversationAvatarShape === option.id}
+                >
+                  <span className={cn("h-5 w-5 border border-current bg-[var(--accent)]", option.cornerClass)} />
+                  {option.label}
+                </button>
+              ))}
             </div>
           </div>
         </div>
@@ -6518,6 +6617,43 @@ function AdvancedSettings() {
     queryKey: ["backups"],
     queryFn: () => api.get("/backup"),
   });
+  type AutomaticBackupFrequency = "daily" | "weekly" | "monthly";
+  type AutomaticBackupSettings = {
+    enabled: boolean;
+    frequency: AutomaticBackupFrequency;
+    lastBackupAt: string | null;
+    lastError: string | null;
+    nextBackupAt: string | null;
+    backupExists: boolean;
+  };
+  const automaticBackupQuery = useQuery<AutomaticBackupSettings>({
+    queryKey: ["backups", "automatic"],
+    queryFn: () => api.get("/backup/automatic"),
+    refetchInterval: (query) => (query.state.data?.enabled ? 30_000 : false),
+  });
+  const automaticBackupMutation = useMutation({
+    mutationFn: (settings: Pick<AutomaticBackupSettings, "enabled" | "frequency">) =>
+      api.put<AutomaticBackupSettings>("/backup/automatic", settings),
+    onSuccess: (settings) => {
+      qc.setQueryData(["backups", "automatic"], settings);
+      toast.success(localizeUi("ui.panels.advancedsettings.automaticBackupSettingsSaved"));
+    },
+    onError: (error) => {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : localizeUi("ui.panels.advancedsettings.failedToSaveAutomaticBackupSettings"),
+      );
+    },
+  });
+  const updateAutomaticBackup = (patch: Partial<Pick<AutomaticBackupSettings, "enabled" | "frequency">>) => {
+    const current = automaticBackupQuery.data;
+    if (!current) return;
+    automaticBackupMutation.mutate({
+      enabled: patch.enabled ?? current.enabled,
+      frequency: patch.frequency ?? current.frequency,
+    });
+  };
 
   const health = useQuery<{
     status: string;
@@ -6980,13 +7116,59 @@ function AdvancedSettings() {
         {...getSettingsSectionAnchorProps("backup-export")}
       >
         <div className="flex flex-col gap-2">
+          {automaticBackupQuery.data && (
+            <div className="rounded-lg border border-[var(--border)]/70 bg-[var(--secondary)]/35 p-2.5">
+              <ToggleSetting
+                anchorId={getSettingsControlAnchorId("automatic-backups")}
+                label={localizeUi("ui.panels.advancedsettings.automaticBackups")}
+                help={localizeUi("ui.panels.advancedsettings.automaticBackupsDescription")}
+                checked={automaticBackupQuery.data.enabled}
+                onChange={(enabled) => updateAutomaticBackup({ enabled })}
+                disabled={automaticBackupMutation.isPending}
+              />
+              <div className="mt-2 grid grid-cols-3 gap-1">
+                {(["daily", "weekly", "monthly"] as const).map((frequency) => (
+                  <button
+                    key={frequency}
+                    type="button"
+                    onClick={() => updateAutomaticBackup({ frequency })}
+                    disabled={automaticBackupMutation.isPending}
+                    className={cn(
+                      SETTINGS_BUTTON_CLASS,
+                      "justify-center px-2",
+                      automaticBackupQuery.data.frequency === frequency && "mari-chrome-control--selected",
+                    )}
+                  >
+                    {localizeUi(`ui.panels.advancedsettings.automaticBackupFrequency.${frequency}`)}
+                  </button>
+                ))}
+              </div>
+              <p className="mt-2 text-[0.625rem] leading-relaxed text-[var(--muted-foreground)]">
+                {automaticBackupQuery.data.lastError
+                  ? localizeUi("ui.panels.advancedsettings.automaticBackupErrorValue1", {
+                      value1: automaticBackupQuery.data.lastError,
+                    })
+                  : automaticBackupQuery.data.lastBackupAt
+                    ? localizeUi("ui.panels.advancedsettings.lastAutomaticBackupValue1", {
+                        value1: new Date(automaticBackupQuery.data.lastBackupAt).toLocaleString(),
+                      })
+                    : automaticBackupQuery.data.enabled
+                      ? localizeUi("ui.panels.advancedsettings.automaticBackupWillBeCreatedShortly")
+                      : localizeUi("ui.panels.advancedsettings.automaticBackupsAreOff")}
+              </p>
+            </div>
+          )}
           <button onClick={handleCreateBackup} disabled={creatingBackup} className={SETTINGS_PRIMARY_BUTTON_CLASS}>
             {creatingBackup ? (
               <>
-                <Loader2 size="0.8125rem" className="animate-spin" />{localizeUi("ui.panels.advancedsettings.creatingBackup")}</>
+                <Loader2 size="0.8125rem" className="animate-spin" />
+                {localizeUi("ui.panels.advancedsettings.creatingBackup")}
+              </>
             ) : (
               <>
-                <Download size="0.8125rem" />{localizeUi("ui.panels.advancedsettings.downloadBackup")}</>
+                <Download size="0.8125rem" />
+                {localizeUi("ui.panels.advancedsettings.downloadBackup")}
+              </>
             )}
           </button>
           <button

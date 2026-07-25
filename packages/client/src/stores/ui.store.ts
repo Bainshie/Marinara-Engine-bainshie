@@ -62,6 +62,7 @@ function normalizeConnectionPanelSort(value: unknown): ConnectionPanelSort {
 type FontSize = 12 | 14 | 16 | 17 | 19 | 22;
 export type VisualTheme = "default" | "sillytavern";
 export type ConversationMessageStyle = "classic" | "bubble";
+export type ConversationAvatarShape = "circle" | "square";
 export type TrackerPanelSide = "left" | "right";
 export type TrackerThoughtBubbleDisplay = "inline" | "floating";
 export type MusicPlayerSource = "spotify" | "youtube" | "custom";
@@ -350,6 +351,10 @@ export function normalizeConversationMessageStyle(value: unknown): ConversationM
   return value === "bubble" || value === "classic" ? value : "classic";
 }
 
+export function normalizeConversationAvatarShape(value: unknown): ConversationAvatarShape {
+  return value === "square" ? "square" : "circle";
+}
+
 export function normalizeTrackerThoughtBubbleDisplay(value: unknown): TrackerThoughtBubbleDisplay {
   return value === "inline" || value === "floating" ? value : "inline";
 }
@@ -578,6 +583,8 @@ interface UIState {
   imageBackgroundHeight: number;
   imageIllustrationWidth: number;
   imageIllustrationHeight: number;
+  imageGameWidth: number;
+  imageGameHeight: number;
   imagePortraitWidth: number;
   imagePortraitHeight: number;
   imageSelfieWidth: number;
@@ -585,6 +592,7 @@ interface UIState {
   imageStyleProfiles: ImageStyleProfileSettings;
 
   conversationMessageStyle: ConversationMessageStyle;
+  conversationAvatarShape: ConversationAvatarShape;
   showTimestamps: boolean;
   showModelName: boolean;
   showTokenUsage: boolean;
@@ -884,11 +892,13 @@ interface UIState {
   setReviewImagePromptsBeforeSend: (v: boolean) => void;
   setImageBackgroundDimensions: (width: number, height: number) => void;
   setImageIllustrationDimensions: (width: number, height: number) => void;
+  setImageGameDimensions: (width: number, height: number) => void;
   setImagePortraitDimensions: (width: number, height: number) => void;
   setImageSelfieDimensions: (width: number, height: number) => void;
   setImageStyleProfiles: (settings: ImageStyleProfileSettings) => void;
 
   setConversationMessageStyle: (v: ConversationMessageStyle) => void;
+  setConversationAvatarShape: (v: ConversationAvatarShape) => void;
   setShowTimestamps: (v: boolean) => void;
   setShowModelName: (v: boolean) => void;
   setShowTokenUsage: (v: boolean) => void;
@@ -1080,6 +1090,8 @@ export function pickSyncedSettings(state: UIState) {
     imageBackgroundHeight: state.imageBackgroundHeight,
     imageIllustrationWidth: state.imageIllustrationWidth,
     imageIllustrationHeight: state.imageIllustrationHeight,
+    imageGameWidth: state.imageGameWidth,
+    imageGameHeight: state.imageGameHeight,
     imagePortraitWidth: state.imagePortraitWidth,
     imagePortraitHeight: state.imagePortraitHeight,
     imageSelfieWidth: state.imageSelfieWidth,
@@ -1087,6 +1099,7 @@ export function pickSyncedSettings(state: UIState) {
     [IMAGE_STYLE_PROFILES_STORAGE_KEY]: state.imageStyleProfiles,
 
     conversationMessageStyle: state.conversationMessageStyle,
+    conversationAvatarShape: state.conversationAvatarShape,
     showTimestamps: state.showTimestamps,
     showModelName: state.showModelName,
     showTokenUsage: state.showTokenUsage,
@@ -1269,6 +1282,8 @@ export const useUIStore = create<UIState>()(
       imageBackgroundHeight: 720,
       imageIllustrationWidth: 896,
       imageIllustrationHeight: 1280,
+      imageGameWidth: 1280,
+      imageGameHeight: 720,
       imagePortraitWidth: 1024,
       imagePortraitHeight: 1024,
       imageSelfieWidth: 896,
@@ -1276,6 +1291,7 @@ export const useUIStore = create<UIState>()(
       imageStyleProfiles: normalizeImageStyleProfileSettings(null),
 
       conversationMessageStyle: "classic" as ConversationMessageStyle,
+      conversationAvatarShape: "circle" as ConversationAvatarShape,
       showTimestamps: false,
       showModelName: false,
       showTokenUsage: false,
@@ -1999,6 +2015,11 @@ export const useUIStore = create<UIState>()(
           imageIllustrationWidth: clampImageDimension(width),
           imageIllustrationHeight: clampImageDimension(height),
         }),
+      setImageGameDimensions: (width, height) =>
+        set({
+          imageGameWidth: clampImageDimension(width),
+          imageGameHeight: clampImageDimension(height),
+        }),
       setImagePortraitDimensions: (width, height) =>
         set({
           imagePortraitWidth: clampImageDimension(width),
@@ -2012,6 +2033,7 @@ export const useUIStore = create<UIState>()(
       setImageStyleProfiles: (settings) => set({ imageStyleProfiles: normalizeImageStyleProfileSettings(settings) }),
 
       setConversationMessageStyle: (v) => set({ conversationMessageStyle: normalizeConversationMessageStyle(v) }),
+      setConversationAvatarShape: (v) => set({ conversationAvatarShape: normalizeConversationAvatarShape(v) }),
       setShowTimestamps: (v) => set({ showTimestamps: v }),
       setShowModelName: (v) => set({ showModelName: v }),
       setShowTokenUsage: (v) => set({ showTokenUsage: v }),
@@ -2138,6 +2160,7 @@ export const useUIStore = create<UIState>()(
           chatFontSize: 16,
           fontFamily: "",
           conversationMessageStyle: "classic" as ConversationMessageStyle,
+          conversationAvatarShape: "circle" as ConversationAvatarShape,
           chatFontColor: "",
           defaultDialogueColor: "",
           chatChromeTextColor: "",
@@ -2241,7 +2264,7 @@ export const useUIStore = create<UIState>()(
     }),
     {
       name: "marinara-engine-ui",
-      version: 82,
+      version: 84,
       // Debounce localStorage writes to avoid sync I/O on every state change
       storage: createJSONStorage(() => {
         let timer: ReturnType<typeof setTimeout> | null = null;
@@ -2598,6 +2621,8 @@ export const useUIStore = create<UIState>()(
         }
         // v39 -> v40: selectable Conversation message layout.
         persisted.conversationMessageStyle = normalizeConversationMessageStyle(persisted.conversationMessageStyle);
+        // v82 -> v83: selectable Conversation avatar corners, circular by default.
+        persisted.conversationAvatarShape = normalizeConversationAvatarShape(persisted.conversationAvatarShape);
         // v40 -> v41: reconcile parallel v40 UI preference additions.
         if (persisted.editMessageOnDoubleClick === undefined) {
           persisted.editMessageOnDoubleClick = true;
@@ -2809,6 +2834,10 @@ export const useUIStore = create<UIState>()(
         if (version <= 81) {
           delete persisted.defaultDialogueColorEnabled;
         }
+        if (version <= 83) {
+          if (persisted.imageGameWidth === undefined) persisted.imageGameWidth = 1280;
+          if (persisted.imageGameHeight === undefined) persisted.imageGameHeight = 720;
+        }
         persisted.appAccentRgbMode = persisted.appAccentRgbMode === true;
         persisted.customCursorEnabled = persisted.customCursorEnabled !== false;
         persisted.professorMariSuggestionsEnabled = persisted.professorMariSuggestionsEnabled !== false;
@@ -2902,6 +2931,8 @@ export const useUIStore = create<UIState>()(
         imageBackgroundHeight: state.imageBackgroundHeight,
         imageIllustrationWidth: state.imageIllustrationWidth,
         imageIllustrationHeight: state.imageIllustrationHeight,
+        imageGameWidth: state.imageGameWidth,
+        imageGameHeight: state.imageGameHeight,
         imagePortraitWidth: state.imagePortraitWidth,
         imagePortraitHeight: state.imagePortraitHeight,
         imageSelfieWidth: state.imageSelfieWidth,
@@ -2909,6 +2940,7 @@ export const useUIStore = create<UIState>()(
         imageStyleProfiles: state.imageStyleProfiles,
 
         conversationMessageStyle: state.conversationMessageStyle,
+        conversationAvatarShape: state.conversationAvatarShape,
         showTimestamps: state.showTimestamps,
         showModelName: state.showModelName,
         showTokenUsage: state.showTokenUsage,

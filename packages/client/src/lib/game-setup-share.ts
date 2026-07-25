@@ -200,6 +200,7 @@ function parseShareConfig(value: unknown): GameSetupConfig {
 
   const optionalBooleans = [
     "enableSpriteGeneration",
+    "gameStoryboardsEnabled",
     "gameStoryboardAutoIllustrationsEnabled",
     "gameStoryboardAutoGenerationEnabled",
     "useCampaignArtStyle",
@@ -662,6 +663,7 @@ export function buildGameSetupSummarySections(source: GameSetupShareSource): Gam
       title: "Visuals and storyboards",
       rows: [
         { label: "Visual generation", value: config.enableSpriteGeneration ? "On" : "Off" },
+        { label: "Storyboards", value: config.gameStoryboardsEnabled === false ? "Off" : "On" },
         {
           label: "Image connection",
           value: formatConnection(connections?.image, config.imageConnectionId, labels?.connectionNames, "None"),
