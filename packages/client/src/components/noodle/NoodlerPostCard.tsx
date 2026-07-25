@@ -43,7 +43,7 @@ import {
   NoodlePollCard,
   NoodleTextContent,
   NoodleToolButton,
-  NoodleToolPopover,
+  NoodlerToolPopover,
   textareaClass,
   type NoodlePostCardCtx,
   type NoodlePostCardModel,
@@ -296,7 +296,7 @@ export function NoodlerPostCard({ post, ctx }: { post: NoodlePostCardModel; ctx:
         </div>
       </div>
       {!disableReplyImage && activeReplyComposerTool === "image" && (
-        <NoodleToolPopover
+        <NoodlerToolPopover
           title={localizeUi("ui.noodle.noodlehome.attachImage")}
           anchorRef={replyImageToolRef}
           onClose={() => setActiveReplyComposerTool(null)}
@@ -338,7 +338,7 @@ export function NoodlerPostCard({ post, ctx }: { post: NoodlePostCardModel; ctx:
               {localizeUi("ui.noodle.noodlehome.attachUrl")}
             </button>
           </div>
-        </NoodleToolPopover>
+        </NoodlerToolPopover>
       )}
       {activeReplyComposerTool === "media" && (
         <NoodleAnchoredPopover anchorRef={replyMediaToolRef} wide>

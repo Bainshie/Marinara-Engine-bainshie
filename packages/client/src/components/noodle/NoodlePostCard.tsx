@@ -472,7 +472,7 @@ export function NoodleAnchoredPopover({
   );
 }
 
-export function NoodleToolPopover({
+export function NoodlerToolPopover({
   title,
   onClose,
   children,
