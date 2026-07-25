@@ -1123,7 +1123,7 @@ export function AppShell() {
         <div className="flex-shrink-0 md:hidden h-[env(safe-area-inset-top)] bg-[var(--marinara-topbar-surface)] backdrop-blur-sm" />
         <TopBar />
         <div className="mari-app-background-paint relative flex flex-1 flex-col overflow-hidden">
-          {/* Card Browser — kept mounted once opened so state persists across close/reopen */}
+          {/* Browser — kept mounted once opened so state persists across close/reopen */}
           <MountOnceWhenOpened open={botBrowserOpen} overlay>
             <BotBrowserView />
           </MountOnceWhenOpened>

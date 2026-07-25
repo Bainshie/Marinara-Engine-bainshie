@@ -65,6 +65,7 @@ import {
   Loader2,
   Wrench,
   Map as MapIcon,
+  VenetianMask,
 } from "lucide-react";
 import {
   ROLEPLAY_POPOVER_CLOSE_BUTTON,
@@ -4627,7 +4628,7 @@ export function ChatSettingsDrawer({
                             toggleCharacter(c.id);
                             setShowCharPicker(false);
                           }}
-                          className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-left transition-all hover:bg-[var(--accent)]"
+                          className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left transition-all hover:bg-[var(--accent)]"
                         >
                           <div className="min-w-0 flex-1">
                             <span className="block truncate text-xs">{name}</span>
@@ -4652,7 +4653,7 @@ export function ChatSettingsDrawer({
               id={`${chatMode}-persona`}
               style={{ order: CHAT_SETTINGS_ORDER.persona }}
               label={localizeUi("ui.characters.cardlibrarydetailcard.persona")}
-              icon={<User size="0.875rem" />}
+              icon={<VenetianMask size="0.875rem" />}
               help={localizeUi("ui.chat.chatsettingsdrawer.yourPersonaDefinesWhoYouAreInThisChat")}
             >
               {/* Currently selected persona */}
@@ -4997,7 +4998,7 @@ export function ChatSettingsDrawer({
                             toggleCharacter(c.id);
                             setShowCharPicker(false);
                           }}
-                          className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-left transition-all hover:bg-[var(--accent)]"
+                          className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left transition-all hover:bg-[var(--accent)]"
                         >
                           {c.avatarPath ? (
                             <span className="relative block h-6 w-6 shrink-0 overflow-hidden rounded-full">
@@ -5071,7 +5072,7 @@ export function ChatSettingsDrawer({
                             }
                             setShowGroupPicker(false);
                           }}
-                          className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-left transition-all hover:bg-[var(--accent)]"
+                          className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left transition-all hover:bg-[var(--accent)]"
                         >
                           {group.avatarPath ? (
                             <img

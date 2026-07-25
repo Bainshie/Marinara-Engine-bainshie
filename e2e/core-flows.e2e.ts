@@ -402,10 +402,24 @@ test("Chat Settings adds a formatted greeting after the setup wizard is skipped"
 
     const drawer = page.locator(".mari-chat-settings-drawer");
     await expect(drawer).toBeVisible();
+    await expect(
+      drawer.locator('[data-chat-settings-section="roleplay-persona"] [role="button"]').first().locator("svg").first(),
+    ).toHaveClass(/lucide-venetian-mask/u);
     await drawer.getByText("Characters", { exact: true }).first().click();
     await drawer.getByRole("button", { name: "Add Character", exact: true }).click();
     await drawer.getByPlaceholder("Search characters").fill(characterName);
-    await drawer.getByText(characterName, { exact: true }).click();
+    const characterOption = drawer.locator("button", { hasText: characterName }).last();
+    const characterOptionContainer = characterOption.locator("..");
+    await characterOption.hover();
+    const [characterOptionBox, characterOptionContainerBox] = await Promise.all([
+      characterOption.boundingBox(),
+      characterOptionContainer.boundingBox(),
+    ]);
+    expect(characterOptionBox).not.toBeNull();
+    expect(characterOptionContainerBox).not.toBeNull();
+    expect(Math.abs(characterOptionBox!.width - characterOptionContainerBox!.width)).toBeLessThan(0.1);
+    await expect(characterOption).not.toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+    await characterOption.click();
 
     const greetingDialog = page.getByRole("dialog", { name: "Choose a Greeting", exact: true });
     await expect(greetingDialog).toBeVisible();
@@ -1080,6 +1094,207 @@ test("Character favorite tags and stars inherit the configured accent color", as
     }
   } finally {
     await request.delete(`/api/characters/${character.id}`).catch(() => undefined);
+  }
+});
+
+test("Character Chat actions reuse mode selection and seed the chosen setup wizard", async ({
+  page,
+  request,
+}, testInfo) => {
+  const suffix = Date.now().toString(36);
+  const characterName = `Character Chat Launcher ${suffix}`;
+  const characterResponse = await request.post("/api/characters", {
+    data: {
+      data: {
+        name: characterName,
+        first_mes: `Hello from ${characterName}.`,
+        tags: [`Launcher ${suffix}`, "Responsive", "No overlap"],
+      },
+    },
+  });
+  expect(characterResponse.ok()).toBeTruthy();
+  const character = (await characterResponse.json()) as { id: string };
+  const createdChatIds = new Set<string>();
+  const createdCharacterIds = new Set([character.id]);
+  const mobile = testInfo.project.name.includes("mobile");
+  const rightPanel = page.locator(`[data-component="${mobile ? "RightPanelMobile" : "RightPanelDesktop"}"]`);
+
+  const readActiveChatId = () =>
+    page.evaluate(async () => {
+      const module = await import("/src/stores/chat.store.ts");
+      return module.useChatStore.getState().activeChatId;
+    });
+  const readButtonTypography = (button: Locator) =>
+    button.evaluate((element) => {
+      const style = getComputedStyle(element);
+      return {
+        fontFamily: style.fontFamily,
+        fontSize: style.fontSize,
+        fontWeight: style.fontWeight,
+        letterSpacing: style.letterSpacing,
+        lineHeight: style.lineHeight,
+      };
+    });
+
+  const expectModeSelector = async () => {
+    const selector = page.locator('[data-component="ChatModeSelectorModal"]');
+    await expect(selector).toBeVisible();
+    await expect(selector.getByRole("button", { name: /^Conversation/u })).toBeVisible();
+    await expect(selector.getByRole("button", { name: /^Roleplay/u })).toBeVisible();
+    await expect(selector.getByRole("button", { name: /^Game/u })).toBeVisible();
+    return selector;
+  };
+
+  const ensureCharacterPanelOpen = async () => {
+    if (!(await rightPanel.isVisible())) {
+      await page.locator('[data-tour="panel-characters"]').click();
+    }
+    await expect(rightPanel).toBeVisible();
+  };
+
+  try {
+    await page.goto("/");
+    await ensureCharacterPanelOpen();
+
+    await rightPanel.getByRole("button", { name: "Open Full Library" }).click();
+    const library = page.locator('[data-component="CharacterLibraryView"]');
+    await library.getByPlaceholder('Search characters or -tag:"tag name"').fill(characterName);
+    const editCharacter = library.getByRole("button", { name: "Edit Character", exact: true });
+    const chatNow = library.getByRole("button", { name: "Chat Now", exact: true });
+    await expect(editCharacter).toBeVisible();
+    await expect(chatNow).toBeVisible();
+    await expect(editCharacter).toHaveCSS("font-weight", "400");
+    await expect(chatNow).toHaveCSS("font-weight", "400");
+    expect(await readButtonTypography(chatNow)).toEqual(await readButtonTypography(editCharacter));
+    await chatNow.click();
+
+    const libraryModeSelector = await expectModeSelector();
+    await libraryModeSelector.getByRole("button", { name: /^Game/u }).click();
+    await expect.poll(readActiveChatId).not.toBeNull();
+    const gameChatId = await readActiveChatId();
+    expect(gameChatId).not.toBeNull();
+    createdChatIds.add(gameChatId!);
+
+    const gameWizard = page.locator('[data-component="GameSetupWizard"]');
+    await expect(gameWizard).toBeVisible();
+    await gameWizard.getByRole("button", { name: "Next", exact: true }).click();
+    await expect(gameWizard.getByRole("heading", { name: "World", exact: true })).toBeVisible();
+    await gameWizard.getByRole("button", { name: "Next", exact: true }).click();
+    await expect(gameWizard.getByRole("heading", { name: "Party", exact: true })).toBeVisible();
+    await expect(gameWizard.getByText(characterName, { exact: true }).first()).toBeVisible();
+    await gameWizard.getByRole("button", { name: "Close setup", exact: true }).click();
+    await expect(gameWizard).toHaveCount(0);
+
+    await ensureCharacterPanelOpen();
+    const characterRow = rightPanel.locator(`[data-touch-drag-card="character"][data-character-id="${character.id}"]`);
+    await expect(characterRow).toBeVisible();
+    if (!mobile) await characterRow.hover();
+
+    const actions = characterRow.locator("[data-character-row-actions]");
+    await expect(actions).toBeVisible();
+    const duplicateButton = actions.getByRole("button", { name: "Duplicate", exact: true });
+    const deleteButton = actions.getByRole("button", { name: "Delete", exact: true });
+    const chatButton = actions.getByRole("button", {
+      name: `Start a new chat with ${characterName}`,
+      exact: true,
+    });
+    await duplicateButton.click();
+    const copiedCharacterRow = rightPanel
+      .locator('[data-touch-drag-card="character"]')
+      .filter({ hasText: `${characterName} (Copy)` });
+    await expect(copiedCharacterRow).toBeVisible();
+    await expect(copiedCharacterRow).toHaveCSS("animation-name", "none");
+    await expect(characterRow).toHaveCSS("flex-shrink", "0");
+    await expect(copiedCharacterRow).toHaveCSS("flex-shrink", "0");
+    const copiedCharacterId = await copiedCharacterRow.getAttribute("data-character-id");
+    expect(copiedCharacterId).toBeTruthy();
+    createdCharacterIds.add(copiedCharacterId!);
+    if (!mobile) await characterRow.hover();
+
+    const [originalRowBox, copiedRowBox, originalNameBox, originalTagsBox, copiedNameBox, copiedTagsBox] =
+      await Promise.all([
+        characterRow.boundingBox(),
+        copiedCharacterRow.boundingBox(),
+        characterRow.locator("[data-character-row-name]").boundingBox(),
+        characterRow.locator("[data-character-row-tags]").boundingBox(),
+        copiedCharacterRow.locator("[data-character-row-name]").boundingBox(),
+        copiedCharacterRow.locator("[data-character-row-tags]").boundingBox(),
+      ]);
+    expect(originalRowBox).not.toBeNull();
+    expect(copiedRowBox).not.toBeNull();
+    expect(originalNameBox).not.toBeNull();
+    expect(originalTagsBox).not.toBeNull();
+    expect(copiedNameBox).not.toBeNull();
+    expect(copiedTagsBox).not.toBeNull();
+    const orderedRowBoxes = [originalRowBox!, copiedRowBox!].sort((left, right) => left.y - right.y);
+    expect(orderedRowBoxes[0].y + orderedRowBoxes[0].height).toBeLessThanOrEqual(orderedRowBoxes[1].y);
+    expect(originalNameBox!.y + originalNameBox!.height).toBeLessThanOrEqual(originalTagsBox!.y);
+    expect(copiedNameBox!.y + copiedNameBox!.height).toBeLessThanOrEqual(copiedTagsBox!.y);
+    expect(originalTagsBox!.y + originalTagsBox!.height).toBeLessThanOrEqual(
+      originalRowBox!.y + originalRowBox!.height,
+    );
+    expect(copiedTagsBox!.y + copiedTagsBox!.height).toBeLessThanOrEqual(copiedRowBox!.y + copiedRowBox!.height);
+
+    const [duplicateBox, deleteBox, chatBox, duplicateIconBox, deleteIconBox, chatIconBox] = await Promise.all([
+      duplicateButton.boundingBox(),
+      deleteButton.boundingBox(),
+      chatButton.boundingBox(),
+      duplicateButton.locator("svg").boundingBox(),
+      deleteButton.locator("svg").boundingBox(),
+      chatButton.locator("svg").boundingBox(),
+    ]);
+    expect(duplicateBox).not.toBeNull();
+    expect(deleteBox).not.toBeNull();
+    expect(chatBox).not.toBeNull();
+    expect(duplicateIconBox).not.toBeNull();
+    expect(deleteIconBox).not.toBeNull();
+    expect(chatIconBox).not.toBeNull();
+    expect(Math.abs(duplicateBox!.height - deleteBox!.height)).toBeLessThan(0.1);
+    expect(Math.abs(duplicateBox!.height - chatBox!.height)).toBeLessThan(0.1);
+    expect(Math.abs(chatBox!.width - (duplicateBox!.width + deleteBox!.width + 2))).toBeLessThan(0.5);
+    expect(duplicateIconBox!.height / duplicateBox!.height).toBeGreaterThan(0.52);
+    expect(duplicateIconBox!.width / duplicateBox!.width).toBeGreaterThan(0.52);
+    expect(deleteIconBox!.height / deleteBox!.height).toBeGreaterThan(0.52);
+    expect(deleteIconBox!.width / deleteBox!.width).toBeGreaterThan(0.52);
+    expect(chatIconBox!.height / chatBox!.height).toBeGreaterThan(0.42);
+    expect(chatIconBox!.width / chatIconBox!.height).toBeGreaterThan(0.9);
+    expect(chatBox!.y).toBeGreaterThan(duplicateBox!.y);
+
+    await chatButton.click();
+    const panelModeSelector = await expectModeSelector();
+    await panelModeSelector.getByRole("button", { name: /^Roleplay/u }).click();
+    await expect.poll(readActiveChatId).not.toBeNull();
+    const roleplayChatId = await readActiveChatId();
+    expect(roleplayChatId).not.toBeNull();
+    createdChatIds.add(roleplayChatId!);
+
+    const roleplayWizard = page.locator('[data-component="ChatSetupWizard"]');
+    await expect(roleplayWizard).toBeVisible();
+    await roleplayWizard.getByRole("button", { name: "Next", exact: true }).click();
+    await expect(roleplayWizard.getByRole("heading", { name: "Pick a Preset", exact: true })).toBeVisible();
+    await roleplayWizard.getByRole("button", { name: "Next", exact: true }).click();
+    const participantsHeading = roleplayWizard.getByRole("heading", {
+      name: "Persona & Characters",
+      exact: true,
+    });
+    const presetVariables = page.getByRole("dialog", { name: "Configure Preset Variables" });
+    await expect(presetVariables.or(participantsHeading).first()).toBeVisible();
+    if (await presetVariables.isVisible()) {
+      await presetVariables.getByRole("button", { name: "Skip", exact: true }).click();
+    }
+    await expect(participantsHeading).toBeVisible();
+    await expect(roleplayWizard.getByText(characterName, { exact: true }).first()).toBeVisible();
+    await roleplayWizard.getByRole("button", { name: "Close setup", exact: true }).click();
+    await expect(roleplayWizard).toHaveCount(0);
+  } finally {
+    await Promise.all(
+      [...createdChatIds].map((chatId) => request.delete(`/api/chats/${chatId}`).catch(() => undefined)),
+    );
+    await Promise.all(
+      [...createdCharacterIds].map((characterId) =>
+        request.delete(`/api/characters/${characterId}`).catch(() => undefined),
+      ),
+    );
   }
 });
 
@@ -3600,16 +3815,32 @@ test("home shell and primary topbar panels open without client errors", async ({
 
   const charactersButton = page.locator('[data-tour="panel-characters"]');
   await expect(charactersButton.locator("svg")).toHaveClass(/mari-topbar-accent-icon/);
+  const personasButton = page.locator('[data-tour="panel-personas"]');
+  await expect(personasButton.locator("svg")).toHaveClass(/lucide-venetian-mask/u);
+
+  const corePanelOrder = await page
+    .locator('[data-tour="panel-buttons"] > button[data-tour^="panel-"]')
+    .evaluateAll((buttons) => buttons.map((button) => button.getAttribute("data-tour")));
+  expect(corePanelOrder).toEqual([
+    "panel-bot-browser",
+    "panel-characters",
+    "panel-personas",
+    "panel-lorebooks",
+    "panel-presets",
+    "panel-connections",
+    "panel-agents",
+    "panel-settings",
+  ]);
 
   for (const selector of [
     '[data-tour="sidebar-toggle"]',
     '[data-tour="panel-bot-browser"]',
     '[data-tour="panel-characters"]',
+    '[data-tour="panel-personas"]',
     '[data-tour="panel-lorebooks"]',
     '[data-tour="panel-presets"]',
     '[data-tour="panel-connections"]',
     '[data-tour="panel-agents"]',
-    '[data-tour="panel-personas"]',
     '[data-tour="panel-settings"]',
   ]) {
     await page.locator(selector).click();
@@ -3619,11 +3850,31 @@ test("home shell and primary topbar panels open without client errors", async ({
         /mari-panel-gradient--characters/,
       );
     }
+    if (selector === '[data-tour="panel-personas"]') {
+      await expect(page.locator('[data-component="RightPanelHeaderIcon"] svg')).toHaveClass(/lucide-venetian-mask/u);
+    }
   }
 
   const health = await page.request.get("/api/health");
   expect(health.ok()).toBeTruthy();
   expect(errors).toEqual([]);
+});
+
+test("Professor Mari introduces Browser, Characters, and Personas in topbar order", async ({ page }) => {
+  await page.goto("/");
+  await page.evaluate(async () => {
+    const module = await import("/src/stores/ui.store.ts");
+    module.useUIStore.getState().setHasCompletedOnboarding(false);
+  });
+
+  const next = page.getByRole("button", { name: "Next", exact: true });
+  await expect(page.getByRole("heading", { name: "Welcome to Marinara Engine!", exact: true })).toBeVisible();
+  await next.click();
+  await expect(page.locator("h3").filter({ hasText: /^Browser$/ })).toBeVisible();
+  await next.click();
+  await expect(page.locator("h3").filter({ hasText: /^Characters$/ })).toBeVisible();
+  await next.click();
+  await expect(page.locator("h3").filter({ hasText: /^Personas$/ })).toBeVisible();
 });
 
 test("settings search divider stays aligned with editor headers across text scales", async ({ page }, testInfo) => {
@@ -3883,7 +4134,7 @@ test("incomplete synced settings preserve disabled Game text effects and repair 
     .toBe(false);
 });
 
-test("Card Browser labels and the Persona full library stay available across viewports", async ({ page }) => {
+test("Browser labels and the Persona full library stay available across viewports", async ({ page }) => {
   const errors = collectUnexpectedErrors(page);
   await page.route("**/api/bot-browser/chub/search?*", async (route) => {
     await route.fulfill({
@@ -3894,7 +4145,8 @@ test("Card Browser labels and the Persona full library stay available across vie
   await page.goto("/");
 
   await page.locator('[data-tour="panel-bot-browser"]').click();
-  await expect(page.getByText("Card Browser", { exact: true })).toBeVisible();
+  await expect(page.getByText("Browser", { exact: true })).toBeVisible();
+  await expect(page.getByText("Card Browser", { exact: true })).toHaveCount(0);
   const downloadCards = page.getByRole("button", { name: "Download Cards" });
   await expect(downloadCards).toBeVisible();
   await downloadCards.click();

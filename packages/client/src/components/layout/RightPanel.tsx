@@ -2,7 +2,7 @@
 // Layout: Right Panel (polished with panel transitions)
 // ──────────────────────────────────────────────
 import { lazy, Suspense, type ComponentType, type LazyExoticComponent, type ReactNode } from "react";
-import { X, Users, BookOpen, FileText, Link, Sparkles, Settings, User, Bot, Puzzle } from "lucide-react";
+import { X, Users, BookOpen, FileText, Link, Sparkles, Settings, VenetianMask, Bot, Puzzle } from "lucide-react";
 import { useUIStore } from "../../stores/ui.store";
 import { cn } from "../../lib/utils";
 import { usePersonalExtensionContributions } from "../../lib/personal-extension-contributions";
@@ -35,7 +35,7 @@ const PersonalExtensionPanel = lazy(() =>
 
 const PANEL_CONFIG: Record<string, { title: string; icon: ReactNode; gradient?: string; gradientClass?: string }> = {
   "bot-browser": {
-    title: "Card Browser",
+    title: "Browser",
     icon: <Bot size="0.875rem" />,
     gradient: "from-lime-400 via-green-500 to-cyan-500",
   },
@@ -52,7 +52,11 @@ const PANEL_CONFIG: Record<string, { title: string; icon: ReactNode; gradient?: 
   },
   connections: { title: "Connections", icon: <Link size="0.875rem" />, gradient: "from-sky-400 to-blue-500" },
   agents: { title: "Agents", icon: <Sparkles size="0.875rem" />, gradient: "from-violet-400 to-purple-500" },
-  personas: { title: "Personas", icon: <User size="0.875rem" />, gradient: "from-emerald-400 to-teal-500" },
+  personas: {
+    title: "Personas",
+    icon: <VenetianMask size="0.875rem" />,
+    gradient: "from-emerald-400 to-teal-500",
+  },
   settings: { title: "Settings", icon: <Settings size="0.875rem" />, gradient: "from-gray-400 to-gray-500" },
   extensions: { title: "Extensions", icon: <Puzzle size="0.875rem" /> },
 };

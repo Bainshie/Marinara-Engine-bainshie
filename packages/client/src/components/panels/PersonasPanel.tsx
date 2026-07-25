@@ -22,6 +22,7 @@ import {
   Plus,
   Trash2,
   User,
+  VenetianMask,
   Camera,
   ArrowUpDown,
   Download,
@@ -573,7 +574,7 @@ export function PersonasPanel() {
         className="mari-chrome-control mari-chrome-control--primary w-full text-xs"
         title={localizeUi("ui.panels.personaspanel.openFullPersonaLibrary")}
       >
-        <User size="0.875rem" />
+        <VenetianMask size="0.875rem" />
         {localizeUi("ui.panels.characterspanel.openFullLibrary_336ca82")}
       </button>
 
@@ -1009,7 +1010,7 @@ export function PersonasPanel() {
       {!isLoading && list.length === 0 && (
         <div className="flex flex-col items-center gap-2 py-8 text-center">
           <div className="animate-float flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-400/20 to-teal-500/20">
-            <User size="1.25rem" className="text-emerald-400" />
+            <VenetianMask size="1.25rem" className="text-emerald-400" />
           </div>
           <p className="mari-chrome-text-muted text-xs">
             {localizeUi("ui.panels.personaspanel.noPersonasYetCreateOne")}
