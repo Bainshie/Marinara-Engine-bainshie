@@ -204,8 +204,16 @@ export function AgentCatalogView() {
       const result = await install.mutateAsync(entry.manifest.id);
       toast.success(
         result.status === "restart-required"
-          ?localizeUi("ui.agents.agentcatalogview.agentValue1RestartMarinaraEngineToFinishSetup", { value1: isUpdate ?localizeUi("ui.agents.agentcatalogview.updated") :localizeUi("ui.agents.agentcatalogview.installed") })
-          :localizeUi("ui.agents.agentcatalogview.agentValue1ItIsReadyToUse", { value1: isUpdate ?localizeUi("ui.agents.agentcatalogview.updated") :localizeUi("ui.agents.agentcatalogview.installed") }),
+          ? localizeUi(
+              isUpdate
+                ? "ui.agents.agentcatalogview.agentUpdatedRestartRequired"
+                : "ui.agents.agentcatalogview.agentInstalledRestartRequired",
+            )
+          : localizeUi(
+              isUpdate
+                ? "ui.agents.agentcatalogview.agentUpdatedReadyToUse"
+                : "ui.agents.agentcatalogview.agentInstalledReadyToUse",
+            ),
       );
     } catch (error) {
       toast.error(getPrivilegedActionErrorMessage(error,localizeUi("ui.agents.agentcatalogview.agentInstallationFailed")));
@@ -321,7 +329,11 @@ export function AgentCatalogView() {
           <p className="text-[0.625rem] font-semibold uppercase tracking-[0.24em] text-[var(--muted-foreground)]">{localizeUi("ui.agents.agentcatalogview.agentLibrary")}</p>
           <h1 className="truncate text-base font-semibold text-[var(--foreground)] md:text-xl">{localizeUi("ui.agents.agentcatalogview.downloadAgents")}</h1>
           <p className="truncate text-xs text-[var(--muted-foreground)]">
-            {catalog.data?.packages.length ?? 0} {localizeUi("ui.agents.agentcatalogview.available")} {installed.data?.length ?? 0} {localizeUi("ui.agents.agentcatalogview.installed")}</p>
+            {localizeUi("ui.agents.agentcatalogview.catalogSummary", {
+              availableCount: catalog.data?.packages.length ?? 0,
+              installedCount: installed.data?.length ?? 0,
+            })}
+          </p>
         </div>
         {customRepositories.data?.enabled && (
           <button

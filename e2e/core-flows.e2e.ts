@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 import { readFileSync } from "node:fs";
 import { createServer } from "node:http";
 
@@ -947,6 +947,33 @@ test("destructive confirmation actions use the shared accent button treatment", 
   await expect(deleteAll).toHaveCSS("color", accentColor);
   expect(await deleteAll.getAttribute("class")).not.toMatch(/destructive|pink|red|rose/iu);
   await choiceDialog.getByRole("button", { name: "Cancel" }).click();
+});
+
+test("modal backdrops ignore drag releases but still close on a fresh outside click", async ({ page }) => {
+  await page.goto("/");
+  await page.evaluate(async () => {
+    const { showConfirmDialog } = (await import("/src/lib/app-dialogs.ts")) as {
+      showConfirmDialog: (options: { title: string; message: string; confirmLabel: string }) => Promise<boolean>;
+    };
+    void showConfirmDialog({
+      title: "Resize Gesture Guard",
+      message: "A drag that ends outside must not dismiss this window.",
+      confirmLabel: "Keep",
+    });
+  });
+
+  const dialog = page.getByRole("dialog", { name: "Resize Gesture Guard" });
+  const panel = dialog.locator(".mari-modal-panel");
+  const backdrop = dialog.locator("[data-backdrop-dismiss-surface]");
+  await expect(dialog).toBeVisible();
+
+  await panel.dispatchEvent("pointerdown", { bubbles: true, pointerId: 1, pointerType: "mouse" });
+  await backdrop.dispatchEvent("pointerup", { bubbles: true, pointerId: 1, pointerType: "mouse" });
+  await backdrop.dispatchEvent("click", { bubbles: true });
+  await expect(dialog).toBeVisible();
+
+  await backdrop.click({ position: { x: 4, y: 4 } });
+  await expect(dialog).toHaveCount(0);
 });
 
 test("connection model fetch errors inherit the configured chroma text color", async ({ page }, testInfo) => {
@@ -2100,7 +2127,7 @@ test("legacy browser records are cleaned while extension imports stay locked", a
         };
       }),
     )
-    .toEqual({ version: 82, hasExtensionRecords: false, hasCleanupFlag: false });
+    .toEqual({ version: 84, hasExtensionRecords: false, hasCleanupFlag: false });
 
   expect(
     await page.evaluate(
@@ -3630,16 +3657,16 @@ test("settings search divider stays aligned with editor headers across text scal
           const settingsSearchHeader = document.querySelector<HTMLElement>(".mari-settings-search-header");
           if (!topbar || !rightPanelHeader || !editorHeader || !settingsSearchHeader) return null;
           return {
-            shellHeaderDelta: Math.abs(
-              topbar.getBoundingClientRect().bottom - rightPanelHeader.getBoundingClientRect().bottom,
-            ),
-            contentHeaderDelta: Math.abs(
-              editorHeader.getBoundingClientRect().bottom - settingsSearchHeader.getBoundingClientRect().bottom,
-            ),
+            shellHeadersAligned:
+              Math.abs(topbar.getBoundingClientRect().bottom - rightPanelHeader.getBoundingClientRect().bottom) < 0.1,
+            contentHeadersAligned:
+              Math.abs(
+                editorHeader.getBoundingClientRect().bottom - settingsSearchHeader.getBoundingClientRect().bottom,
+              ) < 0.1,
           };
         }),
       )
-      .toEqual({ shellHeaderDelta: 0, contentHeaderDelta: 0 });
+      .toEqual({ shellHeadersAligned: true, contentHeadersAligned: true });
   }
 });
 
@@ -3724,6 +3751,32 @@ test("UI language selection loads locale files and persists across reloads", asy
     await expect.poll(() => page.evaluate(() => document.documentElement.lang)).toBe(translation.locale);
     await expect.poll(() => page.evaluate(() => document.documentElement.dir)).toBe(translation.direction);
   }
+
+  await languageSelect.selectOption("ko");
+  await expect
+    .poll(() =>
+      page.evaluate(async () => {
+        const { translate } = (await import("/src/localization/i18n.ts")) as {
+          translate: (key: string, options?: Record<string, unknown>) => string;
+        };
+        return {
+          repositoryImport: translate("ui.agents.customagentrepositoriesmodal.repositoryAgentsWillBeImported", {
+            warning: "주의:",
+            count: 3,
+          }),
+          catalogSummary: translate("ui.agents.agentcatalogview.catalogSummary", {
+            availableCount: 7,
+            installedCount: 3,
+          }),
+          spriteConnection: translate("ui.ui.spritegenerationmodal.noVideoGenerationConnectionsFound"),
+        };
+      }),
+    )
+    .toEqual({
+      repositoryImport: "주의: 에이전트 3개를 가져옵니다.",
+      catalogSummary: "7개 사용 가능 • 3개 설치됨",
+      spriteConnection: '동영상 생성 연결이 없습니다. 설정 → 연결에서 "동영상 생성" 제공자 유형으로 추가하세요.',
+    });
 
   // Community locales are intentionally partial. A newly extracted English
   // key must render in English when the selected locale has not translated it.
@@ -4810,9 +4863,15 @@ test("Conversation feature packages expose commands and settings without per-cha
     await page.goto("/");
     await page.getByRole("button", { name: "Chat Settings" }).click();
     let drawer = page.locator(".mari-chat-settings-drawer");
-    let agentsSection = drawer.locator('[role="button"][aria-expanded]').filter({ hasText: /^Agents$/ });
-    await expect(agentsSection).toHaveCount(1);
-    await agentsSection.click();
+    const openAgentsSection = async () => {
+      const agentsSection = drawer.locator('[role="button"][aria-expanded]').filter({ hasText: /^Agents$/ });
+      await expect(agentsSection).toHaveCount(1);
+      if ((await agentsSection.getAttribute("aria-expanded")) !== "true") {
+        await agentsSection.click();
+      }
+      await expect(agentsSection).toHaveAttribute("aria-expanded", "true");
+    };
+    await openAgentsSection();
     await expect(drawer.getByText("Commands", { exact: true })).toBeVisible();
     await expect(drawer.getByText("Schedule Updates", { exact: true })).toBeVisible();
     await expect(drawer.getByText("Memories", { exact: true })).toBeVisible();
@@ -4827,9 +4886,7 @@ test("Conversation feature packages expose commands and settings without per-cha
     await page.reload();
     await page.getByRole("button", { name: "Chat Settings" }).click();
     drawer = page.locator(".mari-chat-settings-drawer");
-    agentsSection = drawer.locator('[role="button"][aria-expanded]').filter({ hasText: /^Agents$/ });
-    await expect(agentsSection).toHaveCount(1);
-    await agentsSection.click();
+    await openAgentsSection();
     await expect(
       drawer.locator('[data-capability-client-state="loading"][data-capability-package-id="conversation-calls"]'),
     ).toBeVisible();
@@ -4986,6 +5043,10 @@ test("Conversation setup commands follow the installed agent library", async ({ 
     await nextButton.click();
     await nextButton.click();
     await expect(page.getByRole("heading", { name: "Automation", exact: true })).toBeVisible();
+    const commandsToggle = page.getByRole("button", { name: /^Commands\b/u });
+    await expect(commandsToggle).toBeVisible();
+    await commandsToggle.click();
+    await expect(page.getByText("Schedule Updates", { exact: true })).toBeVisible();
   };
 
   try {
@@ -5183,6 +5244,7 @@ test("Game setup only shows features owned by installed agents", async ({ page, 
     await expect(dialog.getByText("Hierarchical world map", { exact: true })).toHaveCount(0);
     await dialog.getByRole("button", { name: "Next", exact: true }).click();
     await expect(dialog.getByRole("heading", { name: "Features", exact: true })).toBeVisible();
+    await dialog.getByRole("button", { name: /^Enable Agents\b/u }).click();
     await expect(dialog.getByText("Music DJ", { exact: true })).toBeVisible();
     await expect(dialog.getByText("Lorebook Keeper", { exact: true })).toBeVisible();
     await expect(dialog.getByText("Illustrator", { exact: true })).toBeVisible();
@@ -5192,6 +5254,9 @@ test("Game setup only shows features owned by installed agents", async ({ page, 
     installedAgentIds.add("hierarchical-maps");
     await page.reload();
     dialog = await openLorebooksStep();
+    await dialog.getByRole("button", { name: "Next", exact: true }).click();
+    await expect(dialog.getByRole("heading", { name: "Features", exact: true })).toBeVisible();
+    await dialog.getByRole("button", { name: /^Enable Agents\b/u }).click();
     await expect(dialog.getByText("Hierarchical world map", { exact: true })).toBeVisible();
     expect(errors).toEqual([]);
   } finally {
@@ -5243,16 +5308,20 @@ test("Conversation Chat Settings can attach and retain custom agents", async ({ 
         active: Array.isArray(metadata.activeAgentIds) && metadata.activeAgentIds.includes(agent.type),
       };
     };
+    const openAgentsSection = async (drawer: Locator) => {
+      const section = drawer.locator('[role="button"][aria-expanded]').filter({ hasText: /^Agents/ });
+      if ((await section.getAttribute("aria-expanded")) !== "true") {
+        await section.click();
+      }
+      await expect(section).toHaveAttribute("aria-expanded", "true");
+    };
 
     await page.goto("/");
     await page.evaluate((chatId) => localStorage.setItem("marinara-active-chat-id", chatId), chat.id);
     await page.reload();
     await page.getByRole("button", { name: "Chat Settings" }).click();
     const drawer = page.locator(".mari-chat-settings-drawer");
-    await drawer
-      .locator('[role="button"][aria-expanded]')
-      .filter({ hasText: /^Agents/ })
-      .click();
+    await openAgentsSection(drawer);
     await expect(drawer.getByText("Custom Agents", { exact: true })).toBeVisible();
     await drawer.getByRole("button", { name: /Custom Agents/ }).click();
     await drawer.getByRole("button").filter({ hasText: agentName }).click();
@@ -5264,11 +5333,16 @@ test("Conversation Chat Settings can attach and retain custom agents", async ({ 
     await page.reload();
     await page.getByRole("button", { name: "Chat Settings" }).click();
     const reloadedDrawer = page.locator(".mari-chat-settings-drawer");
-    await reloadedDrawer
-      .locator('[role="button"][aria-expanded]')
-      .filter({ hasText: /^Agents/ })
-      .click();
+    await openAgentsSection(reloadedDrawer);
     await expect(reloadedDrawer.getByText(agentName, { exact: true }).first()).toBeVisible();
+    const customAgentSection = reloadedDrawer.getByRole("button", { name: "Collapse Custom Agents" });
+    await expect(customAgentSection).toHaveAttribute("aria-expanded", "true");
+    await customAgentSection.click();
+    await expect(reloadedDrawer.getByRole("button", { name: "Expand Custom Agents" })).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
+    await expect(reloadedDrawer.getByText(agentName, { exact: true })).toHaveCount(0);
     await expect.poll(readAgentState).toEqual({ enabled: true, active: true });
   } finally {
     if (chatId) await request.delete(`/api/chats/${chatId}`);

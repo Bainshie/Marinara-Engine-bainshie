@@ -666,7 +666,12 @@ export function STBulkImportModal({ open, onClose }: Props) {
                   return (
                     <span>
                       {item.isBuiltin ?localizeUi("ui.modals.stbulkimportmodal.detectedBuiltInPreset") :localizeUi("ui.modals.stbulkimportmodal.customOrUserPreset")}
-                      {modified ?localizeUi("ui.modals.stbulkimportmodal.modifiedValue1", { value1: modified }) : ""}
+                      {modified ? (
+                        <>
+                          {" "}
+                          {localizeUi("ui.modals.stbulkimportmodal.modifiedValue1", { value1: modified })}
+                        </>
+                      ) : null}
                     </span>
                   );
                 }}

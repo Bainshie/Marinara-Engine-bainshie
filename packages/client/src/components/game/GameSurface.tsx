@@ -71,6 +71,7 @@ import {
 } from "../../hooks/use-chats";
 import { useConnections } from "../../hooks/use-connections";
 import { useGenerate } from "../../hooks/use-generate";
+import { useBackdropDismiss } from "../../hooks/use-backdrop-dismiss";
 import { useGenerateSpatialMapDraft, useSpatialContext } from "../../hooks/use-spatial-context";
 import { useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { spriteKeys, type SpriteInfo } from "../../hooks/use-characters";
@@ -2606,6 +2607,8 @@ function GameSurfaceComponent({
   const [mobileVolumePopoverAnchor, setMobileVolumePopoverAnchor] = useState<ChatToolbarFloatingPanelAnchor>(null);
   const [mobileGameAssetsPanelAnchor, setMobileGameAssetsPanelAnchor] = useState<ChatToolbarFloatingPanelAnchor>(null);
   const [combatLogsOpen, setCombatLogsOpen] = useState(false);
+  const closeCombatLogs = useCallback(() => setCombatLogsOpen(false), []);
+  const combatLogsBackdropDismiss = useBackdropDismiss(closeCombatLogs);
   const [spotifyRetryPending, setSpotifyRetryPending] = useState(false);
   const [youtubeRetryPending, setYoutubeRetryPending] = useState(false);
   const combatLogScrolledRef = useRef(false);
@@ -11731,7 +11734,7 @@ function GameSurfaceComponent({
                 {combatLogsOpen && (
                   <div
                     className="absolute inset-0 z-40 flex items-center justify-center bg-black/60 px-4 backdrop-blur-sm"
-                    onClick={() => setCombatLogsOpen(false)}
+                    {...combatLogsBackdropDismiss}
                   >
                     <div
                       className="flex max-h-[82vh] w-full max-w-2xl flex-col rounded-xl border border-white/15 bg-[var(--card)] shadow-2xl"

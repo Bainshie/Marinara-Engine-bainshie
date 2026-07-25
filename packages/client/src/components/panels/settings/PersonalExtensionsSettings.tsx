@@ -349,7 +349,7 @@ function ExtensionSettings({ showIntro, mode }: { showIntro: boolean; mode: Exte
         toast.success(localizeUi("ui.panels.extensionsettings.value1PersonalExtensionValue2SavedAsDisabledDrafts", { value1: installed, value2: installed === 1 ? "" :localizeUi("ui.noodle.stageprofileview.s") }));
       }
       if (skipped > 0) {
-        toast.warning(localizeUi("ui.panels.extensionsettings.value1InvalidExtensionEntrValue2Skipped", { value1: skipped, value2: skipped === 1 ?localizeUi("ui.panels.extensionsettings.yWas") :localizeUi("ui.panels.extensionsettings.iesWere") }));
+        toast.warning(localizeUi("ui.panels.extensionsettings.invalidExtensionEntriesSkipped", { count: skipped }));
       }
     },
     [extensions, installDraft, localizeUi],
