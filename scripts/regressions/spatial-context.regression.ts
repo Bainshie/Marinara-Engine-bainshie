@@ -38,6 +38,7 @@ import {
 } from "../../packages/server/src/services/spatial-context/state-resolution.js";
 import { ensureTimestampAfter } from "../../packages/server/src/services/import/import-timestamps.js";
 import { resolveVisibleGameStateAnchor } from "../../packages/server/src/routes/generate/generate-route-utils.js";
+import { mergeSpatialLocationReferenceImages } from "../../packages/server/src/services/image/spatial-location-reference.js";
 
 assert.equal(ensureTimestampAfter("2026-07-16T07:47:03.766Z", "2026-07-16T07:47:03.765Z"), "2026-07-16T07:47:03.766Z");
 assert.equal(ensureTimestampAfter("2026-07-16T07:47:03.765Z", "2026-07-16T07:47:03.765Z"), "2026-07-16T07:47:03.766Z");
@@ -194,6 +195,34 @@ for (const legacyLocation of legacyDefinitionWithoutLoreRefs.locations as Array<
 }
 const parsedLegacyDefinition = spatialContextDefinitionSchema.parse(legacyDefinitionWithoutLoreRefs);
 assert.ok(parsedLegacyDefinition.locations.every((entry) => entry.lorebookEntryIds.length === 0));
+const visualReferenceDefinition = definition([
+  location("visual_reference", "Visual Reference", {
+    referenceImageId: "gallery-image-1",
+    useReferenceImage: true,
+    mapBackgroundImageId: "gallery-image-2",
+  }),
+]);
+assert.equal(spatialContextDefinitionSchema.safeParse(visualReferenceDefinition).success, true);
+assert.equal(
+  spatialContextDefinitionSchema.safeParse({
+    ...visualReferenceDefinition,
+    locations: [{ ...visualReferenceDefinition.locations[0], referenceImageId: "x".repeat(201) }],
+  }).success,
+  false,
+);
+assert.equal(
+  spatialContextDefinitionSchema.safeParse({
+    ...visualReferenceDefinition,
+    locations: [{ ...visualReferenceDefinition.locations[0], mapBackgroundImageId: "x".repeat(201) }],
+  }).success,
+  false,
+);
+assert.deepEqual(mergeSpatialLocationReferenceImages("location", ["character-a", "character-b"], 2), [
+  "location",
+  "character-a",
+]);
+assert.deepEqual(mergeSpatialLocationReferenceImages(null, ["character-a", "character-b"], 1), ["character-a"]);
+assert.deepEqual(mergeSpatialLocationReferenceImages("location", ["character-a"], 0), []);
 
 // AI map drafting and normalization are package-owned and tested in Pasta-Devs/Marinara-Agents.
 assert.deepEqual(
@@ -418,6 +447,8 @@ const fallbackProjection: ResolvedOwnerSpatialProjection = {
   ],
   description: "The library.",
   modelMemory: "A hidden key.",
+  referenceImageId: null,
+  useReferenceImage: false,
   lorebookEntryIds: ["lore_library"],
   destinations: [],
   omittedDestinationCount: 0,

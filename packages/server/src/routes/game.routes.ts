@@ -212,6 +212,10 @@ import { resolveGameVideoRuntime, type GameVideoRuntime } from "../services/vide
 import { resolveConnectionImageDefaults } from "../services/image/image-generation-defaults.js";
 import { resolveImagePromptReviewSize } from "../services/image/image-prompt-review.js";
 import {
+  mergeSpatialLocationReferenceImages,
+  resolveSpatialLocationReferenceImage,
+} from "../services/image/spatial-location-reference.js";
+import {
   resolveImageConnectionFallback,
   resolveVideoConnectionFallback,
 } from "../services/generation/media-connection-fallback.js";
@@ -10729,6 +10733,18 @@ export async function gameRoutes(app: FastifyInstance) {
         imgService: imgConn.imageService || (imgConn as any).imageGenerationSource || imgConn.model || "",
       };
       const storyboardReferenceImageLimit = resolveSceneIllustrationReferenceImageLimit(storyboardImageRequestContext);
+      const storyboardSpatialProjection =
+        (await resolveOwnerSpatialProjection(
+          input.chatId,
+          { exactAnchor: { messageId: input.messageId, swipeIndex: input.swipeIndex } },
+          meta,
+        )) ??
+        (await resolveOwnerSpatialProjection(input.chatId, { throughMessageId: input.messageId }, meta));
+      const spatialLocationReferenceImage = await resolveSpatialLocationReferenceImage({
+        db: app.db,
+        chatId: input.chatId,
+        projection: storyboardSpatialProjection?.ownerMode === "game" ? storyboardSpatialProjection : null,
+      });
       const useNovelAiCharacterPrompts = meta.gameStoryboardUseNovelAiCharacterPrompts !== false;
       const providerSupportsStructuredCharacterPrompts =
         supportsSceneIllustrationStructuredCharacterPrompts(storyboardImageRequestContext);
@@ -10954,7 +10970,7 @@ export async function gameRoutes(app: FastifyInstance) {
           characterPrompts,
           slug: storyboardSlug(`${slugPrefix}-${frameIndex + 1}-${plannedFrame.title}`, `storyboard-${frameIndex + 1}`),
         };
-        const illustrationAssets = collectIllustrationCharacterAssets({
+        const characterIllustrationAssets = collectIllustrationCharacterAssets({
           illustration,
           characterNames: plannedFrame.characters,
           trackedNpcs: storyboardCharacterContext.trackedNpcs,
@@ -10964,8 +10980,19 @@ export async function gameRoutes(app: FastifyInstance) {
           charDescriptionByName,
           includeReferenceImages: useAvatarReferences,
           includeCharacterDescriptions: includeCharacterAppearance,
-          maxReferenceImages: storyboardReferenceImageLimit,
+          maxReferenceImages: Math.max(
+            0,
+            storyboardReferenceImageLimit - (spatialLocationReferenceImage ? 1 : 0),
+          ),
         });
+        const illustrationAssets = {
+          ...characterIllustrationAssets,
+          referenceImages: mergeSpatialLocationReferenceImages(
+            spatialLocationReferenceImage,
+            characterIllustrationAssets.referenceImages,
+            storyboardReferenceImageLimit,
+          ),
+        };
         return { plannedFrame, characterPrompts, illustration, illustrationAssets };
       };
 
