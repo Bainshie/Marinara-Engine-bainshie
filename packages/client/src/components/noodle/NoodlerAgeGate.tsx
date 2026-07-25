@@ -312,7 +312,10 @@ function OathStep({
   onComplete: () => void;
 }) {
   const [checked, setChecked] = useState(false);
-  const [dodged, setDodged] = useState(reducedMotion); // once true, the box stays catchable
+  // Coarse pointers start dodged so the synthesized mouse events a tap fires cannot flee.
+  const [dodged, setDodged] = useState(
+    () => reducedMotion || (typeof window !== "undefined" && window.matchMedia("(pointer: coarse)").matches),
+  ); // once true, the box stays catchable
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const [confetti, setConfetti] = useState(false);
 

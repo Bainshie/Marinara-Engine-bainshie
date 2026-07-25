@@ -1181,7 +1181,7 @@ export function NoodlePostCard({
     replyManagement?.deleteNoodleReply ?? (() => {});
   const updateInteraction = replyManagement?.updateInteraction ?? { isPending: false };
   const deleteInteraction = replyManagement?.deleteInteraction ?? { isPending: false };
-  const canManageReplyOverride = replyManagement ? replyManagement.canManageReply : () => false;
+  const canManageReplyOverride = replyManagement?.canManageReply;
   const activeReplyMention = mentions?.activeReplyMention ?? null;
   const activeReplyMentionIndex = mentions?.activeReplyMentionIndex ?? 0;
   const replyMentionSuggestions = mentions?.replyMentionSuggestions ?? [];

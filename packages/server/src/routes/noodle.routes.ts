@@ -296,9 +296,7 @@ export async function noodleRoutes(app: FastifyInstance) {
   // Shared viewer-scope builder: also returned from the unlock/subscribe mutations so the
   // client can patch its cache in place instead of refetching the whole feed (avoids the
   // reload-and-jump when a post is revealed).
-  async function buildViewerScope(personaId: string) {
-    const viewer = await resolveViewerPersona(personaId);
-    if (!viewer) return null;
+  async function buildViewerScope(viewer: NonNullable<Awaited<ReturnType<typeof resolveViewerPersona>>>) {
     const [accounts, profiles, subscriptions, unlocks] = await Promise.all([
       noodle.listPrivateAccounts(),
       noodle.listNoodlerStageProfiles(),
@@ -388,9 +386,9 @@ export async function noodleRoutes(app: FastifyInstance) {
     if (!settings.enableNoodler) return reply.code(404).send({ error: "Not Found" });
     const parsed = noodlerViewerPersonaSchema.safeParse(req.query);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
-    const scope = await buildViewerScope(parsed.data.personaId);
-    if (!scope) return reply.code(404).send({ error: "Noodle persona not found" });
-    return scope;
+    const viewer = await resolveViewerPersona(parsed.data.personaId);
+    if (!viewer) return reply.code(404).send({ error: "Noodle persona not found" });
+    return await buildViewerScope(viewer);
   });
 
   async function resolveReadablePrivatePost(personaId: string, postId: string) {
@@ -592,7 +590,7 @@ export async function noodleRoutes(app: FastifyInstance) {
     }
     const subscription = await noodle.subscribe(viewer.id, creator.id);
     if (!subscription) return reply.code(400).send({ error: "Could not subscribe to this stage profile" });
-    return reply.code(201).send(await buildViewerScope(parsed.data.personaId));
+    return reply.code(201).send(await buildViewerScope(viewer));
   });
 
   app.delete("/noodler/accounts/:id/subscribe", async (req, reply) => {
@@ -604,7 +602,7 @@ export async function noodleRoutes(app: FastifyInstance) {
     if (!viewer) return reply.code(404).send({ error: "Noodle persona not found" });
     const { id } = req.params as { id: string };
     await noodle.unsubscribe(viewer.id, id);
-    return (await buildViewerScope(parsed.data.personaId)) ?? { creators: [] };
+    return await buildViewerScope(viewer);
   });
 
   app.get("/noodler/accounts/:id/subscribers", async (req, reply) => {
@@ -657,7 +655,7 @@ export async function noodleRoutes(app: FastifyInstance) {
     }
     const unlock = await noodle.unlockPost(viewer.id, post.id);
     if (!unlock) return reply.code(400).send({ error: "Could not unlock this post" });
-    return reply.code(201).send(await buildViewerScope(parsed.data.personaId));
+    return reply.code(201).send(await buildViewerScope(viewer));
   });
 
   app.get<{ Querystring: { limit?: string; offset?: string; search?: string; kind?: string } }>(
