@@ -521,11 +521,9 @@ export function STBulkImportModal({ open, onClose }: Props) {
               <div className="flex items-start gap-2 rounded-lg bg-amber-500/10 p-2.5 text-xs text-amber-400">
                 <AlertTriangle size="0.875rem" className="mt-0.5 shrink-0" />
                 <span>
-                  {builtinPresetCount} {localizeUi("ui.modals.stbulkimportmodal.builtInPreset")}
-                  {builtinPresetCount !== 1
-                    ? localizeUi("ui.modals.stbulkimportmodal.sWere")
-                    : localizeUi("ui.modals.stbulkimportmodal.was")}{" "}
-                  {localizeUi("ui.modals.stbulkimportmodal.detectedAndLeftUncheckedByDefaultSoOnlyLikely")}
+                  {localizeUi("ui.modals.stbulkimportmodal.builtInPresetsDetectedAndUnchecked", {
+                    count: builtinPresetCount,
+                  })}
                 </span>
               </div>
             )}
@@ -536,8 +534,9 @@ export function STBulkImportModal({ open, onClose }: Props) {
                   {localizeUi("ui.modals.stbulkimportmodal.chooseExactlyWhatToImport")}
                 </span>
                 <span className="text-[0.6875rem] text-[var(--muted-foreground)]">
-                  {Object.values(selection).reduce((sum, ids) => sum + ids.length, 0)}{" "}
-                  {localizeUi("ui.agents.agenteditor.selected")}
+                  {localizeUi("ui.modals.stbulkimportmodal.selectedItems", {
+                    count: Object.values(selection).reduce((sum, ids) => sum + ids.length, 0),
+                  })}
                 </span>
               </div>
 
@@ -850,37 +849,51 @@ export function STBulkImportModal({ open, onClose }: Props) {
                 <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-[0.625rem] text-[var(--muted-foreground)]">
                   {progress.imported.characters > 0 && (
                     <span>
-                      {progress.imported.characters} {localizeUi("ui.noodle.noodlehome.characters")}
+                      {localizeUi("ui.modals.stbulkimportmodal.importedCharacters", {
+                        count: progress.imported.characters,
+                      })}
                     </span>
                   )}
                   {progress.imported.chats > 0 && (
                     <span>
-                      {progress.imported.chats} {localizeUi("ui.modals.stbulkimportmodal.chats")}
+                      {localizeUi("ui.modals.stbulkimportmodal.importedChats", {
+                        count: progress.imported.chats,
+                      })}
                     </span>
                   )}
                   {progress.imported.groupChats > 0 && (
                     <span>
-                      {progress.imported.groupChats} {localizeUi("ui.modals.stbulkimportmodal.groupChats_f61d9ba")}
+                      {localizeUi("ui.modals.stbulkimportmodal.importedGroupChats", {
+                        count: progress.imported.groupChats,
+                      })}
                     </span>
                   )}
                   {progress.imported.presets > 0 && (
                     <span>
-                      {progress.imported.presets} {localizeUi("ui.modals.stbulkimportmodal.presets")}
+                      {localizeUi("ui.modals.stbulkimportmodal.importedPresets", {
+                        count: progress.imported.presets,
+                      })}
                     </span>
                   )}
                   {progress.imported.lorebooks > 0 && (
                     <span>
-                      {progress.imported.lorebooks} {localizeUi("ui.modals.stbulkimportmodal.lorebooks")}
+                      {localizeUi("ui.modals.stbulkimportmodal.importedLorebooks", {
+                        count: progress.imported.lorebooks,
+                      })}
                     </span>
                   )}
                   {progress.imported.backgrounds > 0 && (
                     <span>
-                      {progress.imported.backgrounds} {localizeUi("ui.panels.backgroundpicker.backgrounds")}
+                      {localizeUi("ui.modals.stbulkimportmodal.importedBackgrounds", {
+                        count: progress.imported.backgrounds,
+                      })}
                     </span>
                   )}
                   {progress.imported.personas > 0 && (
                     <span>
-                      {progress.imported.personas} {localizeUi("ui.modals.stbulkimportmodal.personas")}
+                      {localizeUi("ui.modals.stbulkimportmodal.importedPersonas", {
+                        count: progress.imported.personas,
+                      })}
                     </span>
                   )}
                 </div>
@@ -955,8 +968,9 @@ export function STBulkImportModal({ open, onClose }: Props) {
               <div className="flex flex-col gap-1.5 rounded-lg bg-amber-500/10 p-2.5">
                 <div className="flex items-center gap-1.5 text-xs font-medium text-amber-400">
                   <AlertTriangle size="0.75rem" />
-                  {importResult.errors.length} {localizeUi("ui.modals.stbulkimportmodal.warning")}
-                  {importResult.errors.length !== 1 ? localizeUi("ui.noodle.stageprofileview.s") : ""}
+                  {localizeUi("ui.modals.stbulkimportmodal.importWarnings", {
+                    count: importResult.errors.length,
+                  })}
                 </div>
                 <div className="max-h-24 overflow-y-auto text-[0.625rem] text-[var(--muted-foreground)]">
                   {importResult.errors.map((warning, index) => (

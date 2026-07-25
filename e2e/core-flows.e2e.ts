@@ -634,9 +634,7 @@ test("Author's Notes resolves the shared prompt macro engine and preset variable
     expect(probe).toContain(
       'character=A meticulous alchemist.|Patient and exacting.|He has studied this reaction for years.|A pale coat and blue gloves.|Inside a mountain laboratory.|"Record every result."|Never lose the thread.',
     );
-    expect(probe).toContain(
-      `context=Measure the blue precipitate.|author-notes-model|${chat.id}|continue`,
-    );
+    expect(probe).toContain(`context=Measure the blue precipitate.|author-notes-model|${chat.id}|continue`);
     expect(probe).toContain("preset=forensic");
     expect(probe).toContain("random=7|1");
     expect(probe).toContain("variables=2");
@@ -3768,6 +3766,8 @@ test("UI language selection loads locale files and persists across reloads", asy
             availableCount: 7,
             installedCount: 3,
           }),
+          importSelection: translate("ui.modals.stbulkimportmodal.selectedItems", { count: 3 }),
+          importWarnings: translate("ui.modals.stbulkimportmodal.importWarnings", { count: 1 }),
           spriteConnection: translate("ui.ui.spritegenerationmodal.noVideoGenerationConnectionsFound"),
         };
       }),
@@ -3775,6 +3775,8 @@ test("UI language selection loads locale files and persists across reloads", asy
     .toEqual({
       repositoryImport: "주의: 에이전트 3개를 가져옵니다.",
       catalogSummary: "7개 사용 가능 • 3개 설치됨",
+      importSelection: "3개 선택됨",
+      importWarnings: "경고 1개",
       spriteConnection: '동영상 생성 연결이 없습니다. 설정 → 연결에서 "동영상 생성" 제공자 유형으로 추가하세요.',
     });
 
@@ -3787,6 +3789,26 @@ test("UI language selection loads locale files and persists across reloads", asy
   await languageSelect.selectOption("en");
   await expect(page.getByText("App Behavior", { exact: true })).toBeVisible();
   await expect.poll(() => page.evaluate(() => document.documentElement.dir)).toBe("ltr");
+  await expect
+    .poll(() =>
+      page.evaluate(async () => {
+        const { translate } = (await import("/src/localization/i18n.ts")) as {
+          translate: (key: string, options?: Record<string, unknown>) => string;
+        };
+        return {
+          onePreset: translate("ui.modals.stbulkimportmodal.importedPresets", { count: 1 }),
+          severalPresets: translate("ui.modals.stbulkimportmodal.importedPresets", { count: 3 }),
+          oneWarning: translate("ui.modals.stbulkimportmodal.importWarnings", { count: 1 }),
+          severalWarnings: translate("ui.modals.stbulkimportmodal.importWarnings", { count: 3 }),
+        };
+      }),
+    )
+    .toEqual({
+      onePreset: "1 preset",
+      severalPresets: "3 presets",
+      oneWarning: "1 warning",
+      severalWarnings: "3 warnings",
+    });
   await expect
     .poll(() =>
       page.evaluate(() => {
@@ -6503,9 +6525,7 @@ test("streamed profile and full-backup ZIPs round-trip through import preview", 
       expect(preview.imported.characters).toBeGreaterThanOrEqual(1);
     }
   } finally {
-    await request
-      .put("/api/backup/automatic", { data: { enabled: false, frequency: "daily" } })
-      .catch(() => undefined);
+    await request.put("/api/backup/automatic", { data: { enabled: false, frequency: "daily" } }).catch(() => undefined);
     await request.delete(`/api/characters/${character.id}`).catch(() => undefined);
   }
 });
