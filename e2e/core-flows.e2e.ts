@@ -3200,6 +3200,55 @@ test("UI language selection loads locale files and persists across reloads", asy
   expect(errors).toEqual([]);
 });
 
+test("incomplete synced settings preserve disabled Game text effects and repair the server blob", async ({ page }) => {
+  let rewrittenValue: string | null = null;
+  await page.addInitScript(() => {
+    localStorage.setItem(
+      "marinara-engine-ui",
+      JSON.stringify({
+        state: { gameTextEffectsEnabled: false },
+        version: 82,
+      }),
+    );
+    localStorage.setItem("marinara-engine-ui-updated-at", "100");
+  });
+  await page.route("**/api/app-settings/ui", async (route) => {
+    if (route.request().method() === "GET") {
+      await route.fulfill({
+        json: {
+          value: JSON.stringify({
+            theme: "dark",
+            __updatedAt: 200,
+          }),
+        },
+      });
+      return;
+    }
+    const body = route.request().postDataJSON() as { value?: unknown } | null;
+    rewrittenValue = typeof body?.value === "string" ? body.value : null;
+    await route.fulfill({ json: { value: rewrittenValue } });
+  });
+
+  await page.goto("/");
+  await expect.poll(() => rewrittenValue).not.toBeNull();
+  const rewritten = JSON.parse(rewrittenValue!) as {
+    gameTextEffectsEnabled?: unknown;
+    __updatedAt?: unknown;
+  };
+  expect(rewritten.gameTextEffectsEnabled).toBe(false);
+  expect(typeof rewritten.__updatedAt).toBe("number");
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const persisted = JSON.parse(localStorage.getItem("marinara-engine-ui") ?? '{"state":{}}') as {
+          state?: { gameTextEffectsEnabled?: unknown };
+        };
+        return persisted.state?.gameTextEffectsEnabled;
+      }),
+    )
+    .toBe(false);
+});
+
 test("Card Browser labels and the Persona full library stay available across viewports", async ({ page }) => {
   const errors = collectUnexpectedErrors(page);
   await page.route("**/api/bot-browser/chub/search?*", async (route) => {
@@ -6369,10 +6418,10 @@ test("Noodle polls support character creation and voting on both sides", async (
 
     const composer = noodle.locator('[data-component="NoodleView.InlineComposer"]');
     await composer.getByTitle("Create poll").click();
-    await page.getByPlaceholder("Ask a question").fill("Which experiment comes next?");
+    await page.getByPlaceholder("What question do you want to ask?").fill("Which experiment comes next?");
     await page.getByPlaceholder("Option 1").fill("Robotics");
     await page.getByPlaceholder("Option 2").fill("Alchemy");
-    await page.getByRole("button", { name: "Add Poll", exact: true }).click();
+    await page.getByRole("button", { name: "Add poll", exact: true }).click();
     await expect(composer.locator('[data-component="NoodleView.DraftPoll"]')).toBeVisible();
 
     const personaPollResponsePromise = page.waitForResponse(
@@ -6928,9 +6977,12 @@ test("Noodle reply notifications focus the actionable timeline reply", async ({ 
     ).toBe(true);
 
     await nestedComposer.getByTitle("Attach image").click();
-    const replyImageDivider = page.locator('[data-component="NoodleView.ReplyImageDivider"]');
-    await expect(replyImageDivider).toBeVisible();
-    await expect(replyImageDivider).toHaveCSS("color", "rgb(126, 167, 255)");
+    await expect(page.getByRole("heading", { name: "Add an image", exact: true })).toBeVisible();
+    await expect(page.getByRole("textbox", { name: "Image URL", exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Upload from device", exact: true })).toHaveCSS(
+      "background-color",
+      "rgb(126, 167, 255)",
+    );
 
     expect(errors).toEqual([]);
   } finally {

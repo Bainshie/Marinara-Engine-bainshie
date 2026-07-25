@@ -281,9 +281,9 @@ export function CharactersPanel() {
     async (tag: string) => {
       if (
         !(await showConfirmDialog({
-          title:localizeUi("ui.panels.characterspanel.removeTag"),
-          message:localizeUi("ui.panels.characterspanel.removeTagValue1FromAllCharacters", { value1: tag }),
-          confirmLabel:localizeUi("settings.notifications.customSound.actions.remove"),
+          title: localizeUi("ui.panels.characterspanel.removeTag"),
+          message: localizeUi("ui.panels.characterspanel.removeTagValue1FromAllCharacters", { value1: tag }),
+          confirmLabel: localizeUi("settings.notifications.customSound.actions.remove"),
           tone: "destructive",
         }))
       ) {
@@ -312,7 +312,15 @@ export function CharactersPanel() {
         toast.error(localizeUi("ui.panels.characterspanel.failedToRemoveTagFromSomeCharacters"));
       }
     },
-    [sort, updateCharacter, includedTags, excludedTags, setCharacterPanelIncludedTags, setCharacterPanelExcludedTags, localizeUi],
+    [
+      sort,
+      updateCharacter,
+      includedTags,
+      excludedTags,
+      setCharacterPanelIncludedTags,
+      setCharacterPanelExcludedTags,
+      localizeUi,
+    ],
   );
 
   const toggleIncludedTag = useCallback(
@@ -632,9 +640,16 @@ export function CharactersPanel() {
         { ids: [...selectedCharacterIds], format: "native" },
         "marinara-characters.zip",
       );
-      toast.success(localizeUi("ui.panels.characterspanel.exportedValue1CharacterValue2", { value1: selectedCharacterIds.size, value2: selectedCharacterIds.size === 1 ? "" :localizeUi("ui.noodle.stageprofileview.s") }));
+      toast.success(
+        localizeUi("ui.panels.characterspanel.exportedValue1CharacterValue2", {
+          value1: selectedCharacterIds.size,
+          value2: selectedCharacterIds.size === 1 ? "" : localizeUi("ui.noodle.stageprofileview.s"),
+        }),
+      );
     } catch (error) {
-      toast.error(error instanceof Error ? error.message :localizeUi("ui.panels.characterspanel.failedToExportCharacters"));
+      toast.error(
+        error instanceof Error ? error.message : localizeUi("ui.panels.characterspanel.failedToExportCharacters"),
+      );
     } finally {
       setExportingSelected(false);
     }
@@ -646,9 +661,12 @@ export function CharactersPanel() {
 
     if (
       !(await showConfirmDialog({
-        title:localizeUi("ui.panels.characterspanel.deleteCharacters"),
-        message:localizeUi("ui.panels.characterspanel.deleteValue1CharacterValue2", { value1: ids.length, value2: ids.length === 1 ? "" :localizeUi("ui.noodle.stageprofileview.s") }),
-        confirmLabel:localizeUi("lorebook.editor.batch.delete"),
+        title: localizeUi("ui.panels.characterspanel.deleteCharacters"),
+        message: localizeUi("ui.panels.characterspanel.deleteValue1CharacterValue2", {
+          value1: ids.length,
+          value2: ids.length === 1 ? "" : localizeUi("ui.noodle.stageprofileview.s"),
+        }),
+        confirmLabel: localizeUi("lorebook.editor.batch.delete"),
         tone: "destructive",
       }))
     ) {
@@ -660,12 +678,22 @@ export function CharactersPanel() {
     const deletedCount = ids.length - failedIds.length;
 
     if (deletedCount > 0) {
-      toast.success(localizeUi("ui.panels.characterspanel.deletedValue1CharacterValue2", { value1: deletedCount, value2: deletedCount === 1 ? "" :localizeUi("ui.noodle.stageprofileview.s") }));
+      toast.success(
+        localizeUi("ui.panels.characterspanel.deletedValue1CharacterValue2", {
+          value1: deletedCount,
+          value2: deletedCount === 1 ? "" : localizeUi("ui.noodle.stageprofileview.s"),
+        }),
+      );
     }
 
     if (failedIds.length > 0) {
       setSelectedCharacterIds(new Set(failedIds));
-      toast.error(localizeUi("ui.panels.characterspanel.failedToDeleteValue1CharacterValue2", { value1: failedIds.length, value2: failedIds.length === 1 ? "" :localizeUi("ui.noodle.stageprofileview.s") }));
+      toast.error(
+        localizeUi("ui.panels.characterspanel.failedToDeleteValue1CharacterValue2", {
+          value1: failedIds.length,
+          value2: failedIds.length === 1 ? "" : localizeUi("ui.noodle.stageprofileview.s"),
+        }),
+      );
       return;
     }
 
@@ -683,7 +711,9 @@ export function CharactersPanel() {
         className="mari-chrome-control mari-chrome-control--primary w-full text-xs"
         title={localizeUi("ui.panels.characterspanel.openFullLibrary")}
       >
-        <Users size="0.875rem" />{localizeUi("ui.panels.characterspanel.openFullLibrary_336ca82")}</button>
+        <Users size="0.875rem" />
+        {localizeUi("ui.panels.characterspanel.openFullLibrary_336ca82")}
+      </button>
 
       {/* Actions */}
       <div className="flex gap-2">
@@ -756,10 +786,14 @@ export function CharactersPanel() {
             onClick={handleCreateFolder}
             className="mari-chrome-control mari-chrome-control--small flex-1 justify-start text-[0.6875rem]"
           >
-            <FolderPlus size="0.75rem" />{localizeUi("ui.panels.backgroundpicker.newFolder")}</button>
+            <FolderPlus size="0.75rem" />
+            {localizeUi("ui.panels.backgroundpicker.newFolder")}
+          </button>
         </div>
         {parsedGroups.length > 0 && (
-          <p className="mari-folder-helper">{localizeUi("ui.panels.characterspanel.dragAndDropCharactersToFoldersDoubleClickOr")}</p>
+          <p className="mari-folder-helper">
+            {localizeUi("ui.panels.characterspanel.dragAndDropCharactersToFoldersDoubleClickOr")}
+          </p>
         )}
       </div>
 
@@ -774,7 +808,11 @@ export function CharactersPanel() {
               favFilter === opt && "mari-chrome-control--selected",
             )}
           >
-            {opt === "all" ?localizeUi("ui.noodle.stageprofilesourcepicker.all") : opt === "favorites" ?localizeUi("ui.panels.characterspanel.favs") :localizeUi("ui.panels.characterspanel.nonFavs")}
+            {opt === "all"
+              ? localizeUi("ui.noodle.stageprofilesourcepicker.all")
+              : opt === "favorites"
+                ? localizeUi("ui.panels.characterspanel.favs")
+                : localizeUi("ui.panels.characterspanel.nonFavs")}
           </button>
         ))}
         {allTags.length > 0 && (
@@ -785,7 +823,9 @@ export function CharactersPanel() {
               (includedTags.size > 0 || excludedTags.size > 0) && "mari-chrome-control--selected",
             )}
           >
-            <Tag size="0.625rem" />{localizeUi("ui.panels.backgroundpicker.tags")}{allTags.length})
+            <Tag size="0.625rem" />
+            {localizeUi("ui.panels.backgroundpicker.tags")}
+            {allTags.length})
             <ChevronDown size="0.625rem" className={cn("transition-transform", tagsExpanded && "rotate-180")} />
           </button>
         )}
@@ -798,7 +838,8 @@ export function CharactersPanel() {
               onClick={clearTagFilters}
               className="mari-chrome-control mari-chrome-control--compact mari-chrome-control--danger"
             >
-              <X size="0.5rem" /> {localizeUi("lorebook.editor.batch.clear")}</button>
+              <X size="0.5rem" /> {localizeUi("lorebook.editor.batch.clear")}
+            </button>
           )}
           {allTags.map((tag) => {
             const included = includedTags.has(tag);
@@ -870,7 +911,12 @@ export function CharactersPanel() {
                 role="button"
                 tabIndex={0}
                 aria-expanded={isExpanded}
-                aria-label={localizeUi("ui.panels.agentspanel.value1FolderValue2DoubleTapOrPressF2To", { value1: isExpanded ?localizeUi("ui.panels.ttsconfigcard.collapse") :localizeUi("ui.panels.ttsconfigcard.expand"), value2: group.name })}
+                aria-label={localizeUi("ui.panels.agentspanel.value1FolderValue2DoubleTapOrPressF2To", {
+                  value1: isExpanded
+                    ? localizeUi("ui.panels.ttsconfigcard.collapse")
+                    : localizeUi("ui.panels.ttsconfigcard.expand"),
+                  value2: group.name,
+                })}
                 title={localizeUi("ui.panels.backgroundpicker.doubleClickDoubleTapOrPressF2ToRename")}
                 className="group relative flex cursor-pointer items-center gap-1.5 rounded-lg px-2 py-1.5 transition-all hover:bg-[var(--sidebar-accent)]/40"
                 onClick={(event) =>
@@ -949,7 +995,9 @@ export function CharactersPanel() {
                 innerClassName="flex flex-col gap-0.5"
               >
                 {folderMemberIds.length === 0 && (
-                  <div className="py-2 text-[0.625rem] italic text-[var(--muted-foreground)]">{localizeUi("ui.panels.characterspanel.dropCharactersHere")}</div>
+                  <div className="py-2 text-[0.625rem] italic text-[var(--muted-foreground)]">
+                    {localizeUi("ui.panels.characterspanel.dropCharactersHere")}
+                  </div>
                 )}
                 {folderMemberIds.map((memberId) => {
                   const member = charMap.get(memberId);
@@ -1008,7 +1056,11 @@ export function CharactersPanel() {
                       {selectionMode && (
                         <button
                           type="button"
-                          aria-label={isBulkSelected ?localizeUi("ui.panels.characterspanel.deselectCharacter") :localizeUi("ui.panels.ttsconfigcard.selectCharacter")}
+                          aria-label={
+                            isBulkSelected
+                              ? localizeUi("ui.panels.characterspanel.deselectCharacter")
+                              : localizeUi("ui.panels.ttsconfigcard.selectCharacter")
+                          }
                           className={cn(
                             "flex h-5 w-5 shrink-0 items-center justify-center rounded border-2 transition-colors",
                             isBulkSelected
@@ -1020,7 +1072,7 @@ export function CharactersPanel() {
                             toggleSelection(memberId);
                           }}
                         >
-                          <Check size="0.75rem" />
+                          {isBulkSelected && <Check size="0.75rem" />}
                         </button>
                       )}
                       <TouchDragHandle
@@ -1095,7 +1147,9 @@ export function CharactersPanel() {
                         {memberTokenEstimate !== null && (
                           <span
                             className="mari-chrome-text-muted flex items-center gap-1 text-[0.5625rem]"
-                            title={localizeUi("ui.panels.characterspanel.estimatedFromCharacterCardTextFieldsActualTokenizerCounts")}
+                            title={localizeUi(
+                              "ui.panels.characterspanel.estimatedFromCharacterCardTextFieldsActualTokenizerCounts",
+                            )}
                           >
                             <Hash size="0.5rem" />
                             {formatEstimatedTokens(memberTokenEstimate)}
@@ -1146,9 +1200,13 @@ export function CharactersPanel() {
 
       {/* Characters Section Header */}
       <div className="flex items-center gap-1.5 px-1 pt-1 text-[0.6875rem] font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
-        <User size="0.6875rem" />{localizeUi("ui.panels.characterspanel.characters")}{filteredCharacters.length})
+        <User size="0.6875rem" />
+        {localizeUi("ui.panels.characterspanel.characters")}
+        {filteredCharacters.length})
         {selectionMode && (
-          <span className="text-[0.625rem] font-normal normal-case">· {selectedCharacterIds.size} {localizeUi("ui.panels.npcdefaultvoicepool.selected")}</span>
+          <span className="text-[0.625rem] font-normal normal-case">
+            · {selectedCharacterIds.size} {localizeUi("ui.panels.npcdefaultvoicepool.selected")}
+          </span>
         )}
       </div>
 
@@ -1166,7 +1224,11 @@ export function CharactersPanel() {
           <div className="mari-chrome-accent-soft-tile mari-accent-animated animate-float flex h-12 w-12 items-center justify-center rounded-2xl">
             <User size="1.25rem" />
           </div>
-          <p className="mari-chrome-text-muted text-xs">{search ?localizeUi("ui.panels.characterspanel.noMatchesFound") :localizeUi("ui.panels.characterspanel.noCharactersYet")}</p>
+          <p className="mari-chrome-text-muted text-xs">
+            {search
+              ? localizeUi("ui.panels.characterspanel.noMatchesFound")
+              : localizeUi("ui.panels.characterspanel.noCharactersYet")}
+          </p>
         </div>
       )}
 
@@ -1183,7 +1245,9 @@ export function CharactersPanel() {
             handleCharacterDrop(null, parseDroppedCharacterIds(payload));
           }}
           className="rounded-xl border border-dashed border-[var(--marinara-chat-chrome-button-border-active)] bg-[var(--marinara-chat-chrome-highlight-bg)] px-3 py-2 text-[0.625rem] text-[var(--marinara-chat-chrome-button-text-active)]"
-        >{localizeUi("ui.panels.agentspanel.dropHereToMoveOutOfFolder")}</div>
+        >
+          {localizeUi("ui.panels.agentspanel.dropHereToMoveOutOfFolder")}
+        </div>
       )}
 
       <div className="stagger-children flex min-h-8 flex-col gap-1 rounded-xl transition-colors">
@@ -1230,7 +1294,11 @@ export function CharactersPanel() {
               {selectionMode && (
                 <button
                   type="button"
-                  aria-label={isBulkSelected ?localizeUi("ui.panels.characterspanel.deselectCharacter") :localizeUi("ui.panels.ttsconfigcard.selectCharacter")}
+                  aria-label={
+                    isBulkSelected
+                      ? localizeUi("ui.panels.characterspanel.deselectCharacter")
+                      : localizeUi("ui.panels.ttsconfigcard.selectCharacter")
+                  }
                   className={cn(
                     "flex h-5 w-5 shrink-0 items-center justify-center rounded border-2 transition-colors",
                     isBulkSelected
@@ -1242,7 +1310,7 @@ export function CharactersPanel() {
                     toggleSelection(char.id);
                   }}
                 >
-                  <Check size="0.75rem" />
+                  {isBulkSelected && <Check size="0.75rem" />}
                 </button>
               )}
               <TouchDragHandle
@@ -1309,7 +1377,9 @@ export function CharactersPanel() {
                 )}
                 <div
                   className="mari-chrome-text-muted flex items-center gap-1 text-[0.625rem]"
-                  title={localizeUi("ui.panels.characterspanel.estimatedFromCharacterCardTextFieldsActualTokenizerCounts")}
+                  title={localizeUi(
+                    "ui.panels.characterspanel.estimatedFromCharacterCardTextFieldsActualTokenizerCounts",
+                  )}
                 >
                   <Hash size="0.5625rem" />
                   {formatEstimatedTokens(tokenEstimate)}
@@ -1345,7 +1415,11 @@ export function CharactersPanel() {
                       e.stopPropagation();
                       duplicateCharacter.mutate(char.id, {
                         onSuccess: () => {
-                          toast.success(localizeUi("ui.panels.characterspanel.duplicatedValue1", { value1: char.parsed?.name ??localizeUi("ui.noodle.noodlehome.character") }));
+                          toast.success(
+                            localizeUi("ui.panels.characterspanel.duplicatedValue1", {
+                              value1: char.parsed?.name ?? localizeUi("ui.noodle.noodlehome.character"),
+                            }),
+                          );
                         },
                       });
                     }}
@@ -1359,9 +1433,11 @@ export function CharactersPanel() {
                       e.stopPropagation();
                       if (
                         !(await showConfirmDialog({
-                          title:localizeUi("ui.panels.characterspanel.deleteCharacter"),
-                          message:localizeUi("ui.panels.characterspanel.deleteValue1ThisCannotBeUndone", { value1: char.parsed?.name ??localizeUi("ui.panels.characterspanel.thisCharacter") }),
-                          confirmLabel:localizeUi("lorebook.editor.batch.delete"),
+                          title: localizeUi("ui.panels.characterspanel.deleteCharacter"),
+                          message: localizeUi("ui.panels.characterspanel.deleteValue1ThisCannotBeUndone", {
+                            value1: char.parsed?.name ?? localizeUi("ui.panels.characterspanel.thisCharacter"),
+                          }),
+                          confirmLabel: localizeUi("lorebook.editor.batch.delete"),
                           tone: "destructive",
                         }))
                       ) {
@@ -1389,7 +1465,9 @@ export function CharactersPanel() {
             disabled={characterPages.isFetchingNextPage}
             className="mari-chrome-control mari-chrome-control--primary w-full justify-center text-xs"
           >
-            {characterPages.isFetchingNextPage ?localizeUi("ui.characters.characterlibraryview.loading") :localizeUi("ui.panels.characterspanel.loadMoreValue1Loaded", { value1: parsedCharacters.length })}
+            {characterPages.isFetchingNextPage
+              ? localizeUi("ui.characters.characterlibraryview.loading")
+              : localizeUi("ui.panels.characterspanel.loadMoreValue1Loaded", { value1: parsedCharacters.length })}
           </button>
         </div>
       )}

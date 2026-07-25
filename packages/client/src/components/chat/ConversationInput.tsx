@@ -369,22 +369,24 @@ export function ConversationInput({
     [installedCapabilities],
   );
   const availableConversationGames = useMemo(
-    () => installedCapabilities.filter(
-      (item) =>
-        isInstalledCapabilityReady(item) &&
-        item.manifest.kind.includes("turn-game") &&
-        item.manifest.entrypoints.client &&
-        item.manifest.contributions?.conversationGame,
-    ),
+    () =>
+      installedCapabilities.filter(
+        (item) =>
+          isInstalledCapabilityReady(item) &&
+          item.manifest.kind.includes("turn-game") &&
+          item.manifest.entrypoints.client &&
+          item.manifest.contributions?.conversationGame,
+      ),
     [installedCapabilities],
   );
   const conversationGameSlashContributions = useMemo<ConversationGameSlashContribution[]>(
-    () => availableConversationGames.map((game) => ({
-      packageId: game.id,
-      packageName: game.manifest.name,
-      command: game.manifest.contributions!.conversationGame!.command,
-      aliases: game.manifest.contributions!.conversationGame!.aliases,
-    })),
+    () =>
+      availableConversationGames.map((game) => ({
+        packageId: game.id,
+        packageName: game.manifest.name,
+        command: game.manifest.contributions!.conversationGame!.command,
+        aliases: game.manifest.contributions!.conversationGame!.aliases,
+      })),
     [availableConversationGames],
   );
   const chatName = activeChat?.name;
@@ -753,7 +755,10 @@ export function ConversationInput({
           return false;
         }
         if (!isSupportedChatAttachment(file)) {
-          toast.error(localizeUi("ui.chat.chatinput.value1IsNotSupportedInChatAttachImagesPdfs", { value1: file.name ||localizeUi("ui.chat.chatinput.thatFile") }),
+          toast.error(
+            localizeUi("ui.chat.chatinput.value1IsNotSupportedInChatAttachImagesPdfs", {
+              value1: file.name || localizeUi("ui.chat.chatinput.thatFile"),
+            }),
           );
           return false;
         }
@@ -1004,11 +1009,9 @@ export function ConversationInput({
       if (/\b(?:play|start|deal|rack)\b/i.test(normalized)) {
         const matchedGame = availableConversationGames.find((game) => {
           const contribution = game.manifest.contributions!.conversationGame!;
-          const aliases = [
-            game.manifest.name,
-            contribution.command.slice(1),
-            ...contribution.aliases,
-          ].map((alias) => alias.toLocaleLowerCase());
+          const aliases = [game.manifest.name, contribution.command.slice(1), ...contribution.aliases].map((alias) =>
+            alias.toLocaleLowerCase(),
+          );
           return aliases.some((alias) => normalized.includes(alias));
         });
         if (matchedGame) {
@@ -1090,7 +1093,8 @@ export function ConversationInput({
     onIllustrate,
     onGenerateSelfie,
     availableCapabilityIds,
-    conversationGameSlashContributions, localizeUi,
+    conversationGameSlashContributions,
+    localizeUi,
   ]);
 
   const runQuickSlashCommand = useCallback(
@@ -1198,7 +1202,8 @@ export function ConversationInput({
       conversationGameSlashContributions,
       qc,
       setInputDraft,
-      syncInputState, localizeUi,
+      syncInputState,
+      localizeUi,
     ],
   );
 
@@ -1214,11 +1219,13 @@ export function ConversationInput({
     const hasFiles = attachments.length > 0;
     if (!hasText && !hasFiles) return;
 
-    if (shouldExecuteQuickPostAsCommand(raw, {
-      mode: "conversation",
-      availableCapabilityIds,
-      conversationGames: conversationGameSlashContributions,
-    })) {
+    if (
+      shouldExecuteQuickPostAsCommand(raw, {
+        mode: "conversation",
+        availableCapabilityIds,
+        conversationGames: conversationGameSlashContributions,
+      })
+    ) {
       await handleSend();
       return;
     }
@@ -1318,7 +1325,11 @@ export function ConversationInput({
         setInputDraft(submittingChatId, submittedDraft);
       }
       const msg = error instanceof Error ? error.message : "Failed to post message";
-      toast.error(rollbackFailed ?localizeUi("ui.chat.chatinput.value1ThePartialMessageMayNeedToBeRemoved", { value1: msg }) : msg);
+      toast.error(
+        rollbackFailed
+          ? localizeUi("ui.chat.chatinput.value1ThePartialMessageMayNeedToBeRemoved", { value1: msg })
+          : msg,
+      );
     }
   }, [
     activeChatId,
@@ -1340,7 +1351,8 @@ export function ConversationInput({
     updateMessageExtra,
     handleSend,
     availableCapabilityIds,
-    conversationGameSlashContributions, localizeUi,
+    conversationGameSlashContributions,
+    localizeUi,
   ]);
 
   const handleGuidedGenerationButton = useCallback(async () => {
@@ -1750,9 +1762,7 @@ export function ConversationInput({
   );
   const showDraftTranslateButton = chatMetadata.showInputTranslateButton === true;
   const showMobileToolsTab =
-    showDraftTranslateButton ||
-    speechToTextEnabled ||
-    (showQuickRepliesMenu && quickReplyActions.length > 0);
+    showDraftTranslateButton || speechToTextEnabled || (showQuickRepliesMenu && quickReplyActions.length > 0);
   const mobilePickerTabs = useMemo<ConversationMediaPickerTab[]>(() => {
     const tabs: ConversationMediaPickerTab[] = [
       { id: "emoji", label: "Emoji" },
@@ -1863,13 +1873,17 @@ export function ConversationInput({
               ) : (
                 <Languages size="1rem" className="shrink-0" />
               )}
-              <span className="min-w-0 flex-1 truncate text-sm font-medium">{localizeUi("chat.input.translateDraft")}</span>
+              <span className="min-w-0 flex-1 truncate text-sm font-medium">
+                {localizeUi("chat.input.translateDraft")}
+              </span>
             </button>
           )}
 
           {speechToTextEnabled && (
             <div className="flex min-h-11 items-center justify-between gap-2 rounded-lg px-3 py-2">
-              <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground/80">{localizeUi("ui.chat.conversationinput.voiceInput")}</span>
+              <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground/80">
+                {localizeUi("ui.chat.conversationinput.voiceInput")}
+              </span>
               <SpeechToTextButton
                 disabled={!activeChatId}
                 onTranscript={(transcript) => {
@@ -2015,7 +2029,11 @@ export function ConversationInput({
               )}
             >
               {em.kind === "custom" ? (
-                <img src={em.url} alt={localizeUi("ui.chat.conversationinput.value1", { value1: em.name })} className="h-5 w-5 shrink-0 object-contain" />
+                <img
+                  src={em.url}
+                  alt={localizeUi("ui.chat.conversationinput.value1", { value1: em.name })}
+                  className="h-5 w-5 shrink-0 object-contain"
+                />
               ) : (
                 <span className="flex h-5 w-5 shrink-0 items-center justify-center text-base" aria-hidden="true">
                   {em.emoji}
@@ -2078,7 +2096,9 @@ export function ConversationInput({
           ))}
           {isReadingAttachments && (
             <div className="flex items-center gap-1.5 rounded-lg bg-foreground/10 px-2.5 py-1.5 text-xs text-foreground/60 ring-1 ring-foreground/10">
-              <Loader2 size="0.875rem" className="animate-spin" />{localizeUi("ui.chat.chatinput.readingFile")}</div>
+              <Loader2 size="0.875rem" className="animate-spin" />
+              {localizeUi("ui.chat.chatinput.readingFile")}
+            </div>
           )}
         </div>
       )}
@@ -2097,6 +2117,16 @@ export function ConversationInput({
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
+        onPointerDown={(event) => {
+          const target = event.target as HTMLElement;
+          if (target.closest("button, input, textarea, select, a, [role='button']")) return;
+          event.preventDefault();
+          const textarea = textareaRef.current;
+          if (!textarea) return;
+          textarea.focus({ preventScroll: true });
+          const caret = textarea.value.length;
+          textarea.setSelectionRange(caret, caret);
+        }}
         className={getChatInputShellClass({
           dragging: isDragging,
           hasContent: hasInput || attachments.length > 0,
@@ -2249,10 +2279,7 @@ export function ConversationInput({
 
           {showQuickRepliesMenu && quickReplyActions.length > 0 && (
             <div className="hidden sm:block">
-              <QuickReplyMenu
-                actions={quickReplyActions}
-                disabled={!activeChatId || isReadingAttachments}
-              />
+              <QuickReplyMenu actions={quickReplyActions} disabled={!activeChatId || isReadingAttachments} />
             </div>
           )}
 
@@ -2262,9 +2289,7 @@ export function ConversationInput({
                 ? () => useChatStore.getState().stopGeneration(activeChatId ?? undefined)
                 : handleSend
             }
-            disabled={
-              !isActuallyGenerating && (isSendBlocked || isReadingAttachments || !activeChatId || !canSubmit)
-            }
+            disabled={!isActuallyGenerating && (isSendBlocked || isReadingAttachments || !activeChatId || !canSubmit)}
             aria-label={sendButtonTitle}
             className={cn(
               "flex h-9 w-9 items-center justify-center rounded-xl transition-all duration-200 sm:h-8 sm:w-8",
