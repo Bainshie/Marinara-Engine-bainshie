@@ -2792,6 +2792,10 @@ function DocsLanguageSetting() {
   const selectionInfo = options.find((option) => option.code === selection);
   const activeInfo = options.find((option) => option.code === active);
   const integrityOk = status ? status.integrity.ok : true;
+  // A language without a downloaded pack needs a download first — the button
+  // becomes "Download & Replace" and the switch may take a short while.
+  const needsDownload = pendingSwitch && selection !== "en" && !(selectionInfo?.installed ?? false);
+  const installProgress = status?.install ?? null;
 
   const handleSwitch = async () => {
     try {
@@ -2802,9 +2806,7 @@ function DocsLanguageSetting() {
     } catch (err) {
       const reason =
         err instanceof ApiError && err.status === 409
-          ? localizeUi("settings.application.docsLanguage.notOnThisVersion", {
-              language: selectionInfo?.label ?? selection,
-            })
+          ? localizeUi("settings.application.docsLanguage.installInProgress")
           : err instanceof Error
             ? err.message
             : String(err);
@@ -2860,19 +2862,31 @@ function DocsLanguageSetting() {
           {localizeUi("settings.application.docsLanguage.fallbackNote")}
         </p>
       ) : null}
+      {needsDownload ? (
+        <p className="text-[0.625rem] text-[var(--muted-foreground)]">
+          {localizeUi("settings.application.docsLanguage.downloadNote")}
+        </p>
+      ) : null}
       {pendingSwitch ? (
         <button type="button" onClick={() => void handleSwitch()} disabled={setDocsLanguage.isPending} className={SETTINGS_PRIMARY_BUTTON_CLASS}>
           {setDocsLanguage.isPending ? (
             <>
               <Loader2 size="0.8125rem" className="animate-spin" />
-              {localizeUi("settings.application.docsLanguage.switching")}
+              {installProgress && installProgress.filesTotal > 0
+                ? localizeUi("settings.application.docsLanguage.downloading", {
+                    done: installProgress.filesDone,
+                    total: installProgress.filesTotal,
+                  })
+                : localizeUi("settings.application.docsLanguage.switching")}
             </>
           ) : (
             <>
               <BookOpen size="0.8125rem" />
-              {localizeUi("settings.application.docsLanguage.switch", {
-                language: selectionInfo?.label ?? selection,
-              })}
+              {needsDownload
+                ? localizeUi("settings.application.docsLanguage.downloadAndReplace")
+                : localizeUi("settings.application.docsLanguage.switch", {
+                    language: selectionInfo?.label ?? selection,
+                  })}
             </>
           )}
         </button>

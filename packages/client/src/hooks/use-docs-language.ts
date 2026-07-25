@@ -15,9 +15,18 @@ export interface DocLanguageInfo {
   /** Native name shown in pickers (e.g. "Español") */
   label: string;
   englishLabel: string;
-  /** English doc paths that have a translated file in this language */
+  /** Whether this language's pack is downloaded ("en" is built-in, always true) */
+  installed: boolean;
+  /** English doc paths covered by this language's installed pack */
   translated: number;
   total: number;
+}
+
+export interface DocsPackInstallProgress {
+  language: string;
+  phase: "manifest" | "downloading" | "finalizing";
+  filesDone: number;
+  filesTotal: number;
 }
 
 export interface DocsLanguageStatus {
@@ -26,15 +35,20 @@ export interface DocsLanguageStatus {
   /** True once the user has explicitly stored a choice (even a broken one) */
   configured: boolean;
   available: DocLanguageInfo[];
+  /** Progress of an in-flight pack download, or null */
+  install: DocsPackInstallProgress | null;
   integrity: {
     ok: boolean;
     unknownLanguage: boolean;
     activeRootMissing: boolean;
+    packIncomplete: boolean;
+    leftovers: boolean;
   };
 }
 
 export interface DocsLanguageFixResult extends DocsLanguageStatus {
   repaired: boolean;
+  actions: string[];
 }
 
 export const docsLanguageKeys = {
@@ -47,6 +61,9 @@ export function useDocsLanguage(enabled = true) {
     queryFn: () => api.get<DocsLanguageStatus>("/docs/language"),
     enabled,
     staleTime: 30_000,
+    // While a pack download is running server-side, poll for filesDone/filesTotal
+    // so the Settings row and onboarding can show live progress.
+    refetchInterval: (query) => (query.state.data?.install ? 1_000 : false),
   });
 }
 

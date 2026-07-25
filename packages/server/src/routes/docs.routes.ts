@@ -15,6 +15,20 @@ import { join, resolve } from "path";
 import { getMonorepoRoot } from "../config/runtime-config.js";
 import { assertInsideDir } from "../utils/security.js";
 import { createAppSettingsStorage } from "../services/storage/app-settings.storage.js";
+import {
+  DocsPackBusyError,
+  checkDocsPackConsistency,
+  docsPackRoot,
+  getActiveDocsPackInstall,
+  installDocsPack,
+  isDocsPackInstalled,
+  listInstalledDocsPacks,
+  readInstalledDocsPackManifest,
+  removeOtherDocsPacks,
+  sweepStaleDocsPackDirs,
+  verifyDocsPackHashes,
+  type DocsPackInstallProgress,
+} from "../services/docs/docs-pack.service.js";
 
 const DOCS_DIR = resolve(getMonorepoRoot(), "docs");
 
@@ -228,8 +242,13 @@ function isSafeSegment(value: string): boolean {
   );
 }
 
-async function assertRealDocsPath(candidatePath: string): Promise<string> {
-  const [root, candidate] = await Promise.all([realpath(DOCS_DIR), realpath(candidatePath)]);
+/**
+ * Realpath-level containment. The root must be the one that produced the
+ * candidate: docs/ for English files, the language's pack folder for overlays —
+ * a pack lives under DATA_DIR, entirely outside docs/.
+ */
+async function assertRealPathInside(rootDir: string, candidatePath: string): Promise<string> {
+  const [root, candidate] = await Promise.all([realpath(rootDir), realpath(candidatePath)]);
   return assertInsideDir(root, candidate);
 }
 
@@ -290,37 +309,27 @@ function docSortKey(doc: DocSummary): [number, number, string, number, string] {
 }
 
 // ──────────────────────────────────────────────
-// Documentation language (docs/i18n/<code>/ trees overlay the English paths)
+// Documentation language (downloaded packs under DATA_DIR/doc-packs/<code>
+// overlay the English paths; English stays built-in under docs/)
 // ──────────────────────────────────────────────
 
 type AppSettingsStorage = ReturnType<typeof createAppSettingsStorage>;
 
 /** Root folder holding a language's translated tree. English is the docs root itself. */
 function langRoot(code: string): string {
-  return code === DEFAULT_DOCS_LANGUAGE ? DOCS_DIR : join(DOCS_DIR, I18N_DIRNAME, code);
+  return code === DEFAULT_DOCS_LANGUAGE ? DOCS_DIR : docsPackRoot(code);
 }
 
-/** A code is usable only when it is well-formed, path-safe, and present on disk. */
+/** A code is usable only when it is well-formed, path-safe, and its pack is installed. */
 function isInstalledLanguage(code: string): boolean {
   if (code === DEFAULT_DOCS_LANGUAGE) return true;
-  return isSafeSegment(code) && existsSync(langRoot(code));
+  return isSafeSegment(code) && isDocsPackInstalled(code);
 }
 
-/** Languages present at this commit: "en" plus every valid folder under docs/i18n/ */
-export async function discoverDocLanguages(): Promise<string[]> {
-  const dir = join(DOCS_DIR, I18N_DIRNAME);
-  if (!existsSync(dir)) return [DEFAULT_DOCS_LANGUAGE];
-  try {
-    const entries = await readdir(dir, { withFileTypes: true });
-    const codes = entries
-      .filter((entry) => entry.isDirectory() && normalizeDocsLanguage(entry.name) === entry.name)
-      .map((entry) => entry.name)
-      .sort();
-    return [DEFAULT_DOCS_LANGUAGE, ...codes];
-  } catch (err) {
-    logger.warn(err, "Failed to list documentation languages");
-    return [DEFAULT_DOCS_LANGUAGE];
-  }
+/** Languages the app knows how to offer: the static shared label map, English first. */
+export function supportedDocLanguages(): string[] {
+  const codes = Object.keys(DOCS_LANGUAGE_LABELS).filter((code) => code !== DEFAULT_DOCS_LANGUAGE);
+  return [DEFAULT_DOCS_LANGUAGE, ...codes.sort()];
 }
 
 interface StoredDocsLanguage {
@@ -360,15 +369,22 @@ async function resolveRequestLanguage(lang: unknown, storage: AppSettingsStorage
 
 /**
  * English is the canonical path set; a translated file is an overlay on an English
- * path. Falls back to the English file when the overlay is missing, so untranslated
- * docs still open instead of breaking cross-doc links.
+ * path served from the language's downloaded pack. Falls back to the English file
+ * when the overlay is missing, so untranslated docs still open instead of breaking
+ * cross-doc links. Each candidate is contained against ITS OWN root (pack folder
+ * vs docs/) — the two trees live in different places on disk.
  */
-export function resolvePhysical(code: string, segments: string[]): { file: string; language: string } {
+export function resolvePhysical(code: string, segments: string[]): { file: string; language: string; root: string } {
   if (code !== DEFAULT_DOCS_LANGUAGE) {
-    const candidate = assertInsideDir(DOCS_DIR, join(langRoot(code), ...segments));
-    if (existsSync(candidate)) return { file: candidate, language: code };
+    const packDir = langRoot(code);
+    const candidate = assertInsideDir(packDir, join(packDir, ...segments));
+    if (existsSync(candidate)) return { file: candidate, language: code, root: packDir };
   }
-  return { file: assertInsideDir(DOCS_DIR, join(DOCS_DIR, ...segments)), language: DEFAULT_DOCS_LANGUAGE };
+  return {
+    file: assertInsideDir(DOCS_DIR, join(DOCS_DIR, ...segments)),
+    language: DEFAULT_DOCS_LANGUAGE,
+    root: DOCS_DIR,
+  };
 }
 
 /** The English index with translated titles/mtimes overlaid where a translation exists. */
@@ -397,7 +413,9 @@ interface DocLanguageInfo {
   code: string;
   label: string;
   englishLabel: string;
-  /** Number of English paths with a translated overlay present ("en" reports total) */
+  /** Whether this language's pack is downloaded ("en" is built-in, always true) */
+  installed: boolean;
+  /** English paths this language's installed pack covers ("en" reports total) */
   translated: number;
   total: number;
 }
@@ -407,19 +425,24 @@ interface DocsLanguageStatus {
   /** True once the user has explicitly stored a choice (even a broken one) */
   configured: boolean;
   available: DocLanguageInfo[];
+  /** Progress of an in-flight pack download, for client polling */
+  install: DocsPackInstallProgress | null;
   integrity: {
     ok: boolean;
     /** A value is stored but it is not a usable language code */
     unknownLanguage: boolean;
-    /** Stored language is valid but its tree is absent at this commit */
+    /** Stored language is valid but its pack is not installed */
     activeRootMissing: boolean;
+    /** The active pack is missing files or has wrong sizes vs its manifest */
+    packIncomplete: boolean;
+    /** Downloaded packs other than the active language are still on disk */
+    leftovers: boolean;
   };
 }
 
 async function buildLanguageStatus(storage: AppSettingsStorage): Promise<DocsLanguageStatus> {
-  const [stored, known, base] = await Promise.all([
+  const [stored, base, installedPacks] = await Promise.all([
     readStoredDocsLanguage(storage),
-    discoverDocLanguages(),
     // A missing/unreadable docs folder degrades to empty coverage instead of
     // failing the whole status — the Settings row and Fix button must stay
     // usable in exactly the broken-install case they exist to surface.
@@ -427,28 +450,51 @@ async function buildLanguageStatus(storage: AppSettingsStorage): Promise<DocsLan
       logger.warn(err, "Failed to walk documentation folder for language status");
       return [] as DocSummary[];
     }),
+    listInstalledDocsPacks(),
   ]);
-  const available = known.map((code) => {
-    const labels = DOCS_LANGUAGE_LABELS[code] ?? { label: code, englishLabel: code };
-    const translated =
-      code === DEFAULT_DOCS_LANGUAGE
-        ? base.length
-        : base.filter((doc) => existsSync(join(langRoot(code), ...doc.path.split("/")))).length;
-    return { code, label: labels.label, englishLabel: labels.englishLabel, translated, total: base.length };
-  });
+  const basePaths = new Set(base.map((doc) => doc.path));
+  const available = await Promise.all(
+    supportedDocLanguages().map(async (code) => {
+      const labels = DOCS_LANGUAGE_LABELS[code] ?? { label: code, englishLabel: code };
+      const installed = isInstalledLanguage(code);
+      let translated = 0;
+      if (code === DEFAULT_DOCS_LANGUAGE) {
+        translated = base.length;
+      } else if (installed) {
+        const manifest = await readInstalledDocsPackManifest(code);
+        translated = manifest ? manifest.files.filter((file) => basePaths.has(file.path)).length : 0;
+      }
+      return { code, label: labels.label, englishLabel: labels.englishLabel, installed, translated, total: base.length };
+    }),
+  );
+
+  const active = stored.code && isInstalledLanguage(stored.code) ? stored.code : DEFAULT_DOCS_LANGUAGE;
+  const install = getActiveDocsPackInstall();
   const unknownLanguage = stored.present && stored.code === null;
   const activeRootMissing =
     stored.code !== null && stored.code !== DEFAULT_DOCS_LANGUAGE && !isInstalledLanguage(stored.code);
+  // Cheap size/existence check only — full hashing is reserved for the fix path.
+  const packIncomplete =
+    active !== DEFAULT_DOCS_LANGUAGE ? !(await checkDocsPackConsistency(active)).complete : false;
+  const leftovers = installedPacks.some((code) => code !== active);
+  // Suppress transient flags while an install is legitimately mid-flight so the
+  // client never flashes the Fix affordance during a normal switch.
+  const ok = install !== null || (!unknownLanguage && !activeRootMissing && !packIncomplete && !leftovers);
   return {
-    active: stored.code && isInstalledLanguage(stored.code) ? stored.code : DEFAULT_DOCS_LANGUAGE,
+    active,
     configured: stored.present,
     available,
-    integrity: { ok: !unknownLanguage && !activeRootMissing, unknownLanguage, activeRootMissing },
+    install,
+    integrity: { ok, unknownLanguage, activeRootMissing, packIncomplete, leftovers },
   };
 }
 
 export async function docsRoutes(app: FastifyInstance) {
   const storage = createAppSettingsStorage(app.db);
+
+  // Crashed installs leave .tmp-/.old- folders under doc-packs; clean them at
+  // boot so a partial pack never lingers until someone finds the Fix button.
+  void sweepStaleDocsPackDirs().catch((err) => logger.warn(err, "Docs pack startup sweep failed"));
 
   /** List available documentation files plus the on-disk docs folder path */
   app.get<{ Querystring: { lang?: string } }>("/", async (req, reply) => {
@@ -469,7 +515,9 @@ export async function docsRoutes(app: FastifyInstance) {
           ka[4].localeCompare(kb[4])
         );
       });
-      return { root: DOCS_DIR, language, docs };
+      // Root reflects where the ACTIVE language's files live (the downloaded
+      // pack for translations) — shown as the on-disk path in the viewer.
+      return { root: langRoot(language), language, docs };
     } catch (err) {
       logger.error(err, "Failed to list documentation files");
       return reply.status(500).send({ error: "Failed to list documentation files" });
@@ -549,11 +597,11 @@ export async function docsRoutes(app: FastifyInstance) {
     let filePath: string;
     let servedLanguage = DEFAULT_DOCS_LANGUAGE;
     try {
-      const { file: candidatePath, language: fileLanguage } = resolvePhysical(language, segments);
+      const { file: candidatePath, language: fileLanguage, root } = resolvePhysical(language, segments);
       if (!existsSync(candidatePath)) {
         return reply.status(404).send({ error: "Not found" });
       }
-      filePath = await assertRealDocsPath(candidatePath);
+      filePath = await assertRealPathInside(root, candidatePath);
       servedLanguage = fileLanguage;
     } catch {
       return reply.status(400).send({ error: "Invalid path" });
@@ -573,41 +621,91 @@ export async function docsRoutes(app: FastifyInstance) {
     }
   });
 
-  /** Active docs language, discovered languages with coverage, and integrity flags */
+  /** Active docs language, supported languages with install/coverage state, and integrity flags */
   app.get("/language", async () => buildLanguageStatus(storage));
 
-  /** Switch the served documentation language. Writes one setting; never touches docs/. */
+  /**
+   * Switch the served documentation language. Downloads the language's pack
+   * into the data dir when it isn't installed yet (Download & Replace), then
+   * flips the setting and removes every other downloaded pack. Never mutates docs/.
+   */
   app.put("/language", async (req, reply) => {
     const body = req.body as { language?: unknown } | null;
     const code = normalizeDocsLanguage(body?.language);
-    if (!code) {
+    // Downloads are gated to the static supported set — a merely well-formed
+    // code must never steer a fetch (attacker-guided path probing on the base host).
+    if (!code || !(code in DOCS_LANGUAGE_LABELS)) {
       return reply
         .status(400)
         .send({ error: "Unsupported documentation language", code: "unsupported-language" });
     }
     if (!isInstalledLanguage(code)) {
-      return reply.status(409).send({
-        error: "That documentation language is not included in this version",
-        code: "not-present-on-this-version",
-      });
+      try {
+        await installDocsPack(code);
+      } catch (err) {
+        if (err instanceof DocsPackBusyError) {
+          return reply.status(409).send({
+            error: `A download for "${err.busyLanguage}" is already running`,
+            code: "install-in-progress",
+          });
+        }
+        logger.error(err, "Documentation pack download failed for %s", code);
+        return reply.status(502).send({
+          error: err instanceof Error ? err.message : "Documentation pack download failed",
+          code: "download-failed",
+        });
+      }
     }
     await storage.set(DOCS_LANGUAGE_SETTINGS_KEY, JSON.stringify({ language: code }));
+    // Only after the new pack serves and the setting points at it: enforce the
+    // one-downloaded-language rule by deleting the other packs.
+    const removed = await removeOtherDocsPacks(code);
+    if (removed.length > 0) logger.info("Removed replaced documentation packs: %s", removed.join(", "));
     logger.info("Documentation language set to %s", code);
     return buildLanguageStatus(storage);
   });
 
-  /** Failsafe: reset a dangling or corrupt stored language to English. Never mutates docs/. */
-  app.post("/language/fix", async () => {
-    const before = await buildLanguageStatus(storage);
-    if (before.integrity.ok) {
-      return { ...before, repaired: false };
+  /**
+   * Failsafe: verify the active pack (full hashes), re-download it when broken,
+   * sweep crashed-install leftovers, delete other languages' packs, and reset a
+   * corrupt stored value to English. Never mutates docs/.
+   */
+  app.post("/language/fix", async (_req, reply) => {
+    const stored = await readStoredDocsLanguage(storage);
+    const actions: string[] = [];
+
+    await sweepStaleDocsPackDirs();
+
+    if (stored.present && stored.code === null) {
+      await storage.set(DOCS_LANGUAGE_SETTINGS_KEY, JSON.stringify({ language: DEFAULT_DOCS_LANGUAGE }));
+      actions.push("reset-invalid-setting");
+    } else if (stored.code && stored.code !== DEFAULT_DOCS_LANGUAGE) {
+      const healthy = isDocsPackInstalled(stored.code) && (await verifyDocsPackHashes(stored.code));
+      if (!healthy) {
+        try {
+          await installDocsPack(stored.code);
+          actions.push("reinstalled-pack");
+        } catch (err) {
+          if (err instanceof DocsPackBusyError) {
+            return reply.status(409).send({
+              error: `A download for "${err.busyLanguage}" is already running`,
+              code: "install-in-progress",
+            });
+          }
+          // Cannot repair without the network: reset to English so the app is
+          // in a clean, fully-working state (the user asked for a fix).
+          logger.warn(err, "Could not re-download documentation pack %s; resetting to English", stored.code);
+          await storage.set(DOCS_LANGUAGE_SETTINGS_KEY, JSON.stringify({ language: DEFAULT_DOCS_LANGUAGE }));
+          actions.push("reset-after-failed-redownload");
+        }
+      }
     }
-    await storage.set(DOCS_LANGUAGE_SETTINGS_KEY, JSON.stringify({ language: DEFAULT_DOCS_LANGUAGE }));
-    logger.warn(
-      "Documentation language reset to English (unknownLanguage=%s, activeRootMissing=%s)",
-      before.integrity.unknownLanguage,
-      before.integrity.activeRootMissing,
-    );
-    return { ...(await buildLanguageStatus(storage)), repaired: true };
+
+    const active = await getActiveDocLanguage(storage);
+    const removed = await removeOtherDocsPacks(active);
+    if (removed.length > 0) actions.push(`removed-leftover-packs:${removed.join(",")}`);
+
+    if (actions.length > 0) logger.info("Documentation fix applied: %s", actions.join(" "));
+    return { ...(await buildLanguageStatus(storage)), repaired: actions.length > 0, actions };
   });
 }

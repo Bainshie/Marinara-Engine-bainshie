@@ -1,7 +1,7 @@
 // ──────────────────────────────────────────────
 // Onboarding Tutorial — first-time guided tour
 // ──────────────────────────────────────────────
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useUIStore, type ChatModeShortcut } from "../../stores/ui.store";
 import { useTrackAchievement } from "../../hooks/use-achievements";
 import { useDocsLanguage, useSetDocsLanguage } from "../../hooks/use-docs-language";
@@ -519,7 +519,7 @@ function OnboardingTutorialInner() {
   const { data: docsLanguageStatus } = useDocsLanguage();
   const setDocsLanguage = useSetDocsLanguage();
   const [docsLanguagePick, setDocsLanguagePick] = useState<string | null>(null);
-  const docsLanguageOptions = docsLanguageStatus?.available ?? [];
+  const docsLanguageOptions = useMemo(() => docsLanguageStatus?.available ?? [], [docsLanguageStatus?.available]);
   const activeDocsLanguage = docsLanguageStatus?.active ?? "en";
   // Pre-select the user's existing choice whenever one has been made, so an
   // untouched picker is a guaranteed no-op on tutorial replays. Only on a
@@ -538,7 +538,17 @@ function OnboardingTutorialInner() {
    */
   const commitDocsLanguage = useCallback(() => {
     if (effectiveDocsLanguagePick === activeDocsLanguage) return;
+    const info = docsLanguageOptions.find((option) => option.code === effectiveDocsLanguagePick);
+    const label = info?.label ?? effectiveDocsLanguagePick;
+    // A not-yet-downloaded pack keeps downloading after the tutorial closes;
+    // tell the user so the eventual success/failure toast has context.
+    if (effectiveDocsLanguagePick !== "en" && !(info?.installed ?? false)) {
+      toast.info(localizeUi("settings.application.docsLanguage.downloadingLanguage", { language: label }));
+    }
     setDocsLanguage.mutate(effectiveDocsLanguagePick, {
+      onSuccess: () => {
+        toast.success(localizeUi("settings.application.docsLanguage.switched", { language: label }));
+      },
       onError: (err) => {
         toast.error(
           localizeUi("settings.application.docsLanguage.switchFailed", {
@@ -547,7 +557,7 @@ function OnboardingTutorialInner() {
         );
       },
     });
-  }, [activeDocsLanguage, effectiveDocsLanguagePick, localizeUi, setDocsLanguage]);
+  }, [activeDocsLanguage, docsLanguageOptions, effectiveDocsLanguagePick, localizeUi, setDocsLanguage]);
 
   useEffect(() => {
     const updateViewportMode = () => setIsMobileViewport(getViewportWidth() < MOBILE_BREAKPOINT);
