@@ -33,6 +33,7 @@ import {
   updateGameMapBinding,
 } from "../../packages/server/src/services/spatial-context/game-map-binding.js";
 import {
+  extractAssistantSpatialDirective,
   materializeAssistantSpatialState,
   resolveEffectiveSpatialState,
 } from "../../packages/server/src/services/spatial-context/state-resolution.js";
@@ -115,6 +116,27 @@ const snapshotInput = {
 };
 assert.equal(spatialContextSnapshotSchema.safeParse(snapshotInput).success, true);
 assert.equal(spatialContextSnapshotSchema.safeParse({ ...snapshotInput, messageId: "" }).success, false);
+assert.deepEqual(
+  extractAssistantSpatialDirective('The lift opens onto Level 1.\n[spatial_move: destination_id="tower_level_1"]'),
+  {
+    cleanContent: "The lift opens onto Level 1.",
+    directive: { type: "move", destinationId: "tower_level_1" },
+  },
+);
+assert.deepEqual(
+  extractAssistantSpatialDirective(
+    'A hidden observatory waits beyond the door.\n[spatial_discover: name="Hidden Observatory" relation="enter" description="A concealed observatory above the tower."]',
+  ),
+  {
+    cleanContent: "A hidden observatory waits beyond the door.",
+    directive: {
+      type: "discover",
+      name: "Hidden Observatory",
+      relation: "enter",
+      description: "A concealed observatory above the tower.",
+    },
+  },
+);
 
 const validDefinition = definition(
   [

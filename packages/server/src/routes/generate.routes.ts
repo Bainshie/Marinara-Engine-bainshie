@@ -62,7 +62,10 @@ import {
   resolveOwnerSpatialProjection,
 } from "../services/spatial-context/projection.js";
 import { isHierarchicalMapsEnabledForChat } from "../services/spatial-context/activation.js";
-import { materializeAssistantSpatialState } from "../services/spatial-context/state-resolution.js";
+import {
+  extractAssistantSpatialDirective,
+  materializeAssistantSpatialState,
+} from "../services/spatial-context/state-resolution.js";
 import { createConnectionsStorage } from "../services/storage/connections.storage.js";
 import { createPromptsStorage } from "../services/storage/prompts.storage.js";
 import { createCharactersStorage } from "../services/storage/characters.storage.js";
@@ -5731,6 +5734,7 @@ export async function generateRoutes(app: FastifyInstance) {
           // group conversations (null elsewhere — caller falls back to the message char).
           let parsedCommandCharacterIds: (string | null)[] | null = null;
           let parsedRawCommandCount = 0;
+          let assistantSpatialDirective: ReturnType<typeof extractAssistantSpatialDirective>["directive"] = null;
           let conversationCommandContent: string | null = null;
           let contentReplaced = false;
           if (tailMessages.assistantPrefillInjected && assistantPrefill && fullResponse.startsWith(assistantPrefill)) {
@@ -6011,6 +6015,26 @@ export async function generateRoutes(app: FastifyInstance) {
             }
           }
 
+          if (
+            !input.impersonate &&
+            hierarchicalMapsEnabledForChat &&
+            (requestChatMode === "roleplay" || requestChatMode === "game")
+          ) {
+            const parsedSpatial = extractAssistantSpatialDirective(fullResponse);
+            assistantSpatialDirective = parsedSpatial.directive;
+            if (parsedSpatial.cleanContent !== fullResponse) {
+              fullResponse = parsedSpatial.cleanContent;
+              contentReplaced = true;
+            }
+            if (assistantSpatialDirective) {
+              logger.debug(
+                "[generate/spatial] Parsed assistant %s directive for chat %s",
+                assistantSpatialDirective.type,
+                input.chatId,
+              );
+            }
+          }
+
           if (contentReplaced) {
             if (!holdForTextRewrite) {
               reply.raw.write(`data: ${JSON.stringify({ type: "content_replace", data: fullResponse })}\n\n`);
@@ -6036,7 +6060,10 @@ export async function generateRoutes(app: FastifyInstance) {
               },
               "[generate] Empty response after post-processing",
             );
-            if (!input.impersonate && (parsedCommands.length > 0 || parsedRawCommandCount > 0)) {
+            if (
+              !input.impersonate &&
+              (parsedCommands.length > 0 || parsedRawCommandCount > 0 || assistantSpatialDirective !== null)
+            ) {
               logger.info(
                 "[generate] Model emitted %d enabled command(s) (%d parsed) with no visible prose for chat %s; saving hidden command anchor",
                 parsedCommands.length,
@@ -6063,16 +6090,28 @@ export async function generateRoutes(app: FastifyInstance) {
                 hierarchicalMapsEnabledForChat &&
                 (requestChatMode === "roleplay" || requestChatMode === "game")
               ) {
-                await materializeAssistantSpatialState(
+                const assistantSpatialSnapshot = await materializeAssistantSpatialState(
                   {
                     chatId: input.chatId,
                     messageId: anchoredMsg.id,
                     swipeIndex: anchoredMsg.activeSwipeIndex ?? 0,
                     regenerate: false,
                     continuation: false,
+                    directive: assistantSpatialDirective,
                   },
                   chatMeta,
                 );
+                if (assistantSpatialSnapshot?.transitionCommandId) {
+                  sendSseEvent(reply, {
+                    type: "spatial_transition_committed",
+                    data: {
+                      chatId: input.chatId,
+                      commandId: assistantSpatialSnapshot.transitionCommandId,
+                      currentLocationId: assistantSpatialSnapshot.currentLocationId,
+                      definitionRevision: assistantSpatialSnapshot.definitionRevision,
+                    },
+                  });
+                }
               }
               if (markGenerationCommitted && anchoredMsg?.id) {
                 generationComplete = true;
@@ -6149,16 +6188,28 @@ export async function generateRoutes(app: FastifyInstance) {
             hierarchicalMapsEnabledForChat &&
             (requestChatMode === "roleplay" || requestChatMode === "game")
           ) {
-            await materializeAssistantSpatialState(
+            const assistantSpatialSnapshot = await materializeAssistantSpatialState(
               {
                 chatId: input.chatId,
                 messageId: savedMsg.id,
                 swipeIndex: savedSwipeIndex,
                 regenerate: Boolean(input.regenerateMessageId),
                 continuation: Boolean(input.continueMessageId),
+                directive: assistantSpatialDirective,
               },
               chatMeta,
             );
+            if (assistantSpatialSnapshot?.transitionCommandId) {
+              sendSseEvent(reply, {
+                type: "spatial_transition_committed",
+                data: {
+                  chatId: input.chatId,
+                  commandId: assistantSpatialSnapshot.transitionCommandId,
+                  currentLocationId: assistantSpatialSnapshot.currentLocationId,
+                  definitionRevision: assistantSpatialSnapshot.definitionRevision,
+                },
+              });
+            }
           }
           if (markGenerationCommitted && savedMsg?.id) {
             generationComplete = true;
@@ -7194,9 +7245,45 @@ export async function generateRoutes(app: FastifyInstance) {
                 // Build the new snapshot from agent output, falling back to previous snapshot.
                 let newDate = coerceGameStateTextValue(gs.date) ?? coerceGameStateTextValue(prevSnap?.date);
                 let newTime = coerceGameStateTextValue(gs.time) ?? coerceGameStateTextValue(prevSnap?.time);
+                const trackerLocationGuidance = coerceGameStateTextValue(gs.location);
+                let effectiveSpatialProjection = ownerSpatialProjection;
+                if (hierarchicalMapsEnabledForChat && messageId) {
+                  effectiveSpatialProjection = await resolveOwnerSpatialProjection(input.chatId, {}, chatMeta);
+                  if (trackerLocationGuidance) {
+                    const previousSpatialLocationId = effectiveSpatialProjection?.currentLocationId ?? null;
+                    const previousSpatialRevision = effectiveSpatialProjection?.definitionRevision ?? 0;
+                    const guidedSpatialSnapshot = await materializeAssistantSpatialState(
+                      {
+                        chatId: input.chatId,
+                        messageId,
+                        swipeIndex: targetSwipeIndex,
+                        regenerate: Boolean(input.regenerateMessageId),
+                        continuation: Boolean(input.continueMessageId),
+                        locationGuidance: trackerLocationGuidance,
+                      },
+                      chatMeta,
+                    );
+                    if (
+                      guidedSpatialSnapshot?.transitionCommandId &&
+                      (guidedSpatialSnapshot.currentLocationId !== previousSpatialLocationId ||
+                        guidedSpatialSnapshot.definitionRevision !== previousSpatialRevision)
+                    ) {
+                      sendSseEvent(reply, {
+                        type: "spatial_transition_committed",
+                        data: {
+                          chatId: input.chatId,
+                          commandId: guidedSpatialSnapshot.transitionCommandId,
+                          currentLocationId: guidedSpatialSnapshot.currentLocationId,
+                          definitionRevision: guidedSpatialSnapshot.definitionRevision,
+                        },
+                      });
+                      effectiveSpatialProjection = await resolveOwnerSpatialProjection(input.chatId, {}, chatMeta);
+                    }
+                  }
+                }
                 const authoritativeGameLocation =
-                  ownerSpatialProjection?.ownerMode === "game"
-                    ? formatOwnerSpatialBreadcrumb(ownerSpatialProjection)
+                  effectiveSpatialProjection?.ownerMode === "game"
+                    ? formatOwnerSpatialBreadcrumb(effectiveSpatialProjection)
                     : null;
                 let newLocation =
                   authoritativeGameLocation ??
