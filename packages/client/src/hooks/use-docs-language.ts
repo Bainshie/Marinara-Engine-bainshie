@@ -1,7 +1,7 @@
 // ──────────────────────────────────────────────
 // React Query: Documentation language (docs/i18n/<code> trees)
 // ──────────────────────────────────────────────
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useIsMutating, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../lib/api-client";
 
 /**
@@ -55,15 +55,22 @@ export const docsLanguageKeys = {
   status: () => [...DOCS_QUERY_ROOT, "language"] as const,
 };
 
+const SET_DOCS_LANGUAGE_MUTATION_KEY = [...DOCS_QUERY_ROOT, "language", "set"] as const;
+
 export function useDocsLanguage(enabled = true) {
+  // The switch PUT blocks server-side for the whole pack download and can't
+  // update the status itself; `install` starts as null, so polling must
+  // bootstrap from this client's pending switch mutation, not from the data.
+  const switching = useIsMutating({ mutationKey: SET_DOCS_LANGUAGE_MUTATION_KEY }) > 0;
   return useQuery({
     queryKey: docsLanguageKeys.status(),
     queryFn: () => api.get<DocsLanguageStatus>("/docs/language"),
     enabled,
     staleTime: 30_000,
-    // While a pack download is running server-side, poll for filesDone/filesTotal
-    // so the Settings row and onboarding can show live progress.
-    refetchInterval: (query) => (query.state.data?.install ? 1_000 : false),
+    refetchInterval: (query) => (switching || query.state.data?.install ? 1_000 : false),
+    // A background download started elsewhere (onboarding) must surface when a
+    // consumer mounts, even if a <30s-old cached status still says install:null.
+    refetchOnMount: "always",
   });
 }
 
@@ -71,6 +78,7 @@ export function useDocsLanguage(enabled = true) {
 export function useSetDocsLanguage() {
   const qc = useQueryClient();
   return useMutation({
+    mutationKey: SET_DOCS_LANGUAGE_MUTATION_KEY,
     mutationFn: (language: string) => api.put<DocsLanguageStatus>("/docs/language", { language }),
     onSuccess: (status) => {
       qc.setQueryData(docsLanguageKeys.status(), status);

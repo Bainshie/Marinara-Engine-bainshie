@@ -27,6 +27,7 @@ import {
   removeOtherDocsPacks,
   sweepStaleDocsPackDirs,
   verifyDocsPackHashes,
+  withDocsPackMutationLock,
   type DocsPackInstallProgress,
 } from "../services/docs/docs-pack.service.js";
 
@@ -440,31 +441,54 @@ interface DocsLanguageStatus {
   };
 }
 
+/** Path-only walk of the English docs — no file reads, cheap enough for every status call. */
+async function collectDocPaths(dir: string, relativeDir: string): Promise<string[]> {
+  const paths: string[] = [];
+  const entries = await readdir(dir, { withFileTypes: true });
+  for (const entry of entries) {
+    if (entry.isDirectory()) {
+      if (relativeDir === "" && EXCLUDED_DIRS.has(entry.name)) continue;
+      const childRelative = relativeDir ? `${relativeDir}/${entry.name}` : entry.name;
+      paths.push(...(await collectDocPaths(join(dir, entry.name), childRelative)));
+    } else if (entry.isFile() && entry.name.toLowerCase().endsWith(".md")) {
+      paths.push(relativeDir ? `${relativeDir}/${entry.name}` : entry.name);
+    }
+  }
+  return paths;
+}
+
 async function buildLanguageStatus(storage: AppSettingsStorage): Promise<DocsLanguageStatus> {
-  const [stored, base, installedPacks] = await Promise.all([
+  const [stored, basePathList, installedPacks] = await Promise.all([
     readStoredDocsLanguage(storage),
     // A missing/unreadable docs folder degrades to empty coverage instead of
     // failing the whole status — the Settings row and Fix button must stay
     // usable in exactly the broken-install case they exist to surface.
-    collectDocs(DOCS_DIR, "").catch((err) => {
+    collectDocPaths(DOCS_DIR, "").catch((err) => {
       logger.warn(err, "Failed to walk documentation folder for language status");
-      return [] as DocSummary[];
+      return [] as string[];
     }),
     listInstalledDocsPacks(),
   ]);
-  const basePaths = new Set(base.map((doc) => doc.path));
+  const basePaths = new Set(basePathList);
   const available = await Promise.all(
     supportedDocLanguages().map(async (code) => {
       const labels = DOCS_LANGUAGE_LABELS[code] ?? { label: code, englishLabel: code };
       const installed = isInstalledLanguage(code);
       let translated = 0;
       if (code === DEFAULT_DOCS_LANGUAGE) {
-        translated = base.length;
+        translated = basePathList.length;
       } else if (installed) {
         const manifest = await readInstalledDocsPackManifest(code);
         translated = manifest ? manifest.files.filter((file) => basePaths.has(file.path)).length : 0;
       }
-      return { code, label: labels.label, englishLabel: labels.englishLabel, installed, translated, total: base.length };
+      return {
+        code,
+        label: labels.label,
+        englishLabel: labels.englishLabel,
+        installed,
+        translated,
+        total: basePathList.length,
+      };
     }),
   );
 
@@ -639,28 +663,37 @@ export async function docsRoutes(app: FastifyInstance) {
         .status(400)
         .send({ error: "Unsupported documentation language", code: "unsupported-language" });
     }
-    if (!isInstalledLanguage(code)) {
-      try {
-        await installDocsPack(code);
-      } catch (err) {
-        if (err instanceof DocsPackBusyError) {
-          return reply.status(409).send({
-            error: `A download for "${err.busyLanguage}" is already running`,
-            code: "install-in-progress",
-          });
-        }
-        logger.error(err, "Documentation pack download failed for %s", code);
-        return reply.status(502).send({
-          error: err instanceof Error ? err.message : "Documentation pack download failed",
-          code: "download-failed",
+    // Refuse early rather than queueing behind a long download for another language.
+    const busy = getActiveDocsPackInstall();
+    if (busy && busy.language !== code) {
+      return reply.status(409).send({
+        error: `A download for "${busy.language}" is already running`,
+        code: "install-in-progress",
+      });
+    }
+    try {
+      // The whole install→set→delete-others sequence runs under the pack
+      // mutation lock so a concurrent switch or fix can never delete the pack
+      // this request just installed.
+      await withDocsPackMutationLock(async () => {
+        if (!isInstalledLanguage(code)) await installDocsPack(code);
+        await storage.set(DOCS_LANGUAGE_SETTINGS_KEY, JSON.stringify({ language: code }));
+        const removed = await removeOtherDocsPacks(code);
+        if (removed.length > 0) logger.info("Removed replaced documentation packs: %s", removed.join(", "));
+      });
+    } catch (err) {
+      if (err instanceof DocsPackBusyError) {
+        return reply.status(409).send({
+          error: `A download for "${err.busyLanguage}" is already running`,
+          code: "install-in-progress",
         });
       }
+      logger.error(err, "Documentation pack download failed for %s", code);
+      return reply.status(502).send({
+        error: err instanceof Error ? err.message : "Documentation pack download failed",
+        code: "download-failed",
+      });
     }
-    await storage.set(DOCS_LANGUAGE_SETTINGS_KEY, JSON.stringify({ language: code }));
-    // Only after the new pack serves and the setting points at it: enforce the
-    // one-downloaded-language rule by deleting the other packs.
-    const removed = await removeOtherDocsPacks(code);
-    if (removed.length > 0) logger.info("Removed replaced documentation packs: %s", removed.join(", "));
     logger.info("Documentation language set to %s", code);
     return buildLanguageStatus(storage);
   });
@@ -671,39 +704,40 @@ export async function docsRoutes(app: FastifyInstance) {
    * corrupt stored value to English. Never mutates docs/.
    */
   app.post("/language/fix", async (_req, reply) => {
-    const stored = await readStoredDocsLanguage(storage);
+    if (getActiveDocsPackInstall()) {
+      return reply.status(409).send({
+        error: "A documentation download is already running",
+        code: "install-in-progress",
+      });
+    }
     const actions: string[] = [];
+    await withDocsPackMutationLock(async () => {
+      const stored = await readStoredDocsLanguage(storage);
+      await sweepStaleDocsPackDirs();
 
-    await sweepStaleDocsPackDirs();
-
-    if (stored.present && stored.code === null) {
-      await storage.set(DOCS_LANGUAGE_SETTINGS_KEY, JSON.stringify({ language: DEFAULT_DOCS_LANGUAGE }));
-      actions.push("reset-invalid-setting");
-    } else if (stored.code && stored.code !== DEFAULT_DOCS_LANGUAGE) {
-      const healthy = isDocsPackInstalled(stored.code) && (await verifyDocsPackHashes(stored.code));
-      if (!healthy) {
-        try {
-          await installDocsPack(stored.code);
-          actions.push("reinstalled-pack");
-        } catch (err) {
-          if (err instanceof DocsPackBusyError) {
-            return reply.status(409).send({
-              error: `A download for "${err.busyLanguage}" is already running`,
-              code: "install-in-progress",
-            });
+      if (stored.present && stored.code === null) {
+        await storage.set(DOCS_LANGUAGE_SETTINGS_KEY, JSON.stringify({ language: DEFAULT_DOCS_LANGUAGE }));
+        actions.push("reset-invalid-setting");
+      } else if (stored.code && stored.code !== DEFAULT_DOCS_LANGUAGE) {
+        const healthy = isDocsPackInstalled(stored.code) && (await verifyDocsPackHashes(stored.code));
+        if (!healthy) {
+          try {
+            await installDocsPack(stored.code);
+            actions.push("reinstalled-pack");
+          } catch (err) {
+            // Cannot repair without the network: reset to English so the app is
+            // in a clean, fully-working state (the user asked for a fix).
+            logger.warn(err, "Could not re-download documentation pack %s; resetting to English", stored.code);
+            await storage.set(DOCS_LANGUAGE_SETTINGS_KEY, JSON.stringify({ language: DEFAULT_DOCS_LANGUAGE }));
+            actions.push("reset-after-failed-redownload");
           }
-          // Cannot repair without the network: reset to English so the app is
-          // in a clean, fully-working state (the user asked for a fix).
-          logger.warn(err, "Could not re-download documentation pack %s; resetting to English", stored.code);
-          await storage.set(DOCS_LANGUAGE_SETTINGS_KEY, JSON.stringify({ language: DEFAULT_DOCS_LANGUAGE }));
-          actions.push("reset-after-failed-redownload");
         }
       }
-    }
 
-    const active = await getActiveDocLanguage(storage);
-    const removed = await removeOtherDocsPacks(active);
-    if (removed.length > 0) actions.push(`removed-leftover-packs:${removed.join(",")}`);
+      const active = await getActiveDocLanguage(storage);
+      const removed = await removeOtherDocsPacks(active);
+      if (removed.length > 0) actions.push(`removed-leftover-packs:${removed.join(",")}`);
+    });
 
     if (actions.length > 0) logger.info("Documentation fix applied: %s", actions.join(" "));
     return { ...(await buildLanguageStatus(storage)), repaired: actions.length > 0, actions };

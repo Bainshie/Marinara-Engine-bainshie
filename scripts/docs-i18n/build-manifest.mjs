@@ -40,17 +40,30 @@ if (!/^[a-z]{2,3}(-[a-z0-9]{2,8})?$/.test(language)) {
   process.exit(1);
 }
 
+const crlfFiles = [];
 const files = walkMarkdown(packDir, packDir)
   .filter((path) => path !== "manifest.json")
   .sort()
   .map((path) => {
     const content = readFileSync(join(packDir, ...path.split("/")));
+    // The server verifies downloads against the LF blobs raw.githubusercontent
+    // serves. A CRLF-authored file would hash "correctly" here but NEVER match
+    // after commit (git normalizes to LF), bricking every install of this pack.
+    if (content.includes("\r\n")) crlfFiles.push(path);
     return {
       path,
       sha256: createHash("sha256").update(content).digest("hex"),
       bytes: statSync(join(packDir, ...path.split("/"))).size,
     };
   });
+
+if (crlfFiles.length > 0) {
+  console.error(`Refusing to build: ${crlfFiles.length} file(s) contain CRLF line endings and would fail`);
+  console.error("server-side hash verification (git stores LF; the raw CDN serves LF). Convert to LF first:");
+  for (const path of crlfFiles.slice(0, 10)) console.error(`  - ${path}`);
+  if (crlfFiles.length > 10) console.error(`  … and ${crlfFiles.length - 10} more`);
+  process.exit(1);
+}
 
 if (files.length === 0) {
   console.error(`No .md files found under ${packDir} — refusing to write an empty manifest.`);

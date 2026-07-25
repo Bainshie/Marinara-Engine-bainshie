@@ -291,6 +291,20 @@ export async function listInstalledDocsPacks(): Promise<string[]> {
     .sort();
 }
 
+/**
+ * Serializes every switch/fix critical section (install + setting write +
+ * other-pack deletion). The download's own single-flight only guards the
+ * network phase; without this lock, a concurrent switch could delete a pack
+ * another request had just finished installing.
+ */
+let mutationChain: Promise<unknown> = Promise.resolve();
+
+export function withDocsPackMutationLock<T>(fn: () => Promise<T>): Promise<T> {
+  const run = mutationChain.then(fn, fn);
+  mutationChain = run.catch(() => undefined);
+  return run;
+}
+
 let activeInstall: { language: string; promise: Promise<void>; progress: DocsPackInstallProgress } | null = null;
 
 export function getActiveDocsPackInstall(): DocsPackInstallProgress | null {

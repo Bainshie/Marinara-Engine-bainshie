@@ -2,9 +2,11 @@
 // Onboarding Tutorial — first-time guided tour
 // ──────────────────────────────────────────────
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useUIStore, type ChatModeShortcut } from "../../stores/ui.store";
 import { useTrackAchievement } from "../../hooks/use-achievements";
-import { useDocsLanguage, useSetDocsLanguage } from "../../hooks/use-docs-language";
+import { docsLanguageKeys, useDocsLanguage, type DocsLanguageStatus } from "../../hooks/use-docs-language";
+import { api } from "../../lib/api-client";
 import { motion, AnimatePresence } from "framer-motion";
 import { ChevronRight } from "lucide-react";
 import { toast } from "sonner";
@@ -517,7 +519,7 @@ function OnboardingTutorialInner() {
 
   // ── Documentation-language picker (final step) ──
   const { data: docsLanguageStatus } = useDocsLanguage();
-  const setDocsLanguage = useSetDocsLanguage();
+  const queryClient = useQueryClient();
   const [docsLanguagePick, setDocsLanguagePick] = useState<string | null>(null);
   const docsLanguageOptions = useMemo(() => docsLanguageStatus?.available ?? [], [docsLanguageStatus?.available]);
   const activeDocsLanguage = docsLanguageStatus?.active ?? "en";
@@ -545,19 +547,25 @@ function OnboardingTutorialInner() {
     if (effectiveDocsLanguagePick !== "en" && !(info?.installed ?? false)) {
       toast.info(localizeUi("settings.application.docsLanguage.downloadingLanguage", { language: label }));
     }
-    setDocsLanguage.mutate(effectiveDocsLanguagePick, {
-      onSuccess: () => {
+    // Plain promise, not a React Query mutation: the tutorial unmounts right
+    // after "Get Started", and v5 drops mutate() callbacks on unmount — these
+    // handlers (and the global sonner toasts) must outlive the component.
+    api
+      .put<DocsLanguageStatus>("/docs/language", { language: effectiveDocsLanguagePick })
+      .then((status) => {
+        queryClient.setQueryData(docsLanguageKeys.status(), status);
+        // "docs" mirrors docsKeys.all in use-docs.ts — every docs query refetches.
+        void queryClient.invalidateQueries({ queryKey: ["docs"] });
         toast.success(localizeUi("settings.application.docsLanguage.switched", { language: label }));
-      },
-      onError: (err) => {
+      })
+      .catch((err: unknown) => {
         toast.error(
           localizeUi("settings.application.docsLanguage.switchFailed", {
             reason: err instanceof Error ? err.message : String(err),
           }),
         );
-      },
-    });
-  }, [activeDocsLanguage, docsLanguageOptions, effectiveDocsLanguagePick, localizeUi, setDocsLanguage]);
+      });
+  }, [activeDocsLanguage, docsLanguageOptions, effectiveDocsLanguagePick, localizeUi, queryClient]);
 
   useEffect(() => {
     const updateViewportMode = () => setIsMobileViewport(getViewportWidth() < MOBILE_BREAKPOINT);
