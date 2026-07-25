@@ -78,6 +78,7 @@ export * from "./constants/conversation-prompt.js";
 export * from "./constants/game-prompt.js";
 export * from "./constants/achievements.js";
 export * from "./constants/tracker-custom-field-icons.js";
+export * from "./constants/docs-languages.js";
 
 // Feature registries
 export * from "./features/agents/agent-manifest.types.js";
