@@ -31,12 +31,14 @@ import {
   trackerFieldLocksAreEmpty,
   customAgentHasCapability,
   CHAT_SUMMARY_PROMPT_SETTINGS_KEY,
+  CUSTOM_GENERATION_PARAMETERS_SETTINGS_KEY,
   DEFAULT_CONVERSATION_PROMPT,
   DEFAULT_GENERATION_PARAMS,
   unwrapConversationInstructions,
   findKnownModel,
   LOCAL_SIDECAR_CONNECTION_ID,
   normalizeTextForMatch,
+  parseManagedGenerationParameterDefinitions,
   normalizeGameStoryboardKeyframeCount,
   type APIProvider,
   type MacroContext,
@@ -88,8 +90,12 @@ import {
   filterGameInternalAgentIds,
   resolveLorebookScopeExclusions,
 } from "../services/lorebook/game-lorebook-scope.js";
-import { lorebookEntryPassesContextFilters, type GameStateForScanning } from "../services/lorebook/keyword-scanner.js";
-import { injectAtDepth } from "../services/lorebook/prompt-injector.js";
+import {
+  lorebookEntryPassesContextFilters,
+  scanForActivatedEntries,
+  type GameStateForScanning,
+} from "../services/lorebook/keyword-scanner.js";
+import { applyTokenBudget, injectAtDepth } from "../services/lorebook/prompt-injector.js";
 import { resolveChatSummaryConnection } from "../services/chat-summary/connection-resolution.js";
 import { resolveConnectionImageDefaults } from "../services/image/image-generation-defaults.js";
 import { generateIllustratorImageVariants } from "../services/image/illustrator-image-variants.js";
@@ -411,7 +417,6 @@ import { applyAllSegmentEdits } from "../services/game/segment-edits.js";
 import type { CharacterData, GameMap, GameNpc, Lorebook, LorebookEntry } from "@marinara-engine/shared";
 import {
   buildConversationProfileBlocks,
-  parsePersonaConvoBehavior,
   readCharacterConvoFields,
   type ConversationProfileParticipant,
 } from "../services/conversation/conversation-profiles.js";
@@ -708,6 +713,9 @@ export async function generateRoutes(app: FastifyInstance) {
       return reply.status(404).send({ error: "Chat not found" });
     }
     const requestChatMode = (chat.mode as ChatMode) ?? "roleplay";
+    const managedParameterDefinitions = parseManagedGenerationParameterDefinitions(
+      await appSettings.get(CUSTOM_GENERATION_PARAMETERS_SETTINGS_KEY),
+    );
     if (requestChatMode === "conversation" && input.impersonate) {
       return reply.status(400).send({ error: "Impersonate is not available in Conversation mode" });
     }
@@ -2204,7 +2212,9 @@ export async function generateRoutes(app: FastifyInstance) {
               displayName: personaConvoDisplay || persona.name,
               aboutMe: effectiveAbout(persona.id as string, personaAboutDefault),
               isPersona: true,
-              behavior: parsePersonaConvoBehavior(persona.convoBehavior),
+              // Personas represent the user. Preserve legacy card data for
+              // round-trips, but never use it to steer the user's behavior.
+              behavior: null,
               postHistoryInstructions: "",
             });
           }
@@ -2585,6 +2595,7 @@ export async function generateRoutes(app: FastifyInstance) {
           chatMode,
           isSceneChat,
           chatParameters: chatMeta.chatParameters,
+          managedParameterDefinitions,
           modelAccessPolicy,
           initial: {
             temperature,
@@ -3232,6 +3243,111 @@ export async function generateRoutes(app: FastifyInstance) {
           }
           return msg;
         });
+        const customAgentsWithLorebookTriggers = resolvedAgents.filter(
+          (agent) =>
+            !builtInAgentTypes.has(agent.type) && agent.settings.triggerLorebooksForAgentCalls === true,
+        );
+        const resolveTriggeredLorebookEntriesByAgentId = async (
+          contextMessages: AgentContext["recentMessages"],
+        ): Promise<NonNullable<AgentContext["triggeredLorebookEntriesByAgentId"]>> => {
+          const triggeredEntries: NonNullable<AgentContext["triggeredLorebookEntriesByAgentId"]> = {};
+          if (customAgentsWithLorebookTriggers.length === 0) return triggeredEntries;
+
+          const allLorebooks = (await lorebooksStore.list()) as unknown as Lorebook[];
+          const enabledLorebooksById = new Map(
+            allLorebooks.filter((lorebook) => lorebook.enabled !== false).map((lorebook) => [lorebook.id, lorebook]),
+          );
+          const activeCharacterTags = Array.from(
+            new Set(charInfo.flatMap((character) => (Array.isArray(character.tags) ? character.tags : []))),
+          );
+          const entryStateOverrides =
+            (chatMeta.entryStateOverrides as Record<string, { enabled?: boolean; ephemeral?: number | null }>) ?? {};
+
+          for (const agent of customAgentsWithLorebookTriggers) {
+            const { sourceLorebookIds: rawSourceIds, source } = resolveKnowledgeSourceLorebookIds({
+              settings: agent.settings,
+              chatActiveLorebookIds,
+            });
+            const sourceIds = (await filterChatActiveLorebookSourceIdsForPrompt(rawSourceIds, source)).filter((id) =>
+              enabledLorebooksById.has(id),
+            );
+            if (sourceIds.length === 0) {
+              triggeredEntries[agent.id] = [];
+              continue;
+            }
+
+            const sourceIdSet = new Set(sourceIds);
+            const sourceLorebooks = sourceIds.flatMap((id) => {
+              const lorebook = enabledLorebooksById.get(id);
+              return lorebook ? [lorebook] : [];
+            });
+            const sourceEntries = ((await lorebooksStore.listEntriesByLorebooks(sourceIds)) as LorebookEntry[])
+              .filter((entry) => sourceIdSet.has(entry.lorebookId))
+              .filter((entry) => {
+                const override = entryStateOverrides[entry.id];
+                if ((override?.enabled ?? entry.enabled !== false) === false) return false;
+                if ((override?.ephemeral ?? entry.ephemeral) === 0) return false;
+                return lorebookEntryPassesContextFilters(entry, {
+                  activeCharacterIds: promptCharacterIds,
+                  activeCharacterTags,
+                  generationTriggers: lorebookGenerationTriggers,
+                });
+              })
+              .map((entry) => {
+                const ephemeral = entryStateOverrides[entry.id]?.ephemeral;
+                return ephemeral !== undefined ? { ...entry, ephemeral } : entry;
+              });
+            const contextSize = normalizeAgentContextSize(agent.settings.contextSize);
+            const scanMessages = contextMessages.slice(-contextSize).map((message) => ({
+              role: message.role,
+              content: message.content,
+            }));
+            let agentChatEmbedding: number[] | null = null;
+            let agentSemanticEmbeddings: Map<string, number[] | null> | undefined;
+            let agentSemanticBaseline = 0;
+            if (
+              sourceEntries.some((entry) => Array.isArray(entry.embedding) && entry.embedding.length > 0) &&
+              memoryRecallVectorizerAvailable
+            ) {
+              try {
+                const semanticEmbeddings = await buildLorebookSemanticEmbeddingsById({
+                  lorebooks: sourceLorebooks,
+                  entries: sourceEntries,
+                  scanMessages,
+                  embeddingSource: memoryRecallEmbeddingSource,
+                  signal: abortController.signal,
+                });
+                agentChatEmbedding = semanticEmbeddings.defaultEmbedding;
+                agentSemanticEmbeddings = semanticEmbeddings.embeddingsByLorebookId;
+                agentSemanticBaseline = semanticEmbeddings.similarityBaseline;
+              } catch {
+                // Keyword matching remains available when semantic retrieval fails.
+              }
+            }
+
+            const activated = scanForActivatedEntries(scanMessages, sourceEntries, {
+              scanDepth: contextSize,
+              gameState: gameState as GameStateForScanning | null,
+              chatEmbedding: agentChatEmbedding,
+              semanticEmbeddingsByLorebookId: agentSemanticEmbeddings,
+              semanticSimilarityBaseline: agentSemanticBaseline,
+              activeCharacterIds: promptCharacterIds,
+              activeCharacterTags,
+              generationTriggers: lorebookGenerationTriggers,
+              ignoreTiming: true,
+            });
+            const budgeted = applyTokenBudget(activated, resolveLorebookTokenBudget(chatMeta));
+            triggeredEntries[agent.id] = budgeted.map((match) => ({
+              id: match.entry.id,
+              name: match.entry.name,
+              content: resolvePromptMacrosForLorebook(match.entry.content).content,
+              matchedKeys: match.matchedKeys,
+              activationSources: match.activationSources,
+            }));
+          }
+          return triggeredEntries;
+        };
+        const triggeredLorebookEntriesByAgentId = await resolveTriggeredLorebookEntriesByAgentId(recentMsgs);
         const resolvePersonaPromptText = (value?: string): string | undefined => {
           if (!value) return value;
           return resolveHistoryMessageMacros([{ content: value, characterId: null }])[0]?.content ?? value;
@@ -3312,6 +3428,9 @@ export async function generateRoutes(app: FastifyInstance) {
                     })),
                 },
               }
+            : {}),
+          ...(Object.keys(triggeredLorebookEntriesByAgentId).length > 0
+            ? { triggeredLorebookEntriesByAgentId }
             : {}),
           streaming: input.streaming,
           ...(requestDebug
@@ -6757,6 +6876,16 @@ export async function generateRoutes(app: FastifyInstance) {
         };
 
         if (hasPostWork && combinedResponse && !abortController.signal.aborted) {
+          if (customAgentsWithLorebookTriggers.some((agent) => agent.phase === "post_processing")) {
+            agentContext.triggeredLorebookEntriesByAgentId = await resolveTriggeredLorebookEntriesByAgentId([
+              ...recentMsgs,
+              {
+                id: latestAssistantMessageId || undefined,
+                role: "assistant",
+                content: combinedResponse,
+              },
+            ]);
+          }
           if (personaId && getLatestUserExpressionSource() && Array.isArray(agentContext.memory._availableSprites)) {
             generatedExpressionTargetIds.add(personaId);
           }

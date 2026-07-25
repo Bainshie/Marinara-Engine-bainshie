@@ -61,6 +61,10 @@ import { useTranslate } from "../../hooks/use-translate";
 import { useTTSConfig } from "../../hooks/use-tts";
 import { useApplyRegex } from "../../hooks/use-apply-regex";
 import { useBackdropDismiss } from "../../hooks/use-backdrop-dismiss";
+import {
+  CHAT_VISUAL_VIEWPORT_CHANGE_EVENT,
+  type ChatVisualViewportChangeDetail,
+} from "../../hooks/use-visual-viewport-chat-bottom";
 import { useGameAssetManifest } from "../../hooks/use-game-assets";
 import { useGameModeStore } from "../../stores/game-mode.store";
 import { getDefaultChatTextColor, useUIStore } from "../../stores/ui.store";
@@ -1037,7 +1041,26 @@ export function GameNarration({
   const logEditDraftRef = useRef<{ content: string; speaker?: string }>({ content: "", speaker: undefined });
   const logScrolledRef = useRef(false);
   const logScrollContainerRef = useRef<HTMLDivElement | null>(null);
+  const activePanelRef = useRef<HTMLDivElement | null>(null);
   const pendingLogScrollAnchorRef = useRef<{ key: string; offsetTop: number; scrollTop: number } | null>(null);
+  useEffect(() => {
+    const handleViewportChange = (event: Event) => {
+      const detail = (event as CustomEvent<ChatVisualViewportChangeDetail>).detail;
+      const activeElement = document.activeElement;
+      if (
+        !detail?.keyboardOpen ||
+        (!(activeElement instanceof HTMLTextAreaElement) && !(activeElement instanceof HTMLInputElement)) ||
+        !activePanelRef.current?.contains(activeElement)
+      ) {
+        return;
+      }
+      requestAnimationFrame(() => {
+        activePanelRef.current?.scrollIntoView({ block: "end", behavior: "auto" });
+      });
+    };
+    window.addEventListener(CHAT_VISUAL_VIEWPORT_CHANGE_EVENT, handleViewportChange);
+    return () => window.removeEventListener(CHAT_VISUAL_VIEWPORT_CHANGE_EVENT, handleViewportChange);
+  }, []);
   const pendingLogScrollTopRef = useRef<number | null>(null);
   const closeLogs = useCallback(() => {
     setLogsOpen(false);
@@ -4431,6 +4454,7 @@ export function GameNarration({
         </div>
 
         <div
+          ref={activePanelRef}
           data-game-skip-bg-nav="true"
           data-component="GameNarration.ActivePanel"
           className="shrink-0 rounded-2xl border border-[var(--border)] bg-[var(--card)]/90 p-3 shadow-[0_16px_38px_rgba(0,0,0,0.45)] backdrop-blur-md dark:border-white/15 dark:bg-black/50"

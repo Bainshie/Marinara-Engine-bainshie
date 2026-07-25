@@ -3820,6 +3820,66 @@ Use HTML sparingly and diegetically. Do not replace normal prose/dialogue unless
     },
   },
   {
+    name: "custom-agent lorebook triggering injects only that agent's resolved context",
+    async run() {
+      const triggeredLorebookEntriesByAgentId = {
+        "custom:lore-reader": [
+          {
+            id: "entry-unidentified",
+            name: "Unidentified Specimen",
+            content: "The unidentified specimen is a dormant mechanical moth.",
+            matchedKeys: ["unidentified"],
+            activationSources: ["keyword"],
+          },
+        ],
+      };
+      const enabledCapture = makeCapturingProvider("Lorebook context received.");
+      const enabledConfig = makeRegressionAgentConfig({
+        id: "custom:lore-reader",
+        type: "custom-lore-reader",
+        name: "Lore Reader",
+        promptTemplate: "Transform the matching lore into a concise replacement.",
+        settings: {
+          contextSize: 1,
+          maxTokens: 256,
+          resultType: "context_injection",
+          triggerLorebooksForAgentCalls: true,
+        },
+      });
+      await executeAgent(
+        enabledConfig as any,
+        makeRegressionAgentContext({ triggeredLorebookEntriesByAgentId }),
+        enabledCapture.provider as any,
+        "regression-model",
+      );
+      const enabledSystem = enabledCapture.calls[0]?.[0]?.content ?? "";
+      assert.match(enabledSystem, /<triggered_lorebook_context>/u);
+      assert.match(enabledSystem, /Unidentified Specimen/u);
+      assert.match(enabledSystem, /dormant mechanical moth/u);
+
+      const disabledCapture = makeCapturingProvider("No lorebook context.");
+      const disabledConfig = makeRegressionAgentConfig({
+        ...enabledConfig,
+        id: "custom:lore-disabled",
+        settings: {
+          contextSize: 1,
+          maxTokens: 256,
+          resultType: "context_injection",
+          triggerLorebooksForAgentCalls: false,
+        },
+      });
+      await executeAgent(
+        disabledConfig as any,
+        makeRegressionAgentContext({ triggeredLorebookEntriesByAgentId }),
+        disabledCapture.provider as any,
+        "regression-model",
+      );
+      const disabledSystem = disabledCapture.calls[0]?.[0]?.content ?? "";
+      assert.doesNotMatch(disabledSystem, /<triggered_lorebook_context>/u);
+      assert.doesNotMatch(disabledSystem, /dormant mechanical moth/u);
+    },
+  },
+  {
     name: "agent current game state hides quest progress from non-quest agents",
     run() {
       const hiddenMoodKey = characterTrackerLockKey({ characterId: "mira", name: "Mira" }, 0, "mood");

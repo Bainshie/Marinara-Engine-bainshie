@@ -403,6 +403,18 @@ export interface AgentContext {
       semanticScore?: number;
     }>;
   };
+  /** Keyword/semantic lorebook matches resolved from each custom agent's own context window. */
+  triggeredLorebookEntriesByAgentId?: Record<
+    string,
+    Array<{
+      id: string;
+      name?: string;
+      content: string;
+      matchedKeys: string[];
+      activationSources: string[];
+      semanticScore?: number;
+    }>
+  >;
   /** Current-turn pre-generation injections, only present for agents that opt in */
   preGenInjections?: Array<{ agentType: string; agentName?: string; text: string }>;
   /** Current-turn parallel-phase results, only present for agents that opt in */
