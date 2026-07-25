@@ -245,6 +245,13 @@ import {
   executeAgentBatch,
   renderAgentPromptTemplate,
 } from "../../packages/server/src/services/agents/agent-executor.js";
+import {
+  CLEAN_HTML_FIND_REGEX,
+  CLEAN_HTML_ID,
+  LEGACY_CLEAN_HTML_FIND_REGEX,
+  shouldMigrateCleanHtmlPattern,
+} from "../../packages/server/src/db/seed-regex.js";
+import { applyRegexScriptsToPromptText } from "../../packages/server/src/services/regex/regex-application.js";
 import { shouldSkipAgentByAssistantInterval } from "../../packages/server/src/services/generation/agent-cadence.js";
 import { filterPromptMessagesForCharacterAudience } from "../../packages/server/src/services/generation/prompt-message-scope.js";
 import {
@@ -1870,6 +1877,97 @@ const cases: RegressionCase[] = [
       assert.equal(isPatternSafe(String.raw`([^|]+)\|([^|]+)\|([^|]+)`), true);
       assert.equal(isPatternSafe(String.raw`([^\\|]+)\|([^\\|]+)\|([^\\|]+)`), true);
       assert.equal(isPatternSafe(String.raw`[^|]+x[^|]+y[^|]+`), false);
+    },
+  },
+  {
+    name: "Clean HTML default is safe and removes prompt markup without clobbering exclusions",
+    run() {
+      assert.equal(isPatternSafe(LEGACY_CLEAN_HTML_FIND_REGEX), false);
+      assert.equal(isPatternSafe(CLEAN_HTML_FIND_REGEX), true);
+      assert.equal(
+        createRegexScriptSchema.safeParse({
+          name: "Clean HTML (Outgoing Prompt)",
+          findRegex: CLEAN_HTML_FIND_REGEX,
+          placement: ["user_input", "ai_output"],
+          flags: "g",
+          promptOnly: true,
+          applyMode: "prompt",
+        }).success,
+        true,
+      );
+
+      const source = [
+        "<!DOCTYPE html>",
+        '<section class="immersive-frame"><div data-speaker="Albedo">A rendered memory.</div></section>',
+        '<speaker="Dottore">"Observe the result."</speaker>',
+        '<font color="#f0f">Keep font markup.</font>',
+        "<lie>Keep lie markup.</lie>",
+        "<filter>Keep filter markup.</filter>",
+        "<!-- keep the author comment -->",
+      ].join("\n");
+      const cleaned = applyRegexScriptsToPromptText(
+        source,
+        [
+          {
+            id: CLEAN_HTML_ID,
+            name: "Clean HTML (Outgoing Prompt)",
+            enabled: "true",
+            findRegex: CLEAN_HTML_FIND_REGEX,
+            replaceString: "",
+            trimStrings: "[]",
+            placement: '["user_input","ai_output"]',
+            flags: "g",
+            promptOnly: "true",
+            applyMode: "prompt",
+            targetCharacterIds: "[]",
+            minDepth: null,
+            maxDepth: null,
+          },
+        ],
+        "ai_output",
+        0,
+      );
+
+      assert.doesNotMatch(cleaned, /<!DOCTYPE|<\/?(?:section|div|speaker)\b/u);
+      assert.match(cleaned, /A rendered memory\./u);
+      assert.match(cleaned, /"Observe the result\."/u);
+      assert.match(cleaned, /<font color="#f0f">Keep font markup\.<\/font>/u);
+      assert.match(cleaned, /<lie>Keep lie markup\.<\/lie>/u);
+      assert.match(cleaned, /<filter>Keep filter markup\.<\/filter>/u);
+      assert.match(cleaned, /<!-- keep the author comment -->/u);
+    },
+  },
+  {
+    name: "Clean HTML seed migration only replaces the exact broken built-in pattern",
+    run() {
+      assert.equal(
+        shouldMigrateCleanHtmlPattern({
+          id: CLEAN_HTML_ID,
+          findRegex: LEGACY_CLEAN_HTML_FIND_REGEX,
+        }),
+        true,
+      );
+      assert.equal(
+        shouldMigrateCleanHtmlPattern({
+          id: CLEAN_HTML_ID,
+          findRegex: CLEAN_HTML_FIND_REGEX,
+        }),
+        false,
+      );
+      assert.equal(
+        shouldMigrateCleanHtmlPattern({
+          id: CLEAN_HTML_ID,
+          findRegex: "<custom-tag>",
+        }),
+        false,
+      );
+      assert.equal(
+        shouldMigrateCleanHtmlPattern({
+          id: "user-clean-html",
+          findRegex: LEGACY_CLEAN_HTML_FIND_REGEX,
+        }),
+        false,
+      );
     },
   },
   {
