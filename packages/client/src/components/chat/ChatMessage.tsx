@@ -42,7 +42,7 @@ import {
   Shield,
 } from "lucide-react";
 import { decodeEncodedSpeakerTags, formatTextQuotes, type Message, type QuoteFormat } from "@marinara-engine/shared";
-import { memo, useState, useMemo, useRef, useEffect, useLayoutEffect, useCallback, type ReactNode } from "react";
+import { memo, useState, useMemo, useRef, useEffect, useId, useLayoutEffect, useCallback, type ReactNode } from "react";
 import { useTranslation, useTranslation as useUiTranslation } from "react-i18next";
 import { useQueryClient, type InfiniteData } from "@tanstack/react-query";
 import { chatKeys, rememberRecentMessageContentEdit } from "../../hooks/use-chats";
@@ -1115,7 +1115,7 @@ function renderContent(
         const lastFontClose = before.lastIndexOf("</font>");
         if (lastFontClose < lastFontOpen) return match;
       }
-      const highlightColor = dialogueColor ?? "white";
+      const highlightColor = safeColor(dialogueColor ?? "white");
       return `<${dialogueTag} style="color:${highlightColor}">${match}</${dialogueTag}>`;
     });
   })();
@@ -1133,6 +1133,55 @@ function renderContent(
   const html = scopedCss ? `<style>${scopedCss}</style>${finalHtml}` : finalHtml;
 
   return <div className={cn("overflow-hidden", htmlScopeClass)} dangerouslySetInnerHTML={{ __html: html }} />;
+}
+
+export function RoleplayMessagePreview({
+  content,
+  dialogueColor,
+  className,
+}: {
+  content: string;
+  dialogueColor?: string;
+  className?: string;
+}) {
+  const previewId = useId();
+  const { chatFontColor, defaultDialogueColor, theme, textStrokeWidth, textStrokeColor, boldDialogue, quoteFormat } =
+    useUIStore(
+      useShallow((state) => ({
+        chatFontColor: state.chatFontColor,
+        defaultDialogueColor: state.defaultDialogueColor,
+        theme: state.theme,
+        textStrokeWidth: state.textStrokeWidth,
+        textStrokeColor: state.textStrokeColor,
+        boldDialogue: state.boldDialogue ?? true,
+        quoteFormat: state.quoteFormat,
+      })),
+    );
+  const resolvedDialogueColor = dialogueColor || defaultDialogueColor || getDefaultChatTextColor(theme);
+  const htmlScopeClass = `mari-html-greeting-${previewId.replace(/[^a-zA-Z0-9_-]/g, "") || "preview"}`;
+  const isHtmlContent = containsChatHtml(content);
+  const previewStyle = useMemo<React.CSSProperties>(
+    () => ({
+      ...(chatFontColor ? { color: chatFontColor } : {}),
+      ...(textStrokeWidth > 0
+        ? { WebkitTextStroke: `${textStrokeWidth}px ${textStrokeColor}`, paintOrder: "stroke fill" }
+        : {}),
+    }),
+    [chatFontColor, textStrokeColor, textStrokeWidth],
+  );
+  const renderedContent = useMemo(
+    () => renderContent(content, resolvedDialogueColor, undefined, boldDialogue, htmlScopeClass, quoteFormat),
+    [boldDialogue, content, htmlScopeClass, quoteFormat, resolvedDialogueColor],
+  );
+
+  return (
+    <div
+      className={cn("mari-message-content block break-words", !isHtmlContent && "whitespace-pre-wrap", className)}
+      style={previewStyle}
+    >
+      {renderedContent}
+    </div>
+  );
 }
 
 function isGradientNameColor(color?: string): color is string {

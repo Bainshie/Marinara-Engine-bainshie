@@ -338,6 +338,323 @@ test("default dialogue color fills only cards without their own dialogue color",
   }
 });
 
+test("Chat Settings adds a formatted greeting after the setup wizard is skipped", async ({
+  page,
+  request,
+}, testInfo) => {
+  test.skip(!testInfo.project.name.includes("desktop"), "Greeting chooser behavior is covered on desktop.");
+
+  const suffix = Date.now().toString(36);
+  const characterName = `Greeting Choice ${suffix}`;
+  const firstGreeting = '*The chalk pauses over the diagram.* "Observe."';
+  const alternateGreeting = '*The page turns to a fresh proof.* "Begin here."';
+  const characterResponse = await request.post("/api/characters", {
+    data: {
+      data: {
+        name: characterName,
+        first_mes: firstGreeting,
+        alternate_greetings: [alternateGreeting],
+        extensions: { dialogueColor: "#22c55e" },
+      },
+    },
+  });
+  expect(characterResponse.ok()).toBeTruthy();
+  const character = (await characterResponse.json()) as { id: string };
+
+  const chatResponse = await request.post("/api/chats", {
+    data: {
+      name: "Skipped Setup Greeting Smoke",
+      mode: "roleplay",
+      characterIds: [],
+    },
+  });
+  expect(chatResponse.ok()).toBeTruthy();
+  const chat = (await chatResponse.json()) as { id: string };
+
+  await page.addInitScript((chatId) => {
+    localStorage.setItem("marinara-active-chat-id", chatId);
+    const persisted = JSON.parse(localStorage.getItem("marinara-engine-ui") ?? '{"state":{}}') as {
+      state?: Record<string, unknown>;
+    };
+    persisted.state = { ...(persisted.state ?? {}), chatFontColor: "#345678" };
+    localStorage.setItem("marinara-engine-ui", JSON.stringify(persisted));
+  }, chat.id);
+
+  try {
+    await page.goto("/");
+    await page.evaluate(() => {
+      document.documentElement.style.setProperty("--marinara-chat-chrome-panel-text", "rgb(12, 34, 56)");
+    });
+    await page.evaluate(async () => {
+      const { useChatStore } = (await import("/src/stores/chat.store.ts")) as {
+        useChatStore: {
+          getState: () => {
+            setShouldOpenSettings: (open: boolean) => void;
+            setShouldOpenWizard: (open: boolean) => void;
+          };
+        };
+      };
+      useChatStore.getState().setShouldOpenWizard(true);
+      useChatStore.getState().setShouldOpenSettings(true);
+    });
+    await expect(page.getByRole("heading", { name: "New Roleplay", exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "Skip", exact: true }).click();
+
+    const drawer = page.locator(".mari-chat-settings-drawer");
+    await expect(drawer).toBeVisible();
+    await drawer.getByText("Characters", { exact: true }).first().click();
+    await drawer.getByRole("button", { name: "Add Character", exact: true }).click();
+    await drawer.getByPlaceholder("Search characters").fill(characterName);
+    await drawer.getByText(characterName, { exact: true }).click();
+
+    const greetingDialog = page.getByRole("dialog", { name: "Choose a Greeting", exact: true });
+    await expect(greetingDialog).toBeVisible();
+    await expect(greetingDialog.locator('[data-component="ChatSettingsDrawer.GreetingDialogHeader"] svg')).toHaveCount(
+      0,
+    );
+    await expect(
+      greetingDialog.getByText(`Choose which greeting ${characterName} should use when joining this chat.`),
+    ).toHaveCSS("color", "rgb(12, 34, 56)");
+
+    const firstOption = greetingDialog.getByRole("button", { name: /First Message/ });
+    await expect(firstOption.locator(".mari-message-content").first()).toHaveCSS("color", "rgb(52, 86, 120)");
+    await expect(firstOption.locator(".mari-message-content strong").first()).toHaveCSS("color", "rgb(34, 197, 94)");
+
+    await greetingDialog.getByRole("button", { name: /Alternate Greeting #1/ }).click();
+    await expect(drawer).toBeVisible();
+    await greetingDialog.getByRole("button", { name: "Add Selected Greeting", exact: true }).click();
+    await expect(greetingDialog).toBeHidden();
+    await expect(drawer).toBeVisible();
+
+    let greetingMessageId = "";
+    await expect
+      .poll(async () => {
+        const messagesResponse = await request.get(`/api/chats/${chat.id}/messages`);
+        const messages = (await messagesResponse.json()) as Array<{
+          id: string;
+          role: string;
+          content: string;
+          characterId?: string | null;
+        }>;
+        const greeting = messages.find((message) => message.content === alternateGreeting);
+        greetingMessageId = greeting?.id ?? "";
+        return greeting ? { role: greeting.role, characterId: greeting.characterId, content: greeting.content } : null;
+      })
+      .toEqual({
+        role: "assistant",
+        characterId: character.id,
+        content: alternateGreeting,
+      });
+    await expect(page.locator(`[data-message-id="${greetingMessageId}"]`)).toBeVisible();
+  } finally {
+    await Promise.allSettled([
+      request.delete(`/api/chats/${chat.id}`),
+      request.delete(`/api/characters/${character.id}`),
+    ]);
+  }
+});
+
+test("Author's Notes keeps its expand and full macro guide inside the field", async ({ page, request }, testInfo) => {
+  test.skip(!testInfo.project.name.includes("desktop"), "Author's Notes field chrome is covered on desktop.");
+
+  const chatResponse = await request.post("/api/chats", {
+    data: {
+      name: "Author Notes Macro Field Smoke",
+      mode: "roleplay",
+      characterIds: [],
+    },
+  });
+  expect(chatResponse.ok()).toBeTruthy();
+  const chat = (await chatResponse.json()) as { id: string };
+  await page.addInitScript((chatId) => localStorage.setItem("marinara-active-chat-id", chatId), chat.id);
+
+  try {
+    await page.goto("/");
+    await page.getByRole("button", { name: "Author's Notes", exact: true }).filter({ visible: true }).click();
+
+    const heading = page.locator("h3").filter({ hasText: "Author's Notes" });
+    await expect(heading).toBeVisible();
+    const panel = heading.locator("..");
+    const field = panel.locator(".mari-author-notes-field");
+    await expect(field.getByRole("textbox", { name: "Author's Notes", exact: true })).toBeVisible();
+    await expect(heading.getByRole("button", { name: "Expand editor", exact: true })).toHaveCount(0);
+    await expect(field.getByRole("button", { name: "Expand editor", exact: true })).toBeVisible();
+    await expect(field.getByRole("button", { name: "Macro reference", exact: true })).toBeVisible();
+
+    await field.getByRole("button", { name: "Macro reference", exact: true }).click();
+    const macroReference = page.locator('[data-component="MacroReference"]');
+    await expect(macroReference).toBeVisible();
+    await expect(macroReference.getByText("{{charPostHistory}}", { exact: true })).toBeVisible();
+    await expect(macroReference.getByText("{{agent::TYPE}}", { exact: true })).toBeVisible();
+    await expect(macroReference.getByText(/Conditional block with/)).toBeVisible();
+    await macroReference.getByRole("button", { name: "Close macro reference", exact: true }).click();
+    await expect(panel).toBeVisible();
+
+    await field.getByRole("button", { name: "Expand editor", exact: true }).click();
+    const expandedEditor = page.locator('[data-component="ExpandedMacroEditor"]');
+    await expect(expandedEditor).toBeVisible();
+    const savedNotes = '{{#if char == "Albedo"}}Keep {{user}} curious.{{else}}Keep the scene curious.{{/if}}';
+    await expandedEditor.locator("textarea").fill(savedNotes);
+    await expandedEditor.getByRole("button", { name: "Close expanded editor", exact: true }).click();
+    await expect(panel).toBeVisible();
+    await expect
+      .poll(async () => {
+        const storedResponse = await request.get(`/api/chats/${chat.id}`);
+        const stored = (await storedResponse.json()) as { metadata: string | Record<string, unknown> };
+        const metadata =
+          typeof stored.metadata === "string"
+            ? (JSON.parse(stored.metadata) as Record<string, unknown>)
+            : stored.metadata;
+        return metadata.authorNotes;
+      })
+      .toBe(savedNotes);
+  } finally {
+    await request.delete(`/api/chats/${chat.id}`).catch(() => undefined);
+  }
+});
+
+test("Author's Notes resolves the shared prompt macro engine and preset variables", async ({ request }, testInfo) => {
+  test.skip(!testInfo.project.name.includes("desktop"), "Author's Notes prompt resolution is covered once.");
+
+  const suffix = Date.now().toString(36);
+  const characterName = `Author Notes Character ${suffix}`;
+  const personaName = `Author Notes Persona ${suffix}`;
+  const connectionResponse = await request.post("/api/connections", {
+    data: {
+      name: `Author Notes Dry Run ${suffix}`,
+      provider: "custom",
+      baseUrl: "http://127.0.0.1:1/v1",
+      apiKey: "author-notes-e2e",
+      model: "author-notes-model",
+      maxContext: 32768,
+    },
+  });
+  expect(connectionResponse.ok()).toBeTruthy();
+  const connection = (await connectionResponse.json()) as { id: string };
+
+  const characterResponse = await request.post("/api/characters", {
+    data: {
+      data: {
+        name: characterName,
+        description: "A meticulous alchemist.",
+        personality: "Patient and exacting.",
+        scenario: "Inside a mountain laboratory.",
+        mes_example: '"Record every result."',
+        post_history_instructions: "Never lose the thread.",
+        extensions: {
+          backstory: "He has studied this reaction for years.",
+          appearance: "A pale coat and blue gloves.",
+        },
+      },
+    },
+  });
+  expect(characterResponse.ok()).toBeTruthy();
+  const character = (await characterResponse.json()) as { id: string };
+
+  const personaResponse = await request.post("/api/characters/personas", {
+    data: {
+      name: personaName,
+      description: "A curious research partner.",
+      personality: "Inquisitive.",
+      backstory: "Trained in field observation.",
+      appearance: "A dark traveling coat.",
+      scenario: "Assisting with the experiment.",
+    },
+  });
+  expect(personaResponse.ok()).toBeTruthy();
+  const persona = (await personaResponse.json()) as { id: string };
+
+  const presetResponse = await request.post("/api/prompts", {
+    data: {
+      name: `Author Notes Macro Preset ${suffix}`,
+      description: "Author's Notes macro-resolution fixture.",
+      variableValues: { AUTHOR_TONE: "forensic" },
+    },
+  });
+  expect(presetResponse.ok()).toBeTruthy();
+  const preset = (await presetResponse.json()) as { id: string };
+  const sectionResponse = await request.post(`/api/prompts/${preset.id}/sections`, {
+    data: {
+      identifier: `author_notes_base_${suffix}`,
+      name: "Base Prompt",
+      content: "Continue the roleplay.",
+      role: "system",
+    },
+  });
+  expect(sectionResponse.ok()).toBeTruthy();
+
+  const chatResponse = await request.post("/api/chats", {
+    data: {
+      name: "Author Notes Macro Resolution Smoke",
+      mode: "roleplay",
+      characterIds: [character.id],
+      personaId: persona.id,
+      connectionId: connection.id,
+      promptPresetId: preset.id,
+    },
+  });
+  expect(chatResponse.ok()).toBeTruthy();
+  const chat = (await chatResponse.json()) as { id: string };
+  const authorNotes = [
+    "AUTHOR_NOTES_MACRO_PROBE",
+    "identity={{user}}|{{char}}|{{characters}}|{{personaDescription}}",
+    "character={{description}}|{{personality}}|{{backstory}}|{{appearance}}|{{scenario}}|{{example}}|{{charPostHistory}}",
+    "context={{input}}|{{model}}|{{chatId}}|{{lastGenerationType}}",
+    "preset={{AUTHOR_TONE}}",
+    "random={{random:7:7}}|{{roll:1d1}}",
+    "variables={{setvar::count::1}}{{incvar::count}}{{getvar::count}}",
+    "format={{uppercase}}quiet{{/uppercase}}|{{lowercase}}LOUD{{/lowercase}}|A{{newline}}B",
+    `conditional={{#if char == "${characterName}"}}matched{{else}}missed{{/if}}`,
+    "comment={{// hidden}}visible|noop={{noop}}done|agent={{agent::missing-agent}}",
+  ].join("\n");
+  const metadataResponse = await request.patch(`/api/chats/${chat.id}/metadata`, {
+    data: { authorNotes, authorNotesDepth: 0 },
+  });
+  expect(metadataResponse.ok()).toBeTruthy();
+  const messageResponse = await request.post(`/api/chats/${chat.id}/messages`, {
+    data: { role: "user", content: "Measure the blue precipitate." },
+  });
+  expect(messageResponse.ok()).toBeTruthy();
+
+  try {
+    const dryRunResponse = await request.post("/api/generate/dryRun", {
+      data: {
+        chatId: chat.id,
+        returnPrompt: true,
+      },
+    });
+    expect(dryRunResponse.ok()).toBeTruthy();
+    const dryRun = (await dryRunResponse.json()) as {
+      prompt: { messages: Array<{ role: string; content: string }> };
+    };
+    const prompt = dryRun.prompt.messages.map((message) => message.content).join("\n\n");
+    const probe = prompt.slice(prompt.indexOf("AUTHOR_NOTES_MACRO_PROBE"));
+
+    expect(probe).toContain(`identity=${personaName}|${characterName}|${characterName}|A curious research partner.`);
+    expect(probe).toContain(
+      'character=A meticulous alchemist.|Patient and exacting.|He has studied this reaction for years.|A pale coat and blue gloves.|Inside a mountain laboratory.|"Record every result."|Never lose the thread.',
+    );
+    expect(probe).toContain(
+      `context=Measure the blue precipitate.|author-notes-model|${chat.id}|continue`,
+    );
+    expect(probe).toContain("preset=forensic");
+    expect(probe).toContain("random=7|1");
+    expect(probe).toContain("variables=2");
+    expect(probe).toContain("format=QUIET|loud|A\nB");
+    expect(probe).toContain("conditional=matched");
+    expect(probe).toContain("comment=visible|noop=done|agent=");
+    expect(probe).not.toContain("{{");
+  } finally {
+    await Promise.allSettled([
+      request.delete(`/api/chats/${chat.id}`),
+      request.delete(`/api/prompts/${preset.id}`),
+      request.delete(`/api/characters/${character.id}`),
+      request.delete(`/api/characters/personas/${persona.id}`),
+      request.delete(`/api/connections/${connection.id}`),
+    ]);
+  }
+});
+
 test("message deletion uses unified chroma controls and selection states", async ({ page }, testInfo) => {
   const chatResponse = await page.request.post("/api/chats", {
     data: { name: "Message Delete Chroma Smoke", mode: "roleplay", characterIds: [] },
@@ -496,6 +813,248 @@ test("message deletion uses unified chroma controls and selection states", async
     await expect(assistantRow).toContainText("First assistant swipe.");
   } finally {
     await page.request.delete(`/api/chats/${chat.id}`).catch(() => undefined);
+  }
+});
+
+test("bulk chat deletion uses the shared primary accent control", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name.includes("mobile"), "Desktop chat-sidebar selection chrome is covered here.");
+
+  const accentColor = "rgb(20, 184, 166)";
+  const chatResponses = await Promise.all(
+    ["Bulk Delete Chroma One", "Bulk Delete Chroma Two"].map((name) =>
+      page.request.post("/api/chats", {
+        data: { name, mode: "roleplay", characterIds: [] },
+      }),
+    ),
+  );
+  for (const response of chatResponses) expect(response.ok()).toBeTruthy();
+  const chats = (await Promise.all(chatResponses.map((response) => response.json()))) as Array<{ id: string }>;
+
+  try {
+    await page.addInitScript((activeChatId) => {
+      localStorage.setItem("marinara-active-chat-id", activeChatId);
+      localStorage.setItem(
+        "marinara-engine-ui",
+        JSON.stringify({
+          state: {
+            hasCompletedOnboarding: true,
+            sidebarOpen: true,
+          },
+          version: 75,
+        }),
+      );
+    }, chats[0]!.id);
+    await page.goto("/");
+    await page.evaluate((accent) => {
+      document.documentElement.style.setProperty("--marinara-app-accent-solid", accent);
+      document.documentElement.style.setProperty("--marinara-chat-chrome-button-text-active", accent);
+    }, accentColor);
+
+    const sidebar = page.locator('[data-component="ChatSidebar"]');
+    await expect(sidebar).toBeVisible();
+    await sidebar.getByRole("button", { name: "Select chats" }).click();
+    for (const chat of chats) {
+      await sidebar.locator(`[data-chat-id="${chat.id}"]`).click();
+    }
+
+    const actionBar = sidebar.locator(".mari-selection-action-bar");
+    await expect(actionBar).toContainText("2 selected");
+    const exportAction = actionBar.getByRole("button", { name: "Export" });
+    const deleteAction = actionBar.getByRole("button", { name: "Delete" });
+    await expect(exportAction).toBeEnabled();
+    await expect(deleteAction).toBeEnabled();
+
+    const styles = await actionBar.locator("button").evaluateAll((buttons) =>
+      buttons.map((button) => {
+        const style = getComputedStyle(button);
+        return {
+          backgroundColor: style.backgroundColor,
+          borderColor: style.borderColor,
+          color: style.color,
+          className: button.className,
+        };
+      }),
+    );
+    expect(styles).toHaveLength(2);
+    await expect(deleteAction).toHaveClass(/mari-chrome-control--primary/u);
+    await expect(deleteAction).toHaveCSS("color", accentColor);
+    expect(styles[1]?.className).not.toMatch(/danger|destructive|pink|red|rose/iu);
+
+    await deleteAction.click();
+    const dialog = page.getByRole("dialog", { name: "Delete Chats" });
+    await expect(dialog).toBeVisible();
+    const confirmDelete = dialog.getByRole("button", { name: "Delete", exact: true });
+    await expect(confirmDelete).toHaveClass(/mari-chrome-control--primary/u);
+    expect(await confirmDelete.getAttribute("class")).not.toMatch(/destructive|pink|red|rose/iu);
+    await dialog.getByRole("button", { name: "Cancel" }).click();
+  } finally {
+    await Promise.all(chats.map((chat) => page.request.delete(`/api/chats/${chat.id}`).catch(() => undefined)));
+  }
+});
+
+test("destructive confirmation actions use the shared accent button treatment", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name.includes("mobile"), "Desktop confirmation-dialog chrome is covered here.");
+
+  const accentColor = "rgb(20, 184, 166)";
+  await page.goto("/");
+  await page.evaluate((accent) => {
+    document.documentElement.style.setProperty("--marinara-chat-chrome-button-text-active", accent);
+    document.documentElement.style.setProperty("--destructive", "rgb(255, 0, 0)");
+  }, accentColor);
+
+  await page.evaluate(async () => {
+    const { showConfirmDialog } = (await import("/src/lib/app-dialogs.ts")) as {
+      showConfirmDialog: (options: {
+        title: string;
+        message: string;
+        confirmLabel: string;
+        tone: "destructive";
+      }) => Promise<boolean>;
+    };
+    void showConfirmDialog({
+      title: "Delete Resource",
+      message: "This representative resource deletion uses the shared confirmation renderer.",
+      confirmLabel: "Delete",
+      tone: "destructive",
+    });
+  });
+
+  const confirmDialog = page.getByRole("dialog", { name: "Delete Resource" });
+  const confirmDelete = confirmDialog.getByRole("button", { name: "Delete", exact: true });
+  await expect(confirmDelete).toHaveClass(/mari-chrome-control--primary/u);
+  await expect(confirmDelete).toHaveCSS("color", accentColor);
+  expect(await confirmDelete.getAttribute("class")).not.toMatch(/destructive|pink|red|rose/iu);
+  await confirmDialog.getByRole("button", { name: "Cancel" }).click();
+
+  await page.evaluate(async () => {
+    const { showChoiceDialog } = (await import("/src/lib/app-dialogs.ts")) as {
+      showChoiceDialog: (options: {
+        title: string;
+        message: string;
+        choices: Array<{ key: string; label: string; tone: "destructive" }>;
+      }) => Promise<string | null>;
+    };
+    void showChoiceDialog({
+      title: "Delete Resources",
+      message: "Choose the deletion scope.",
+      choices: [{ key: "all", label: "Delete All", tone: "destructive" }],
+    });
+  });
+
+  const choiceDialog = page.getByRole("dialog", { name: "Delete Resources" });
+  const deleteAll = choiceDialog.getByRole("button", { name: "Delete All", exact: true });
+  await expect(deleteAll).toHaveClass(/mari-chrome-control--primary/u);
+  await expect(deleteAll).toHaveCSS("color", accentColor);
+  expect(await deleteAll.getAttribute("class")).not.toMatch(/destructive|pink|red|rose/iu);
+  await choiceDialog.getByRole("button", { name: "Cancel" }).click();
+});
+
+test("connection model fetch errors inherit the configured chroma text color", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name.includes("mobile"), "Desktop connection editor chrome is covered here.");
+
+  const connectionResponse = await page.request.post("/api/connections", {
+    data: {
+      name: "Connection Fetch Error Chroma",
+      provider: "custom",
+    },
+  });
+  expect(connectionResponse.ok()).toBeTruthy();
+  const connection = (await connectionResponse.json()) as { id: string };
+  const networkError = "NetworkError when attempting to fetch resource.";
+
+  try {
+    await page.route(`**/api/connections/${connection.id}/models`, async (route) => {
+      await route.fulfill({
+        status: 502,
+        contentType: "application/json",
+        body: JSON.stringify({ error: { message: networkError } }),
+      });
+    });
+    await page.goto("/");
+    await page.evaluate(() => {
+      document.documentElement.style.setProperty("--marinara-chat-chrome-panel-text", "rgb(12, 34, 56)");
+      document.documentElement.style.setProperty("--destructive", "rgb(255, 0, 0)");
+    });
+
+    await page.locator('[data-tour="panel-connections"]').click();
+    const rightPanel = page.locator('[data-component="RightPanelDesktop"]');
+    await rightPanel
+      .getByText("Connection Fetch Error Chroma", { exact: true })
+      .first()
+      .evaluate((element) => (element as HTMLElement).click());
+
+    const editor = page.locator(".mari-editor-shell");
+    await expect(editor).toBeVisible();
+    await editor.getByText("Select a model…", { exact: true }).click();
+    await editor.getByRole("button", { name: "Fetch Models from API" }).click();
+
+    const errorText = editor.getByText(networkError, { exact: true });
+    await expect(errorText).toBeVisible();
+    await expect(errorText).toHaveClass(/mari-chrome-text/u);
+    await expect(errorText).toHaveCSS("color", "rgb(12, 34, 56)");
+    expect(await errorText.getAttribute("class")).not.toMatch(/destructive|pink|red|rose/iu);
+  } finally {
+    await page.request.delete(`/api/connections/${connection.id}`).catch(() => undefined);
+  }
+});
+
+test("Character favorite tags and stars inherit the configured accent color", async ({ page, request }, testInfo) => {
+  test.skip(testInfo.project.name.includes("mobile"), "Desktop Character favorite chrome is covered here.");
+
+  const characterName = `Favorite Chroma ${Date.now().toString(36)}`;
+  const characterResponse = await request.post("/api/characters", {
+    data: {
+      data: {
+        name: characterName,
+        extensions: { fav: true },
+      },
+    },
+  });
+  expect(characterResponse.ok()).toBeTruthy();
+  const character = (await characterResponse.json()) as { id: string };
+  const accentColor = "rgb(18, 86, 170)";
+
+  try {
+    await page.goto("/");
+    await page.evaluate((accent) => {
+      document.documentElement.style.setProperty("--marinara-app-accent-solid", accent);
+      document.documentElement.style.setProperty("--marinara-app-accent-static", accent);
+      document.documentElement.style.setProperty("--marinara-chat-chrome-accent", accent);
+      document.documentElement.style.setProperty("--marinara-chat-chrome-button-text-active", accent);
+      document.documentElement.style.setProperty("--marinara-editor-accent", accent);
+    }, accentColor);
+
+    await page.locator('[data-tour="panel-characters"]').click();
+    const rightPanel = page.locator('[data-component="RightPanelDesktop"]');
+    const characterRow = rightPanel.locator('[data-touch-drag-card="character"]').filter({ hasText: characterName });
+    await expect(characterRow).toBeVisible();
+
+    const panelStar = characterRow.locator('[data-character-favorite-indicator="panel"]');
+    await expect(panelStar).toHaveCSS("color", accentColor);
+    expect(await panelStar.getAttribute("class")).not.toMatch(/amber|yellow/iu);
+
+    await characterRow.click();
+    const editor = page.locator(".mari-editor-shell");
+    const favoriteToggle = editor.locator("[data-character-favorite-toggle]");
+    await expect(favoriteToggle).toHaveAttribute("data-favorite", "true");
+    await expect(favoriteToggle).toHaveCSS("color", accentColor);
+    expect(await favoriteToggle.getAttribute("class")).not.toMatch(/amber|yellow/iu);
+    await editor.getByTitle("Back").click();
+
+    await rightPanel.getByRole("button", { name: "Open Full Library" }).click();
+    const library = page.locator('[data-component="CharacterLibraryView"]');
+    await library.getByPlaceholder('Search characters or -tag:"tag name"').fill(characterName);
+
+    const cardFavorite = library.locator('[data-character-favorite-indicator="card"]');
+    const detailFavorite = library.locator('[data-character-favorite-indicator="detail"]:visible');
+    for (const indicator of [cardFavorite, detailFavorite]) {
+      await expect(indicator).toBeVisible();
+      await expect(indicator).toHaveClass(/mari-chrome-accent-surface/u);
+      await expect(indicator).toHaveCSS("color", accentColor);
+      expect(await indicator.getAttribute("class")).not.toMatch(/amber|yellow/iu);
+    }
+  } finally {
+    await request.delete(`/api/characters/${character.id}`).catch(() => undefined);
   }
 });
 

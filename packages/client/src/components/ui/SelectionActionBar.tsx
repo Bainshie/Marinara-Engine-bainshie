@@ -6,6 +6,7 @@ interface SelectionActionBarProps {
   selectedCount: number;
   onExport: () => void;
   onDelete: () => void;
+  deleteTone?: "accent" | "danger";
   exportDisabled?: boolean;
   deleteDisabled?: boolean;
   exporting?: boolean;
@@ -17,6 +18,7 @@ export function SelectionActionBar({
   selectedCount,
   onExport,
   onDelete,
+  deleteTone = "danger",
   exportDisabled = false,
   deleteDisabled = false,
   exporting = false,
@@ -49,7 +51,10 @@ export function SelectionActionBar({
           type="button"
           onClick={onDelete}
           disabled={selectedCount === 0 || deleteDisabled || exporting}
-          className="mari-chrome-control mari-chrome-control--danger flex-1 px-3 py-2 text-xs"
+          className={cn(
+            "mari-chrome-control flex-1 px-3 py-2 text-xs",
+            deleteTone === "danger" ? "mari-chrome-control--danger" : "mari-chrome-control--primary",
+          )}
         >
           <Trash2 size="0.75rem" />{localizeUi("lorebook.editor.batch.delete")}</button>
       </div>
