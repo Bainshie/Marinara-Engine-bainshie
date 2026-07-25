@@ -200,6 +200,7 @@ const visualReferenceDefinition = definition([
     referenceImageId: "gallery-image-1",
     useReferenceImage: true,
     mapBackgroundImageId: "gallery-image-2",
+    mapBackgroundPosition: { x: 25, y: 75 },
   }),
 ]);
 assert.equal(spatialContextDefinitionSchema.safeParse(visualReferenceDefinition).success, true);
@@ -214,6 +215,13 @@ assert.equal(
   spatialContextDefinitionSchema.safeParse({
     ...visualReferenceDefinition,
     locations: [{ ...visualReferenceDefinition.locations[0], mapBackgroundImageId: "x".repeat(201) }],
+  }).success,
+  false,
+);
+assert.equal(
+  spatialContextDefinitionSchema.safeParse({
+    ...visualReferenceDefinition,
+    locations: [{ ...visualReferenceDefinition.locations[0], mapBackgroundPosition: { x: -1, y: 50 } }],
   }).success,
   false,
 );

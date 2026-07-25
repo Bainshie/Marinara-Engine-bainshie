@@ -47,6 +47,7 @@ export const spatialLocationSchema = z
     referenceImageId: z.string().trim().min(1).max(200).optional(),
     useReferenceImage: z.boolean().optional(),
     mapBackgroundImageId: z.string().trim().min(1).max(200).optional(),
+    mapBackgroundPosition: spatialLocationPlacementSchema.optional(),
     lorebookEntryIds: z
       .array(z.string().trim().min(1))
       .max(SPATIAL_CONTEXT_LIMITS.maxLorebookEntryIdsPerLocation)

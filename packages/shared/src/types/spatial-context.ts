@@ -39,6 +39,8 @@ export interface SpatialLocation {
   useReferenceImage?: boolean;
   /** Chat Gallery image displayed behind this location's child map. */
   mapBackgroundImageId?: string;
+  /** Saved focal point used to position the child map background. */
+  mapBackgroundPosition?: SpatialLocationPlacement;
   /** Stable lorebook entry IDs activated only while this exact location is current. */
   lorebookEntryIds: string[];
   childPresentation: SpatialChildPresentation;
