@@ -2245,22 +2245,6 @@ function formatStoryboardSectionLabel(frame: GameTurnStoryboardKeyframe): string
   return `Sections ${Math.min(start, end) + 1}-${Math.max(start, end) + 1}`;
 }
 
-function parseGameChatCharacterIds(value: Chat["characterIds"]): string[] {
-  const parsed = (() => {
-    if (Array.isArray(value)) return value;
-    if (typeof value !== "string") return [];
-    try {
-      const decoded = JSON.parse(value);
-      return Array.isArray(decoded) ? decoded : [];
-    } catch {
-      return [];
-    }
-  })();
-  return Array.from(
-    new Set(parsed.filter((characterId): characterId is string => typeof characterId === "string" && !!characterId)),
-  );
-}
-
 function buildSegmentEditMap(chatMeta: Record<string, unknown>): Map<string, GameSegmentEdit> {
   const map = new Map<string, GameSegmentEdit>();
   for (const [key, value] of Object.entries(chatMeta)) {
@@ -9806,7 +9790,7 @@ function GameSurfaceComponent({
   // Does this chat need initial game creation?
   const needsCreation = !chatMeta.gameId;
   const initialSetupPartyCharacterIds = useMemo(
-    () => parseGameChatCharacterIds(chat.characterIds),
+    () => getChatCharacterIds(chat.characterIds).filter((id) => id !== PROFESSOR_MARI_ID),
     [chat.characterIds],
   );
   const setupWizardDismissed = dismissedSetupWizardChatId === activeChatId;
