@@ -30,8 +30,6 @@ import {
   MessageSquare,
   Sparkles,
   Image,
-  Film,
-  PanelsTopLeft,
   Pencil,
   AlertTriangle,
   GripVertical,
@@ -6701,45 +6699,6 @@ export function ChatSettingsDrawer({
                     </div>
                   )}
 
-                  {isRoleplayMode && (
-                    <AgentSettingsCard
-                      icon={<Film size="0.75rem" className="mt-0.5 text-[var(--primary)]" />}
-                      title={localizeUi("ui.chat.chatsettingsdrawer.sceneVideos")}
-                      description={localizeUi(
-                        "ui.chat.chatsettingsdrawer.generateManualMp4SceneVideosFromGalleryImages",
-                      )}
-                    >
-                      <label className="flex flex-col gap-1">
-                        <span className="text-[0.625rem] font-medium text-[var(--foreground)]">
-                          {localizeUi("ui.chat.chatsettingsdrawer.videoConnection")}
-                        </span>
-                        <select
-                          value={(metadata.sceneVideoConnectionId as string) ?? ""}
-                          onChange={(e) =>
-                            updateMeta.mutate({ id: chat.id, sceneVideoConnectionId: e.target.value || null })
-                          }
-                          className="w-full rounded-lg border border-[var(--border)] bg-[var(--background)] px-2.5 py-2 text-xs text-[var(--foreground)] outline-none transition-colors focus:border-[var(--primary)]/50"
-                        >
-                          <option value="">{localizeUi("ui.chat.chatsettingsdrawer.selectVideoConnection")}</option>
-                          {(videoConnectionsList ?? []).map((c: { id: string; name: string; model?: string }) => (
-                            <option key={c.id} value={c.id}>
-                              {c.name}
-                              {c.model ? localizeUi("ui.chat.chatsettingsdrawer.value1", { value1: c.model }) : ""}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                      {videoConnectionsList.length === 0 && (
-                        <p className="text-[0.625rem] text-amber-700 dark:text-amber-400/80">
-                          {localizeUi("ui.chat.chatsettingsdrawer.noVideoGenerationConnectionsFoundAddOneInSettings")}
-                        </p>
-                      )}
-                      <p className="text-[0.625rem] text-[var(--muted-foreground)]">
-                        {localizeUi("ui.chat.chatsettingsdrawer.galleryVideoAndImageAnimateUseThisConnectionWith")}
-                      </p>
-                    </AgentSettingsCard>
-                  )}
-
                   {isGame && (
                     <AgentSettingsCard
                       icon={<BookOpen size="0.75rem" className="mt-0.5 text-[var(--primary)]" />}
@@ -7676,6 +7635,54 @@ export function ChatSettingsDrawer({
                               <span>{localizeUi("ui.chat.chatsettingsdrawer.openSetup")}</span>
                             </button>
                           </div>
+                          {illustratorInstalled && (
+                            <AgentSettingsSubsection
+                              id="scene-videos"
+                              title={localizeUi("ui.chat.chatsettingsdrawer.sceneVideos")}
+                              description={localizeUi(
+                                "ui.chat.chatsettingsdrawer.generateManualMp4SceneVideosFromGalleryImages",
+                              )}
+                            >
+                              <label className="flex flex-col gap-1">
+                                <span className="text-[0.625rem] font-medium text-[var(--foreground)]">
+                                  {localizeUi("ui.chat.chatsettingsdrawer.videoConnection")}
+                                </span>
+                                <select
+                                  value={(metadata.sceneVideoConnectionId as string) ?? ""}
+                                  onChange={(e) =>
+                                    updateMeta.mutate({ id: chat.id, sceneVideoConnectionId: e.target.value || null })
+                                  }
+                                  className="w-full rounded-lg border border-[var(--border)] bg-[var(--background)] px-2.5 py-2 text-xs text-[var(--foreground)] outline-none transition-colors focus:border-[var(--primary)]/50"
+                                >
+                                  <option value="">
+                                    {localizeUi("ui.chat.chatsettingsdrawer.selectVideoConnection")}
+                                  </option>
+                                  {(videoConnectionsList ?? []).map(
+                                    (c: { id: string; name: string; model?: string }) => (
+                                      <option key={c.id} value={c.id}>
+                                        {c.name}
+                                        {c.model
+                                          ? localizeUi("ui.chat.chatsettingsdrawer.value1", { value1: c.model })
+                                          : ""}
+                                      </option>
+                                    ),
+                                  )}
+                                </select>
+                              </label>
+                              {videoConnectionsList.length === 0 && (
+                                <p className="text-[0.625rem] text-amber-700 dark:text-amber-400/80">
+                                  {localizeUi(
+                                    "ui.chat.chatsettingsdrawer.noVideoGenerationConnectionsFoundAddOneInSettings",
+                                  )}
+                                </p>
+                              )}
+                              <p className="text-[0.625rem] text-[var(--muted-foreground)]">
+                                {localizeUi(
+                                  "ui.chat.chatsettingsdrawer.galleryVideoAndImageAnimateUseThisConnectionWith",
+                                )}
+                              </p>
+                            </AgentSettingsSubsection>
+                          )}
                         </AgentSettingsCard>
                       )}
 
@@ -7967,6 +7974,7 @@ export function ChatSettingsDrawer({
                   {/* Illustrator — game mode only */}
                   {isGame && (
                     <AgentSettingsCard
+                      id={getAgentSettingsMenuId(chat.id, "illustrator")}
                       icon={<Image size="0.75rem" className="mt-0.5 text-[var(--primary)]" />}
                       title={localizeUi("ui.chat.chatsettingsdrawer.illustrator")}
                       description={localizeUi(
@@ -8171,30 +8179,53 @@ export function ChatSettingsDrawer({
                           />
                         </div>
                       )}
-                    </AgentSettingsCard>
-                  )}
-
-                  {isGame && illustratorInstalled && (
-                    <AgentSettingsCard
-                      icon={<Film size="0.75rem" className="mt-0.5 text-[var(--primary)]" />}
-                      title={localizeUi("ui.chat.chatsettingsdrawer.sceneVideos")}
-                      description={localizeUi("ui.chat.chatsettingsdrawer.generateMp4SceneVideosFromGameIllustrations")}
-                    >
-                      <AgentSettingsToggle
-                        label={localizeUi("ui.chat.chatsettingsdrawer.enableSceneVideos")}
-                        description={localizeUi(
-                          "ui.chat.chatsettingsdrawer.showSceneVideoControlsAndAllowManualVideoGeneration",
-                        )}
-                        enabled={gameSceneVideosEnabled}
-                        onToggle={() =>
-                          updateMeta.mutate({
-                            id: chat.id,
-                            gameSceneVideosEnabled: !gameSceneVideosEnabled,
-                          })
-                        }
-                      />
-                      {gameSceneVideosEnabled && (
-                        <>
+                      {illustratorInstalled && (
+                        <div
+                          data-agent-settings-feature-toggles="illustrator"
+                          className="space-y-2 border-t border-[var(--border)] pt-3"
+                        >
+                          <AgentSettingsToggle
+                            label={localizeUi("ui.chat.chatsettingsdrawer.enableSceneVideos")}
+                            description={localizeUi(
+                              "ui.chat.chatsettingsdrawer.showSceneVideoControlsAndAllowManualVideoGeneration",
+                            )}
+                            enabled={gameSceneVideosEnabled}
+                            onToggle={() =>
+                              updateMeta.mutate({
+                                id: chat.id,
+                                gameSceneVideosEnabled: !gameSceneVideosEnabled,
+                              })
+                            }
+                          />
+                          <AgentSettingsToggle
+                            label={localizeUi("ui.chat.chatsettingsdrawer.enableStoryboards")}
+                            description={localizeUi(
+                              "ui.chat.chatsettingsdrawer.showStoryboardControlsAndAllowAutomaticKeyframeMedia",
+                            )}
+                            enabled={gameStoryboardsEnabled}
+                            onToggle={() =>
+                              updateMeta.mutate({
+                                id: chat.id,
+                                gameStoryboardsEnabled: !gameStoryboardsEnabled,
+                                ...(!gameStoryboardsEnabled
+                                  ? {}
+                                  : {
+                                      gameStoryboardAutoIllustrationsEnabled: false,
+                                      gameStoryboardAutoGenerationEnabled: false,
+                                    }),
+                              })
+                            }
+                          />
+                        </div>
+                      )}
+                      {illustratorInstalled && gameSceneVideosEnabled && (
+                        <AgentSettingsSubsection
+                          id="scene-videos"
+                          title={localizeUi("ui.chat.chatsettingsdrawer.sceneVideos")}
+                          description={localizeUi(
+                            "ui.chat.chatsettingsdrawer.generateMp4SceneVideosFromGameIllustrations",
+                          )}
+                        >
                           <GenerationSettingsLink
                             onClick={openGenerationSettings}
                             title={localizeUi("ui.chat.chatsettingsdrawer.openSettingsGenerations")}
@@ -8245,40 +8276,16 @@ export function ChatSettingsDrawer({
                               "ui.chat.chatsettingsdrawer.sceneVideosUseTheLatestGeneratedSceneIllustrationAs",
                             )}
                           </p>
-                        </>
+                        </AgentSettingsSubsection>
                       )}
-                    </AgentSettingsCard>
-                  )}
-
-                  {isGame && illustratorInstalled && (
-                    <AgentSettingsCard
-                      icon={<PanelsTopLeft size="0.75rem" className="mt-0.5 text-[var(--primary)]" />}
-                      title={localizeUi("ui.chat.chatsettingsdrawer.storyboards")}
-                      description={localizeUi(
-                        "ui.chat.chatsettingsdrawer.createKeyframeMediaForCompletedGmTurnsAndFollow",
-                      )}
-                    >
-                      <AgentSettingsToggle
-                        label={localizeUi("ui.chat.chatsettingsdrawer.enableStoryboards")}
-                        description={localizeUi(
-                          "ui.chat.chatsettingsdrawer.showStoryboardControlsAndAllowAutomaticKeyframeMedia",
-                        )}
-                        enabled={gameStoryboardsEnabled}
-                        onToggle={() =>
-                          updateMeta.mutate({
-                            id: chat.id,
-                            gameStoryboardsEnabled: !gameStoryboardsEnabled,
-                            ...(!gameStoryboardsEnabled
-                              ? {}
-                              : {
-                                  gameStoryboardAutoIllustrationsEnabled: false,
-                                  gameStoryboardAutoGenerationEnabled: false,
-                                }),
-                          })
-                        }
-                      />
-                      {gameStoryboardsEnabled && (
-                        <>
+                      {illustratorInstalled && gameStoryboardsEnabled && (
+                        <AgentSettingsSubsection
+                          id="storyboards"
+                          title={localizeUi("ui.chat.chatsettingsdrawer.storyboards")}
+                          description={localizeUi(
+                            "ui.chat.chatsettingsdrawer.createKeyframeMediaForCompletedGmTurnsAndFollow",
+                          )}
+                        >
                           <div className="flex items-start gap-2 rounded-lg border border-[var(--border)] bg-[var(--background)]/60 px-3 py-2 text-[0.625rem] leading-relaxed text-[var(--muted-foreground)]">
                             <Image size="0.75rem" className="mt-0.5 shrink-0 text-[var(--primary)]" />
                             <p>{localizeUi("ui.chat.chatsettingsdrawer.recommendedUseAStrongStateOfTheArtImage")}</p>
@@ -8565,7 +8572,7 @@ export function ChatSettingsDrawer({
                               "ui.chat.chatsettingsdrawer.flowTheSelectedPlannerCreatesEachKeyframePlanStoryboard",
                             )}
                           </p>
-                        </>
+                        </AgentSettingsSubsection>
                       )}
                     </AgentSettingsCard>
                   )}
@@ -9928,6 +9935,28 @@ function GenerationSettingsLink({
   );
 }
 
+function AgentSettingsSubsection({
+  id,
+  title,
+  description,
+  children,
+}: {
+  id: string;
+  title: string;
+  description: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section data-agent-settings-subsection={id} className="space-y-2 border-t border-[var(--border)] pt-3">
+      <div data-agent-settings-subsection-header className="space-y-0.5 px-0.5">
+        <h4 className="text-[0.6875rem] font-semibold text-[var(--foreground)]">{title}</h4>
+        <p className="text-[0.59375rem] leading-snug text-[var(--muted-foreground)]">{description}</p>
+      </div>
+      {children}
+    </section>
+  );
+}
+
 function AgentSettingsCard({
   id,
   icon,
@@ -9962,7 +9991,7 @@ function AgentSettingsCard({
       className="scroll-mt-3 rounded-xl border border-[var(--border)] bg-[var(--secondary)]/70 focus:outline-none focus:ring-1 focus:ring-[var(--primary)]/45"
       style={order == null ? undefined : { order }}
     >
-      <div className="flex items-start gap-1 p-3">
+      <div className="flex items-start p-3">
         <button
           type="button"
           onClick={() => setOpen((current) => !current)}
@@ -9988,21 +10017,23 @@ function AgentSettingsCard({
             )}
           />
         </button>
-        {onRemove && (
+      </div>
+      {open && (
+        <div id={contentId} className="space-y-2 px-3 pb-2">
+          {children}
+        </div>
+      )}
+      {onRemove && open && (
+        <div className="flex justify-end px-3 pb-3 pt-1">
           <button
             type="button"
             onClick={onRemove}
-            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-[var(--muted-foreground)] transition-colors hover:bg-[var(--destructive)]/15 hover:text-[var(--destructive)] focus:outline-none focus:ring-1 focus:ring-[var(--destructive)]/45 active:scale-95"
+            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[var(--primary)]/10 text-[var(--primary)] ring-1 ring-[var(--primary)]/25 transition-colors hover:bg-[var(--primary)]/15 focus:outline-none focus:ring-1 focus:ring-[var(--primary)]/55 active:scale-95"
             title={localizeUi("ui.chat.agentsettingscard.removeValue1FromChat", { value1: title })}
             aria-label={localizeUi("ui.chat.agentsettingscard.removeValue1FromChat", { value1: title })}
           >
             <Trash2 size="0.75rem" />
           </button>
-        )}
-      </div>
-      {open && (
-        <div id={contentId} className="space-y-2 px-3 pb-3">
-          {children}
         </div>
       )}
     </div>

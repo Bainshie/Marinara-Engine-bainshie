@@ -69,6 +69,7 @@ export function FeatureAgentDetailHost({
             id: agent.id,
             name: agent.name,
             description: agent.description,
+            author: agent.author ?? null,
             modeAllowlist: agent.modeAllowlist ? [...agent.modeAllowlist] : [],
           },
           chatId: activeChatSupported ? (activeChat?.id ?? null) : null,

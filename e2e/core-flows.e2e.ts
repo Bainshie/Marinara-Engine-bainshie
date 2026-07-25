@@ -5778,6 +5778,170 @@ test("Roleplay and Game chat settings link empty agent libraries to Download Age
   }
 });
 
+test("Illustrator owns conditional media subsections and agent removal stays away from collapse", async ({
+  page,
+  request,
+}, testInfo) => {
+  test.skip(!testInfo.project.name.includes("desktop"), "Illustrator agent card hierarchy is covered on desktop.");
+  test.setTimeout(90_000);
+
+  const errors = collectUnexpectedErrors(page);
+  const chatResponse = await request.post("/api/chats", {
+    data: { name: "Roleplay Illustrator Agent Card Smoke", mode: "roleplay", characterIds: [] },
+  });
+  expect(chatResponse.ok()).toBeTruthy();
+  const chat = (await chatResponse.json()) as { id: string };
+  const gameChatResponse = await request.post("/api/chats", {
+    data: { name: "Game Illustrator Subsections Smoke", mode: "game", characterIds: [] },
+  });
+  expect(gameChatResponse.ok()).toBeTruthy();
+  const gameChat = (await gameChatResponse.json()) as { id: string };
+  const gameMetadataResponse = await request.patch(`/api/chats/${gameChat.id}/metadata`, {
+    data: {
+      gameId: "illustrator-subsections-smoke-game",
+      gameSessionStatus: "active",
+      gameSessionNumber: 1,
+      gameIntroPresented: true,
+      enableAgents: true,
+      activeAgentIds: ["illustrator"],
+      gameSceneVideosEnabled: false,
+      gameStoryboardsEnabled: false,
+    },
+  });
+  expect(gameMetadataResponse.ok()).toBeTruthy();
+  const gameMessageResponse = await request.post(`/api/chats/${gameChat.id}/messages`, {
+    data: { role: "assistant", content: "The Illustrator subsection smoke campaign begins." },
+  });
+  expect(gameMessageResponse.ok()).toBeTruthy();
+  const illustratorManifest = {
+    id: "illustrator",
+    name: "Illustrator",
+    description: "Generates visual scene prompts and images.",
+    author: "Pasta Devs",
+    phase: "post_processing",
+    execution: "feature",
+    enabledByDefault: false,
+    category: "misc",
+    modeAllowlist: ["roleplay", "game"],
+    defaultPromptTemplate: "Return a scene image prompt.",
+  };
+
+  await page.route("**/api/capability-packages/agents", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify([illustratorManifest]),
+    });
+  });
+  await page.route("**/api/capability-packages/installed", async (route) => {
+    await route.fulfill({ status: 200, contentType: "application/json", body: "[]" });
+  });
+  await page.route("**/api/agents", async (route) => {
+    await route.fulfill({ status: 200, contentType: "application/json", body: "[]" });
+  });
+  await page.route("**/api/lorebooks/scan/**", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ entries: [], budgetSkippedEntries: [], totalTokens: 0, totalEntries: 0 }),
+    });
+  });
+  await page.route("**/api/backgrounds/file/Black.jpg", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "image/gif",
+      body: Buffer.from(TRANSPARENT_GIF_BASE64, "base64"),
+    });
+  });
+
+  const openAgentsSection = async () => {
+    await page.getByRole("button", { name: "Chat Settings" }).click();
+    const drawer = page.locator(".mari-chat-settings-drawer");
+    const section = drawer.locator('[role="button"][aria-expanded]').filter({ hasText: /^Agents/ });
+    if ((await section.getAttribute("aria-expanded")) !== "true") await section.click();
+    await expect(section).toHaveAttribute("aria-expanded", "true");
+    return drawer;
+  };
+
+  try {
+    await page.addInitScript((chatId) => {
+      if (sessionStorage.getItem("illustrator-subsections-chat-seeded")) return;
+      localStorage.setItem("marinara-active-chat-id", chatId);
+      sessionStorage.setItem("illustrator-subsections-chat-seeded", "true");
+    }, chat.id);
+    await page.goto("/");
+    let drawer = await openAgentsSection();
+    await expect(drawer.getByText("Scene Videos", { exact: true })).toHaveCount(0);
+
+    const metadataResponse = await request.patch(`/api/chats/${chat.id}/metadata`, {
+      data: { enableAgents: true, activeAgentIds: ["illustrator"] },
+    });
+    expect(metadataResponse.ok()).toBeTruthy();
+    await page.reload();
+    drawer = await openAgentsSection();
+
+    const illustratorCard = drawer.locator(`#chat-settings-agent-menu-${chat.id}-illustrator`);
+    await expect(illustratorCard).toBeVisible();
+    const sceneVideosSubsection = illustratorCard.locator('[data-agent-settings-subsection="scene-videos"]');
+    await expect(sceneVideosSubsection).toBeVisible();
+    await expect(sceneVideosSubsection.getByRole("heading", { name: "Scene Videos" })).toBeVisible();
+    await expect(sceneVideosSubsection.locator("[data-agent-settings-subsection-header] > svg")).toHaveCount(0);
+
+    const collapseButton = illustratorCard.getByRole("button", { name: "Collapse Illustrator" });
+    const cardToggle = illustratorCard.locator("button[aria-controls][aria-expanded]");
+    const removeButton = illustratorCard.getByRole("button", { name: "Remove Illustrator from chat" });
+    const assertRemoveAtBottomRight = async () => {
+      const [cardBox, collapseBox, removeBox] = await Promise.all([
+        illustratorCard.boundingBox(),
+        cardToggle.boundingBox(),
+        removeButton.boundingBox(),
+      ]);
+      expect(cardBox).not.toBeNull();
+      expect(collapseBox).not.toBeNull();
+      expect(removeBox).not.toBeNull();
+      expect(removeBox!.y).toBeGreaterThanOrEqual(collapseBox!.y + collapseBox!.height);
+      expect(Math.abs(cardBox!.x + cardBox!.width - 12 - (removeBox!.x + removeBox!.width))).toBeLessThanOrEqual(2);
+      expect(Math.abs(cardBox!.y + cardBox!.height - 12 - (removeBox!.y + removeBox!.height))).toBeLessThanOrEqual(2);
+    };
+    await assertRemoveAtBottomRight();
+    await collapseButton.click();
+    const expandButton = illustratorCard.getByRole("button", { name: "Expand Illustrator" });
+    await expect(expandButton).toHaveAttribute("aria-expanded", "false");
+    await expect(removeButton).toHaveCount(0);
+
+    await page.evaluate((chatId) => localStorage.setItem("marinara-active-chat-id", chatId), gameChat.id);
+    await page.reload();
+    drawer = await openAgentsSection();
+
+    const gameIllustratorCard = drawer.locator(`#chat-settings-agent-menu-${gameChat.id}-illustrator`);
+    const featureToggles = gameIllustratorCard.locator('[data-agent-settings-feature-toggles="illustrator"]');
+    const sceneVideosToggle = featureToggles.getByRole("checkbox", { name: /Enable Scene Videos/ });
+    const storyboardsToggle = featureToggles.getByRole("checkbox", { name: /Enable Storyboards/ });
+    await expect(gameIllustratorCard).toBeVisible();
+    await expect(sceneVideosToggle).not.toBeChecked();
+    await expect(storyboardsToggle).not.toBeChecked();
+    await expect(gameIllustratorCard.locator('[data-agent-settings-subsection="scene-videos"]')).toHaveCount(0);
+    await expect(gameIllustratorCard.locator('[data-agent-settings-subsection="storyboards"]')).toHaveCount(0);
+
+    await featureToggles.getByText("Enable Scene Videos", { exact: true }).click();
+    const gameSceneVideosSubsection = gameIllustratorCard.locator('[data-agent-settings-subsection="scene-videos"]');
+    await expect(sceneVideosToggle).toBeChecked();
+    await expect(gameSceneVideosSubsection).toBeVisible();
+    await expect(gameSceneVideosSubsection.getByRole("heading", { name: "Scene Videos" })).toBeVisible();
+    await expect(gameSceneVideosSubsection.locator("[data-agent-settings-subsection-header] > svg")).toHaveCount(0);
+
+    await featureToggles.getByText("Enable Storyboards", { exact: true }).click();
+    const gameStoryboardsSubsection = gameIllustratorCard.locator('[data-agent-settings-subsection="storyboards"]');
+    await expect(storyboardsToggle).toBeChecked();
+    await expect(gameStoryboardsSubsection).toBeVisible();
+    await expect(gameStoryboardsSubsection.getByRole("heading", { name: "Storyboards" })).toBeVisible();
+    await expect(gameStoryboardsSubsection.locator("[data-agent-settings-subsection-header] > svg")).toHaveCount(0);
+    expect(errors).toEqual([]);
+  } finally {
+    await Promise.all([chat.id, gameChat.id].map((chatId) => request.delete(`/api/chats/${chatId}`)));
+  }
+});
+
 test("Hierarchical Maps settings stay inside the active agent entry", async ({ page, request }, testInfo) => {
   test.skip(!testInfo.project.name.includes("desktop"), "Hierarchical Maps agent placement is covered on desktop.");
   test.setTimeout(90_000);
