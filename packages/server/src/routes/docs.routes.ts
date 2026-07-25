@@ -92,6 +92,7 @@ const DOC_ORDER: Record<string, string[]> = {
     "hud-widgets.md",
     "game-assets.md",
     "storyboard.md",
+    "ltx-2-3-storyboards.md",
   ],
   characters: [
     "creating-and-editing-characters.md",
