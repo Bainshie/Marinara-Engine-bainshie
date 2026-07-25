@@ -3195,6 +3195,9 @@ try {
   assert.equal(parseGenerationParameterDraft("0.075"), 0.075);
   assert.equal(isReservedManagedGenerationParameterKey("temperature"), true);
   assert.equal(isReservedManagedGenerationParameterKey("min_p"), false);
+  assert.equal(isReservedManagedGenerationParameterKey("__proto__"), true);
+  assert.equal(isReservedManagedGenerationParameterKey("constructor"), true);
+  assert.equal(isReservedManagedGenerationParameterKey("prototype"), true);
 
   const definitions = parseManagedGenerationParameterDefinitions([
     {
@@ -3254,6 +3257,19 @@ try {
     resolveManagedGenerationParameters([], { "min-p": { enabled: true, value: 0.2 } }),
     {},
     "Deleting a definition must prevent its hidden stored value from being sent",
+  );
+  assert.equal(
+    parseManagedGenerationParameterDefinitions(
+      Array.from({ length: 101 }, (_, index) => ({
+        id: `parameter-${index}`,
+        name: `Parameter ${index}`,
+        requestKey: `parameter_${index}`,
+        min: 0,
+        max: 1,
+      })),
+    ).length,
+    100,
+    "Managed parameter parsing must enforce the declared definition ceiling",
   );
 }
 

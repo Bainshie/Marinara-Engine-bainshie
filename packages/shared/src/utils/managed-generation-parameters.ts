@@ -1,4 +1,7 @@
-import { managedGenerationParameterDefinitionSchema } from "../schemas/app-settings.schema.js";
+import {
+  managedGenerationParameterDefinitionSchema,
+  MAX_MANAGED_GENERATION_PARAMETER_DEFINITIONS,
+} from "../schemas/app-settings.schema.js";
 import type {
   ManagedGenerationParameterDefinition,
   ManagedGenerationParameterValueMap,
@@ -10,7 +13,10 @@ const RESERVED_REQUEST_KEYS = new Set(
     "max_tokens",
     "messages",
     "model",
+    "__proto__",
+    "constructor",
     "presence_penalty",
+    "prototype",
     "reasoning_effort",
     "service_tier",
     "stop",
@@ -44,7 +50,7 @@ export function parseManagedGenerationParameterDefinitions(
   const definitions: ManagedGenerationParameterDefinition[] = [];
   const usedIds = new Set<string>();
   const usedKeys = new Set<string>();
-  for (const candidate of parsed) {
+  for (const candidate of parsed.slice(0, MAX_MANAGED_GENERATION_PARAMETER_DEFINITIONS)) {
     const result = managedGenerationParameterDefinitionSchema.safeParse(candidate);
     if (!result.success) continue;
     const definition = result.data;

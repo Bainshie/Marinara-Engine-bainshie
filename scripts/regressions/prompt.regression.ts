@@ -3860,7 +3860,6 @@ Use HTML sparingly and diegetically. Do not replace normal prose/dialogue unless
       const disabledCapture = makeCapturingProvider("No lorebook context.");
       const disabledConfig = makeRegressionAgentConfig({
         ...enabledConfig,
-        id: "custom:lore-disabled",
         settings: {
           contextSize: 1,
           maxTokens: 256,

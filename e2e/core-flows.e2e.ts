@@ -8836,6 +8836,7 @@ test("kaomoji scrollbar presses stay inside the picker and use chat chroma", asy
       const chromaColor = getComputedStyle(document.documentElement)
         .getPropertyValue("--marinara-chat-chrome-button-text-active")
         .trim();
+      if (!chromaColor) return false;
       const probe = document.createElement("span");
       probe.style.color = chromaColor;
       document.body.appendChild(probe);

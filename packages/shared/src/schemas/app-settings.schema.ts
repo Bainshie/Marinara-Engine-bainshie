@@ -3,6 +3,8 @@
 // ──────────────────────────────────────────────
 import { z } from "zod";
 
+export const MAX_MANAGED_GENERATION_PARAMETER_DEFINITIONS = 100;
+
 export const managedGenerationParameterDefinitionSchema = z.object({
   id: z.string().trim().min(1).max(100),
   name: z.string().trim().min(1).max(100),
@@ -19,7 +21,7 @@ export const managedGenerationParameterDefinitionSchema = z.object({
 
 export const managedGenerationParameterDefinitionsSchema = z
   .array(managedGenerationParameterDefinitionSchema)
-  .max(100);
+  .max(MAX_MANAGED_GENERATION_PARAMETER_DEFINITIONS);
 
 export type ManagedGenerationParameterDefinitionInput = z.infer<typeof managedGenerationParameterDefinitionSchema>;
 
