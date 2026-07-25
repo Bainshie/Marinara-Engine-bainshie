@@ -104,7 +104,7 @@ import {
   sanitizeAgentSettingsForTransfer,
 } from "../../lib/agent-transfer";
 import { downloadZipFile } from "../../lib/download-zip";
-import { useTranslation as useUiTranslation } from "react-i18next";
+import { Trans, useTranslation as useUiTranslation } from "react-i18next";
 
 function parseActivationKeywordsText(value: string): string[] {
   const seen = new Set<string>();
@@ -2815,8 +2815,14 @@ export function AgentEditor() {
                       >
                         <ExternalLink size="0.8rem" />{localizeUi("ui.agents.agenteditor.openFolder")}</button>
                     </div>
-                    <p className="mt-2 text-[0.625rem] leading-relaxed text-white/40">{localizeUi("ui.agents.agenteditor.use")} <code>{"music"}</code> {localizeUi("ui.agents.agenteditor.forTheWholeGameAssetsMusicLibraryOrA")}{" "}
-                      <code>{"music/combat"}</code>.
+                    <p className="mt-2 text-[0.625rem] leading-relaxed text-white/40">
+                      <Trans
+                        i18nKey="ui.agents.agenteditor.gameAssetsMusicFolderGuidance"
+                        components={{
+                          folder: <code />,
+                          subfolder: <code />,
+                        }}
+                      />
                     </p>
                   </div>
                 ) : (

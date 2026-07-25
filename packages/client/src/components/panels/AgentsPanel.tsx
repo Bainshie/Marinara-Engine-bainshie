@@ -325,10 +325,30 @@ export function AgentsPanel() {
       ? (availableBuiltInAgents.find((entry) => entry.id === agent.type)?.category ?? "misc")
       : "custom",
   });
-  const agentCategorySections: Array<{ category: AgentCategory; title: string; icon: ReactNode }> = [
-    { category: "writer", title: "Writing Agents", icon: <PenLine size="0.8125rem" /> },
-    { category: "tracker", title: "Tracker Agents", icon: <Radar size="0.8125rem" /> },
-    { category: "misc", title: "Misc Agents", icon: <Puzzle size="0.8125rem" /> },
+  const agentCategorySections: Array<{
+    category: AgentCategory;
+    title: string;
+    emptyMessage: string;
+    icon: ReactNode;
+  }> = [
+    {
+      category: "writer",
+      title: localizeUi("ui.panels.agentspanel.writingAgents"),
+      emptyMessage: localizeUi("ui.panels.agentspanel.noWritingAgentsYet"),
+      icon: <PenLine size="0.8125rem" />,
+    },
+    {
+      category: "tracker",
+      title: localizeUi("ui.panels.agentspanel.trackerAgents"),
+      emptyMessage: localizeUi("ui.panels.agentspanel.noTrackerAgentsYet"),
+      icon: <Radar size="0.8125rem" />,
+    },
+    {
+      category: "misc",
+      title: localizeUi("ui.panels.agentspanel.miscAgents"),
+      emptyMessage: localizeUi("ui.panels.agentspanel.noMiscAgentsYet"),
+      icon: <Puzzle size="0.8125rem" />,
+    },
   ];
   const visibleCustomAgents = sortBasicPanelItems(
     customAgents.filter(
@@ -996,7 +1016,7 @@ export function AgentsPanel() {
         return (
           <PanelSection key={section.category} title={section.title} icon={section.icon}>
             {visibleAgents.length === 0 ? (
-              <p className="mari-chrome-text-muted px-1 py-2 text-[0.625rem]">{localizeUi("ui.game.gamesurfacecomponent.no")} {section.title.toLowerCase()} {localizeUi("ui.panels.agentspanel.yet")}</p>
+              <p className="mari-chrome-text-muted px-1 py-2 text-[0.625rem]">{section.emptyMessage}</p>
             ) : (
               visibleAgents.map((agent) => {
                 const sourceAgent = createBuiltInAgentConfigRow(agent, configByType.get(agent.id));

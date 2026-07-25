@@ -1757,7 +1757,11 @@ export function SpriteGenerationModal({
                 {animatedExpressionMode ?localizeUi("ui.ui.callclipgenerationmodal.videoGenerationConnection") :localizeUi("ui.agents.agenteditor.imageGenerationConnection")}
               </label>
               {activeGenerationConnections.length === 0 ? (
-                <p className="text-xs text-[var(--destructive)]">{localizeUi("ui.game.gamesurfacecomponent.no")} {animatedExpressionMode ?localizeUi("ui.ui.spritegenerationmodal.video") :localizeUi("ui.ui.spritegenerationmodal.image")} {localizeUi("ui.ui.spritegenerationmodal.generationConnectionsFoundAddOneInSettingsConnectionsWith")}{animatedExpressionMode ?localizeUi("settings.sections.videoGeneration.title") :localizeUi("settings.sections.imageGeneration.title")}{localizeUi("ui.ui.spritegenerationmodal.providerType")}</p>
+                <p className="text-xs text-[var(--destructive)]">
+                  {animatedExpressionMode
+                    ? localizeUi("ui.ui.spritegenerationmodal.noVideoGenerationConnectionsFound")
+                    : localizeUi("ui.ui.spritegenerationmodal.noImageGenerationConnectionsFound")}
+                </p>
               ) : (
                 <select
                   value={effectiveConnectionId ?? ""}
