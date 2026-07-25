@@ -2,7 +2,7 @@
 // Purely presentational: every path (finishing the gag steps OR skipping) calls the
 // same enable action passed in from NoodlerHome. No real input is collected — the ID
 // and credit-card fields fill themselves — so there is zero PII and nothing to validate.
-import { BadgeCheck, Check, CreditCard, Loader2, ScanLine, X } from "lucide-react";
+import { BadgeCheck, Check, CreditCard, Loader2, ScanLine } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation as useUiTranslation } from "react-i18next";
 import { cn } from "../../lib/utils";
@@ -79,23 +79,6 @@ export function NoodlerAgeGate({ personaName, avatarUrl, onComplete, onSkip, isP
         {tt("skipTheGate", "Skip — I'm clearly an adult")}
       </button>
     </div>
-  );
-}
-
-/** Header skip button, rendered into NoodlerFrame's `action` slot. */
-export function NoodlerAgeGateSkip({ onSkip, disabled }: { onSkip: () => void; disabled: boolean }) {
-  const { t } = useUiTranslation();
-  return (
-    <button
-      type="button"
-      onClick={onSkip}
-      disabled={disabled}
-      className="flex h-9 items-center gap-1 rounded-full px-3 text-xs font-bold text-[var(--noodle-accent)] hover:bg-[var(--noodle-accent)]/10 disabled:opacity-50"
-      aria-label={t("ui.noodle.agegate.skip", "Skip")}
-    >
-      {t("ui.noodle.agegate.skip", "Skip")}
-      <X size={14} />
-    </button>
   );
 }
 
@@ -197,7 +180,7 @@ function IdStep({
           </div>
           <div className="min-w-0 flex-1">
             <p className="text-[0.6rem] font-bold uppercase tracking-widest text-[var(--noodle-accent)]">
-              {tt("idHeader", "Noodler Republic · Adult ID")}
+              {tt("idHeader", "Marinara Republic · Adult ID")}
             </p>
             <p className="truncate text-base font-black">{displayName}</p>
             <p className="text-[0.65rem] text-[var(--muted-foreground)]">
@@ -229,7 +212,7 @@ function IdStep({
   );
 }
 
-const CARD_NUMBER = "4242 4242 4242 4242";
+const CARD_NUMBER = "5309 1312 4200 6969";
 
 function CardStep({
   tt,
@@ -278,7 +261,7 @@ function CardStep({
         <div className="flex items-center justify-between">
           <CreditCard size={26} className="text-[var(--noodle-accent)]" />
           <span className="text-xs font-bold uppercase tracking-widest text-zinc-400">
-            {tt("cardBrand", "NoodlePay")}
+            {tt("cardBrand", "Pastapay")}
           </span>
         </div>
         <p className="mt-6 font-mono text-lg tracking-[0.15em]">{shownNumber}</p>
@@ -289,7 +272,7 @@ function CardStep({
           </div>
           <div>
             <p className="text-[0.55rem] uppercase text-zinc-400">{tt("cardExp", "Expires")}</p>
-            <p className="font-semibold">88 / 88</p>
+            <p className="font-semibold">12 / 34</p>
           </div>
           <div>
             <p className="text-[0.55rem] uppercase text-zinc-400">{tt("cardCvv", "CVV")}</p>

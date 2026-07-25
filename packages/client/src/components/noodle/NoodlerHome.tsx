@@ -92,7 +92,7 @@ import {
 } from "./NoodlePostCard";
 import { NoodlerPostCard } from "./NoodlerPostCard";
 import { Avatar, NoodleShell, NOODLE_PERSONA_SWITCHER_PAGE_SIZE, NOODLE_PINK, useNoodleAccent } from "./NoodleShell";
-import { NoodlerAgeGate, NoodlerAgeGateSkip } from "./NoodlerAgeGate";
+import { NoodlerAgeGate } from "./NoodlerAgeGate";
 import { NoodleProfileSurface } from "./NoodleProfileSurface";
 import { NOODLE_AUTO_POST_INTENSITIES } from "./noodle-auto-post";
 import { NoodlerBulkCreateButton } from "./NoodlerBulkCreatePanel";
@@ -243,7 +243,9 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
   const updateSettings = useUpdateNoodleSettings();
   const enabled = data?.settings.enableNoodler === true;
   const accountsQuery = useNoodlerAccounts(navigation.mode === "private" && enabled);
-  const personasQuery = usePersonas(navigation.mode === "private" && enabled);
+  const personasQuery = usePersonas(
+    (navigation.mode === "private" && enabled) || navigation.mode === "verification" || (Boolean(data) && !enabled),
+  );
   // Also fetch on the verification/age-gate screen (enabled === false there) so the joke
   // ID card and credit card can show the current persona's name and avatar.
   const activePersonaQuery = useActivePersona(
@@ -257,6 +259,7 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
     activePersonaQuery.data?.id ??
     personas[0]?.id ??
     null;
+  const gatePersona = personas.find((persona) => persona.id === viewerPersonaId) ?? activePersonaQuery.data ?? personas[0] ?? null;
   const viewerAccounts = (data?.accounts ?? []).filter((account) => account.kind === "persona");
   const shellPersonaAccount = viewerAccounts.find((account) => account.entityId === viewerPersonaId) ?? null;
   const [accountSwitcherOpen, setAccountSwitcherOpen] = useState(false);
@@ -827,14 +830,10 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
   if (navigation.mode === "verification" || (data && !enabled)) {
     return (
       <NoodleShell {...shellProps} rightRail={emptyRightRail}>
-        <NoodlerFrame
-          onBack={exitToPublic}
-          title={localizeUi("ui.noodle.noodlerhome.aboutNoodler")}
-          action={<NoodlerAgeGateSkip onSkip={enableNoodler} disabled={!data?.settings || updateSettings.isPending} />}
-        >
+        <NoodlerFrame onBack={exitToPublic} title={localizeUi("ui.noodle.noodlerhome.aboutNoodler")}>
           <NoodlerAgeGate
-            personaName={activePersonaQuery.data?.name ?? personas[0]?.name ?? ""}
-            avatarUrl={activePersonaQuery.data?.avatarPath ?? personas[0]?.avatarPath ?? null}
+            personaName={gatePersona?.name ?? ""}
+            avatarUrl={gatePersona?.avatarPath ?? null}
             onComplete={enableNoodler}
             onSkip={enableNoodler}
             isPending={!data?.settings || updateSettings.isPending}
@@ -3482,10 +3481,11 @@ function NoodlerFrame({
           </button>
         )}
         <p className="min-w-0 flex-1 truncate text-sm font-semibold">{title}</p>
-        {action}
-        <span className="rounded-full bg-[var(--noodle-accent)]/10 px-2.5 py-1 text-[0.65rem] font-bold text-[var(--noodle-accent)]">
-          {localizeUi("ui.noodle.noodlerframe.private")}
-        </span>
+        {action ?? (
+          <span className="rounded-full bg-[var(--noodle-accent)]/10 px-2.5 py-1 text-[0.65rem] font-bold text-[var(--noodle-accent)]">
+            {localizeUi("ui.noodle.noodlerframe.private")}
+          </span>
+        )}
       </header>
       <main className="min-h-0 flex-1 overflow-y-auto">{children}</main>
     </div>
