@@ -58,6 +58,7 @@ import {
   type NoodleRefreshSchedulerStatus,
   type NoodleSettingsUpdateInput,
 } from "@marinara-engine/shared";
+import { ApiError } from "../../lib/api-client";
 import { showConfirmDialog } from "../../lib/app-dialogs";
 import { cn, parseAvatarCropJson, type AvatarCropValue } from "../../lib/utils";
 import { useActivePersona, useCharacterGroups, useCharacters, usePersonas } from "../../hooks/use-characters";
@@ -985,7 +986,19 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
           setProfileEditing(false);
           toast.success(localizeUi("ui.noodle.noodlehome.noodleProfileUpdated"));
         },
-        onError: (error) => toast.error(error instanceof Error ? error.message :localizeUi("ui.noodle.noodlehome.couldNotUpdateNoodleProfile")),
+        onError: (error) => {
+          const payload =
+            error instanceof ApiError && error.payload && typeof error.payload === "object"
+              ? (error.payload as { code?: unknown })
+              : null;
+          toast.error(
+            payload?.code === "NOODLE_HANDLE_TAKEN"
+              ? localizeUi("ui.noodle.noodlehome.handleAlreadyInUse")
+              : error instanceof Error
+                ? error.message
+                : localizeUi("ui.noodle.noodlehome.couldNotUpdateNoodleProfile"),
+          );
+        },
       },
     );
   };

@@ -276,6 +276,8 @@ export interface ChatMetadata {
   illustratorUseAvatarReferences?: boolean;
   /** Optional per-chat LLM connection override used only to write Illustrator/selfie image prompts. */
   illustratorPromptConnectionId?: string | null;
+  /** Optional per-chat image generation connection override used by Illustrator. */
+  illustratorImageConnectionId?: string | null;
   /** Number of image variants generated for each Illustrator request. */
   illustratorImagesPerGeneration?: number;
   /** Whether Roleplay Illustrator may generate and activate a reusable background after a scene-location change. */
