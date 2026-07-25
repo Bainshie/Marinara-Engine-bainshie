@@ -7,6 +7,7 @@ import {
 } from "../lorebook/keyword-scanner.js";
 import { applyTokenBudget } from "../lorebook/prompt-injector.js";
 import type { MemoryRecallEmbeddingSource } from "../memory-recall.js";
+import { logger } from "../../lib/logger.js";
 
 type LorebookSource = "manual" | "chat_active" | "none";
 type TriggeredEntriesByAgentId = NonNullable<AgentContext["triggeredLorebookEntriesByAgentId"]>;
@@ -102,8 +103,13 @@ export function createAgentLorebookTriggerResolver(
           });
         })
         .map((entry) => {
-          const ephemeral = options.entryStateOverrides[entry.id]?.ephemeral;
-          return ephemeral !== undefined ? { ...entry, ephemeral } : entry;
+          const override = options.entryStateOverrides[entry.id];
+          if (override?.enabled === undefined && override?.ephemeral === undefined) return entry;
+          return {
+            ...entry,
+            ...(override.enabled !== undefined ? { enabled: override.enabled } : {}),
+            ...(override.ephemeral !== undefined ? { ephemeral: override.ephemeral } : {}),
+          };
         });
       const lorebooks = sourceIds.flatMap((id) => {
         const lorebook = enabledLorebooksById.get(id);
@@ -144,8 +150,12 @@ export function createAgentLorebookTriggerResolver(
             chatEmbedding = semanticEmbeddings.defaultEmbedding;
             semanticEmbeddingsByLorebookId = semanticEmbeddings.embeddingsByLorebookId;
             semanticSimilarityBaseline = semanticEmbeddings.similarityBaseline;
-          } catch {
-            // Keyword matching remains available when semantic retrieval fails.
+          } catch (err) {
+            logger.warn(
+              err,
+              "Semantic lorebook retrieval failed for agent %s; falling back to keyword matching",
+              agent.id,
+            );
           }
         }
 

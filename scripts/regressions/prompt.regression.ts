@@ -496,6 +496,7 @@ import {
   buildLorebookScanMessagesWithGenerationGuide,
   resolveLorebookTokenBudget,
 } from "../../packages/server/src/services/generation/lorebook-generation-runtime.js";
+import { createAgentLorebookTriggerResolver } from "../../packages/server/src/services/generation/agent-lorebook-triggers.js";
 import {
   buildGameIllustratorAppearanceContextBlock,
   buildDynamicGameImagePromptMessages,
@@ -3817,6 +3818,71 @@ Use HTML sparingly and diegetically. Do not replace normal prose/dialogue unless
       assert.doesNotMatch(disabledSystem, /<vector_context>/u);
       assert.doesNotMatch(disabledSystem, /hidden laboratory/u);
       assert.doesNotMatch(disabledSystem, /silver key/u);
+    },
+  },
+  {
+    name: "custom-agent lorebook trigger resolution applies enabled overrides and reuses request data",
+    async run() {
+      let lorebookListCalls = 0;
+      let entryListCalls = 0;
+      const resolveTriggeredEntries = createAgentLorebookTriggerResolver({
+        agents: [
+          {
+            id: "custom:override-reader",
+            contextSize: 1,
+            sourceLorebookIds: ["book-override"],
+            source: "manual",
+          },
+        ],
+        activeCharacterIds: [],
+        activeCharacterTags: [],
+        entryStateOverrides: {
+          "entry-override": { enabled: true },
+        },
+        filterSourceLorebookIds: async (sourceIds) => sourceIds,
+        gameState: null,
+        generationTriggers: ["chat"],
+        listEntriesByLorebookIds: async () => {
+          entryListCalls += 1;
+          return [
+            {
+              id: "entry-override",
+              lorebookId: "book-override",
+              name: "Override Entry",
+              content: "State overrides can reactivate this entry.",
+              enabled: false,
+              constant: true,
+              keys: [],
+              secondaryKeys: [],
+              order: 0,
+              probability: 100,
+              activationConditions: [],
+              characterFilterMode: "any",
+              characterFilterIds: [],
+              characterTagFilterMode: "any",
+              characterTagFilters: [],
+              generationTriggerFilterMode: "any",
+              generationTriggerFilters: [],
+            } as any,
+          ];
+        },
+        listLorebooks: async () => {
+          lorebookListCalls += 1;
+          return [{ id: "book-override", enabled: true } as any];
+        },
+        resolveContent: (value) => value,
+        tokenBudget: 2048,
+        vectorizerAvailable: false,
+      });
+
+      const messages = [{ role: "user", content: "Inspect the override." }];
+      const first = await resolveTriggeredEntries(messages);
+      const second = await resolveTriggeredEntries(messages);
+
+      assert.equal(first["custom:override-reader"]?.[0]?.id, "entry-override");
+      assert.equal(second["custom:override-reader"]?.[0]?.id, "entry-override");
+      assert.equal(lorebookListCalls, 1);
+      assert.equal(entryListCalls, 1);
     },
   },
   {
