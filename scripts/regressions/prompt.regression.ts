@@ -63,6 +63,8 @@ import {
   GAME_STORYBOARD_NOVELAI_PROMPT_TEMPLATE_ID,
   GAME_STORYBOARD_LTX_DIRECTOR_PROMPT_TEMPLATE,
   GAME_STORYBOARD_LTX_DIRECTOR_PROMPT_TEMPLATE_ID,
+  GAME_STORYBOARD_LTX_SIMPLE_PROMPT_TEMPLATE,
+  GAME_STORYBOARD_LTX_SIMPLE_PROMPT_TEMPLATE_ID,
   GAME_STORYBOARD_STILL_ANIMATION_PROMPT_TEMPLATE,
   GAME_STORYBOARD_STILL_ANIMATION_PROMPT_TEMPLATE_ID,
   DEFERRED_RELOCATION_CONDITIONAL_TOKEN_RE,
@@ -2171,7 +2173,7 @@ const cases: RegressionCase[] = [
       const animationIds = new Set(GAME_STORYBOARD_ANIMATION_PROMPT_TEMPLATES.map((template) => template.id));
 
       assert.equal(GAME_STORYBOARD_ILLUSTRATION_PROMPT_TEMPLATES.length, 5);
-      assert.equal(GAME_STORYBOARD_ANIMATION_PROMPT_TEMPLATES.length, 7);
+      assert.equal(GAME_STORYBOARD_ANIMATION_PROMPT_TEMPLATES.length, 8);
       assert.equal(GAME_STORYBOARD_ANIMATION_PROMPT_TEMPLATE_ID, GAME_STORYBOARD_COMIC_ANIMATION_PROMPT_TEMPLATE_ID);
       assert.notEqual(
         GAME_STORYBOARD_STILL_ANIMATION_PROMPT_TEMPLATE_ID,
@@ -2276,6 +2278,9 @@ const cases: RegressionCase[] = [
       const plannerPreset = GAME_STORYBOARD_ANIMATION_PROMPT_TEMPLATES.find(
         (template) => template.id === GAME_STORYBOARD_LTX_DIRECTOR_PROMPT_TEMPLATE_ID,
       );
+      const simplePlannerPreset = GAME_STORYBOARD_ANIMATION_PROMPT_TEMPLATES.find(
+        (template) => template.id === GAME_STORYBOARD_LTX_SIMPLE_PROMPT_TEMPLATE_ID,
+      );
       const videoPreset = GAME_VIDEO_BUILT_IN_PROMPT_TEMPLATES.find(
         (template) => template.id === LTX_DIRECTOR_GAME_VIDEO_PROMPT_TEMPLATE_ID,
       );
@@ -2298,6 +2303,14 @@ const cases: RegressionCase[] = [
       assert.match(plannerPreset?.promptTemplate ?? "", /The supplied first-frame image defines static appearance/);
       assert.match(plannerPreset?.promptTemplate ?? "", /Exact readable text, captions, subtitles, logos/);
       assert.doesNotMatch(plannerPreset?.promptTemplate ?? "", /2-4 ordered local prompts|segment_lengths/);
+      assert.equal(simplePlannerPreset?.name, "LTX Simple Image-to-Video");
+      assert.equal(simplePlannerPreset?.promptTemplate, GAME_STORYBOARD_LTX_SIMPLE_PROMPT_TEMPLATE);
+      assert.match(simplePlannerPreset?.promptTemplate ?? "", /one focused, physically achievable primary action/);
+      assert.match(simplePlannerPreset?.promptTemplate ?? "", /4-8 short descriptive sentences/);
+      assert.match(simplePlannerPreset?.promptTemplate ?? "", /one camera behavior relative to the subject/);
+      assert.match(simplePlannerPreset?.promptTemplate ?? "", /Do not use labels, lists, timecodes/);
+      assert.match(simplePlannerPreset?.promptTemplate ?? "", /Do not pad the paragraph with extra actions/);
+      assert.doesNotMatch(simplePlannerPreset?.promptTemplate ?? "", /physics\.its/);
       assert.equal(videoPreset?.name, "LTX Director Video");
       assert.equal(videoPreset?.promptTemplate, LTX_DIRECTOR_GAME_VIDEO_PROMPT_TEMPLATE);
       assert.equal(LTX_DIRECTOR_GAME_VIDEO_PROMPT_TEMPLATE, "${narrationSummary}");

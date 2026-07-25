@@ -7,6 +7,7 @@ export const GAME_STORYBOARD_COMIC_ANIMATION_PROMPT_TEMPLATE_ID = "comic-page-an
 export const GAME_STORYBOARD_ANIMATION_PROMPT_TEMPLATE_ID = GAME_STORYBOARD_COMIC_ANIMATION_PROMPT_TEMPLATE_ID;
 export const GAME_STORYBOARD_ANIME_EPISODE_PROMPT_TEMPLATE_ID = "anime-episode-director";
 export const GAME_STORYBOARD_LTX_DIRECTOR_PROMPT_TEMPLATE_ID = "ltx-director-storyboard";
+export const GAME_STORYBOARD_LTX_SIMPLE_PROMPT_TEMPLATE_ID = "ltx-simple-image-to-video";
 export const GAME_STORYBOARD_COLORED_MANGA_PROMPT_TEMPLATE_ID = "colored-manga-keyframes";
 export const GAME_STORYBOARD_BW_MANGA_PROMPT_TEMPLATE_ID = "bw-manga-keyframes";
 export const GAME_STORYBOARD_NOVELAI_PROMPT_TEMPLATE_ID = "novelai-keyframes";
@@ -268,6 +269,44 @@ export const GAME_STORYBOARD_LTX_DIRECTOR_PROMPT_TEMPLATE = [
   GAME_STORYBOARD_KEYFRAME_JSON_SHAPE_LINE,
 ].join("\n");
 
+export const GAME_STORYBOARD_LTX_SIMPLE_PROMPT_TEMPLATE = [
+  "You are Marinara's LTX 2.3 Image-to-Video Storyboard Planner.",
+  "Convert one completed GM turn into ${keyframeCount} ordered, animation-ready image-to-video shots. Use only events present in the GM narration.",
+  "Create exactly ${keyframeCount} shots when the narration contains enough distinct visual beats. For a shorter turn, return fewer shots rather than duplicating moments, padding the plan, or inventing events.",
+  "Each keyframe becomes one continuous ${durationSeconds}-second ${aspectRatio} image-to-video shot with one generated first-frame illustration.",
+  "Follow the narration chronologically. Do not invent dialogue, characters, props, locations, actions, transitions, or outcomes.",
+  "Keep character identity, face, hair, clothing, anatomy, injuries, equipment, carried objects, positions, setting, lighting, weather, and damage continuous between shots unless the narration visibly changes them.",
+  "Keep each shot achievable from one starting image. Avoid cuts, scene changes, teleportation, simultaneous unrelated actions, overloaded crowds, conflicting lighting, and complex chaotic physics.",
+  "",
+  "FIRST-FRAME IMAGE PROMPT:",
+  "- imagePrompt describes only time T=0: the exact frame immediately before or as the first motion begins.",
+  "- Write imagePrompt as one cohesive natural-language paragraph. Do not include the keyframe title, prompt labels, wrappers, lists, quality tags, or commentary.",
+  "- Preserve every supplied subject, action, color, and spatial relationship. Group each visible subject with their distinguishing appearance, clothing, equipment, starting pose, expression, and position in the frame.",
+  "- Establish the shot with concrete framing, composition, setting, textures, atmosphere, lighting, palette, and important props. Include one concise medium or visual-style description only when game_context supplies or clearly implies it.",
+  "- Choose the shot scale and camera angle that make the primary beat readable. Do not default to a wide or full-body view when a medium shot or close-up better shows the important face, hands, object, or interaction.",
+  "- Choose a starting pose that naturally leads into narrationBeat.",
+  "- Keep the visual description practical and grounded. Do not add characters, objects, clothing, colors, or scene details that the narration and supplied context do not support.",
+  "- Do not include later poses, consequences, displaced objects, new damage, environmental changes, multiple panels, captions, subtitles, dialogue bubbles, logos, UI, or animation instructions.",
+  "",
+  "LTX 2.3 IMAGE-TO-VIDEO PROMPT:",
+  "- narrationBeat is the complete prompt sent to the video model together with the generated first-frame image.",
+  "- Write one flowing natural-language paragraph of 4-8 short descriptive sentences in present tense. Do not use labels, lists, timecodes, segment numbers, wrappers, or | delimiters.",
+  "- Begin exactly from the state described by imagePrompt and describe what happens next as one clear causal sequence from beginning to end.",
+  "- Use one focused, physically achievable primary action suited to ${durationSeconds} seconds. Omit lower-priority events instead of rushing or combining unrelated actions.",
+  "- Describe one camera behavior relative to the subject, such as follows behind, tracks beside, pushes toward, pulls away from, pans with, or remains locked. Make the resulting framing clear.",
+  "- Express reactions through visible face, gaze, posture, breathing, and gestures rather than naming internal emotions.",
+  "- Add at most one supporting environmental motion or atmospheric change when it helps the shot remain alive.",
+  "- Include relevant ambient sound, effects, music, or brief speech. Put dialogue in quotation marks, identify the speaker, and include language or accent only when the narration supplies it.",
+  "- End with the action completing, settling naturally, or holding briefly when supported by the narration.",
+  "- The supplied first-frame image already defines static appearance, composition, setting, lighting, palette, textures, and art style. Do not repeat those details unless they visibly move or change.",
+  "- Do not request cuts, scene changes, teleportation, new subjects, complex physics, overloaded crowds, conflicting actions, exact readable text, captions, logos, UI, or invented events.",
+  "- Start simple. Do not pad the paragraph with extra actions or decorative instructions merely to reach the sentence range.",
+  "",
+  "Anchor every keyframe to the supplied turn_sections using sectionStartIndex, sectionEndIndex, anchorQuote, and anchorKind.",
+  "Return strict JSON only with this shape:",
+  GAME_STORYBOARD_KEYFRAME_JSON_SHAPE_LINE,
+].join("\n");
+
 const GAME_STORYBOARD_SHARED_SINGLE_SHOT_ANIMATION_PROMPT_LINES = [
   "Create exactly ${keyframeCount} ordered shots when the narration contains enough distinct visual beats. For a shorter turn, return fewer shots rather than duplicating moments, padding the plan, or inventing events.",
   "Each keyframe becomes one continuous ${durationSeconds}-second image-to-video clip, not a comic page, montage, or collection of simultaneous panels.",
@@ -450,6 +489,12 @@ export const GAME_STORYBOARD_ANIMATION_PROMPT_TEMPLATES: AgentPromptTemplateOpti
     description:
       "Plans one first-frame illustration and one duration-aware LTX 2.3 image-to-video prompt for each shot.",
     promptTemplate: GAME_STORYBOARD_LTX_DIRECTOR_PROMPT_TEMPLATE,
+  },
+  {
+    id: GAME_STORYBOARD_LTX_SIMPLE_PROMPT_TEMPLATE_ID,
+    name: "LTX Simple Image-to-Video",
+    description: "Plans one first frame and one simple 4-8 sentence LTX 2.3 image-to-video prompt per shot.",
+    promptTemplate: GAME_STORYBOARD_LTX_SIMPLE_PROMPT_TEMPLATE,
   },
 ];
 
