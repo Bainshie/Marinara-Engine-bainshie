@@ -31,12 +31,14 @@ import {
   trackerFieldLocksAreEmpty,
   customAgentHasCapability,
   CHAT_SUMMARY_PROMPT_SETTINGS_KEY,
+  CUSTOM_GENERATION_PARAMETERS_SETTINGS_KEY,
   DEFAULT_CONVERSATION_PROMPT,
   DEFAULT_GENERATION_PARAMS,
   unwrapConversationInstructions,
   findKnownModel,
   LOCAL_SIDECAR_CONNECTION_ID,
   normalizeTextForMatch,
+  parseManagedGenerationParameterDefinitions,
   normalizeGameStoryboardKeyframeCount,
   type APIProvider,
   type MacroContext,
@@ -397,6 +399,7 @@ import {
   resolveLorebookGenerationTriggers,
   resolveLorebookTokenBudget,
 } from "../services/generation/lorebook-generation-runtime.js";
+import { createAgentLorebookTriggerResolver } from "../services/generation/agent-lorebook-triggers.js";
 import { addLocationEntry, addInventoryEntry, upsertQuest, addNpcEntry } from "../services/game/journal.service.js";
 import { updateJournal } from "../services/generation/game-journal-runtime.js";
 import { buildGmFormatReminder } from "../services/game/gm-prompts.js";
@@ -411,7 +414,6 @@ import { applyAllSegmentEdits } from "../services/game/segment-edits.js";
 import type { CharacterData, GameMap, GameNpc, Lorebook, LorebookEntry } from "@marinara-engine/shared";
 import {
   buildConversationProfileBlocks,
-  parsePersonaConvoBehavior,
   readCharacterConvoFields,
   type ConversationProfileParticipant,
 } from "../services/conversation/conversation-profiles.js";
@@ -708,6 +710,9 @@ export async function generateRoutes(app: FastifyInstance) {
       return reply.status(404).send({ error: "Chat not found" });
     }
     const requestChatMode = (chat.mode as ChatMode) ?? "roleplay";
+    const managedParameterDefinitions = parseManagedGenerationParameterDefinitions(
+      await appSettings.get(CUSTOM_GENERATION_PARAMETERS_SETTINGS_KEY),
+    );
     if (requestChatMode === "conversation" && input.impersonate) {
       return reply.status(400).send({ error: "Impersonate is not available in Conversation mode" });
     }
@@ -2204,7 +2209,9 @@ export async function generateRoutes(app: FastifyInstance) {
               displayName: personaConvoDisplay || persona.name,
               aboutMe: effectiveAbout(persona.id as string, personaAboutDefault),
               isPersona: true,
-              behavior: parsePersonaConvoBehavior(persona.convoBehavior),
+              // Personas represent the user. Preserve legacy card data for
+              // round-trips, but never use it to steer the user's behavior.
+              behavior: null,
               postHistoryInstructions: "",
             });
           }
@@ -2585,6 +2592,7 @@ export async function generateRoutes(app: FastifyInstance) {
           chatMode,
           isSceneChat,
           chatParameters: chatMeta.chatParameters,
+          managedParameterDefinitions,
           modelAccessPolicy,
           initial: {
             temperature,
@@ -3232,6 +3240,42 @@ export async function generateRoutes(app: FastifyInstance) {
           }
           return msg;
         });
+        const customAgentsWithLorebookTriggers = resolvedAgents.filter(
+          (agent) =>
+            !builtInAgentTypes.has(agent.type) && agent.settings.triggerLorebooksForAgentCalls === true,
+        );
+        const resolveTriggeredLorebookEntriesByAgentId = createAgentLorebookTriggerResolver({
+          agents: customAgentsWithLorebookTriggers.map((agent) => {
+            const { sourceLorebookIds, source } = resolveKnowledgeSourceLorebookIds({
+              settings: agent.settings,
+              chatActiveLorebookIds,
+            });
+            return {
+              id: agent.id,
+              contextSize: normalizeAgentContextSize(agent.settings.contextSize),
+              sourceLorebookIds,
+              source,
+            };
+          }),
+          activeCharacterIds: promptCharacterIds,
+          activeCharacterTags: Array.from(
+            new Set(charInfo.flatMap((character) => (Array.isArray(character.tags) ? character.tags : []))),
+          ),
+          embeddingSource: memoryRecallEmbeddingSource,
+          entryStateOverrides:
+            (chatMeta.entryStateOverrides as Record<string, { enabled?: boolean; ephemeral?: number | null }>) ?? {},
+          filterSourceLorebookIds: filterChatActiveLorebookSourceIdsForPrompt,
+          gameState: gameState as GameStateForScanning | null,
+          generationTriggers: lorebookGenerationTriggers,
+          listEntriesByLorebookIds: async (sourceIds) =>
+            (await lorebooksStore.listEntriesByLorebooks(sourceIds)) as LorebookEntry[],
+          listLorebooks: async () => (await lorebooksStore.list()) as unknown as Lorebook[],
+          resolveContent: (value) => resolvePromptMacrosForLorebook(value).content,
+          signal: abortController.signal,
+          tokenBudget: resolveLorebookTokenBudget(chatMeta),
+          vectorizerAvailable: memoryRecallVectorizerAvailable,
+        });
+        const triggeredLorebookEntriesByAgentId = await resolveTriggeredLorebookEntriesByAgentId(recentMsgs);
         const resolvePersonaPromptText = (value?: string): string | undefined => {
           if (!value) return value;
           return resolveHistoryMessageMacros([{ content: value, characterId: null }])[0]?.content ?? value;
@@ -3312,6 +3356,9 @@ export async function generateRoutes(app: FastifyInstance) {
                     })),
                 },
               }
+            : {}),
+          ...(Object.keys(triggeredLorebookEntriesByAgentId).length > 0
+            ? { triggeredLorebookEntriesByAgentId }
             : {}),
           streaming: input.streaming,
           ...(requestDebug
@@ -6757,6 +6804,16 @@ export async function generateRoutes(app: FastifyInstance) {
         };
 
         if (hasPostWork && combinedResponse && !abortController.signal.aborted) {
+          if (customAgentsWithLorebookTriggers.some((agent) => agent.phase === "post_processing")) {
+            agentContext.triggeredLorebookEntriesByAgentId = await resolveTriggeredLorebookEntriesByAgentId([
+              ...recentMsgs,
+              {
+                id: latestAssistantMessageId || undefined,
+                role: "assistant",
+                content: combinedResponse,
+              },
+            ]);
+          }
           if (personaId && getLatestUserExpressionSource() && Array.isArray(agentContext.memory._availableSprites)) {
             generatedExpressionTargetIds.add(personaId);
           }

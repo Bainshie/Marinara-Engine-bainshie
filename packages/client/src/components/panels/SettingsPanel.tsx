@@ -108,6 +108,7 @@ import {
   Bell,
   Copy,
   BookOpen,
+  SlidersHorizontal,
 } from "lucide-react";
 import { useClearAllData, useExpungeData, useUpdateChatMetadata, type ExpungeScope } from "../../hooks/use-chats";
 import { useChatStore } from "../../stores/chat.store";
@@ -129,6 +130,7 @@ import {
 import { TrackerCardColorSettings } from "./settings/TrackerCardColorSettings";
 import { PromptOverridesEditor } from "./settings/PromptOverridesEditor";
 import { BackgroundPicker } from "./settings/BackgroundPicker";
+import { CustomGenerationParametersSettings } from "./settings/CustomGenerationParametersSettings";
 import {
   ExternalExtensionsSettings,
   PersonalExtensionsSettings,
@@ -236,6 +238,7 @@ type SettingsSectionId =
   | "sillytavern-import"
   | "admin-access"
   | "updates"
+  | "parameters"
   | "message-tools"
   | "backup-export"
   | "danger-zone";
@@ -468,6 +471,13 @@ const SETTINGS_SECTIONS: readonly SettingsSectionMeta[] = [
     label: "Updates",
     description: "Version and update controls.",
     aliases: ["update", "version", "refresh", "release"],
+  },
+  {
+    id: "parameters",
+    tab: "advanced",
+    label: "Parameters",
+    description: "Reusable numeric controls for provider-specific request fields.",
+    aliases: ["custom parameters", "generation", "provider", "min p", "min_p"],
   },
   {
     id: "message-tools",
@@ -1106,6 +1116,14 @@ const SETTINGS_SEARCHABLE_CONTROLS: readonly SettingsSearchableControlMeta[] = [
     description: "Choose which release channel update checks follow.",
     aliases: ["updates", "branch", "version"],
     kind: "Select",
+  },
+  {
+    id: "custom-generation-parameters",
+    sectionId: "parameters",
+    label: "Custom generation parameters",
+    description: "Create reusable numeric provider parameters for chats and connections.",
+    aliases: ["parameter", "provider", "min p", "min_p", "range", "tooltip"],
+    kind: "Input",
   },
   {
     id: "quick-replies",
@@ -7192,6 +7210,17 @@ function AdvancedSettings() {
             />
           </div>
         </div>
+      </SettingsSection>
+
+      <SettingsSection
+        title={localizeUi("settings.customGenerationParameters.title")}
+        description={localizeUi("settings.customGenerationParameters.sectionDescription")}
+        icon={<SlidersHorizontal size="0.875rem" />}
+        {...getSettingsSectionAnchorProps("parameters")}
+      >
+        <SearchableSettingTarget controlId="custom-generation-parameters">
+          <CustomGenerationParametersSettings />
+        </SearchableSettingTarget>
       </SettingsSection>
 
       <SettingsSection

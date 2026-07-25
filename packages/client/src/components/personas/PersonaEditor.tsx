@@ -3179,7 +3179,6 @@ const PERSONA_VERSION_COMPARE_FIELDS: Array<{ key: keyof PersonaCardSnapshot; la
   { key: "savedStatusOptions", label: "Saved Status Options" },
   { key: "convoDisplayName", label: "Convo Display Name" },
   { key: "aboutMe", label: "About Me" },
-  { key: "convoBehavior", label: "Convo Behavior" },
 ];
 
 function buildCurrentPersonaSnapshot(formData: PersonaFormData): PersonaCardSnapshot {

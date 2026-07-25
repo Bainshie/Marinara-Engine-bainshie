@@ -2087,6 +2087,9 @@ export function ConnectionEditor() {
 
               {localDefaultParametersEnabled ? (
                 <div className="rounded-xl bg-[var(--secondary)]/40 p-3 ring-1 ring-[var(--border)]">
+                  <p className="mb-3 text-[0.625rem] leading-relaxed text-[var(--muted-foreground)]">
+                    {localizeUi("settings.customGenerationParameters.availabilityHint")}
+                  </p>
                   <GenerationParametersFields
                     value={localDefaultParameters}
                     showOpenRouterServiceTier={localProvider === "openrouter"}

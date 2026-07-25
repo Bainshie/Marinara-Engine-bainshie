@@ -66,6 +66,11 @@ import {
   resolveTranslationSystemPrompt,
 } from "../../packages/shared/src/constants/defaults.js";
 import { normalizeIllustratorImagesPerGeneration } from "../../packages/shared/src/utils/illustrator-generation-count.js";
+import {
+  isReservedManagedGenerationParameterKey,
+  parseManagedGenerationParameterDefinitions,
+  resolveManagedGenerationParameters,
+} from "../../packages/shared/src/utils/managed-generation-parameters.js";
 import { getChatModeCapabilities } from "../../packages/shared/src/constants/chat-mode-capabilities.js";
 import { mergeNoodleCustomEmojiMap } from "../../packages/client/src/lib/noodle-custom-emojis.js";
 import {
@@ -1411,6 +1416,25 @@ const personaEditorSource = readFileSync(
   new URL("../../packages/client/src/components/personas/PersonaEditor.tsx", import.meta.url),
   "utf8",
 );
+const convoProfileFieldsSource = readFileSync(
+  new URL("../../packages/client/src/components/characters/ConvoProfileFields.tsx", import.meta.url),
+  "utf8",
+);
+const generationParametersEditorSource = readFileSync(
+  new URL("../../packages/client/src/components/ui/GenerationParametersEditor.tsx", import.meta.url),
+  "utf8",
+);
+const kaomojiPickerSource = readFileSync(
+  new URL("../../packages/client/src/components/ui/KaomojiPicker.tsx", import.meta.url),
+  "utf8",
+);
+const visualViewportChatBottomSource = readFileSync(
+  new URL("../../packages/client/src/hooks/use-visual-viewport-chat-bottom.ts", import.meta.url),
+  "utf8",
+);
+const englishLocale = JSON.parse(
+  readFileSync(new URL("../../packages/client/src/localization/locales/en.json", import.meta.url), "utf8"),
+) as Record<string, string>;
 const fileDownloadSource = readFileSync(
   new URL("../../packages/client/src/lib/file-download.ts", import.meta.url),
   "utf8",
@@ -1525,6 +1549,31 @@ assert.match(characterEditorSource, /ui\.characters\.colorstab\.value1AvatarPrev
 assert.match(characterEditorSource, /getAvatarCropStyle/u);
 assert.match(characterEditorSource, /downloadSpriteFile/u);
 assert.match(personaEditorSource, /downloadSpriteFile/u);
+assert.match(
+  convoProfileFieldsSource,
+  /\{kind === "character" && \(\s*<div className="mari-editor-panel space-y-3 p-3">[\s\S]*?convoBehavior/u,
+  "Persona editors must not render the character-only Convo Behavior control",
+);
+assert.match(
+  conversationGenerationSource,
+  /isPersona: true,\s*\/\/ Personas represent the user\.[\s\S]{0,180}?behavior: null,/u,
+  "Legacy Persona Convo Behavior data must not steer Conversation prompts",
+);
+assert.equal(englishLocale["ui.characters.colorstab.ldquoHelloThereRdquo"], "“Hello there.”");
+assert.equal(englishLocale["ui.personas.personacolorstab.ldquoGeneralKenobiRdquo"], "“General Kenobi.”");
+assert.match(
+  generationParametersEditorSource,
+  /placeholder=\{localizeUi\("ui\.ui\.generationparametersfields\.thinking"\)\.trimStart\(\)\}/u,
+  "Assistant Prefill must strip accidental leading localization whitespace",
+);
+assert.match(generationParametersEditorSource, /placeholder:\[text-indent:0\]/u);
+assert.match(
+  kaomojiPickerSource,
+  /e\.composedPath\(\)[\s\S]{0,500}pointInsidePanel[\s\S]{0,250}path\.includes\(panel\)/u,
+  "Kaomoji native-scrollbar presses must remain inside the open picker",
+);
+assert.match(kaomojiPickerSource, /--marinara-chat-chrome-button-text-active/u);
+assert.match(visualViewportChatBottomSource, /detail\?\.keyboardOpen[\s\S]{0,500}scrollToBottom\("auto"\)/u);
 assert.match(characterEditorSource, /if \(uploading \|\| !expression\) return;/u);
 assert.match(personaEditorSource, /if \(uploading \|\| !expression\) return;/u);
 assert.match(characterEditorSource, /className="flex flex-col gap-2 sm:flex-row"/u);
@@ -3135,6 +3184,92 @@ try {
     [...new Set([...checkpointNames, ...unetNames])],
     ["sd15.safetensors", "shared.safetensors", "anima.safetensors", "zimage.safetensors"],
     "Overlapping names across the two folders must be listed once",
+  );
+}
+
+// Issue #4107 — reusable numeric provider parameters must survive storage,
+// accept comma decimals, honor chat overrides, and drop stale values once the
+// authoritative definition disappears.
+{
+  assert.equal(parseGenerationParameterDraft("0,075"), 0.075);
+  assert.equal(parseGenerationParameterDraft("0.075"), 0.075);
+  assert.equal(isReservedManagedGenerationParameterKey("temperature"), true);
+  assert.equal(isReservedManagedGenerationParameterKey("min_p"), false);
+  assert.equal(isReservedManagedGenerationParameterKey("__proto__"), true);
+  assert.equal(isReservedManagedGenerationParameterKey("constructor"), true);
+  assert.equal(isReservedManagedGenerationParameterKey("prototype"), true);
+
+  const definitions = parseManagedGenerationParameterDefinitions([
+    {
+      id: "min-p",
+      name: "Min P",
+      requestKey: "min_p",
+      min: 0,
+      max: 1,
+      tooltip: "Dynamic probability truncation.",
+    },
+    {
+      id: "duplicate",
+      name: "Duplicate",
+      requestKey: "MIN_P",
+      min: 0,
+      max: 1,
+    },
+    {
+      id: "reserved",
+      name: "Temperature Again",
+      requestKey: "temperature",
+      min: 0,
+      max: 2,
+    },
+    {
+      id: "bad-range",
+      name: "Bad range",
+      requestKey: "bad_range",
+      min: 2,
+      max: 1,
+    },
+  ]);
+  assert.deepEqual(
+    definitions.map((definition) => definition.id),
+    ["min-p"],
+    "Invalid, duplicate, and built-in request keys must not become managed controls",
+  );
+  assert.deepEqual(
+    resolveManagedGenerationParameters(
+      definitions,
+      { "min-p": { enabled: true, value: 0.2 } },
+      { "min-p": { enabled: true, value: 1.5 } },
+    ),
+    { min_p: 1 },
+    "Chat values must override connection defaults and clamp to the saved range",
+  );
+  assert.deepEqual(
+    resolveManagedGenerationParameters(
+      definitions,
+      { "min-p": { enabled: true, value: 0.2 } },
+      { "min-p": { enabled: false, value: 0.8 } },
+    ),
+    {},
+    "A chat-level disabled toggle must omit an enabled connection default",
+  );
+  assert.deepEqual(
+    resolveManagedGenerationParameters([], { "min-p": { enabled: true, value: 0.2 } }),
+    {},
+    "Deleting a definition must prevent its hidden stored value from being sent",
+  );
+  assert.equal(
+    parseManagedGenerationParameterDefinitions(
+      Array.from({ length: 101 }, (_, index) => ({
+        id: `parameter-${index}`,
+        name: `Parameter ${index}`,
+        requestKey: `parameter_${index}`,
+        min: 0,
+        max: 1,
+      })),
+    ).length,
+    100,
+    "Managed parameter parsing must enforce the declared definition ceiling",
   );
 }
 
