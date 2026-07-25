@@ -96,6 +96,7 @@ import { SecretPlotPanel } from "../agents/SecretPlotPanel";
 import { SummariesEditorModal } from "./SummariesEditorModal";
 import { AgentSuiteModal } from "./AgentSuiteModal";
 import { ConversationTimeZoneSelect } from "./ConversationTimeZoneSelect";
+import { RoleplayMessagePreview } from "./ChatMessage";
 import { useCharacters, usePersonas, useCharacterGroups, type SpriteInfo } from "../../hooks/use-characters";
 import { useLorebooks, useEntriesAcrossLorebooks } from "../../hooks/use-lorebooks";
 import { useDefaultPreset, usePresetFull, usePresets } from "../../hooks/use-presets";
@@ -2404,23 +2405,24 @@ export function ChatSettingsDrawer({
   const [firstMesConfirm, setFirstMesConfirm] = useState<{
     charId: string;
     charName: string;
+    dialogueColor?: string;
     greetings: GreetingOption[];
     selectedIndex: number;
   } | null>(null);
 
   const handleFirstMesConfirm = useCallback(async () => {
     if (!firstMesConfirm) return;
-    const selectedGreeting = firstMesConfirm.greetings[firstMesConfirm.selectedIndex];
+    const confirmation = firstMesConfirm;
+    const selectedGreeting = confirmation.greetings[confirmation.selectedIndex];
     if (!selectedGreeting) return;
     let messageId: string | null = null;
     try {
       const msg = await createMessage.mutateAsync({
         role: "assistant",
         content: selectedGreeting.text,
-        characterId: firstMesConfirm.charId,
+        characterId: confirmation.charId,
       });
       messageId = msg?.id ?? null;
-      setFirstMesConfirm(null);
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : localizeUi("ui.chat.chatsettingsdrawer.failedToAddSelectedGreeting"),
@@ -2428,8 +2430,8 @@ export function ChatSettingsDrawer({
       return;
     }
 
-    const remainingGreetings = firstMesConfirm.greetings
-      .filter((_greeting, index) => index !== firstMesConfirm.selectedIndex)
+    const remainingGreetings = confirmation.greetings
+      .filter((_greeting, index) => index !== confirmation.selectedIndex)
       .map((greeting) => greeting.text);
     try {
       if (messageId && remainingGreetings.length > 0) {
@@ -2447,6 +2449,7 @@ export function ChatSettingsDrawer({
         error instanceof Error ? error.message : localizeUi("ui.chat.chatsettingsdrawer.failedToAddSelectedGreeting"),
       );
     }
+    setFirstMesConfirm((current) => (current === confirmation ? null : current));
   }, [firstMesConfirm, createMessage, chat.id, qc, localizeUi]);
 
   // ── Mutations ──
@@ -2524,9 +2527,16 @@ export function ChatSettingsDrawer({
                 });
               }
               if (greetings.length > 0) {
+                const extensions = (parsed as { extensions?: unknown }).extensions;
+                const dialogueColor =
+                  extensions && typeof extensions === "object"
+                    ? (extensions as { dialogueColor?: unknown }).dialogueColor
+                    : undefined;
                 setFirstMesConfirm({
                   charId,
                   charName: charName(char),
+                  dialogueColor:
+                    typeof dialogueColor === "string" && dialogueColor.trim() ? dialogueColor.trim() : undefined,
                   greetings,
                   selectedIndex: 0,
                 });
@@ -9440,24 +9450,32 @@ export function ChatSettingsDrawer({
       {/* First message confirmation dialog */}
       {firstMesConfirm && (
         <div
+          data-chat-floating-panel
+          data-component="ChatSettingsDrawer.GreetingDialog"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="chat-settings-greeting-title"
+          aria-describedby="chat-settings-greeting-description"
           className="fixed inset-0 z-[95] flex items-center justify-center bg-black/60 max-md:pt-[env(safe-area-inset-top)]"
           onClick={(event) => {
             if (event.target === event.currentTarget) setFirstMesConfirm(null);
           }}
         >
           <div
-            className="relative mx-4 flex w-full max-w-sm flex-col rounded-xl bg-[var(--card)] shadow-2xl ring-1 ring-[var(--border)]"
+            className="mari-chrome-token-scope relative mx-4 flex w-full max-w-sm flex-col rounded-xl bg-[var(--marinara-chat-chrome-panel-bg)] text-[var(--marinara-chat-chrome-panel-text)] shadow-2xl ring-1 ring-[var(--marinara-chat-chrome-panel-border)]"
             onPointerDown={(e) => e.stopPropagation()}
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center gap-2 border-b border-[var(--marinara-chat-chrome-panel-divider)] px-4 py-3">
-              <MessageCircle size="0.875rem" className="text-[var(--muted-foreground)]" />
-              <span className="text-sm font-semibold text-[var(--foreground)]">
+            <div
+              data-component="ChatSettingsDrawer.GreetingDialogHeader"
+              className="border-b border-[var(--marinara-chat-chrome-panel-divider)] px-4 py-3"
+            >
+              <span id="chat-settings-greeting-title" className="mari-chrome-text-strong text-sm font-semibold">
                 {localizeUi("ui.chat.chatsettingsdrawer.chooseGreeting")}
               </span>
             </div>
             <div className="min-h-0 px-4 py-3">
-              <p className="text-xs leading-relaxed text-[var(--muted-foreground)]">
+              <p id="chat-settings-greeting-description" className="mari-chrome-text text-xs leading-relaxed">
                 {localizeUi("ui.chat.chatsettingsdrawer.chooseGreetingForValue1", {
                   value1: firstMesConfirm.charName,
                 })}
@@ -9479,7 +9497,7 @@ export function ChatSettingsDrawer({
                       )}
                     >
                       <span className="flex items-center justify-between gap-2">
-                        <span className="text-[0.6875rem] font-semibold text-[var(--foreground)]">
+                        <span className="mari-chrome-text-strong text-[0.6875rem] font-semibold">
                           {greeting.alternateIndex === null
                             ? localizeUi("ui.characters.dialoguetab.firstMessage")
                             : localizeUi("ui.characters.dialoguetab.alternateGreetingValue1", {
@@ -9497,13 +9515,17 @@ export function ChatSettingsDrawer({
                           {selected && <Check size="0.625rem" />}
                         </span>
                       </span>
-                      <span className="mt-1 block whitespace-pre-wrap text-[0.6875rem] leading-relaxed text-[var(--muted-foreground)]">
-                        {greeting.text.length > 500
-                          ? localizeUi("ui.chat.chatsettingsdrawer.value1_30f5501", {
-                              value1: greeting.text.slice(0, 500),
-                            })
-                          : greeting.text}
-                      </span>
+                      <RoleplayMessagePreview
+                        content={
+                          greeting.text.length > 500
+                            ? localizeUi("ui.chat.chatsettingsdrawer.value1_30f5501", {
+                                value1: greeting.text.slice(0, 500),
+                              })
+                            : greeting.text
+                        }
+                        dialogueColor={firstMesConfirm.dialogueColor}
+                        className="mt-1 text-[0.6875rem] leading-relaxed"
+                      />
                     </button>
                   );
                 })}
@@ -9511,6 +9533,7 @@ export function ChatSettingsDrawer({
             </div>
             <div className="flex justify-end gap-2 border-t border-[var(--marinara-chat-chrome-panel-divider)] px-4 py-3">
               <button
+                type="button"
                 onClick={() => setFirstMesConfirm(null)}
                 disabled={createMessage.isPending}
                 className="mari-chrome-control mari-chrome-control--small text-xs"
@@ -9518,6 +9541,7 @@ export function ChatSettingsDrawer({
                 {localizeUi("onboarding.actions.skip")}
               </button>
               <button
+                type="button"
                 onClick={handleFirstMesConfirm}
                 disabled={createMessage.isPending}
                 className="mari-chrome-control mari-chrome-control--small mari-chrome-control--selected text-xs"

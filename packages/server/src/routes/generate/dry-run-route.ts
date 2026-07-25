@@ -1281,6 +1281,11 @@ export async function registerDryRunRoute(app: FastifyInstance) {
       };
 
       const assembled = await assemblePrompt(assemblerInput);
+      Object.assign(promptMacroContext.variables, assembled.macroVariables);
+      promptMacroContext.agentData = {
+        ...promptMacroContext.agentData,
+        ...assembled.macroAgentData,
+      };
       finalMessages = assembled.messages;
       temperature = assembled.parameters.temperature;
       maxTokens = assembled.parameters.maxTokens;
@@ -1454,6 +1459,18 @@ export async function registerDryRunRoute(app: FastifyInstance) {
       if (characterAdvancedPromptEntries.length > 0) {
         finalMessages = injectAtDepth(finalMessages as any, characterAdvancedPromptEntries) as any;
       }
+    }
+
+    const authorNotesRaw = typeof chatMeta.authorNotes === "string" ? chatMeta.authorNotes.trim() : "";
+    const authorNotes = authorNotesRaw ? resolveMacros(authorNotesRaw, promptMacroContext).trim() : "";
+    if (authorNotes) {
+      const authorNotesDepth =
+        typeof chatMeta.authorNotesDepth === "number" && Number.isFinite(chatMeta.authorNotesDepth)
+          ? Math.max(0, Math.floor(chatMeta.authorNotesDepth))
+          : 4;
+      finalMessages = injectAtDepth(finalMessages as any, [
+        { content: authorNotes, role: "system", depth: authorNotesDepth },
+      ]) as any;
     }
 
     // Optional injection: tracker context (read-only snapshot)

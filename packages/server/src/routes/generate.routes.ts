@@ -2000,6 +2000,11 @@ export async function generateRoutes(app: FastifyInstance) {
           };
 
           const assembled = await assemblePrompt(assemblerInput);
+          Object.assign(promptMacroContext.variables, assembled.macroVariables);
+          promptMacroContext.agentData = {
+            ...promptMacroContext.agentData,
+            ...assembled.macroAgentData,
+          };
           lorebookPromptScanResult = assembled.lorebookScanResult ?? null;
           if (assembled.lorebookActivatedEntries || assembled.lorebookBudgetSkippedEntries) {
             lorebookScanSnapshot = {
@@ -2528,7 +2533,13 @@ export async function generateRoutes(app: FastifyInstance) {
 
         // ── Author's Notes injection ──
         const authorNotesRaw = (chatMeta.authorNotes as string | undefined)?.trim();
-        const authorNotes = authorNotesRaw ? resolvePromptMacros(authorNotesRaw).trim() : "";
+        const authorNotes = authorNotesRaw
+          ? resolveMacros(
+              authorNotesRaw,
+              promptMacroContext,
+              deferCharacterMacros ? { deferCharacterMacros: "all" } : undefined,
+            ).trim()
+          : "";
         if (authorNotes) {
           const authorNotesDepth = (chatMeta.authorNotesDepth as number) ?? 4;
           finalMessages = injectAtDepth(finalMessages, [

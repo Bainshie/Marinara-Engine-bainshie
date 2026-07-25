@@ -843,10 +843,9 @@ export function CharacterEditor() {
       <button
         type="button"
         onClick={() => updateExtension("fav", !formData.extensions.fav)}
-        className={cn(
-          "mari-editor-action inline-flex",
-          formData.extensions.fav ? "text-yellow-400" : "text-[var(--muted-foreground)] hover:text-yellow-400",
-        )}
+        data-character-favorite-toggle
+        data-favorite={formData.extensions.fav ? "true" : "false"}
+        className="mari-editor-action mari-editor-action--favorite inline-flex"
         title={
           formData.extensions.fav
             ? localizeUi("ui.characters.charactereditor.removeFromFavorites")

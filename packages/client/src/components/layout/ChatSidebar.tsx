@@ -811,7 +811,7 @@ export function ChatSidebar() {
         title:localizeUi("ui.layout.chatsidebar.deleteChats"),
         message:localizeUi("ui.layout.chatsidebar.deleteValue1ChatValue2", { value1: selectedChatIds.size, value2: selectedChatIds.size > 1 ?localizeUi("ui.noodle.stageprofileview.s") : "" }),
         confirmLabel:localizeUi("lorebook.editor.batch.delete"),
-        tone: "destructive",
+        tone: "accent",
       }))
     ) {
       return;
@@ -1477,6 +1477,7 @@ export function ChatSidebar() {
           selectedCount={selectedChatIds.size}
           onExport={() => void handleBatchExport()}
           onDelete={handleBatchDelete}
+          deleteTone="accent"
           exporting={bulkExportChats.isPending}
           className="static mx-0"
         />
