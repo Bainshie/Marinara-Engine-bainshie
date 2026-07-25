@@ -113,6 +113,7 @@ interface GameSetupWizardProps {
     avatarUrl?: string | null;
     avatarCrop?: AvatarCropValue | null;
   }>;
+  initialPartyCharacterIds?: string[];
 }
 
 interface PersonaDisplayInfo {
@@ -417,6 +418,7 @@ export function GameSetupWizard({
   isLoading,
   isDraftingMap,
   characters,
+  initialPartyCharacterIds = [],
 }: GameSetupWizardProps) {
   const { t: localizeUi } = useUiTranslation();
   const prefersReducedMotion = useReducedMotion();
@@ -432,7 +434,9 @@ export function GameSetupWizard({
   const [combatStyle, setCombatStyle] = useState<GameCombatStyle>("classic");
   const [gmMode, setGmMode] = useState<GameGmMode>("standalone");
   const [gmCharacterId, setGmCharacterId] = useState<string | null>(null);
-  const [partyCharacterIds, setPartyCharacterIds] = useState<string[]>([]);
+  const [partyCharacterIds, setPartyCharacterIds] = useState<string[]>(() =>
+    Array.from(new Set(initialPartyCharacterIds.filter((id) => characters.some((character) => character.id === id)))),
+  );
   const [playerGoals, setPlayerGoals] = useState(
     () => useUIStore.getState().rememberedGameSetupText?.playerGoals ?? "",
   );
@@ -1191,6 +1195,7 @@ export function GameSetupWizard({
         <AnimatePresence mode="wait">
           <motion.div
             key={currentStep.key}
+            data-component="GameSetupWizard"
             role="dialog"
             aria-modal="true"
             aria-labelledby="game-setup-wizard-title"

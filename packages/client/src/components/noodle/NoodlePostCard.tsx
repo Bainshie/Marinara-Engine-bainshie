@@ -58,18 +58,20 @@ import { NoodlePollComposer } from "./NoodlePollComposer";
 import { PostImageCropEditor, PostImageFrame } from "./PostImageCropEditor";
 import { useTranslation as useUiTranslation } from "react-i18next";
 
-const textareaClass =
+export const fieldClass =
+  "mari-chrome-field h-9 w-full min-w-0 rounded-md border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)] px-3 text-xs text-[var(--foreground)] outline-none transition-colors focus:border-[var(--noodle-accent)]";
+export const textareaClass =
   "mari-chrome-field min-h-24 w-full min-w-0 resize-y rounded-md border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)] p-3 text-xs leading-relaxed text-[var(--foreground)] outline-none transition-colors focus:border-[var(--noodle-accent)]";
-const labelClass =
+export const labelClass =
   "text-[0.68rem] font-semibold uppercase tracking-normal text-[var(--marinara-chat-chrome-panel-muted)]";
 export const noodleIconButtonClass =
   "inline-flex h-8 min-w-8 items-center justify-center gap-1 rounded-md px-2 text-xs font-medium !text-[var(--noodle-accent)] transition-colors hover:bg-[var(--noodle-accent)]/10 disabled:cursor-not-allowed disabled:opacity-50 [&_svg]:!text-[var(--noodle-accent)]";
-const NOODLE_MEDIA_PICKER_TABS: ConversationMediaPickerTab[] = [
+export const NOODLE_MEDIA_PICKER_TABS: ConversationMediaPickerTab[] = [
   { id: "emoji", label: "Emoji" },
   { id: "gifs", label: "GIFs" },
   { id: "stickers", label: "Stickers" },
 ];
-const NOODLE_TEXT_MEDIA_PICKER_TABS: ConversationMediaPickerTab[] = [
+export const NOODLE_TEXT_MEDIA_PICKER_TABS: ConversationMediaPickerTab[] = [
   { id: "emoji", label: "Emoji" },
   { id: "stickers", label: "Stickers" },
 ];
@@ -154,7 +156,7 @@ export function NoodleMentionSuggestions({
   );
 }
 
-function NoodleTextContent({
+export function NoodleTextContent({
   content,
   accountByHandle,
   onOpenProfile,
@@ -198,7 +200,7 @@ function NoodleTextContent({
   return <p className={cn("whitespace-pre-wrap text-sm", className)}>{parts}</p>;
 }
 
-function NoodlePollCard({
+export function NoodlePollCard({
   poll,
   votes,
   accountById,
@@ -297,11 +299,11 @@ function NoodlePollCard({
   );
 }
 
-function countInteractions(interactions: NoodleInteraction[], type: NoodleInteractionType) {
+export function countInteractions(interactions: NoodleInteraction[], type: NoodleInteractionType) {
   return interactions.filter((interaction) => interaction.type === type).length;
 }
 
-function createNoodleLightboxImage(id: string, url: string, prompt = ""): ChatImage {
+export function createNoodleLightboxImage(id: string, url: string, prompt = ""): ChatImage {
   const filename = url.split("?")[0]?.split("/").pop();
   const safeFilename = filename && /\.(?:avif|gif|jpe?g|png|webp)$/i.test(filename) ? filename : `noodle-${id}.png`;
   return {
@@ -470,6 +472,44 @@ export function NoodleAnchoredPopover({
   );
 }
 
+export function NoodlerToolPopover({
+  title,
+  onClose,
+  children,
+  wide,
+  anchorRef,
+  modalOwned,
+}: {
+  title: string;
+  onClose: () => void;
+  children: React.ReactNode;
+  wide?: boolean;
+  anchorRef: React.RefObject<HTMLElement | null>;
+  modalOwned?: boolean;
+}) {
+  const { t: localizeUi } = useUiTranslation();
+  return (
+    <NoodleAnchoredPopover anchorRef={anchorRef} wide={wide} modalOwned={modalOwned}>
+      <div className="marinara-chat-popover flex h-[22rem] max-h-[60vh] flex-col overflow-hidden rounded-xl border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)] text-[var(--foreground)] shadow-2xl shadow-black/35">
+        <div className="flex shrink-0 items-center gap-1 border-b border-foreground/10 px-2 py-1.5">
+          <span className="flex-1 rounded-md bg-foreground/10 px-2 py-1 text-center text-xs font-medium text-foreground/80 ring-1 ring-foreground/15">
+            {title}
+          </span>
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-[var(--noodle-accent)] transition-colors hover:bg-foreground/10"
+            title={localizeUi("capabilities.actions.close")}
+          >
+            <X size={14} />
+          </button>
+        </div>
+        <div className="min-h-0 flex-1 overflow-y-auto p-3">{children}</div>
+      </div>
+    </NoodleAnchoredPopover>
+  );
+}
+
 /**
  * Reply image attach/upload/lightbox. Hosts that persist reply images pass this; hosts that
  * don't (NoodleR) omit it — the card then hides the attach-image tool, upload, GIF tab, and
@@ -552,7 +592,7 @@ interface NoodlePostCardImageEditingCap {
   restore: () => void;
 }
 
-function PostImageEditControls({
+export function PostImageEditControls({
   post,
   editing,
   disabled,
@@ -697,7 +737,7 @@ function FileImagePreview({ file, crop }: { file: File; crop: NoodlePostImageCro
   return <PostImageFrame src={url} crop={crop} alt={localizeUi("ui.noodle.fileimagepreview.replacementPostPreview")} maxHeight={240} />;
 }
 
-interface NoodlePostCardCtx {
+export interface NoodlePostCardCtx {
   accountById?: Map<string, NoodleAccount>;
   accountByHandle?: Map<string, NoodleAccount>;
   personaAccount: NoodleAccount | null;
@@ -1141,7 +1181,7 @@ export function NoodlePostCard({
     replyManagement?.deleteNoodleReply ?? (() => {});
   const updateInteraction = replyManagement?.updateInteraction ?? { isPending: false };
   const deleteInteraction = replyManagement?.deleteInteraction ?? { isPending: false };
-  const canManageReplyOverride = replyManagement ? replyManagement.canManageReply : () => false;
+  const canManageReplyOverride = replyManagement?.canManageReply;
   const activeReplyMention = mentions?.activeReplyMention ?? null;
   const activeReplyMentionIndex = mentions?.activeReplyMentionIndex ?? 0;
   const replyMentionSuggestions = mentions?.replyMentionSuggestions ?? [];
@@ -1387,9 +1427,6 @@ export function NoodlePostCard({
                 </button>
                 <span className="text-xs text-[var(--muted-foreground)]">@{author?.handle ?? "noodle"}</span>
                 <span className="text-xs text-[var(--muted-foreground)]">{formatTime(post.createdAt)}</span>
-                <span className="rounded-full border border-[var(--noodle-divider)] px-2 py-0.5 text-[0.68rem] font-bold text-[var(--muted-foreground)]">
-                  {post.access === "ppv" ?localizeUi("ui.noodle.noodlepostcard.payToUnlock") : post.access === "subscriber" ?localizeUi("ui.noodle.privatepostcomposer.subscribers") :localizeUi("ui.noodle.noodlepostcard.public")}
-                </span>
               </div>
               {ctx.postManagement && <div className="relative shrink-0">
                 <button

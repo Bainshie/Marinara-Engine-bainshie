@@ -17,6 +17,7 @@ import {
   normalizeWorldCustomFields,
   normalizeAgentPhaseValue,
   normalizeAgentPromptTemplateSelectionMap,
+  resolveMacros,
   resolveGameSetupArtStylePrompt,
   resolveAgentPromptTemplate,
   stripMacroComments,
@@ -65,6 +66,8 @@ import { createPromptsStorage } from "../../services/storage/prompts.storage.js"
 import { findLastUserMessageIdBefore } from "../../services/generation/message-history.js";
 import { textRewriteDropsProtectedMarkup } from "../../services/generation/text-rewrite-safety.js";
 import { resolveConnectionImageDefaults } from "../../services/image/image-generation-defaults.js";
+import { injectMemoryRecallContext } from "../../services/generation/memory-recall-context.js";
+import { resolveMemoryRecallEmbeddingSource } from "../../services/memory-recall-embedding.js";
 import {
   loadImageGenerationUserSettings,
   resolveIllustratorImageSize,
@@ -711,6 +714,65 @@ async function buildRetryAgentContext(args: {
   };
 
   const chatMode = ((chat as { mode?: ChatMode }).mode ?? "conversation") as ChatMode;
+  const customAgentVectorAccessEnabled = enabledConfigs.some((config: any) => {
+    if (!resolvedAgentTypes.has(config.type)) return false;
+    const settings = parseJsonIfString<Record<string, unknown>>(config.settings ?? {});
+    return customAgentHasCapability(settings, "access_vectors");
+  });
+  const lastAssistantExtra = lastAssistant ? parseExtra((lastAssistant as any).extra) : {};
+  const rawLorebookScan =
+    lastAssistantExtra.lorebookScan &&
+    typeof lastAssistantExtra.lorebookScan === "object" &&
+    !Array.isArray(lastAssistantExtra.lorebookScan)
+      ? (lastAssistantExtra.lorebookScan as Record<string, unknown>)
+      : {};
+  const semanticLorebookEntries = (
+    Array.isArray(rawLorebookScan.activatedEntries) ? rawLorebookScan.activatedEntries : []
+  ).flatMap((entry) => {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) return [];
+    const row = entry as Record<string, unknown>;
+    const activationSources = Array.isArray(row.activationSources) ? row.activationSources : [];
+    const matchedKeys = Array.isArray(row.matchedKeys) ? row.matchedKeys : [];
+    const semanticMatch =
+      row.matchType === "semantic" ||
+      activationSources.includes("semantic") ||
+      matchedKeys.some((key) => typeof key === "string" && key.startsWith("[semantic:"));
+    if (!semanticMatch || typeof row.id !== "string" || typeof row.content !== "string") return [];
+    return [
+      {
+        id: row.id,
+        content: row.content,
+        ...(typeof row.semanticScore === "number" && Number.isFinite(row.semanticScore)
+          ? { semanticScore: row.semanticScore }
+          : {}),
+      },
+    ];
+  });
+  let recalledAgentVectorMemories: string[] = [];
+  if (customAgentVectorAccessEnabled) {
+    try {
+      const embeddingSource = await resolveMemoryRecallEmbeddingSource(db, {
+        chatMetadata: chatMeta,
+        connectionId: typeof chat.connectionId === "string" ? chat.connectionId : null,
+      });
+      const latestUserMessage = [...resolvedAgentSlice]
+        .reverse()
+        .find((message: any) => message.role === "user" && message.content?.trim());
+      recalledAgentVectorMemories = await injectMemoryRecallContext({
+        db,
+        messages: [],
+        currentInputMessages: latestUserMessage ? [{ role: "user", content: String(latestUserMessage.content) }] : [],
+        chatId,
+        embeddingSource,
+        contextLimit: undefined,
+        sendProgress: () => {},
+        resolveMacros: (value) => resolveMacros(value, promptMacroContext, { trimResult: false }),
+        wrapFormat,
+      });
+    } catch (err) {
+      logger.warn(err, "[retry-agents] Failed to resolve custom-agent vector context");
+    }
+  }
   const agentContext: AgentContext = {
     chatId,
     chatMode,
@@ -761,6 +823,14 @@ async function buildRetryAgentContext(args: {
         : null,
     writableLorebookIds: null,
     chatSummary: resolveRoleplayChatSummary(chatMode, chatMeta),
+    ...(customAgentVectorAccessEnabled
+      ? {
+          vectorContext: {
+            recalledMemories: recalledAgentVectorMemories,
+            semanticLorebookEntries,
+          },
+        }
+      : {}),
     streaming,
     memory: {},
   };
