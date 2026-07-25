@@ -317,7 +317,10 @@ function CardLibraryDetailCard({
                   {formatEstimatedTokens(card.tokenEstimate)}
                 </span>
                 {card.favorite && (
-                  <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/10 px-2.5 py-1 text-[0.6875rem] font-medium text-amber-300">
+                  <span
+                    data-character-favorite-indicator="detail"
+                    className="mari-chrome-accent-surface mari-accent-animated inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[0.6875rem] font-medium"
+                  >
                     <Star size="0.75rem" className="fill-current" /> {localizeUi("ui.characters.cardlibrarydetailcard.favorite")}</span>
                 )}
                 {card.active && (
@@ -711,7 +714,10 @@ export function CharacterLibraryView() {
                           </div>
                         )}
                         {card.favorite && (
-                          <div className="absolute right-2 top-2 inline-flex items-center gap-1 rounded-full bg-black/55 px-2 py-1 text-[0.5625rem] font-medium text-amber-200 backdrop-blur-sm sm:right-3 sm:top-3 sm:text-[0.625rem]">
+                          <div
+                            data-character-favorite-indicator="card"
+                            className="mari-chrome-accent-surface mari-accent-animated absolute right-2 top-2 inline-flex items-center gap-1 rounded-full px-2 py-1 text-[0.5625rem] font-medium backdrop-blur-sm sm:right-3 sm:top-3 sm:text-[0.625rem]"
+                          >
                             <Star size="0.625rem" className="fill-current sm:h-[0.6875rem] sm:w-[0.6875rem]" /> {localizeUi("ui.characters.cardlibrarydetailcard.favorite")}</div>
                         )}
                         {card.active && (
