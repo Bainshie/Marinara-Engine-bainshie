@@ -444,6 +444,13 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
   const [draftConnectionId, setDraftConnectionId] = useState("");
   const [previousDraft, setPreviousDraft] = useState<NoodleStageProfileInput | null>(null);
   const [editingProfileId, setEditingProfileId] = useState<string | null>(null);
+  // Back from a stage profile returns to wherever it was opened from (hub feed, sidebar,
+  // profile list) instead of always dumping the user on the profile list. Hub is the fallback.
+  const profileReturnView = useRef<"hub" | "profiles">("hub");
+  useEffect(() => {
+    if (navigation.mode !== "private") return;
+    if (navigation.view === "hub" || navigation.view === "profiles") profileReturnView.current = navigation.view;
+  }, [navigation]);
   useEffect(() => {
     if (
       navigation.mode !== "private" ||
@@ -1176,7 +1183,7 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
             isError={postsQuery.isError}
             onRetry={() => void postsQuery.refetch()}
             onEdit={() => beginEdit(selectedProfile)}
-            onBack={() => onNavigate({ mode: "private", view: "profiles" })}
+            onBack={() => onNavigate({ mode: "private", view: profileReturnView.current })}
             onDelete={async () => {
               const confirmed = await showConfirmDialog({
                 title: localizeUi("ui.chat.homeprofessormarichat.deleteValue1", { value1: selectedProfile.displayName }),
