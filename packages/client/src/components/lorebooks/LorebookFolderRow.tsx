@@ -313,7 +313,7 @@ export function LorebookFolderRow({
         {/* Entry count badge */}
         <span
           className="mari-editor-chip shrink-0 px-1.5 py-0.5 text-[0.625rem] sm:px-2"
-          title={localizeUi("ui.lorebooks.lorebookfolderrow.value1EntrValue2InThisFolder", { value1: entryCount, value2: entryCount === 1 ?localizeUi("ui.lorebooks.lorebookeditor.y") :localizeUi("ui.lorebooks.lorebookeditor.ies") })}
+          title={localizeUi("ui.lorebooks.lorebookfolderrow.entriesInThisFolder", { count: entryCount })}
         >
           {entryCount}
         </span>

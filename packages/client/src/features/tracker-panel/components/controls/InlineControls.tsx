@@ -5,6 +5,7 @@ import { TRACKER_TEXT_MICRO } from "../../lib/tracker-panel.constants";
 import { getNumberValueWidth } from "../../lib/tracker-display";
 import { coerceStatNumber } from "../../lib/tracker-stat-layout";
 import { useTranslation as useUiTranslation } from "react-i18next";
+import { useTrackerWindow } from "../TrackerWindowContext";
 
 export function FittedText({
   children,
@@ -19,6 +20,7 @@ export function FittedText({
   minScale?: number;
   align?: "left" | "center" | "right";
 }) {
+  const trackerWindow = useTrackerWindow();
   const containerRef = useRef<HTMLSpanElement>(null);
   const measureRef = useRef<HTMLSpanElement>(null);
   const [scale, setScale] = useState(1);
@@ -39,16 +41,16 @@ export function FittedText({
 
     updateScale();
 
-    if (typeof ResizeObserver === "undefined") {
-      window.addEventListener("resize", updateScale);
-      return () => window.removeEventListener("resize", updateScale);
+    if (typeof trackerWindow.ResizeObserver === "undefined") {
+      trackerWindow.addEventListener("resize", updateScale);
+      return () => trackerWindow.removeEventListener("resize", updateScale);
     }
 
-    const resizeObserver = new ResizeObserver(updateScale);
+    const resizeObserver = new trackerWindow.ResizeObserver(updateScale);
     resizeObserver.observe(container);
     resizeObserver.observe(measure);
     return () => resizeObserver.disconnect();
-  }, [children, minScale]);
+  }, [children, minScale, trackerWindow]);
 
   return (
     <span

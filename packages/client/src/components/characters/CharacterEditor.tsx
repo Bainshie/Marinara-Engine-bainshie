@@ -4605,19 +4605,11 @@ function LorebookTab({
       }
       toast.success(
         result.reimported
-          ? localizeUi("ui.characters.lorebooktab.reimportedValue1EmbeddedLorebookEntrValue2", {
-              value1: result.entriesImported,
-              value2:
-                result.entriesImported === 1
-                  ? localizeUi("ui.characters.lorebooktab.y")
-                  : localizeUi("ui.characters.lorebooktab.ies"),
+          ? localizeUi("ui.characters.lorebooktab.reimportedEmbeddedLorebookEntries", {
+              count: result.entriesImported,
             })
-          : localizeUi("ui.characters.lorebooktab.importedValue1EmbeddedLorebookEntrValue2", {
-              value1: result.entriesImported,
-              value2:
-                result.entriesImported === 1
-                  ? localizeUi("ui.characters.lorebooktab.y")
-                  : localizeUi("ui.characters.lorebooktab.ies"),
+          : localizeUi("ui.characters.lorebooktab.importedEmbeddedLorebookEntries", {
+              count: result.entriesImported,
             }),
       );
     } catch (error) {

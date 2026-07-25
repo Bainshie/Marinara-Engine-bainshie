@@ -1,7 +1,18 @@
 // ──────────────────────────────────────────────
 // Chat: Settings Drawer — per-chat configuration
 // ──────────────────────────────────────────────
-import { Fragment, lazy, Suspense, useState, useRef, useEffect, useMemo, useCallback, type CSSProperties } from "react";
+import {
+  Fragment,
+  lazy,
+  Suspense,
+  useState,
+  useRef,
+  useEffect,
+  useId,
+  useMemo,
+  useCallback,
+  type CSSProperties,
+} from "react";
 import { useQuery, useQueryClient, useQueries } from "@tanstack/react-query";
 import { useTranslation, useTranslation as useUiTranslation } from "react-i18next";
 import { toast } from "sonner";
@@ -9936,22 +9947,46 @@ function AgentSettingsCard({
   children?: React.ReactNode;
 }) {
   const { t: localizeUi } = useUiTranslation();
+  const [open, setOpen] = useState(true);
+  const contentId = useId();
+  const toggleLabel = localizeUi(
+    open ? "ui.chat.agentsettingscard.collapseValue1" : "ui.chat.agentsettingscard.expandValue1",
+    { value1: title },
+  );
+
   return (
     <div
       id={id}
       tabIndex={id ? -1 : undefined}
-      className="scroll-mt-3 space-y-2 rounded-xl border border-[var(--border)] bg-[var(--secondary)]/70 p-3 focus:outline-none focus:ring-1 focus:ring-[var(--primary)]/45"
+      className="scroll-mt-3 rounded-xl border border-[var(--border)] bg-[var(--secondary)]/70 focus:outline-none focus:ring-1 focus:ring-[var(--primary)]/45"
       style={order == null ? undefined : { order }}
     >
-      <div className="flex items-start gap-2">
-        {icon}
-        <div className="min-w-0 flex-1">
-          <div className="flex min-w-0 items-center gap-1.5 text-[0.6875rem] font-medium">
-            <span className="min-w-0 truncate">{title}</span>
-            {badge}
-          </div>
-          <p className="mt-1 text-[0.625rem] text-[var(--muted-foreground)]">{description}</p>
-        </div>
+      <div className="flex items-start gap-1 p-3">
+        <button
+          type="button"
+          onClick={() => setOpen((current) => !current)}
+          aria-expanded={open}
+          aria-controls={contentId}
+          aria-label={toggleLabel}
+          title={toggleLabel}
+          className="-m-1 flex min-w-0 flex-1 items-start gap-2 rounded-lg p-1 text-left transition-colors hover:bg-[var(--accent)]/50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--primary)]/60"
+        >
+          {icon}
+          <span className="min-w-0 flex-1">
+            <span className="flex min-w-0 items-center gap-1.5 text-[0.6875rem] font-medium">
+              <span className="min-w-0 truncate">{title}</span>
+              {badge}
+            </span>
+            <span className="mt-1 block text-[0.625rem] text-[var(--muted-foreground)]">{description}</span>
+          </span>
+          <ChevronRight
+            size="0.75rem"
+            className={cn(
+              "mt-0.5 shrink-0 text-[var(--muted-foreground)] transition-transform",
+              open && "rotate-90",
+            )}
+          />
+        </button>
         {onRemove && (
           <button
             type="button"
@@ -9964,7 +9999,11 @@ function AgentSettingsCard({
           </button>
         )}
       </div>
-      {children}
+      {open && (
+        <div id={contentId} className="space-y-2 px-3 pb-3">
+          {children}
+        </div>
+      )}
     </div>
   );
 }

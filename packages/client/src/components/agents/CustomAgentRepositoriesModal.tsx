@@ -78,7 +78,10 @@ export function CustomAgentRepositoriesModal({ open, onClose }: { open: boolean;
     if (!configuredRepository) {
       const confirmed = await showConfirmDialog({
         title:localizeUi("ui.agents.customagentrepositoriesmodal.addThisCustomRepository"),
-        message:localizeUi("ui.agents.customagentrepositoriesmodal.value1Value2AgentValue3WillBeImported", { value1: TRUST_WARNING, value2: preview.changes.length, value3: preview.changes.length === 1 ? "" :localizeUi("ui.noodle.stageprofileview.s") }),
+        message: localizeUi("ui.agents.customagentrepositoriesmodal.repositoryAgentsWillBeImported", {
+          warning: TRUST_WARNING,
+          count: preview.changes.length,
+        }),
         confirmLabel:localizeUi("ui.agents.customagentrepositoriesmodal.addRepoAnyway"),
       });
       if (!confirmed) return;

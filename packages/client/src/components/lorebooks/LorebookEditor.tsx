@@ -2350,8 +2350,10 @@ export function LorebookEditor() {
                         <p className="text-[0.6875rem] text-[var(--muted-foreground)]">
                           {previewMatchCount === 0
                             ?localizeUi("ui.lorebooks.lorebookeditor.noEntriesWouldActivateOnThisText")
-                            :localizeUi("ui.lorebooks.lorebookeditor.value1OfValue2EnabledEntrValue3WouldActivate", { value1: previewMatchCount, value2: entries.filter((e) => e.enabled).length, value3:
-                                entries.filter((e) => e.enabled).length === 1 ?localizeUi("ui.lorebooks.lorebookeditor.y") :localizeUi("ui.lorebooks.lorebookeditor.ies") })}
+                            : localizeUi("ui.lorebooks.lorebookeditor.enabledEntriesWouldActivate", {
+                                matchCount: previewMatchCount,
+                                count: entries.filter((entry) => entry.enabled).length,
+                              })}
                         </p>
                       )}
                     </div>
@@ -2859,8 +2861,10 @@ function VectorizeSection({
     if (mode === "all" && storedVectorCount > 0) {
       const confirmed = await showConfirmDialog({
         title:localizeUi("ui.lorebooks.vectorizesection.reVectorizeAllEntries"),
-        message:localizeUi("ui.lorebooks.vectorizesection.reVectorizeAllValue1VectorizableEntrValue2WithValue3", { value1: vectorizableEntryCount, value2:
-          vectorizableEntryCount === 1 ?localizeUi("ui.lorebooks.lorebookeditor.y") :localizeUi("ui.lorebooks.lorebookeditor.ies"), value3: conn?.name ??localizeUi("ui.lorebooks.vectorizesection.theSelectedConnection") }),
+        message: localizeUi("ui.lorebooks.vectorizesection.reVectorizeAllEntriesWithConnection", {
+          count: vectorizableEntryCount,
+          connection: conn?.name ?? localizeUi("ui.lorebooks.vectorizesection.theSelectedConnection"),
+        }),
         confirmLabel:localizeUi("ui.lorebooks.vectorizesection.reVectorizeAll"),
         cancelLabel: "Cancel",
         tone: "default",

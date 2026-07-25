@@ -60,6 +60,7 @@ import type { SpriteInfo } from "../../hooks/use-characters";
 import { useTranslate } from "../../hooks/use-translate";
 import { useTTSConfig } from "../../hooks/use-tts";
 import { useApplyRegex } from "../../hooks/use-apply-regex";
+import { useBackdropDismiss } from "../../hooks/use-backdrop-dismiss";
 import { useGameAssetManifest } from "../../hooks/use-game-assets";
 import { useGameModeStore } from "../../stores/game-mode.store";
 import { getDefaultChatTextColor, useUIStore } from "../../stores/ui.store";
@@ -1038,6 +1039,12 @@ export function GameNarration({
   const logScrollContainerRef = useRef<HTMLDivElement | null>(null);
   const pendingLogScrollAnchorRef = useRef<{ key: string; offsetTop: number; scrollTop: number } | null>(null);
   const pendingLogScrollTopRef = useRef<number | null>(null);
+  const closeLogs = useCallback(() => {
+    setLogsOpen(false);
+    setEditingLogSeg(null);
+    logScrolledRef.current = false;
+  }, []);
+  const logsBackdropDismiss = useBackdropDismiss(closeLogs);
   const stackedLogShellRef = useRef<HTMLDivElement | null>(null);
   const stackedLogRef = useRef<HTMLDivElement | null>(null);
   const activeSegmentScrollRef = useRef<HTMLDivElement | null>(null);
@@ -4869,11 +4876,7 @@ export function GameNarration({
           data-game-skip-bg-nav="true"
           role="dialog"
           aria-modal="true"
-          onClick={() => {
-            setLogsOpen(false);
-            setEditingLogSeg(null);
-            logScrolledRef.current = false;
-          }}
+          {...logsBackdropDismiss}
         >
           <div
             className="relative mx-4 flex max-h-[80vh] w-full max-w-2xl flex-col rounded-2xl border border-white/15 bg-[var(--card)] shadow-2xl"
