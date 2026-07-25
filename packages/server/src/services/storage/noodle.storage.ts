@@ -50,6 +50,7 @@ import {
 } from "@marinara-engine/shared";
 import type { DB } from "../../db/connection.js";
 import { isFileUniqueConstraintError } from "../../db/file-schema.js";
+import { logger } from "../../lib/logger.js";
 import { canViewNoodlerPost, isNoodlerHiddenFromViewer } from "../noodle/noodler-access.js";
 import { nextAutoPostRunAt } from "../noodle/noodle-autopost-cadence.js";
 import {
@@ -407,12 +408,30 @@ export function normalizeNoodleSettings(raw: unknown): NoodleSettings {
   const rawRecord = parseRecord(raw);
   const migratedMaxImagesPerRefresh =
     rawRecord.maxImagesPerRefresh ?? rawRecord.maxImagePromptsPerDay ?? DEFAULT_NOODLE_SETTINGS.maxImagesPerRefresh;
-  const parsed = noodleSettingsSchema.safeParse({
+  const candidate: Record<string, unknown> = {
     ...DEFAULT_NOODLE_SETTINGS,
     ...rawRecord,
     maxImagesPerRefresh: migratedMaxImagesPerRefresh,
-  });
-  if (!parsed.success) return noodleSettingsSchema.parse(DEFAULT_NOODLE_SETTINGS);
+  };
+  let parsed = noodleSettingsSchema.safeParse(candidate);
+  if (!parsed.success) {
+    // One unparseable field used to discard *every* stored Noodle setting, silently resetting
+    // things the user never touched (lorebook context, invited character folders, connection).
+    // Drop only the fields that failed and let the schema default those instead.
+    const rejectedKeys = new Set(
+      parsed.error.issues.map((issue) => String(issue.path[0] ?? "")).filter((key) => key.length > 0),
+    );
+    logger.warn(
+      "Noodle settings had invalid field(s); falling back to defaults for: %s",
+      [...rejectedKeys].join(", ") || "(unknown)",
+    );
+    for (const key of rejectedKeys) delete candidate[key];
+    parsed = noodleSettingsSchema.safeParse({ ...DEFAULT_NOODLE_SETTINGS, ...candidate });
+    if (!parsed.success) {
+      logger.error(parsed.error, "Noodle settings could not be recovered; resetting to defaults");
+      return noodleSettingsSchema.parse(DEFAULT_NOODLE_SETTINGS);
+    }
+  }
   const min = Math.min(parsed.data.participantMin, parsed.data.participantMax);
   const max = Math.max(parsed.data.participantMin, parsed.data.participantMax);
   const providedCarryoverModes = Array.isArray(rawRecord.carryoverModes);
