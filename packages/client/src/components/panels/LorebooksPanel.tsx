@@ -64,6 +64,7 @@ import { SmoothFolderContent } from "../ui/SmoothFolderContent";
 import { TouchDragHandle } from "../ui/TouchDragHandle";
 import { useLocalizedUiText } from "../../localization/use-localized-ui-text";
 import { useTranslation as useUiTranslation } from "react-i18next";
+import { PanelLoadMoreBar } from "./PanelLoadMoreBar";
 
 const CATEGORIES: Array<{ id: LorebookCategory | "all" | "active"; label: string }> = [
   { id: "all", label: "All" },
@@ -1085,14 +1086,12 @@ export function LorebooksPanel() {
       )}
 
       {lorebookPages.hasNextPage && (
-        <button
-          type="button"
-          onClick={() => void lorebookPages.fetchNextPage()}
+        <PanelLoadMoreBar
+          onLoadMore={() => void lorebookPages.fetchNextPage()}
           disabled={lorebookPages.isFetchingNextPage}
-          className="mari-chrome-control mari-chrome-control--primary justify-center text-xs"
         >
           {lorebookPages.isFetchingNextPage ?localizeUi("ui.characters.characterlibraryview.loading") :localizeUi("ui.panels.characterspanel.loadMoreValue1Loaded", { value1: lorebooks.length })}
-        </button>
+        </PanelLoadMoreBar>
       )}
 
       {selectionMode && (

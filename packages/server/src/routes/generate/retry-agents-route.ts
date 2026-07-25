@@ -158,6 +158,7 @@ import {
   illustratorBackgroundGenerationEnabled,
   illustratorRequestedBackground,
   illustratorTrackerLocationChanged,
+  resolveIllustratorImageConnectionId,
 } from "../../services/generation/illustrator-background-generation.js";
 import {
   isExclusiveIllustratorRetryTarget,
@@ -2525,10 +2526,7 @@ async function applyRetryResultEffects(args: {
   const chats = createChatsStorage(app.db);
   const agentsStore = createAgentsStorage(app.db);
   const chatMeta = parseExtra(chat.metadata) as Record<string, unknown>;
-  const isManualIllustratorBackgroundRequest = isExclusiveIllustratorRetryTarget(
-    illustratorRetryTargets,
-    "background",
-  );
+  const isManualIllustratorBackgroundRequest = isExclusiveIllustratorRetryTarget(illustratorRetryTargets, "background");
   const isManualIllustratorImageRequest = isExclusiveIllustratorRetryTarget(illustratorRetryTargets, "illustration");
   let currentResponseForRewrite = agentContext.mainResponse;
   const retryOwnerSpatialProjection =
@@ -3048,11 +3046,11 @@ async function applyRetryResultEffects(args: {
           const rawSavedNegativePrompt = illustratorAgent?.resolved.settings?.imageNegativePrompt;
           const imagePositivePrompt = typeof rawImagePositivePrompt === "string" ? rawImagePositivePrompt.trim() : "";
           const savedNegativePrompt = typeof rawSavedNegativePrompt === "string" ? rawSavedNegativePrompt.trim() : "";
-          const chatGameImageConnectionId =
-            typeof chatMeta.gameImageConnectionId === "string" ? chatMeta.gameImageConnectionId.trim() : "";
-          const configuredImgConnId = illustratorAgent?.resolved.settings?.imageConnectionId;
-          const agentImageConnectionId = typeof configuredImgConnId === "string" ? configuredImgConnId.trim() : "";
-          const imageConnectionOverride = chatGameImageConnectionId || agentImageConnectionId;
+          const imageConnectionOverride = resolveIllustratorImageConnectionId(
+            chat.mode,
+            chatMeta,
+            illustratorAgent?.resolved.settings?.imageConnectionId,
+          );
           let imgConnFull = imageConnectionOverride ? await conns.getWithKey(imageConnectionOverride) : null;
           if (imageConnectionOverride && !imgConnFull) {
             logger.warn(
@@ -3090,7 +3088,10 @@ async function applyRetryResultEffects(args: {
               (typeof setupConfig.imageStyleProfileId === "string" ? setupConfig.imageStyleProfileId : "") ||
               (typeof chatMeta.imageStyleProfileId === "string" ? chatMeta.imageStyleProfileId : "") ||
               null;
-            const illustrationSize = resolveIllustratorImageSize(imageSettings.illustration, illData.aspectRatio);
+            const illustrationSize = resolveIllustratorImageSize(
+              chat.mode === "game" ? imageSettings.game : imageSettings.illustration,
+              illData.aspectRatio,
+            );
             const imgWidth = illustrationSize.width;
             const imgHeight = illustrationSize.height;
 
@@ -3456,10 +3457,10 @@ async function applyRetryResultEffects(args: {
       const backgroundDecisionReason = isManualIllustratorBackgroundRequest
         ? "Manual Gallery background request"
         : requestedBackground
-        ? typeof illData.reason === "string"
-          ? illData.reason
-          : undefined
-        : `Tracker location changed from ${agentContext.gameState?.location || "an unspecified location"} to ${latestGameState?.location}.`;
+          ? typeof illData.reason === "string"
+            ? illData.reason
+            : undefined
+          : `Tracker location changed from ${agentContext.gameState?.location || "an unspecified location"} to ${latestGameState?.location}.`;
       if (trackerLocationChanged && !requestedBackground) {
         logger.info(
           '[retry-agents/illustrator-background] Tracker location changed from "%s" to "%s"; generating despite a false Illustrator background decision',
@@ -3471,21 +3472,23 @@ async function applyRetryResultEffects(args: {
         db: app.db,
         chatId,
         chatName: chat.name,
-        chatMode: (chat as { mode?: unknown }).mode === "visual_novel" ? "visual_novel" : "roleplay",
+        chatMode:
+          (chat as { mode?: unknown }).mode === "game"
+            ? "game"
+            : (chat as { mode?: unknown }).mode === "visual_novel"
+              ? "visual_novel"
+              : "roleplay",
         chatMetadata: freshMeta,
         currentBackground:
           backgroundBeforeGeneration ??
-          (typeof agentContext.memory._currentBackground === "string"
-            ? agentContext.memory._currentBackground
-            : null),
+          (typeof agentContext.memory._currentBackground === "string" ? agentContext.memory._currentBackground : null),
         illustratorAgent: illustratorEntry.resolved,
         assistantResponse: agentContext.mainResponse ?? "",
         decisionReason: backgroundDecisionReason,
         gameState: latestGameState,
         recentMessages: agentContext.recentMessages,
         signal: agentContext.signal,
-        debugLog: (message, ...values) =>
-          logDebugOverride(debugMode || isDebugAgentsEnabled(), message, ...values),
+        debugLog: (message, ...values) => logDebugOverride(debugMode || isDebugAgentsEnabled(), message, ...values),
       });
 
       const chatAfterGeneration = await chats.getById(chatId);
@@ -3615,10 +3618,7 @@ export async function registerRetryAgentsRoute(app: FastifyInstance) {
       illustratorRetryTargets,
       "background",
     );
-    const isManualIllustratorImageRequest = isExclusiveIllustratorRetryTarget(
-      illustratorRetryTargets,
-      "illustration",
-    );
+    const isManualIllustratorImageRequest = isExclusiveIllustratorRetryTarget(illustratorRetryTargets, "illustration");
 
     startSseReply(reply, { "X-Accel-Buffering": "no" });
     const onFallback = createReplyFallbackNotifier(reply);

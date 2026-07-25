@@ -17,12 +17,6 @@ const profileTabs: Array<{ id: NoodleProfileTab; label: string }> = [
   { id: "media", label: "Media" },
 ];
 
-const PROFILE_TAB_KEYS: Record<NoodleProfileTab, string> = {
-  posts: "ui.noodle.profile.tabs.posts",
-  likes: "ui.noodle.profile.tabs.likes",
-  media: "ui.noodle.profile.tabs.media",
-};
-
 interface NoodleProfileSurfaceProps<TTab extends string = NoodleProfileTab> {
   mobileHeader: ReactNode;
   account: Parameters<typeof Avatar>[0]["account"];
@@ -199,7 +193,7 @@ export function NoodleProfileSurface<TTab extends string = NoodleProfileTab>({
                   : "bg-[var(--foreground)] text-[var(--background)]",
               )}
             >
-              {followAction.followed ?localizeUi("ui.noodle.noodleprofilesurface.following") :localizeUi("ui.noodle.noodlehome.follow")}
+              {followAction.followed ?localizeUi("ui.noodle.connections.tabs.following") :localizeUi("ui.noodle.noodlehome.follow")}
             </button>
           ) : null}
           {secondaryActions}
@@ -275,11 +269,7 @@ export function NoodleProfileSurface<TTab extends string = NoodleProfileTab>({
                 activeTab === tab.id && "text-[var(--foreground)]",
               )}
             >
-              <span className="truncate">
-                {tab.id in PROFILE_TAB_KEYS
-                  ? localizeUi(PROFILE_TAB_KEYS[tab.id as NoodleProfileTab])
-                  : tab.label}
-              </span>
+              <span className="truncate">{tab.label}</span>
               {activeTab === tab.id && (
                 <span className="absolute bottom-0 left-1/2 h-1 w-12 -translate-x-1/2 rounded-full bg-[var(--noodle-accent)]" />
               )}

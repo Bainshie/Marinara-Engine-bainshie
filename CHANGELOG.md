@@ -6,7 +6,25 @@ This file is the release-notes source of truth for Marinara Engine. Reuse these 
 
 ### Added
 
+- Added rotating daily, weekly, or monthly automatic full backups under **Settings → Advanced → Backup & Export**, with the latest run and failure state shown in the UI (#4071).
 - Added a **Retry** action to Game Mode character-sheet editing. It regenerates only the selected Persona or party member from their card and the current campaign history, keeps the result as an unsaved draft for review, and preserves the original sheet unless the user saves (#4048).
+- Added a compact **New Chat** launcher to Home that explains Conversation, Roleplay, and Game before opening the selected mode's existing setup wizard (#4058).
+- Added a Roleplay **Illustrator image connection** override in Chat Settings, separate from the prompt-writing connection and with the Illustrator Agent's configured image model as its fallback (#4057).
+
+### Changed
+
+- Made the Game dynamic-image prompt timeout configurable with `GAME_DYNAMIC_IMAGE_PROMPT_TIMEOUT_MS`, retaining 45 seconds as the default and accepting values from 10 seconds to 1 hour (#4052).
+- Made Game session conclusions prepare the next playable arc with refreshed goals, quest seeds, pressure clocks, factions, and named NPCs so the following session does not inherit a stale scenario plan (#4059).
+
+### Fixed
+
+- Streamed native profile and full-backup ZIP exports to disk with bounded JSONL table shards, preventing large libraries from failing with `Invalid string length` while preserving preview/import compatibility and archive integrity checks (#4064).
+- Included the live Character or Persona card as the first, explicitly labelled current revision in version history; saved revisions now show stable sequence numbers and second-precision edit times (#4040).
+- Made Conversation composer chrome focus the real text field, kept mobile thinking controls clear of participant names, and repaired the downloadable Calls surface's mobile participant labels and seven-button control rail (#4053, #4054).
+- Removed checked marks from unselected Character and Persona multi-select controls (#4055).
+- Enforced case-insensitive, globally unique public Noodle handles across Personas and Characters, including deterministic suffixes for auto-created profiles and reconciliation of older collisions (#4056).
+- Routed Krea models through OpenRouter's dedicated Images API while retaining image-only modality detection for every current `krea/` model (#4061).
+- Rewrote incomplete legacy UI-settings blobs with newly synced preferences, preserving an explicitly disabled Game Text Effects setting across staging updates (#4062).
 
 ## [2.3.5]
 

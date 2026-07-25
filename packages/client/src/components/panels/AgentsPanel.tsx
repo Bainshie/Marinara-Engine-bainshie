@@ -1202,7 +1202,7 @@ function renderAgentCard({
               : "border-[var(--muted-foreground)]/40 bg-[var(--secondary)] text-transparent",
           )}
         >
-          <Check size="0.75rem" />
+          {selected && <Check size="0.75rem" />}
         </div>
       )}
       {!selectionMode && (

@@ -178,16 +178,13 @@ function getCharacterSummaryFromRow(row: typeof characters.$inferSelect) {
   try {
     const parsed = parseCharacterData(row.data);
     const extensions =
-      parsed.extensions && typeof parsed.extensions === "object"
-        ? (parsed.extensions as Record<string, unknown>)
-        : {};
+      parsed.extensions && typeof parsed.extensions === "object" ? (parsed.extensions as Record<string, unknown>) : {};
     return {
       id: row.id,
       name: typeof parsed.name === "string" && parsed.name.trim() ? parsed.name.trim() : "Unknown",
       avatarUrl: row.avatarPath ?? null,
       avatarCrop: extensions.avatarCrop ?? null,
-      conversationStatus:
-        typeof extensions.conversationStatus === "string" ? extensions.conversationStatus : undefined,
+      conversationStatus: typeof extensions.conversationStatus === "string" ? extensions.conversationStatus : undefined,
     };
   } catch {
     return {
@@ -285,8 +282,15 @@ export function createCharactersStorage(db: DB) {
         !!favoriteFilter || options.sort === "name-asc" || options.sort === "name-desc" || options.sort === "favorites";
       if (needsJsonFilteringOrSort) {
         const rows = await (whereClause
-          ? db.select().from(characters).where(whereClause).orderBy(...characterOrder(options.sort))
-          : db.select().from(characters).orderBy(...characterOrder(options.sort)));
+          ? db
+              .select()
+              .from(characters)
+              .where(whereClause)
+              .orderBy(...characterOrder(options.sort))
+          : db
+              .select()
+              .from(characters)
+              .orderBy(...characterOrder(options.sort)));
         const annotatedRows = rows.map(readCharacterListRow);
         const filtered =
           favoriteFilter === "favorites"
@@ -297,11 +301,7 @@ export function createCharactersStorage(db: DB) {
         const pagedRows = sortCharacterRows(filtered, options.sort)
           .slice(options.offset, options.offset + options.limit + 1)
           .map(({ row }) => row);
-        return toPaginatedList(
-          pagedRows,
-          options.limit,
-          options.offset,
-        );
+        return toPaginatedList(pagedRows, options.limit, options.offset);
       }
       const rows = await (whereClause
         ? db
@@ -333,16 +333,38 @@ export function createCharactersStorage(db: DB) {
     },
 
     async listVersions(characterId: string) {
-      const rows = await db
-        .select()
-        .from(characterCardVersions)
-        .where(eq(characterCardVersions.characterId, characterId))
-        .orderBy(desc(characterCardVersions.createdAt));
-
-      return rows.map((row) => ({
+      const [rows, current] = await Promise.all([
+        db
+          .select()
+          .from(characterCardVersions)
+          .where(eq(characterCardVersions.characterId, characterId))
+          .orderBy(desc(characterCardVersions.createdAt)),
+        this.getById(characterId),
+      ]);
+      const saved = rows.map((row, index) => ({
         ...row,
         data: parseCharacterData(row.data),
+        revision: rows.length - index,
+        isCurrent: false,
       }));
+      if (!current) return saved;
+      const currentData = parseCharacterData(current.data);
+      return [
+        {
+          id: `current:${characterId}`,
+          characterId,
+          data: currentData,
+          comment: current.comment ?? "",
+          avatarPath: current.avatarPath ?? null,
+          version: currentData.character_version ?? "",
+          source: "current",
+          reason: "",
+          createdAt: current.updatedAt,
+          revision: saved.length + 1,
+          isCurrent: true,
+        },
+        ...saved,
+      ];
     },
 
     async getVersionById(characterId: string, versionId: string) {
@@ -365,7 +387,7 @@ export function createCharactersStorage(db: DB) {
       const existing = await this.getById(characterId);
       if (!existing) return null;
       const currentData = parseCharacterData(existing.data);
-      const timestamp = options?.createdAt ?? now();
+      const timestamp = options?.createdAt ?? existing.updatedAt ?? now();
       const id = newId();
       await db.insert(characterCardVersions).values({
         id,
@@ -605,16 +627,38 @@ export function createCharactersStorage(db: DB) {
     },
 
     async listPersonaVersions(personaId: string) {
-      const rows = await db
-        .select()
-        .from(personaCardVersions)
-        .where(eq(personaCardVersions.personaId, personaId))
-        .orderBy(desc(personaCardVersions.createdAt));
-
-      return rows.map((row) => ({
+      const [rows, current] = await Promise.all([
+        db
+          .select()
+          .from(personaCardVersions)
+          .where(eq(personaCardVersions.personaId, personaId))
+          .orderBy(desc(personaCardVersions.createdAt)),
+        this.getPersona(personaId),
+      ]);
+      const saved = rows.map((row, index) => ({
         ...row,
         data: parsePersonaSnapshot(row.data),
+        revision: rows.length - index,
+        isCurrent: false,
       }));
+      if (!current) return saved;
+      const currentData = buildPersonaSnapshot(current);
+      return [
+        {
+          id: `current:${personaId}`,
+          personaId,
+          data: currentData,
+          comment: current.comment ?? "",
+          avatarPath: current.avatarPath ?? null,
+          version: currentData.personaVersion ?? "",
+          source: "current",
+          reason: "",
+          createdAt: current.updatedAt,
+          revision: saved.length + 1,
+          isCurrent: true,
+        },
+        ...saved,
+      ];
     },
 
     async getPersonaVersionById(personaId: string, versionId: string) {
@@ -637,7 +681,7 @@ export function createCharactersStorage(db: DB) {
       const existing = await this.getPersona(personaId);
       if (!existing) return null;
       const currentData = buildPersonaSnapshot(existing);
-      const timestamp = options?.createdAt ?? now();
+      const timestamp = options?.createdAt ?? existing.updatedAt ?? now();
       const id = newId();
       await db.insert(personaCardVersions).values({
         id,

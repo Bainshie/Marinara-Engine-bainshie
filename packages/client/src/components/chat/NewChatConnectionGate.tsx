@@ -31,6 +31,7 @@ export function NewChatConnectionGate({ mode, onClose }: NewChatConnectionGatePr
   const applyChatPreset = useApplyChatPreset();
   const openRightPanel = useUIStore((s) => s.openRightPanel);
   const setSidebarOpen = useUIStore((s) => s.setSidebarOpen);
+  const pendingNewChatOrigin = useChatStore((s) => s.pendingNewChatOrigin);
   const sidecarModelDownloaded = useSidecarStore((state) => state.modelDownloaded);
   const sidecarModelDisplayName = useSidecarStore((state) => state.modelDisplayName);
   const [connectionId, setConnectionId] = useState<string>("");
@@ -73,7 +74,11 @@ export function NewChatConnectionGate({ mode, onClose }: NewChatConnectionGatePr
         onSuccess: (chat) => {
           const store = useChatStore.getState();
           store.setPendingNewChatMode(null);
-          if (typeof window !== "undefined" && window.innerWidth < 768) setSidebarOpen(false);
+          if (pendingNewChatOrigin === "home") {
+            setSidebarOpen(true);
+          } else if (typeof window !== "undefined" && window.innerWidth < 768) {
+            setSidebarOpen(false);
+          }
           store.setActiveChatId(chat.id);
           store.setShouldOpenSettings(true);
           store.setShouldOpenWizard(true);

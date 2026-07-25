@@ -3200,6 +3200,55 @@ test("UI language selection loads locale files and persists across reloads", asy
   expect(errors).toEqual([]);
 });
 
+test("incomplete synced settings preserve disabled Game text effects and repair the server blob", async ({ page }) => {
+  let rewrittenValue: string | null = null;
+  await page.addInitScript(() => {
+    localStorage.setItem(
+      "marinara-engine-ui",
+      JSON.stringify({
+        state: { gameTextEffectsEnabled: false },
+        version: 82,
+      }),
+    );
+    localStorage.setItem("marinara-engine-ui-updated-at", "100");
+  });
+  await page.route("**/api/app-settings/ui", async (route) => {
+    if (route.request().method() === "GET") {
+      await route.fulfill({
+        json: {
+          value: JSON.stringify({
+            theme: "dark",
+            __updatedAt: 200,
+          }),
+        },
+      });
+      return;
+    }
+    const body = route.request().postDataJSON() as { value?: unknown } | null;
+    rewrittenValue = typeof body?.value === "string" ? body.value : null;
+    await route.fulfill({ json: { value: rewrittenValue } });
+  });
+
+  await page.goto("/");
+  await expect.poll(() => rewrittenValue).not.toBeNull();
+  const rewritten = JSON.parse(rewrittenValue!) as {
+    gameTextEffectsEnabled?: unknown;
+    __updatedAt?: unknown;
+  };
+  expect(rewritten.gameTextEffectsEnabled).toBe(false);
+  expect(typeof rewritten.__updatedAt).toBe("number");
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const persisted = JSON.parse(localStorage.getItem("marinara-engine-ui") ?? '{"state":{}}') as {
+          state?: { gameTextEffectsEnabled?: unknown };
+        };
+        return persisted.state?.gameTextEffectsEnabled;
+      }),
+    )
+    .toBe(false);
+});
+
 test("Card Browser labels and the Persona full library stay available across viewports", async ({ page }) => {
   const errors = collectUnexpectedErrors(page);
   await page.route("**/api/bot-browser/chub/search?*", async (route) => {
@@ -5024,6 +5073,22 @@ test("Hierarchical Maps settings stay inside the active agent entry", async ({ p
       await expect(agentEntry.getByTestId("hierarchical-maps-controls")).toBeVisible();
       await expect(drawer.locator("marinara-capability-hierarchical-maps")).toHaveCount(1);
       await expect(agentEntry.locator("marinara-capability-hierarchical-maps")).toHaveCount(1);
+
+      if (chat.mode === "game") {
+        await expect(drawer.getByText("Scene Videos", { exact: true })).toHaveCount(0);
+        await expect(drawer.getByText("Storyboards", { exact: true })).toHaveCount(0);
+        await page.locator('[data-chat-toolbar-panel-action="settings"]').click();
+        await expect(drawer).toHaveCount(0);
+        const mapPanel = page.locator('[data-tour="game-map"]:visible').first();
+        const narrationPanel = page.locator('[data-component="GameNarration.ActivePanel"]');
+        await expect(mapPanel).toBeVisible();
+        await expect(narrationPanel).toBeVisible();
+        const [mapBackground, narrationBackground] = await Promise.all([
+          mapPanel.evaluate((element) => getComputedStyle(element).backgroundColor),
+          narrationPanel.evaluate((element) => getComputedStyle(element).backgroundColor),
+        ]);
+        expect(mapBackground).toBe(narrationBackground);
+      }
     }
     expect(errors).toEqual([]);
   } finally {
@@ -5724,6 +5789,94 @@ test("Conversation autocompletes and renders standard emoji shortcodes", async (
   }
 });
 
+test("streamed profile and full-backup ZIPs round-trip through import preview", async ({ request }, testInfo) => {
+  test.skip(!testInfo.project.name.includes("desktop"), "Backup archive round-trip is covered once on desktop.");
+  test.setTimeout(90_000);
+
+  const characterResponse = await request.post("/api/characters", {
+    data: {
+      data: {
+        name: `Backup archive smoke ${Date.now()}`,
+        description: "A small fixture that must survive the sharded profile archive.",
+      },
+    },
+  });
+  expect(characterResponse.ok()).toBeTruthy();
+  const character = (await characterResponse.json()) as { id: string };
+
+  try {
+    const automaticSettingsResponse = await request.get("/api/backup/automatic");
+    expect(automaticSettingsResponse.ok()).toBeTruthy();
+    const automaticSettings = (await automaticSettingsResponse.json()) as { enabled: boolean };
+    expect(automaticSettings.enabled).toBe(false);
+
+    const enableAutomaticResponse = await request.put("/api/backup/automatic", {
+      data: { enabled: true, frequency: "daily" },
+    });
+    expect(enableAutomaticResponse.ok()).toBeTruthy();
+    await expect
+      .poll(
+        async () => {
+          const statusResponse = await request.get("/api/backup/automatic");
+          if (!statusResponse.ok()) return false;
+          const status = (await statusResponse.json()) as {
+            backupExists: boolean;
+            lastBackupAt: string | null;
+            lastError: string | null;
+          };
+          return status.backupExists && Boolean(status.lastBackupAt) && status.lastError === null;
+        },
+        { timeout: 30_000 },
+      )
+      .toBe(true);
+
+    const archiveRequests = [
+      {
+        name: "marinara-profile.zip",
+        load: () => request.get("/api/backup/export-profile?format=zip", { timeout: 60_000 }),
+      },
+      {
+        name: "marinara-backup.zip",
+        load: () => request.post("/api/backup/download", { timeout: 60_000 }),
+      },
+    ];
+
+    for (const archiveRequest of archiveRequests) {
+      const archiveResponse = await archiveRequest.load();
+      expect(archiveResponse.ok(), `${archiveRequest.name} should download`).toBeTruthy();
+      expect(archiveResponse.headers()["content-type"]).toContain("application/zip");
+      const archive = await archiveResponse.body();
+      expect(archive.subarray(0, 2).toString("ascii")).toBe("PK");
+      expect(Number(archiveResponse.headers()["content-length"])).toBe(archive.length);
+
+      const previewResponse = await request.post("/api/backup/import-profile?preview=true", {
+        multipart: {
+          file: {
+            name: archiveRequest.name,
+            mimeType: "application/zip",
+            buffer: archive,
+          },
+        },
+        timeout: 60_000,
+      });
+      expect(previewResponse.ok(), `${archiveRequest.name} should preview-import`).toBeTruthy();
+      const preview = (await previewResponse.json()) as {
+        success: boolean;
+        preview: boolean;
+        imported: { characters: number };
+      };
+      expect(preview.success).toBe(true);
+      expect(preview.preview).toBe(true);
+      expect(preview.imported.characters).toBeGreaterThanOrEqual(1);
+    }
+  } finally {
+    await request
+      .put("/api/backup/automatic", { data: { enabled: false, frequency: "daily" } })
+      .catch(() => undefined);
+    await request.delete(`/api/characters/${character.id}`).catch(() => undefined);
+  }
+});
+
 test("home page stays fitted while FAQ behavior matches the viewport", async ({ page }, testInfo) => {
   const errors = collectUnexpectedErrors(page);
   const mobile = testInfo.project.name.includes("mobile");
@@ -5752,6 +5905,16 @@ test("home page stays fitted while FAQ behavior matches the viewport", async ({ 
     await expect(mobileFaqLauncher.locator(".lucide-chevron-right")).toHaveCount(0);
 
     const recentChats = page.locator('[data-component="RecentChats"]');
+    await expect(recentChats.locator(".overflow-x-auto")).toHaveCount(0);
+    expect(await recentChats.evaluate((element) => element.scrollWidth <= element.clientWidth + 1)).toBeTruthy();
+    const recentChatButtons = recentChats.getByRole("button");
+    const recentChatButtonCount = await recentChatButtons.count();
+    if (recentChatButtonCount > 1) {
+      const rowPositions = await recentChatButtons.evaluateAll((buttons) =>
+        buttons.map((button) => Math.round(button.getBoundingClientRect().top)),
+      );
+      expect(new Set(rowPositions).size).toBe(1);
+    }
     const mariPanel = page.locator('[data-component="HomeProfessorMariChat.MariPanel"]');
     const mariSprite = page.locator('[data-component="HomeProfessorMariChat.Scene"] [data-part="sprite"]');
     const mobileGeometry = await Promise.all([
@@ -6369,10 +6532,10 @@ test("Noodle polls support character creation and voting on both sides", async (
 
     const composer = noodle.locator('[data-component="NoodleView.InlineComposer"]');
     await composer.getByTitle("Create poll").click();
-    await page.getByPlaceholder("Ask a question").fill("Which experiment comes next?");
+    await page.getByPlaceholder("What question do you want to ask?").fill("Which experiment comes next?");
     await page.getByPlaceholder("Option 1").fill("Robotics");
     await page.getByPlaceholder("Option 2").fill("Alchemy");
-    await page.getByRole("button", { name: "Add Poll", exact: true }).click();
+    await page.getByRole("button", { name: "Add poll", exact: true }).click();
     await expect(composer.locator('[data-component="NoodleView.DraftPoll"]')).toBeVisible();
 
     const personaPollResponsePromise = page.waitForResponse(
@@ -6928,9 +7091,12 @@ test("Noodle reply notifications focus the actionable timeline reply", async ({ 
     ).toBe(true);
 
     await nestedComposer.getByTitle("Attach image").click();
-    const replyImageDivider = page.locator('[data-component="NoodleView.ReplyImageDivider"]');
-    await expect(replyImageDivider).toBeVisible();
-    await expect(replyImageDivider).toHaveCSS("color", "rgb(126, 167, 255)");
+    await expect(page.getByRole("heading", { name: "Add an image", exact: true })).toBeVisible();
+    await expect(page.getByRole("textbox", { name: "Image URL", exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Upload from device", exact: true })).toHaveCSS(
+      "background-color",
+      "rgb(126, 167, 255)",
+    );
 
     expect(errors).toEqual([]);
   } finally {
@@ -7819,7 +7985,15 @@ test("Background library organization works with desktop drag and touch drag", a
 
     const backgroundRow = page.locator(`[data-background-id="${backgroundId}"]`);
     await expect(backgroundRow).toBeVisible();
+    const backgroundActions = backgroundRow.locator("[data-background-actions]");
     const defaultToggle = backgroundRow.locator("[data-background-default-toggle]");
+    if (testInfo.project.name.includes("mobile")) {
+      await expect(backgroundActions).toBeVisible();
+    } else {
+      await expect(backgroundActions).toBeHidden();
+      await backgroundRow.hover();
+      await expect(backgroundActions).toBeVisible();
+    }
     await defaultToggle.scrollIntoViewIfNeeded();
     const starBefore = await defaultToggle.boundingBox();
     await defaultToggle.click();
@@ -7827,6 +8001,13 @@ test("Background library organization works with desktop drag and touch drag", a
     const starAfter = await defaultToggle.boundingBox();
     expect(Math.abs((starAfter?.x ?? 0) - (starBefore?.x ?? 0))).toBeLessThan(1);
     expect(Math.abs((starAfter?.y ?? 0) - (starBefore?.y ?? 0))).toBeLessThan(1);
+    if (!testInfo.project.name.includes("mobile")) {
+      await sortSelect.hover();
+      await expect(backgroundActions).toBeHidden();
+      await expect(backgroundRow.locator("[data-background-default-indicator]")).toBeVisible();
+      await backgroundRow.hover();
+      await expect(backgroundActions).toBeVisible();
+    }
     await defaultToggle.click();
 
     const [createFolderResponse] = await Promise.all([

@@ -425,6 +425,16 @@ export function BackgroundPicker({
           draggedBackgroundIdRef.current = null;
           setDraggedBackgroundId(null);
         }}
+        onMouseLeave={(event) => {
+          const focused = event.currentTarget.ownerDocument.activeElement;
+          if (
+            focused instanceof HTMLElement &&
+            event.currentTarget.contains(focused) &&
+            !focused.matches(":focus-visible")
+          ) {
+            focused.blur();
+          }
+        }}
         className={cn(
           "group relative flex touch-pan-y items-start gap-2 rounded-xl p-1.5 transition-colors hover:bg-[var(--sidebar-accent)]/45",
           draggedBackgroundId === background.id && "opacity-50",
@@ -555,7 +565,7 @@ export function BackgroundPicker({
                   setTagInput("");
                 }}
                 className={cn(
-                  "rounded-full p-1 transition-colors",
+                  "rounded-full p-1 opacity-0 transition-all group-hover:opacity-100 group-focus-within:opacity-100 max-md:opacity-100",
                   isEditing
                     ? "bg-[var(--primary)]/20 text-[var(--primary)]"
                     : "text-[var(--muted-foreground)]/60 hover:text-[var(--primary)]",
@@ -604,12 +614,25 @@ export function BackgroundPicker({
           )}
         </div>
 
-        <div className="absolute right-1 top-1 flex items-center gap-0.5 rounded-lg bg-[var(--sidebar)] px-0.5 py-0.5 shadow-sm ring-1 ring-[var(--border)]">
+        {isDefaultRoleplay && (
+          <span
+            data-background-default-indicator
+            className="pointer-events-none absolute right-2 top-2 hidden h-5 w-5 items-center justify-center text-amber-300 transition-opacity md:flex md:group-hover:opacity-0 md:group-focus-within:opacity-0"
+            aria-hidden="true"
+          >
+            <Star size="0.8125rem" fill="currentColor" />
+          </span>
+        )}
+
+        <div
+          data-background-actions
+          className="absolute right-1 top-1 flex items-center gap-0.5 rounded-lg bg-[var(--sidebar)] px-0.5 py-0.5 opacity-100 shadow-sm ring-1 ring-[var(--border)] transition-all md:invisible md:opacity-0 md:group-hover:visible md:group-hover:opacity-100 md:group-focus-within:visible md:group-focus-within:opacity-100"
+        >
           {canDelete && (
             <button
               type="button"
               onClick={() => void handleDeleteBackground(background)}
-              className="flex h-7 w-7 items-center justify-center rounded-md text-[var(--destructive)] opacity-0 transition-all hover:bg-[var(--destructive)]/12 active:scale-90 group-hover:opacity-100 max-md:opacity-100"
+              className="flex h-7 w-7 items-center justify-center rounded-md text-[var(--destructive)] transition-all hover:bg-[var(--destructive)]/12 active:scale-90"
               title={localizeUi("ui.panels.backgroundpicker.deleteBackground")}
               aria-label={localizeUi("ui.panels.botbrowserpanel.deleteValue1", { value1: title })}
             >

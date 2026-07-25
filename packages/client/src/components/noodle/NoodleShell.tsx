@@ -24,6 +24,14 @@ export const NOODLE_LOGO_SRC = "/noodle-klusek.png";
 const NOODLER_LOGO_SRC = "/noodler-klusek.png";
 export const NOODLE_PERSONA_SWITCHER_PAGE_SIZE = 5;
 
+export function getNoodleAccentStyle(accent: string, style: CSSProperties = {}): CSSProperties {
+  return {
+    "--noodle-accent": accent,
+    "--noodle-divider": "var(--marinara-chat-chrome-panel-divider)",
+    ...style,
+  } as CSSProperties;
+}
+
 const labelClass = "text-[0.68rem] font-semibold uppercase tracking-normal text-[var(--marinara-chat-chrome-panel-muted)]";
 
 export function initials(name: string) {
@@ -217,12 +225,7 @@ export function NoodleShell({
         NOODLE_ICON_SCOPE_CLASS,
       )}
       data-component="NoodleView"
-      style={
-        {
-          "--noodle-accent": accent,
-          "--noodle-divider": "var(--marinara-chat-chrome-panel-divider)",
-        } as CSSProperties
-      }
+      style={getNoodleAccentStyle(accent)}
     >
       {overlays}
       <AnimatePresence>
@@ -551,9 +554,7 @@ export function NoodleShell({
           <button
             type="button"
             onClick={onOpenMobileHomeDestination}
-            aria-label={localizeUi("ui.noodle.navigation.destination", {
-              destination: homeLabel,
-            })}
+            aria-label={localizeUi("ui.noodle.noodleshell.noodleValue1", { value1: homeLabel.toLowerCase() })}
             aria-current={homeActive ? "page" : undefined}
             className="relative flex items-center justify-center transition-colors hover:bg-[var(--accent)]"
           >

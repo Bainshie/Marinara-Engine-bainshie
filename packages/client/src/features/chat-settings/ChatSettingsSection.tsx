@@ -33,12 +33,11 @@ export function ChatSettingsSection({
   useEffect(() => {
     if (rememberedOpen === undefined && initialOpen) setOpen(true);
   }, [initialOpen, rememberedOpen]);
-  const toggleOpen = () =>
-    setOpen((current) => {
-      const next = !current;
-      if (id) setSectionExpanded(id, next);
-      return next;
-    });
+  const toggleOpen = () => {
+    const next = !open;
+    setOpen(next);
+    if (id) setSectionExpanded(id, next);
+  };
   const handleHeaderKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.target !== event.currentTarget) return;
     if (event.key !== "Enter" && event.key !== " ") return;

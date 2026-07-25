@@ -1,6 +1,7 @@
 import {
   NOODLE_PRIVATE_POST_CONTENT_MAX_LENGTH,
   NOODLE_PRIVATE_POST_TITLE_MAX_LENGTH,
+  createNoodlePoll,
   noodleGeneratedPrivatePostSchema,
   type APIProvider,
   type NoodleAccount,
@@ -26,7 +27,11 @@ import { createNoodleStorage } from "../storage/noodle.storage.js";
 import { createPromptOverridesStorage } from "../storage/prompt-overrides.storage.js";
 import { formatNoodleMessagesForLog } from "./noodle-generation-log.js";
 import { generatePrivatePostImage } from "./noodle-private-images.service.js";
-import { privatePostMediaUrl } from "./noodle-private-media.js";
+import {
+  persistPrivatePostWithUploadedMedia,
+  privatePostMediaUrl,
+  type NoodlerPrivatePostMediaUpload,
+} from "./noodle-private-media.js";
 import type { NoodleImagePromptReviewItem } from "./noodle-public-images.service.js";
 import { getErrorMessage } from "./noodle-public-support.js";
 import { noodleResponseFormat } from "./noodle-response-format.js";
@@ -42,6 +47,7 @@ export type PrivatePostGenerationInput = {
   account: NoodleAccount;
   request: NoodlePrivateGenerationRequest;
   connection: GenerationConnection;
+  media?: NoodlerPrivatePostMediaUpload;
 };
 
 const PRIVATE_POST_MAX_TOKENS = 2048;
@@ -181,7 +187,7 @@ export async function generatePrivatePost(
   const { account } = input;
   const settings = await noodle.getSettings();
   const autoPosting = account.settings.scheduler.autoPosting;
-  const imagesEnabled = autoPosting?.imagesEnabled === true;
+  const imagesEnabled = autoPosting?.imagesEnabled === true && !input.media;
 
   const connections = createConnectionsStorage(db);
   const fallbackConnection = await connections.getFallbackForMain();
@@ -295,15 +301,36 @@ export async function generatePrivatePost(
     source: "generated" as const,
     access: input.request.access,
     ppvPrice: input.request.access === "ppv" ? (input.request.ppvPrice ?? null) : null,
+    metadata: {
+      ...(input.request.poll ? { poll: createNoodlePoll(input.request.poll) } : {}),
+      ...(input.request.imageCrop ? { imageCrop: input.request.imageCrop } : {}),
+    },
   };
 
   const persist = async (
     extra: { id?: string; imagePrompt?: string | null; imageUrl?: string | null; metadata?: Record<string, unknown> } = {},
   ): Promise<NoodlerManagedPost> => {
-    const post = await noodle.createPrivatePost({ ...baseInput, ...extra });
+    const post = await noodle.createPrivatePost({
+      ...baseInput,
+      ...extra,
+      metadata: { ...baseInput.metadata, ...extra.metadata },
+    });
     if (!post) throw new Error("Failed to persist the generated private NoodleR post.");
     return post;
   };
+
+  if (input.media) {
+    const postId = newId();
+    const post = await persistPrivatePostWithUploadedMedia(account.id, postId, input.media, (persistedMedia) =>
+      persist({
+        id: postId,
+        imageUrl: persistedMedia.imageUrl,
+        metadata: { privateMediaPath: persistedMedia.privateMediaPath },
+      }),
+    );
+    if (!post) throw new Error("Failed to persist the generated private NoodleR post.");
+    return { post, imagePromptReview: null };
+  }
 
   if (!draftImagePrompt) return { post: await persist(), imagePromptReview: null };
 

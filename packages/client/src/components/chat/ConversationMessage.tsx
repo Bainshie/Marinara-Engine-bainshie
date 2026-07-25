@@ -168,6 +168,7 @@ export const ConversationMessage = memo(function ConversationMessage({
   const chatFontColor = useUIStore((s) => s.chatFontColor);
   const showMessageNumbers = useUIStore((s) => s.showMessageNumbers);
   const quoteFormat = useUIStore((s) => s.quoteFormat);
+  const conversationAvatarShape = useUIStore((s) => s.conversationAvatarShape);
 
   // ── Translation ──
   const { translate, translations, translating } = useTranslate();
@@ -725,6 +726,7 @@ export const ConversationMessage = memo(function ConversationMessage({
     displayName: headerDisplayName,
     avatarUrl,
     avatarCropStyle,
+    avatarCornerClass: conversationAvatarShape === "square" ? "rounded-lg" : "rounded-full",
     nameColor,
     onOpenAboutMe,
     mentionNames,
@@ -988,6 +990,7 @@ export const ConversationMessage = memo(function ConversationMessage({
           isConversationStart && cn("rounded-lg ring-1", CONVERSATION_MESSAGE_CHROME_RING_CLASS),
           isHiddenFromAI && cn("rounded-lg ring-1 saturate-75", CONVERSATION_MESSAGE_CHROME_RING_CLASS),
           multiSelectMode && isSelected && MESSAGE_SELECTION_SURFACE_CLASS,
+          hideActions && thinking && !isUser && "max-sm:pb-8",
         )}
         data-message-id={message.id}
         data-message-role={message.role}

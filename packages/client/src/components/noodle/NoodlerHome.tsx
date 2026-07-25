@@ -24,12 +24,13 @@ import {
   X,
 } from "lucide-react";
 import { createPortal } from "react-dom";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import {
   NOODLE_PRIVATE_POST_CONTENT_MAX_LENGTH,
   NOODLE_PRIVATE_POST_GUIDE_MAX_LENGTH,
   NOODLE_PRIVATE_POST_TITLE_MAX_LENGTH,
+  noodlePollInputSchema,
 } from "@marinara-engine/shared";
 import type {
   NoodleIdentityDisclosure,
@@ -39,6 +40,8 @@ import type {
   NoodlePostAccess,
   NoodlerPostView,
   NoodleStageProfileInput,
+  NoodlePollInput,
+  NoodlePostImageCrop,
   NoodlerManagedStageProfile,
   NoodlerManagedPost,
   NoodlerStageProfile,
@@ -55,6 +58,7 @@ import {
   useRunNoodlerAutoPostNow,
   useRefreshAllNoodlerCreatorsNow,
   useGenerateNoodlerStageProfileDraft,
+  useLoadNoodlerPostImage,
   useNoodle,
   useNoodlerAccounts,
   useNoodlerEligibleAccounts,
@@ -65,15 +69,18 @@ import {
   useToggleNoodlerSubscription,
   useUnlockNoodlerPost,
   useUpdateNoodlerPost,
+  useReplaceNoodlerPostImage,
   useUpdateNoodlerAccess,
   useUpdateNoodlerAutoPosting,
   useRescheduleNoodlerAutoPost,
   useUpdateNoodleSettings,
   useUpdateNoodlerStageProfile,
+  type NoodlerPostDraftImage,
 } from "../../hooks/use-noodle";
 import { useActivePersona, usePersonas } from "../../hooks/use-characters";
 import { useConnections } from "../../hooks/use-connections";
 import { ApiError } from "../../lib/api-client";
+import { showConfirmDialog } from "../../lib/app-dialogs";
 import { cn } from "../../lib/utils";
 import { useUIStore } from "../../stores/ui.store";
 import {
@@ -88,14 +95,24 @@ import {
   NoodleComposerToolRow,
   NoodleToolButton,
   type NoodlePostCardModel,
+  type NoodlePostImageUpdate,
   useNoodlePostCardController,
 } from "./NoodlePostCard";
 import { NoodlerPostCard } from "./NoodlerPostCard";
-import { Avatar, NoodleShell, NOODLE_PERSONA_SWITCHER_PAGE_SIZE, NOODLE_PINK, useNoodleAccent } from "./NoodleShell";
 import { NoodlerAgeGate } from "./NoodlerAgeGate";
-import { NoodleProfileSurface } from "./NoodleProfileSurface";
 import { NOODLE_AUTO_POST_INTENSITIES } from "./noodle-auto-post";
 import { NoodlerBulkCreateButton } from "./NoodlerBulkCreatePanel";
+import {
+  Avatar,
+  getNoodleAccentStyle,
+  NoodleShell,
+  NOODLE_PERSONA_SWITCHER_PAGE_SIZE,
+  useNoodleAccent,
+} from "./NoodleShell";
+import { NoodleProfileSurface } from "./NoodleProfileSurface";
+import { NoodleImageComposer } from "./NoodleImageComposer";
+import { NoodlePollComposer } from "./NoodlePollComposer";
+import { PostImageCropEditor, PostImageFrame } from "./PostImageCropEditor";
 import { ConversationMediaPickerPanel, type ConversationMediaPickerTabId } from "../chat/ConversationMediaPickerPanel";
 import { HelpTooltip } from "../ui/HelpTooltip";
 import { Modal } from "../ui/Modal";
@@ -113,6 +130,8 @@ interface PrivatePostSubmission {
   body: string;
   access: NoodlePostAccess;
   ppvPrice: number | null;
+  image: NoodlerPostDraftImage | null;
+  poll: { question: string; options: string[] } | null;
 }
 
 interface PrivatePostDraft {
@@ -120,6 +139,12 @@ interface PrivatePostDraft {
   body: string;
   access: NoodlePostAccess;
   ppvPrice: string;
+  image: NoodlerPostDraftImage | null;
+  poll: NoodlePollInput | null;
+}
+
+interface PendingPrivateImage {
+  source: File | string;
 }
 
 const EMPTY_PRIVATE_POST_DRAFT: PrivatePostDraft = {
@@ -127,6 +152,8 @@ const EMPTY_PRIVATE_POST_DRAFT: PrivatePostDraft = {
   body: "",
   access: "public",
   ppvPrice: "5",
+  image: null,
+  poll: null,
 };
 
 function isEmptyPrivatePostDraft(draft: PrivatePostDraft): boolean {
@@ -134,8 +161,25 @@ function isEmptyPrivatePostDraft(draft: PrivatePostDraft): boolean {
     draft.title === EMPTY_PRIVATE_POST_DRAFT.title &&
     draft.body === EMPTY_PRIVATE_POST_DRAFT.body &&
     draft.access === EMPTY_PRIVATE_POST_DRAFT.access &&
-    draft.ppvPrice === EMPTY_PRIVATE_POST_DRAFT.ppvPrice
+    draft.ppvPrice === EMPTY_PRIVATE_POST_DRAFT.ppvPrice &&
+    !draft.image &&
+    !draft.poll
   );
+}
+
+function PrivateDraftImageFrame({ image }: { image: NoodlerPostDraftImage }) {
+  const { t: localizeUi } = useUiTranslation();
+  const sourceUrl = useMemo(
+    () => (typeof image.source === "string" ? image.source : URL.createObjectURL(image.source)),
+    [image.source],
+  );
+  useEffect(
+    () => () => {
+      if (image.source instanceof File) URL.revokeObjectURL(sourceUrl);
+    },
+    [image.source, sourceUrl],
+  );
+  return <PostImageFrame src={sourceUrl} crop={image.crop} alt={localizeUi("ui.noodle.noodlehome.attachedPostImage")} maxHeight={240} />;
 }
 
 type NoodlerProfileTab = "posts" | "media" | "subscribers";
@@ -307,6 +351,8 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
       window.removeEventListener("pointerdown", onPointerDown, true);
     };
   }, [accountSwitcherOpen]);
+  const replacePostImage = useReplaceNoodlerPostImage();
+  const loadPostImage = useLoadNoodlerPostImage();
   const [privatePostDrafts, setPrivatePostDrafts] = useState<Record<string, PrivatePostDraft>>({});
   const updatePrivatePostDraft = (profileId: string, patch: Partial<PrivatePostDraft>) => {
     setPrivatePostDrafts((current) => {
@@ -332,16 +378,21 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
       return next;
     });
   };
-  const confirmDiscardPrivatePostDrafts = () =>
+  const confirmDiscardPrivatePostDrafts = async () =>
     Object.keys(privatePostDrafts).length === 0 ||
-    window.confirm(localizeUi("ui.noodle.noodlerhome.discardUnpublishedNoodlerPostDrafts"));
-  const exitToPublic = () => {
-    if (!confirmDiscardPrivatePostDrafts()) return;
+    showConfirmDialog({
+      title:localizeUi("ui.noodle.noodlerhome.discardNoodlerDrafts"),
+      message:localizeUi("ui.noodle.noodlerhome.yourUnpublishedNoodlerPostDraftsWillBeLost"),
+      confirmLabel:localizeUi("ui.noodle.noodlerhome.discardDrafts"),
+      tone: "destructive",
+    });
+  const exitToPublic = async () => {
+    if (!(await confirmDiscardPrivatePostDrafts())) return;
     setPrivatePostDrafts({});
     onNavigate({ mode: "public", view: "home" });
   };
-  const openSettings = () => {
-    if (!confirmDiscardPrivatePostDrafts()) return;
+  const openSettings = async () => {
+    if (!(await confirmDiscardPrivatePostDrafts())) return;
     setPrivatePostDrafts({});
     onNavigate({ mode: "settings" });
   };
@@ -417,7 +468,7 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
   // Returns false (and blocks navigation) when there is an unsaved create/edit draft the
   // user chose to keep. Covers both new drafts and changed edits so no surface silently
   // discards work.
-  const confirmDiscardProfileDraft = (): boolean => {
+  const confirmDiscardProfileDraft = async (): Promise<boolean> => {
     if (!profileDraft) return true;
     const editing = editingProfileId
       ? (accountsQuery.data?.find((profile) => profile.id === editingProfileId) ?? null)
@@ -432,10 +483,15 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
       };
       if (JSON.stringify(profileDraft) === JSON.stringify(savedDraft)) return true;
     }
-    return window.confirm(localizeUi("ui.noodle.noodlerhome.discardUnsavedProfileChanges"));
+    return showConfirmDialog({
+      title:localizeUi("ui.noodle.noodlerhome.discardProfileChanges"),
+      message:localizeUi("ui.noodle.noodlerhome.yourUnsavedStageProfileChangesWillBeLost"),
+      confirmLabel:localizeUi("ui.noodle.noodlerhome.discardChanges"),
+      tone: "destructive",
+    });
   };
-  const goToHub = () => {
-    if (!confirmDiscardProfileDraft()) return;
+  const goToHub = async () => {
+    if (!(await confirmDiscardProfileDraft())) return;
     setCreationStep(null);
     setProfileDraft(null);
     setEditingProfileId(null);
@@ -471,6 +527,13 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
     if (active) removeInteraction.mutate(payload, { onError });
     else createInteraction.mutate(payload, { onError });
   };
+  const voteInPoll = (post: NoodlePostCardModel, optionId: string, selectedOptionId: string | null) => {
+    if (!viewerPersonaId || optionId === selectedOptionId) return;
+    createInteraction.mutate(
+      { postId: post.id, personaId: viewerPersonaId, type: "vote", content: optionId },
+      { onError: (error) => toast.error(errorMessage(error,localizeUi("ui.noodle.noodlerhome.couldNotVoteInThisPoll"))) },
+    );
+  };
   const submitReply = async (
     post: NoodlePostCardModel,
     input: { content: string; parentInteractionId: string | null },
@@ -489,17 +552,50 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
       },
     );
   };
-  const savePost = async (post: NoodlePostCardModel, input: { title: string | null; content: string }) => {
-    await updatePost.mutateAsync(
-      { id: post.id, accountId: post.authorAccountId, title: input.title, content: input.content },
-      {
-        onError: (error) =>
-          toast.error(errorMessage(error, localizeUi("ui.noodle.noodlerhome.couldNotUpdateThisPost"))),
-      },
-    );
+  const savePost = async (
+    post: NoodlePostCardModel,
+    input: {
+      title: string | null;
+      content: string;
+      image: NoodlePostImageUpdate | null;
+      poll?: NoodlePollInput | null;
+    },
+  ) => {
+    try {
+      if (input.image?.kind === "replace") {
+        await replacePostImage.mutateAsync({
+          id: post.id,
+          accountId: post.authorAccountId,
+          file: input.image.file,
+          crop: input.image.crop,
+          title: input.title,
+          ...(input.content !== post.content.trim() && { content: input.content }),
+          ...(input.poll !== undefined && { poll: input.poll }),
+        });
+      } else {
+        await updatePost.mutateAsync({
+          id: post.id,
+          accountId: post.authorAccountId,
+          title: input.title,
+          ...(input.content !== post.content.trim() && { content: input.content }),
+          ...(input.poll !== undefined && { poll: input.poll }),
+          ...(input.image?.kind === "crop" && { imageCrop: input.image.crop }),
+          ...(input.image?.kind === "remove" && { removeImage: true }),
+        });
+      }
+    } catch (error) {
+      toast.error(errorMessage(error,localizeUi("ui.noodle.noodlerhome.couldNotUpdateThisPost")));
+      throw error;
+    }
   };
-  const deleteNoodlePost = (post: NoodlePostCardModel) => {
-    if (!window.confirm(localizeUi("ui.noodle.noodlerhome.deleteThisNoodlerPostAlongWithItsLikesReposts"))) return;
+  const deleteNoodlePost = async (post: NoodlePostCardModel) => {
+    const confirmed = await showConfirmDialog({
+      title:localizeUi("ui.noodle.noodlerhome.deleteNoodlerPost"),
+      message:localizeUi("ui.noodle.noodlerhome.thisAlsoRemovesItsLikesRepostsAndReplies"),
+      confirmLabel:localizeUi("ui.noodle.noodlehome.deletePost"),
+      tone: "destructive",
+    });
+    if (!confirmed) return;
     deletePost.mutate(
       { id: post.id, accountId: post.authorAccountId },
       {
@@ -515,11 +611,22 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
     deletePost: deleteNoodlePost,
     reactToPost,
     reactToReply,
+    voteInPoll,
     submitReply,
     reactionPendingFor: () => false,
-    createInteractionPendingFor: (_postId, type) => type === "reply" && createInteraction.isPending,
-    updatePostPending: updatePost.isPending,
+    createInteractionPendingFor: (_postId, type) =>
+      (type === "reply" || type === "vote") && createInteraction.isPending,
+    updatePostPending: updatePost.isPending || replacePostImage.isPending,
     titleMaxLength: NOODLE_PRIVATE_POST_TITLE_MAX_LENGTH,
+    allowPollOnlyEdits: true,
+    deduplicatePollBody: false,
+    imageFit: "contain",
+    imageEditing: {
+      loadPostImage: async (post) => {
+        if (!post.imageUrl) throw new Error("This post does not have an image.");
+        return loadPostImage.mutateAsync({ imageUrl: post.imageUrl });
+      },
+    },
     openAuthorProfile: (accountId) => onNavigate({ mode: "private", view: "profile", accountId }),
   });
   const postCardCtx = postCardController.ctx;
@@ -569,8 +676,8 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
     setSourceKind("all");
   };
 
-  const cancelCreateProfile = () => {
-    if (!confirmDiscardProfileDraft()) return;
+  const cancelCreateProfile = async () => {
+    if (!(await confirmDiscardProfileDraft())) return;
     const publicAccountId =
       navigation.mode === "private" && navigation.view === "create-profile"
         ? navigation.publicAccountId
@@ -601,8 +708,8 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
     });
   };
 
-  const closeProfileEditor = () => {
-    if (!confirmDiscardProfileDraft()) return;
+  const closeProfileEditor = async () => {
+    if (!(await confirmDiscardProfileDraft())) return;
     setProfileDraft(null);
     setPreviousDraft(null);
     setEditingProfileId(null);
@@ -681,18 +788,36 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
     }
   };
 
-  const submitManualPost = async ({ profileId, title, body, access, ppvPrice }: PrivatePostSubmission) => {
+  const submitManualPost = async ({
+    profileId,
+    title,
+    body,
+    access,
+    ppvPrice,
+    image,
+    poll,
+  }: PrivatePostSubmission) => {
     await createPost.mutateAsync({
       targetAccountId: profileId,
       title,
       content: body,
       access,
       ...(access === "ppv" ? { ppvPrice } : {}),
+      image,
+      poll,
     });
     toast.success(localizeUi("ui.noodle.noodlerhome.privatePostPublished"));
   };
 
-  const submitGuidedPost = async ({ profileId, title, body, access, ppvPrice }: PrivatePostSubmission) => {
+  const submitGuidedPost = async ({
+    profileId,
+    title,
+    body,
+    access,
+    ppvPrice,
+    image,
+    poll,
+  }: PrivatePostSubmission) => {
     const guide = serializePrivatePostGuide(title, body);
     const result = await generatePost.mutateAsync({
       mode: "private",
@@ -700,6 +825,8 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
       ...(guide ? { privatePostGuide: guide } : {}),
       access,
       ...(access === "ppv" ? { ppvPrice } : {}),
+      image,
+      poll,
     });
     if (result.imagePromptReview) {
       setImagePromptReview({ accountId: profileId, items: [result.imagePromptReview] });
@@ -757,7 +884,7 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
     activeView:
       navigation.mode === "private" && navigation.view === "profile" ? ("profile" as const) : ("noodler" as const),
     homeActive: navigation.mode === "private" && navigation.view === "hub",
-    accent: NOODLE_PINK,
+    accent: "var(--marinara-chat-chrome-accent)",
     enableNoodler: enabled,
     personaAccount: shellPersonaAccount,
     sortedPersonaAccounts: viewerAccounts,
@@ -1043,21 +1170,20 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
             draft={privatePostDrafts[selectedProfile.id] ?? EMPTY_PRIVATE_POST_DRAFT}
             onDraftChange={(patch) => updatePrivatePostDraft(selectedProfile.id, patch)}
             onClearDraft={() => clearPrivatePostDraft(selectedProfile.id)}
+            onDiscardDraft={() => clearPrivatePostDraft(selectedProfile.id)}
             isLoading={postsQuery.isLoading}
             isError={postsQuery.isError}
             onRetry={() => void postsQuery.refetch()}
             onEdit={() => beginEdit(selectedProfile)}
             onBack={() => onNavigate({ mode: "private", view: "profiles" })}
-            onDelete={() => {
-              if (
-                !window.confirm(
-                  localizeUi("ui.noodle.stageProfile.deleteConfirmation", {
-                    name: selectedProfile.displayName,
-                  }),
-                )
-              ) {
-                return;
-              }
+            onDelete={async () => {
+              const confirmed = await showConfirmDialog({
+                title: localizeUi("ui.chat.homeprofessormarichat.deleteValue1", { value1: selectedProfile.displayName }),
+                message: localizeUi("ui.noodle.noodlerhome.thisRemovesTheStageProfileAndAllOfIts"),
+                confirmLabel: localizeUi("ui.noodle.noodlerhome.deleteProfile"),
+                tone: "destructive",
+              });
+              if (!confirmed) return;
               deleteProfile.mutate(selectedProfile.id, {
                 onSuccess: () => {
                   clearPrivatePostDraft(selectedProfile.id);
@@ -1302,6 +1428,9 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
         onClearAuthorDraft={() => {
           if (mainAuthorProfile) clearPrivatePostDraft(mainAuthorProfile.id);
         }}
+        onDiscardAuthorDraft={() => {
+          if (mainAuthorProfile) clearPrivatePostDraft(mainAuthorProfile.id);
+        }}
         authorLoading={accountsQuery.isLoading || !data}
         authorError={accountsQuery.isError && !accountsQuery.data}
         onRetryAuthor={() => void accountsQuery.refetch()}
@@ -1374,6 +1503,7 @@ function StageProfileForm({
   onSave: () => void;
 }) {
   const { t: localizeUi } = useUiTranslation();
+  const accent = useNoodleAccent();
   const [connectionPickerOpen, setConnectionPickerOpen] = useState(false);
   const [relationshipPickerOpen, setRelationshipPickerOpen] = useState(false);
   const [relationshipPickerPosition, setRelationshipPickerPosition] = useState<{
@@ -1447,11 +1577,12 @@ function StageProfileForm({
               }
             }}
             className="fixed z-[9999] w-72 max-w-[calc(100vw-1rem)] overflow-hidden rounded-xl border border-foreground/10 bg-[var(--card)] p-1 shadow-2xl"
-            style={
+            style={getNoodleAccentStyle(
+              accent,
               relationshipPickerPosition
                 ? { left: relationshipPickerPosition.left, top: relationshipPickerPosition.top }
-                : { visibility: "hidden" }
-            }
+                : { visibility: "hidden" },
+            )}
           >
             {DISCLOSURE_OPTIONS.map((option) => {
               const isSelected = option.value === disclosureMode;
@@ -1471,11 +1602,9 @@ function StageProfileForm({
                   )}
                 >
                   <span className="min-w-0 flex-1">
-                    <span className="block text-xs font-semibold text-[var(--foreground)]">
-                      {localizeUi(`ui.noodle.disclosure.${option.value}.label`)}
-                    </span>
+                    <span className="block text-xs font-semibold text-[var(--foreground)]">{option.label}</span>
                     <span className="mt-0.5 block text-[0.6875rem] leading-4 text-[var(--muted-foreground)]">
-                      {localizeUi(`ui.noodle.disclosure.${option.value}.detail`)}
+                      {option.detail}
                     </span>
                   </span>
                   {isSelected && <Check size={14} className="mt-0.5 shrink-0 text-[var(--noodle-accent)]" />}
@@ -1520,7 +1649,7 @@ function StageProfileForm({
                     aria-expanded={relationshipPickerOpen}
                     className="inline-flex items-center gap-1 rounded px-1 py-0.5 font-bold text-[var(--foreground)] transition-colors hover:bg-foreground/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] disabled:cursor-not-allowed disabled:opacity-50"
                   >
-                    {localizeUi(`ui.noodle.disclosure.${selectedDisclosure.value}.label`)}
+                    {selectedDisclosure.label}
                     <ChevronDown
                       size={13}
                       className={cn("transition-transform", relationshipPickerOpen && "rotate-180")}
@@ -1649,7 +1778,7 @@ function StageProfileForm({
                     >
                       <Link size={18} className="shrink-0 !text-[var(--noodle-accent)]" />
                       <span className="truncate text-xs font-semibold">
-                        {selectedConnection?.name ?? localizeUi("ui.noodle.connection.default")}
+                        {selectedConnection?.name ?? "Default connection"}
                       </span>
                     </button>
                     {connectionPickerOpen && (
@@ -1681,9 +1810,7 @@ function StageProfileForm({
                               !connectionId && "bg-foreground/5 font-semibold",
                             )}
                           >
-                            <span className="flex-1 truncate">
-                              {localizeUi("ui.noodle.stageprofileform.defaultConnection")}
-                            </span>
+                            <span className="flex-1 truncate">{localizeUi("ui.noodle.connection.default")}</span>
                             {!connectionId && <Check size={14} />}
                           </button>
                           {connections.map((connection) => {
@@ -1984,15 +2111,9 @@ function DisclosureStep({
                 {value === option.value && <Check size={13} className="!text-zinc-950" />}
               </span>
               <span>
-                <span className="block text-sm font-bold">
-                  {localizeUi(`ui.noodle.disclosure.${option.value}.label`)}
-                </span>
-                <span className="mt-1 block text-xs leading-5 text-[var(--muted-foreground)]">
-                  {localizeUi(`ui.noodle.disclosure.${option.value}.detail`)}
-                </span>
-                <span className="mt-2 block text-xs leading-5 text-[var(--muted-foreground)]">
-                  {localizeUi(`ui.noodle.disclosure.${option.value}.guidance`)}
-                </span>
+                <span className="block text-sm font-bold">{option.label}</span>
+                <span className="mt-1 block text-xs leading-5 text-[var(--muted-foreground)]">{option.detail}</span>
+                <span className="mt-2 block text-xs leading-5 text-[var(--muted-foreground)]">{option.guidance}</span>
               </span>
             </button>
           ))}
@@ -2023,35 +2144,20 @@ function WizardFooter({
   showProgress?: boolean;
 }) {
   const { t: localizeUi } = useUiTranslation();
-  const labels = [
-    localizeUi("ui.noodle.wizard.source"),
-    localizeUi("ui.noodle.wizard.disclosure"),
-    localizeUi("ui.noodle.wizard.profile"),
-  ];
+  const labels = ["Source", "Disclosure", "Profile"];
   return (
     <div className="sticky bottom-0 z-[60] shrink-0 border-t border-[var(--noodle-divider)] bg-[var(--background)] px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 sm:px-6">
       {showProgress && (
         <div
           className="mb-3 flex items-center justify-center gap-1.5"
           role="status"
-          aria-label={localizeUi("ui.noodle.wizard.progressLabel", {
-            current: step + 1,
-            total: labels.length,
-            label: labels[step],
-          })}
+          aria-label={localizeUi("ui.noodle.wizardfooter.stepValue1OfValue2Value3", { value1: step + 1, value2: labels.length, value3: labels[step] })}
         >
           {labels.map((label, index) => (
             <span key={label} className="flex items-center gap-1.5">
               <span
                 aria-current={index === step ? "step" : undefined}
-                aria-label={localizeUi(
-                  index === step
-                    ? "ui.noodle.wizard.stepCurrent"
-                    : index < step
-                      ? "ui.noodle.wizard.stepComplete"
-                      : "ui.noodle.wizard.step",
-                  { number: index + 1, label },
-                )}
+                aria-label={localizeUi("ui.noodle.wizardfooter.stepValue1Value2Value3", { value1: index + 1, value2: label, value3: index === step ?localizeUi("ui.noodle.wizardfooter.current") : index < step ?localizeUi("ui.noodle.wizardfooter.complete") : "" })}
                 title={label}
                 className={`h-1.5 rounded-full transition-all ${index === step ? "w-6 bg-[var(--noodle-accent)]" : index < step ? "w-4 bg-[var(--noodle-accent)]/45" : "w-2 bg-[var(--muted-foreground)]/25"}`}
               />
@@ -2097,6 +2203,7 @@ function StageProfileView({
   draft,
   onDraftChange,
   onClearDraft,
+  onDiscardDraft,
   isLoading,
   isError,
   onRetry,
@@ -2129,6 +2236,7 @@ function StageProfileView({
   draft: PrivatePostDraft;
   onDraftChange: (patch: Partial<PrivatePostDraft>) => void;
   onClearDraft: () => void;
+  onDiscardDraft: () => void;
   isLoading: boolean;
   isError: boolean;
   onRetry: () => void;
@@ -2232,11 +2340,7 @@ function StageProfileView({
           <Loader2 size={22} className="animate-spin text-[var(--noodle-accent)]" />
         </div>
       ) : viewerIsError ? (
-        <EmptyState
-          title={localizeUi("ui.noodle.stageprofileview.viewerAccessCouldNotBeLoaded")}
-          action={localizeUi("capabilities.actions.tryAgain")}
-          onAction={onRetryViewer}
-        />
+        <EmptyState title={localizeUi("ui.noodle.stageprofileview.viewerAccessCouldNotBeLoaded")} action={localizeUi("capabilities.actions.tryAgain")} onAction={onRetryViewer} />
       ) : isError ? (
         <EmptyState
           title={localizeUi("ui.noodle.stageprofileview.privatePostsCouldNotBeLoaded")}
@@ -2330,13 +2434,13 @@ function StageProfileView({
           <>
             {profile.disclosureMode === "hinted" && profile.publicIdentity ? (
               <HelpTooltip
-                label={localizeUi("ui.noodle.stageprofileview.hinted")}
+                label={localizeUi("ui.noodle.disclosure.hinted.shortLabel")}
                 side="bottom"
                 buttonClassName="border border-[var(--noodle-divider)] px-2 py-0.5 text-[0.68rem] font-bold text-[var(--muted-foreground)] opacity-100 [&_svg]:hidden"
                 text={
                   <span>
                     <span className="block font-bold text-[var(--popover-foreground)]">
-                      {localizeUi("ui.noodle.stageprofileview.linkedIdentity")}
+                      {localizeUi("ui.noodle.disclosure.open.label")}
                     </span>
                     <span className="mt-1 block">
                       {profile.publicIdentity.displayName} (@{profile.publicIdentity.handle})
@@ -2409,9 +2513,7 @@ function StageProfileView({
               type="button"
               onClick={onDelete}
               disabled={deletePending}
-              aria-label={localizeUi("ui.noodle.stageProfile.deleteLabel", {
-                name: profile.displayName,
-              })}
+              aria-label={localizeUi("ui.noodle.stageprofileview.deleteValue1Profile", { value1: profile.displayName })}
               className="flex h-9 w-9 items-center justify-center rounded-full border border-[var(--destructive)]/45 text-[var(--destructive)] hover:bg-[var(--destructive)]/10 disabled:cursor-wait disabled:opacity-50"
             >
               {deletePending ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
@@ -2419,8 +2521,8 @@ function StageProfileView({
           </div>
         }
         tabs={[
-          { id: "posts", label: localizeUi("ui.noodle.profile.tabs.posts") },
-          { id: "media", label: localizeUi("ui.noodle.profile.tabs.media") },
+          { id: "posts", label: "Posts" },
+          { id: "media", label: "Media" },
           {
             id: "subscribers",
             label: localizeUi("ui.noodle.stageProfile.tabs.subscribers", {
@@ -2440,6 +2542,7 @@ function StageProfileView({
             draft={draft}
             onDraftChange={onDraftChange}
             onClearDraft={onClearDraft}
+            onDiscardDraft={onDiscardDraft}
             onManualPost={onManualPost}
             onGuidedPost={onGuidedPost}
             manualPending={manualPending}
@@ -2453,7 +2556,7 @@ function StageProfileView({
         onClose={() => setAccessSettingsOpen(false)}
         title={localizeUi("ui.noodle.stageprofileview.subscriberAccess")}
         width="max-w-md"
-        panelStyle={{ "--noodle-accent": accent } as React.CSSProperties}
+        panelStyle={getNoodleAccentStyle(accent)}
       >
         <div className="space-y-4">
           <div className="flex items-start justify-between gap-4">
@@ -2518,7 +2621,7 @@ function StageProfileView({
         onClose={() => setAutomationOpen(false)}
         title={localizeUi("ui.noodle.stageprofileview.automaticPosting")}
         width="max-w-md"
-        panelStyle={{ "--noodle-accent": accent } as React.CSSProperties}
+        panelStyle={getNoodleAccentStyle(accent)}
       >
         <div className="space-y-4">
           <p className="text-xs leading-5 text-[var(--muted-foreground)]">
@@ -2559,7 +2662,7 @@ function StageProfileView({
           <fieldset disabled={!autoPosting.enabled || updateAutoPosting.isPending} className="disabled:opacity-50">
             <legend className="text-xs font-bold">{localizeUi("ui.noodle.stageprofileview.cadence")}</legend>
             <div className="mt-2 flex gap-2">
-              {AUTO_POST_INTENSITIES.map(({ labelKey, value }) => (
+              {AUTO_POST_INTENSITIES.map(({ label, value }) => (
                 <button
                   key={value}
                   type="button"
@@ -2581,15 +2684,11 @@ function StageProfileView({
                       : "border-[var(--noodle-divider)] hover:bg-[var(--accent)]",
                   )}
                 >
-                  {localizeUi(labelKey)}
+                  {label}
                 </button>
               ))}
             </div>
-            <p className="mt-1 text-[0.68rem] text-[var(--muted-foreground)]">
-              {localizeUi("ui.noodle.automation.postsPerDay", {
-                count: autoPosting.intensity,
-              })}
-            </p>
+            <p className="mt-1 text-[0.68rem] text-[var(--muted-foreground)]">{localizeUi("ui.noodle.stageprofileview.about")} {autoPosting.intensity} {localizeUi("ui.noodle.stageprofileview.automaticPost")}{autoPosting.intensity === 1 ? "" :localizeUi("ui.noodle.stageprofileview.s")} {localizeUi("ui.noodle.stageprofileview.perDay")}</p>
           </fieldset>
           <fieldset disabled={updateAutoPosting.isPending} className="space-y-2 disabled:opacity-50">
             <label className="flex min-h-11 items-center justify-between gap-4 rounded-md border border-[var(--noodle-divider)] px-3 py-2">
@@ -2677,10 +2776,10 @@ function StageProfileView({
   );
 }
 
-const AUTO_POST_INTENSITIES: { labelKey: string; value: NoodleAutoPostingIntensity }[] = [
-  { labelKey: "ui.noodle.automation.intensity.low", value: 1 },
-  { labelKey: "ui.noodle.automation.intensity.medium", value: 3 },
-  { labelKey: "ui.noodle.automation.intensity.high", value: 6 },
+const AUTO_POST_INTENSITIES: { label: string; value: NoodleAutoPostingIntensity }[] = [
+  { label: "Low", value: 1 },
+  { label: "Medium", value: 3 },
+  { label: "High", value: 6 },
 ];
 
 function ViewerHub({
@@ -2701,6 +2800,7 @@ function ViewerHub({
   authorDraft,
   onAuthorDraftChange,
   onClearAuthorDraft,
+  onDiscardAuthorDraft,
   authorLoading,
   authorError,
   onRetryAuthor,
@@ -2730,6 +2830,7 @@ function ViewerHub({
   authorDraft: PrivatePostDraft;
   onAuthorDraftChange: (patch: Partial<PrivatePostDraft>) => void;
   onClearAuthorDraft: () => void;
+  onDiscardAuthorDraft: () => void;
   authorLoading: boolean;
   authorError: boolean;
   onRetryAuthor: () => void;
@@ -2783,7 +2884,7 @@ function ViewerHub({
             )}
             aria-pressed={tab === option.id}
           >
-            {localizeUi(`ui.noodle.viewer.tabs.${option.id}`)}
+            {option.label}
             {tab === option.id && (
               <span className="absolute bottom-0 left-1/2 h-1 w-14 -translate-x-1/2 rounded-full bg-[var(--noodle-accent)]" />
             )}
@@ -2806,6 +2907,7 @@ function ViewerHub({
           draft={authorDraft}
           onDraftChange={onAuthorDraftChange}
           onClearDraft={onClearAuthorDraft}
+          onDiscardDraft={onDiscardAuthorDraft}
           onManualPost={onManualPost}
           onGuidedPost={onGuidedPost}
           manualPending={manualPending}
@@ -3072,7 +3174,7 @@ function LockedPrivatePostCard({
   );
 }
 
-type PrivateComposerTool = "media" | "coin";
+type PrivateComposerTool = "image" | "poll" | "media" | "coin";
 
 function PrivatePostComposer({
   profile,
@@ -3080,6 +3182,7 @@ function PrivatePostComposer({
   draft,
   onDraftChange,
   onClearDraft,
+  onDiscardDraft,
   onManualPost,
   onGuidedPost,
   manualPending,
@@ -3090,6 +3193,7 @@ function PrivatePostComposer({
   draft: PrivatePostDraft;
   onDraftChange: (patch: Partial<PrivatePostDraft>) => void;
   onClearDraft: () => void;
+  onDiscardDraft: () => void;
   onManualPost: (input: PrivatePostSubmission) => Promise<void>;
   onGuidedPost: (input: PrivatePostSubmission) => Promise<void>;
   manualPending: boolean;
@@ -3100,37 +3204,159 @@ function PrivatePostComposer({
   const [postError, setPostError] = useState<string | null>(null);
   const [guideError, setGuideError] = useState<string | null>(null);
   const [activeTool, setActiveTool] = useState<PrivateComposerTool | null>(null);
+  const [pollEditorValue, setPollEditorValue] = useState<NoodlePollInput | null>(null);
   const [mediaPickerTab, setMediaPickerTab] = useState<ConversationMediaPickerTabId>("emoji");
+  const [attachmentError, setAttachmentError] = useState<string | null>(null);
+  const [pendingImage, setPendingImage] = useState<PendingPrivateImage | null>(null);
+  const [imageUrlDraft, setImageUrlDraft] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const imageFileRef = useRef<HTMLInputElement | null>(null);
+  const imageToolRef = useRef<HTMLDivElement | null>(null);
+  const pollToolRef = useRef<HTMLDivElement | null>(null);
   const mediaToolRef = useRef<HTMLDivElement | null>(null);
   const coinToolRef = useRef<HTMLDivElement | null>(null);
-  const { title, body, access, ppvPrice } = draft;
-  const hasDraft = !isEmptyPrivatePostDraft(draft);
+  const composerBusyRef = useRef(false);
+  const { title, body, access, ppvPrice, image, poll } = draft;
+  const hasDraft = pendingImage !== null || !isEmptyPrivatePostDraft(draft);
   const parsedPrice = Number(ppvPrice);
-  const pending = manualPending || guidePending;
+  const composerBusy = submitting || manualPending || guidePending;
+  composerBusyRef.current = composerBusy;
   const guide = serializePrivatePostGuide(title, body);
+  const pollIsValid = poll ? noodlePollInputSchema.safeParse(poll).success : false;
+
+  useEffect(() => {
+    if (composerBusy) {
+      setActiveTool(null);
+    }
+  }, [composerBusy]);
+
+  const updateDraft = (patch: Partial<PrivatePostDraft>) => {
+    if (composerBusyRef.current) return false;
+    onDraftChange(patch);
+    return true;
+  };
+  const discardPendingImage = () => {
+    setPendingImage(null);
+  };
 
   const clearDraft = () => {
     onClearDraft();
     setPostError(null);
     setGuideError(null);
+    setAttachmentError(null);
+    discardPendingImage();
+    setImageUrlDraft("");
+    setPollEditorValue(null);
     setActiveTool(null);
     setExpanded(false);
   };
+  const discardDraft = () => {
+    if (composerBusyRef.current) return;
+    onDiscardDraft();
+    setPostError(null);
+    setGuideError(null);
+    setAttachmentError(null);
+    discardPendingImage();
+    setImageUrlDraft("");
+    setPollEditorValue(null);
+    setActiveTool(null);
+    setExpanded(false);
+  };
+  const removeImage = () => {
+    if (!image || composerBusyRef.current) return;
+    onDraftChange({ image: null });
+    setPendingImage(null);
+  };
+  const handleImageFile = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file || composerBusyRef.current) return;
+    if (!file.type.startsWith("image/")) {
+      setAttachmentError("Choose an image file.");
+      return;
+    }
+    setAttachmentError(null);
+    discardPendingImage();
+    onDraftChange({ image: { source: file, crop: null } });
+    setActiveTool(null);
+  };
+  const handleImageUrl = () => {
+    const imageUrl = imageUrlDraft.trim();
+    if (!imageUrl || composerBusyRef.current) return;
+    setAttachmentError(null);
+    try {
+      const parsed = new URL(imageUrl);
+      if (!["http:", "https:"].includes(parsed.protocol)) throw new Error("Use an HTTP or HTTPS image URL.");
+      setImageUrlDraft("");
+      onDraftChange({ image: { source: parsed.toString(), crop: null } });
+      setActiveTool(null);
+    } catch (error) {
+      setAttachmentError(errorMessage(error, "Enter a valid image URL."));
+    }
+  };
+  const applyImageCrop = async (crop: NoodlePostImageCrop) => {
+    if (composerBusyRef.current) return;
+    const pending = pendingImage;
+    if (!pending) return;
+    setAttachmentError(null);
+    onDraftChange({ image: { source: pending.source, crop } });
+    setPendingImage(null);
+    setActiveTool(null);
+  };
 
-  const toggleTool = (tool: PrivateComposerTool) => setActiveTool((current) => (current === tool ? null : tool));
+  const toggleTool = (tool: PrivateComposerTool) => {
+    if (composerBusyRef.current) return;
+    if (activeTool === tool) {
+      setActiveTool(null);
+      if (tool === "poll") setPollEditorValue(null);
+      return;
+    }
+    if (tool === "poll") {
+      setPollEditorValue(
+        poll ? { question: poll.question, options: [...poll.options] } : { question: "", options: ["", ""] },
+      );
+    } else {
+      setPollEditorValue(null);
+    }
+    setActiveTool(tool);
+  };
+
+  const applyPollDraft = () => {
+    const parsed = noodlePollInputSchema.safeParse(pollEditorValue);
+    if (!parsed.success) return;
+    if (
+      updateDraft({
+        poll: parsed.data,
+      })
+    ) {
+      setPollEditorValue(null);
+      setActiveTool(null);
+    }
+  };
 
   const submission = (): PrivatePostSubmission => ({
     profileId: profile.id,
     title,
-    body,
+    body: body.trim() || (image && !poll ? "Shared an image." : ""),
     access,
     ppvPrice: access === "ppv" ? parsedPrice : null,
+    image,
+    poll: poll ? { question: poll.question.trim(), options: poll.options.map((option) => option.trim()) } : null,
   });
 
   const publish = async () => {
+    if (composerBusyRef.current) return;
     setPostError(null);
-    if (!body.trim()) {
-      setPostError("A literal post needs a body.");
+    if (pendingImage) {
+      setPostError("Apply or cancel the image crop before posting.");
+      return;
+    }
+    if (!body.trim() && !image && !poll) {
+      setPostError("Add a body, image, or poll.");
+      return;
+    }
+    if (poll && !pollIsValid) {
+      setPostError("Polls need a question and two unique answers.");
       return;
     }
     if (access === "ppv" && (!Number.isFinite(parsedPrice) || parsedPrice < 0 || parsedPrice > 999_999)) {
@@ -3138,15 +3364,33 @@ function PrivatePostComposer({
       return;
     }
     try {
+      composerBusyRef.current = true;
+      setSubmitting(true);
+      setActiveTool(null);
       await onManualPost(submission());
       clearDraft();
     } catch (error) {
       setPostError(errorMessage(error, localizeUi("ui.noodle.privatepostcomposer.couldNotPublishThisPost")));
+    } finally {
+      setSubmitting(false);
     }
   };
 
   const guidePost = async () => {
+    if (composerBusyRef.current) return;
     setGuideError(null);
+    if (pendingImage) {
+      setGuideError("Apply or cancel the image crop before generating.");
+      return;
+    }
+    if (!body.trim() && !image && !poll) {
+      setGuideError("A guided post needs a body, image, or poll.");
+      return;
+    }
+    if (poll && !pollIsValid) {
+      setGuideError("Polls need a question and two unique options.");
+      return;
+    }
     if (guide.length > NOODLE_PRIVATE_POST_GUIDE_MAX_LENGTH) {
       setGuideError(
         `The combined title and body guide must be ${NOODLE_PRIVATE_POST_GUIDE_MAX_LENGTH.toLocaleString()} characters or fewer.`,
@@ -3158,10 +3402,15 @@ function PrivatePostComposer({
       return;
     }
     try {
+      composerBusyRef.current = true;
+      setSubmitting(true);
+      setActiveTool(null);
       await onGuidedPost(submission());
       clearDraft();
     } catch (error) {
       setGuideError(errorMessage(error, localizeUi("ui.noodle.privatepostcomposer.couldNotGenerateThisPost")));
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -3171,6 +3420,7 @@ function PrivatePostComposer({
         <button
           type="button"
           onClick={() => setExpanded(true)}
+          disabled={composerBusy}
           className="flex min-h-12 w-full items-center gap-3 rounded-xl border border-[var(--noodle-divider)] px-3 text-left transition-colors hover:bg-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]"
           aria-expanded="false"
         >
@@ -3201,7 +3451,7 @@ function PrivatePostComposer({
               setActiveTool(null);
               setExpanded(false);
             }}
-            disabled={pending}
+            disabled={composerBusy}
             aria-expanded="true"
             className="inline-flex min-h-8 items-center gap-1.5 rounded-md px-1 text-xs font-bold text-[var(--noodle-accent)] hover:bg-[var(--accent)] disabled:opacity-50"
           >
@@ -3213,12 +3463,22 @@ function PrivatePostComposer({
       avatar={<ProfileInitial profile={profile} />}
       tools={
         <NoodleComposerToolRow
-          image={{ disabled: true }}
-          poll={{ disabled: true }}
+          image={{
+            ref: imageToolRef,
+            active: activeTool === "image" || Boolean(image),
+            disabled: composerBusy,
+            onClick: () => toggleTool("image"),
+          }}
+          poll={{
+            ref: pollToolRef,
+            active: activeTool === "poll" || Boolean(poll),
+            disabled: composerBusy,
+            onClick: () => toggleTool("poll"),
+          }}
           media={{
             ref: mediaToolRef,
             active: activeTool === "media",
-            disabled: pending,
+            disabled: composerBusy,
             onClick: () => toggleTool("media"),
           }}
           trailing={
@@ -3226,7 +3486,7 @@ function PrivatePostComposer({
               <NoodleToolButton
                 title={localizeUi("ui.noodle.privatepostcomposer.postVisibilityAndPrice")}
                 active={activeTool === "coin" || access !== "public"}
-                disabled={pending}
+                disabled={composerBusy}
                 onClick={() => toggleTool("coin")}
               >
                 <Coins size={18} />
@@ -3240,7 +3500,7 @@ function PrivatePostComposer({
           <button
             type="button"
             onClick={() => void guidePost()}
-            disabled={pending}
+            disabled={composerBusy || Boolean(pendingImage)}
             className="inline-flex h-8 items-center gap-1.5 rounded-full border border-[var(--noodle-divider)] px-3 text-xs font-bold hover:bg-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-50"
           >
             {guidePending ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
@@ -3248,10 +3508,22 @@ function PrivatePostComposer({
               ? localizeUi("ui.noodle.privatepostcomposer.guiding")
               : localizeUi("ui.noodle.privatepostcomposer.guide_bf073fa")}
           </button>
+          {hasDraft && (
+            <button
+              type="button"
+              onClick={discardDraft}
+              disabled={composerBusy}
+              className="inline-flex h-8 items-center rounded-full px-3 text-xs font-bold text-[var(--muted-foreground)] hover:bg-[var(--accent)] disabled:opacity-50"
+            >{localizeUi("ui.agents.agenteditor.discard")}</button>
+          )}
           <button
             type="button"
             onClick={() => void publish()}
-            disabled={pending || !body.trim()}
+            disabled={
+              composerBusy ||
+              Boolean(pendingImage) ||
+              (!body.trim() && !image && !pollIsValid)
+            }
             className="inline-flex h-8 items-center gap-1.5 rounded-full bg-[var(--noodle-accent)] px-4 text-xs font-bold text-zinc-950 [&_svg]:!text-zinc-950 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {manualPending ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />}
@@ -3263,21 +3535,54 @@ function PrivatePostComposer({
       }
       popovers={
         <>
-          {activeTool === "media" && (
+          {activeTool === "media" && !composerBusy && (
             <NoodleAnchoredPopover anchorRef={mediaToolRef} wide>
               <ConversationMediaPickerPanel
                 tabs={[{ id: "emoji", label: "Emoji" }]}
                 activeTab={mediaPickerTab}
-                onActiveTabChange={setMediaPickerTab}
+                onActiveTabChange={(tab) => {
+                  if (!composerBusyRef.current) setMediaPickerTab(tab);
+                }}
                 onClose={() => setActiveTool(null)}
-                onEmojiSelect={(emoji) => onDraftChange({ body: body + emoji })}
+                onEmojiSelect={(emoji) => updateDraft({ body: body + emoji })}
                 onGifSelect={() => {}}
-                onStickerSelect={(name) => onDraftChange({ body: `${body}sticker:${name}:` })}
+                onStickerSelect={(name) => updateDraft({ body: `${body}sticker:${name}:` })}
                 className="w-full !border-[var(--marinara-chat-chrome-panel-border)] !bg-[var(--background)] !text-[var(--foreground)] shadow-2xl shadow-black/35"
               />
             </NoodleAnchoredPopover>
           )}
-          {activeTool === "coin" && (
+          {activeTool === "image" && !composerBusy && (
+            <NoodleAnchoredPopover anchorRef={imageToolRef} wide>
+              <NoodleImageComposer
+                imageUrl={imageUrlDraft}
+                onImageUrlChange={setImageUrlDraft}
+                onChooseFile={() => {
+                  if (!composerBusyRef.current) imageFileRef.current?.click();
+                }}
+                onUseImageUrl={() => void handleImageUrl()}
+                onClose={() => setActiveTool(null)}
+                disabled={composerBusy}
+                hasImage={Boolean(image)}
+                urlActionLabel="Import URL"
+              />
+            </NoodleAnchoredPopover>
+          )}
+          {activeTool === "poll" && !composerBusy && (
+            <NoodleAnchoredPopover anchorRef={pollToolRef} wide>
+              <NoodlePollComposer
+                value={pollEditorValue}
+                onChange={setPollEditorValue}
+                onClose={() => {
+                  setPollEditorValue(null);
+                  setActiveTool(null);
+                }}
+                onSubmit={applyPollDraft}
+                submitLabel={poll ? "Update poll" : "Add poll"}
+                disabled={composerBusy}
+              />
+            </NoodleAnchoredPopover>
+          )}
+          {activeTool === "coin" && !composerBusy && (
             <NoodleAnchoredPopover anchorRef={coinToolRef}>
               <div className="marinara-chat-popover space-y-3 rounded-xl border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)] p-3 text-[var(--foreground)] shadow-2xl shadow-black/35">
                 <p className="text-xs font-bold">{localizeUi("ui.noodle.privatepostcomposer.whoCanSeeThisPost")}</p>
@@ -3287,7 +3592,8 @@ function PrivatePostComposer({
                       key={option}
                       type="button"
                       aria-pressed={access === option}
-                      onClick={() => onDraftChange({ access: option })}
+                      disabled={composerBusy}
+                      onClick={() => updateDraft({ access: option })}
                       className={cn(
                         "min-h-8 rounded px-2 text-xs font-bold capitalize",
                         access === option
@@ -3312,7 +3618,8 @@ function PrivatePostComposer({
                       max="999999"
                       step="0.01"
                       value={ppvPrice}
-                      onChange={(event) => onDraftChange({ ppvPrice: event.target.value })}
+                      disabled={composerBusy}
+                      onChange={(event) => updateDraft({ ppvPrice: event.target.value })}
                       aria-label={localizeUi("ui.noodle.privatepostcomposer.ppvPrice")}
                       className="mari-chrome-field h-9 w-full rounded-md border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)] px-3 text-sm text-[var(--foreground)] outline-none focus:border-[var(--noodle-accent)]"
                     />
@@ -3324,7 +3631,7 @@ function PrivatePostComposer({
         </>
       }
       footer={
-        (postError || guideError) && (
+        (postError || guideError || attachmentError) && (
           <div className="mt-2 space-y-1 pl-14 text-xs text-[var(--destructive)]" role="alert">
             {postError && (
               <p>
@@ -3336,30 +3643,97 @@ function PrivatePostComposer({
                 {localizeUi("ui.noodle.privatepostcomposer.guide")} {guideError}
               </p>
             )}
+            {attachmentError && (
+              <p>
+                {localizeUi("ui.noodle.privatepostcomposer.image")} {attachmentError}
+              </p>
+            )}
           </div>
         )
       }
     >
+      <input ref={imageFileRef} type="file" accept="image/*" className="hidden" onChange={handleImageFile} />
       <label className="block space-y-1">
         <span className="sr-only">{localizeUi("ui.noodle.privatepostcomposer.postTitleOptional")}</span>
         <input
           value={title}
-          onChange={(event) => onDraftChange({ title: event.target.value })}
+          onChange={(event) => updateDraft({ title: event.target.value })}
           maxLength={NOODLE_PRIVATE_POST_TITLE_MAX_LENGTH}
-          disabled={pending}
+          disabled={composerBusy}
           placeholder={localizeUi("ui.noodle.noodlepostcard.titleOptional")}
           className="h-9 w-full border-0 bg-transparent text-base font-bold text-[var(--foreground)] outline-none placeholder:text-[var(--muted-foreground)]"
         />
       </label>
       <textarea
         value={body}
-        onChange={(event) => onDraftChange({ body: event.target.value })}
+        onChange={(event) => updateDraft({ body: event.target.value })}
         maxLength={NOODLE_PRIVATE_POST_CONTENT_MAX_LENGTH}
-        disabled={pending}
+        disabled={composerBusy}
         aria-label={localizeUi("ui.noodle.privatepostcomposer.postBody")}
         placeholder={localizeUi("ui.noodle.privatepostcomposer.whatSSimmeringPrivately")}
         className="min-h-20 w-full resize-none border-0 bg-transparent py-2 text-[1rem] leading-6 text-[var(--foreground)] outline-none placeholder:text-[var(--muted-foreground)]"
       />
+      {pendingImage && (
+        <PostImageCropEditor
+          source={pendingImage.source}
+          crop={image?.source === pendingImage.source ? image.crop : null}
+          disabled={composerBusy}
+          onCancel={discardPendingImage}
+          onApply={applyImageCrop}
+        />
+      )}
+      {image && !pendingImage && (
+        <div className="mb-3 overflow-hidden rounded-xl border border-[var(--noodle-divider)] bg-[var(--noodle-accent)]/10">
+          <PrivateDraftImageFrame image={image} />
+          <div className="flex items-center justify-between gap-2 px-3 py-2 text-xs text-[var(--noodle-accent)]">
+            <span>{localizeUi("ui.noodle.noodlehome.attachedImage")}</span>
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => setPendingImage({ source: image.source })}
+                disabled={composerBusy}
+                className="min-h-8 px-2 font-bold disabled:opacity-50"
+              >{localizeUi("ui.noodle.privatepostcomposer.adjust")}</button>
+              <button
+                type="button"
+                onClick={removeImage}
+                disabled={composerBusy}
+                className="min-h-8 px-2 font-bold disabled:opacity-50"
+              >{localizeUi("settings.notifications.customSound.actions.remove")}</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {poll && (
+        <div className="mb-3 flex items-start justify-between gap-3 rounded-xl border border-[var(--noodle-divider)] p-3">
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-bold">{poll.question}</p>
+            <p className="mt-1 truncate text-xs text-[var(--muted-foreground)]">{poll.options.join(" · ")}</p>
+          </div>
+          <div className="flex shrink-0 items-center gap-1">
+            <button
+              type="button"
+              onClick={() => toggleTool("poll")}
+              disabled={composerBusy}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-md text-[var(--noodle-accent)] hover:bg-[var(--noodle-accent)]/10 disabled:opacity-50"
+              aria-label={localizeUi("ui.noodle.noodlehome.editDraftPoll")}
+              title={localizeUi("ui.noodle.noodlehome.editPoll")}
+            >
+              <Pencil size={14} />
+            </button>
+            <button
+              type="button"
+              onClick={() => updateDraft({ poll: null })}
+              disabled={composerBusy}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-md text-[var(--destructive)] hover:bg-[var(--destructive)]/10 disabled:opacity-50"
+              aria-label={localizeUi("ui.noodle.noodlehome.removeDraftPoll")}
+              title={localizeUi("ui.noodle.noodlehome.removePoll")}
+            >
+              <Trash2 size={14} />
+            </button>
+          </div>
+        </div>
+      )}
     </NoodleComposerShell>
   );
 }
@@ -3454,10 +3828,7 @@ function ProfileInitial({
 }
 
 function DisclosureBadge({ mode }: { mode: NoodleIdentityDisclosure | null }) {
-  const { t: localizeUi } = useUiTranslation();
-  const label = mode
-    ? localizeUi(`ui.noodle.disclosure.${mode}.shortLabel`)
-    : localizeUi("ui.noodle.disclosure.setupNeeded");
+  const label = mode ? DISCLOSURE_OPTIONS.find((option) => option.value === mode)?.shortLabel : "Setup needed";
   return (
     <span className="rounded-full border border-[var(--noodle-divider)] px-2 py-0.5 text-[0.68rem] font-bold capitalize text-[var(--muted-foreground)]">
       {label}

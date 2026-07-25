@@ -27,7 +27,6 @@ import {
 import { cn } from "../../lib/utils";
 import { PanelLockButton, useDraggablePanel } from "./DraggablePanel";
 import { CHAT_TOOLBAR_OVERFLOW_BUTTON_SIZE_CLASS, getChatToolbarButtonClass } from "../chat/ChatToolbarControls";
-import { NEUTRAL_SURFACE_VARIABLES } from "../ui/neutral-surface-styles";
 import { useTranslation as useUiTranslation } from "react-i18next";
 
 const STATE_CONFIG: Record<GameActiveState, { icon: typeof Compass; label: string; color: string }> = {
@@ -40,15 +39,13 @@ const STATE_CONFIG: Record<GameActiveState, { icon: typeof Compass; label: strin
 const MAP_ZOOM_MIN = 0.75;
 const MAP_ZOOM_MAX = 1.8;
 const MAP_ZOOM_STEP = 0.25;
-const GAME_MAP_PANEL_CLASS = cn(
-  NEUTRAL_SURFACE_VARIABLES,
-  "marinara-chat-popover rounded-lg border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--marinara-chat-chrome-panel-bg)] text-[var(--marinara-chat-chrome-panel-text)] shadow-lg shadow-black/35 backdrop-blur-md",
-);
-const GAME_MAP_DIVIDER_CLASS = "border-[var(--marinara-chat-chrome-panel-divider)]";
+const GAME_MAP_PANEL_CLASS =
+  "rounded-lg border border-[var(--border)] bg-[var(--card)]/90 text-[var(--foreground)] shadow-lg backdrop-blur-md dark:border-white/15 dark:bg-black/50";
+const GAME_MAP_DIVIDER_CLASS = "border-[var(--border)]";
 const GAME_MAP_FIELD_CLASS =
-  "rounded-md border border-[var(--marinara-chat-chrome-input-border)] bg-[var(--marinara-chat-chrome-input-bg)] text-[var(--marinara-chat-chrome-panel-text)] outline-none transition-colors focus:border-[var(--marinara-chat-chrome-input-border-focus)]";
+  "rounded-md border border-[var(--border)] bg-[var(--card)] text-[var(--foreground)] outline-none transition-colors focus:border-[var(--primary)]/50";
 const GAME_MAP_ACTION_ITEM_CLASS =
-  "text-[var(--marinara-chat-chrome-button-text)] transition-colors hover:bg-[var(--marinara-chat-chrome-button-bg-hover)] hover:text-[var(--marinara-chat-chrome-button-text-hover)] disabled:cursor-not-allowed disabled:opacity-35";
+  "text-[var(--muted-foreground)] transition-colors hover:bg-[var(--accent)] hover:text-[var(--foreground)] disabled:cursor-not-allowed disabled:opacity-35";
 
 function hasActiveSpatialWorldMap(spatialContext?: SpatialContextResponse | null): boolean {
   return Boolean(
@@ -646,7 +643,9 @@ export function GameMapPanel({
         className={cn(GAME_MAP_PANEL_CLASS, "flex w-52 flex-col items-center justify-center gap-2 p-3")}
       >
         <span className="text-[0.625rem] text-[var(--marinara-chat-chrome-panel-muted)]">
-          {spatialContextLoading ?localizeUi("ui.game.gamemappanel.loadingMaps") :localizeUi("ui.game.gamemappanel.noMapYet")}
+          {spatialContextLoading
+            ? localizeUi("ui.game.gamemappanel.loadingMaps")
+            : localizeUi("ui.game.gamemappanel.noMapYet")}
         </span>
         {onGenerateMap && (
           <button
@@ -1182,17 +1181,23 @@ export function MobileMapButton({
               <div className={cn("flex items-center gap-2 border-t px-2.5 py-2", GAME_MAP_DIVIDER_CLASS)}>
                 <span className="text-sm">{selectedNodeData.discovered ? selectedNodeData.emoji : "❓"}</span>
                 <span className="min-w-0 flex-1 truncate text-xs font-medium text-[var(--foreground)]">
-                  {selectedNodeData.discovered ? selectedNodeData.label :localizeUi("ui.game.mobilemapbutton.unknownLocation")}
+                  {selectedNodeData.discovered
+                    ? selectedNodeData.label
+                    : localizeUi("ui.game.mobilemapbutton.unknownLocation")}
                 </span>
                 {canTravel && selectedNode !== currentNode?.id && (
                   <button
                     type="button"
                     onClick={handleTravel}
                     className="shrink-0 rounded-lg border border-[var(--marinara-chat-chrome-button-border)] bg-[var(--marinara-chat-chrome-button-bg)] px-3 py-1.5 text-[0.6875rem] font-semibold text-[var(--marinara-chat-chrome-button-text-hover)] transition-colors hover:border-[var(--marinara-chat-chrome-button-border-hover)] hover:bg-[var(--marinara-chat-chrome-button-bg-hover)] active:opacity-80"
-                  >{localizeUi("ui.game.mobilemapbutton.setDestination")}</button>
+                  >
+                    {localizeUi("ui.game.mobilemapbutton.setDestination")}
+                  </button>
                 )}
                 {selectedNode === currentNode?.id && (
-                  <span className="shrink-0 text-[0.625rem] text-emerald-400/70">{localizeUi("ui.game.mobilemapbutton.youAreHere")}</span>
+                  <span className="shrink-0 text-[0.625rem] text-emerald-400/70">
+                    {localizeUi("ui.game.mobilemapbutton.youAreHere")}
+                  </span>
                 )}
               </div>
             )}

@@ -67,7 +67,7 @@ import {
 } from "../../packages/shared/src/constants/defaults.js";
 import { normalizeIllustratorImagesPerGeneration } from "../../packages/shared/src/utils/illustrator-generation-count.js";
 import { getChatModeCapabilities } from "../../packages/shared/src/constants/chat-mode-capabilities.js";
-import { mergeNoodleCustomEmojiMap } from "../../packages/client/src/hooks/use-noodle-custom-emojis.js";
+import { mergeNoodleCustomEmojiMap } from "../../packages/client/src/lib/noodle-custom-emojis.js";
 import {
   isBundledGameAssetFolderPath,
   isBundledGameAssetPath,
@@ -90,6 +90,7 @@ import {
   resolveIllustratorPromptRuntime,
   type IllustratorPromptConnection,
 } from "../../packages/server/src/services/generation/illustrator-prompt-runtime.js";
+import { resolveIllustratorImageConnectionId } from "../../packages/server/src/services/generation/illustrator-background-generation.js";
 import { annotateContentWithReactions } from "../../packages/server/src/routes/generate/conversation-custom-assets.js";
 import {
   buildGameSessionReplayTurns,
@@ -116,9 +117,15 @@ import { isAllowedResponseContentType, validateOutboundUrl } from "../../package
 import { seedDefaultBackgrounds } from "../../packages/server/src/db/seed-backgrounds.js";
 import {
   DEFAULT_CHAT_GENERATION_TIMEOUT_MS,
+  DEFAULT_GAME_DYNAMIC_IMAGE_PROMPT_TIMEOUT_MS,
   getChatGenerationTimeoutMs,
+  getGameDynamicImagePromptTimeoutMs,
   isCustomAgentRepositoriesEnabled,
 } from "../../packages/server/src/config/runtime-config.js";
+import {
+  normalizeNextSessionCampaignPlan,
+  normalizeNextSessionNpcs,
+} from "../../packages/server/src/services/game/next-session-plan.js";
 import {
   buildRepositoryAgentInput,
   normalizeCustomAgentRepositoryUrl,
@@ -127,11 +134,14 @@ import {
 import { shouldAutomaticallyRetryAgentResult } from "../../packages/server/src/routes/generate/agent-result-capabilities.js";
 import { runImageGenerationRequest } from "../../packages/server/src/services/image/image-generation-queue.js";
 import {
+  buildOpenRouterImagesRequest,
   detectNovelAiSubjectCount,
+  openRouterImagesUrl,
   openRouterModalities,
   resolveNovelAiDefaults,
   resolveNovelAiRequestSize,
   resolveNovelAiSize,
+  usesOpenRouterImagesApi,
 } from "../../packages/server/src/services/image/image-generation.js";
 import {
   COMFYUI_PLACEHOLDER_REFERENCE_BASE64,
@@ -149,6 +159,7 @@ import {
 import { createAgentsStorage } from "../../packages/server/src/services/storage/agents.storage.js";
 import { createCustomToolsStorage } from "../../packages/server/src/services/storage/custom-tools.storage.js";
 import { createCharactersStorage } from "../../packages/server/src/services/storage/characters.storage.js";
+import { createNoodleStorage } from "../../packages/server/src/services/storage/noodle.storage.js";
 import { resolveRunPodComfyUiTimeoutSeconds } from "../../packages/server/src/services/image/runpod-comfyui.service.js";
 import {
   findMissingComfyReferenceSlots,
@@ -481,6 +492,7 @@ try {
   closeCharacterUpdateDb = closeDB;
   const db = await getDB();
   const characterStorage = createCharactersStorage(db);
+  const noodleStorage = createNoodleStorage(db);
   const patchFixture = characterDataSchema.parse({
     name: "Nested patch fixture",
     extensions: {
@@ -505,6 +517,14 @@ try {
   });
   const patchedFixture = await characterStorage.update(createdPatchFixture.id, nestedPatch.data);
   assert.ok(patchedFixture);
+  const patchFixtureVersions = await characterStorage.listVersions(createdPatchFixture.id);
+  assert.equal(patchFixtureVersions.length, 2);
+  assert.equal(patchFixtureVersions[0]?.isCurrent, true);
+  assert.equal(patchFixtureVersions[0]?.revision, 2);
+  assert.equal(patchFixtureVersions[0]?.createdAt, patchedFixture.updatedAt);
+  assert.equal(patchFixtureVersions[1]?.isCurrent, false);
+  assert.equal(patchFixtureVersions[1]?.revision, 1);
+  assert.equal(patchFixtureVersions[1]?.createdAt, createdPatchFixture.updatedAt);
   const patchedFixtureData = JSON.parse(patchedFixture.data) as {
     extensions: Record<string, unknown> & {
       fav: boolean;
@@ -546,6 +566,23 @@ try {
     extensions: {},
     entries: [],
   });
+
+  const firstPublicNoodleAccount = await noodleStorage.upsertAccountFromProfile({
+    kind: "persona",
+    entityId: "shared-noodle-handle-persona",
+    displayName: "Shared Noodle Handle",
+  });
+  const secondPublicNoodleAccount = await noodleStorage.upsertAccountFromProfile({
+    kind: "character",
+    entityId: "shared-noodle-handle-character",
+    displayName: "Shared Noodle Handle",
+  });
+  assert.equal(firstPublicNoodleAccount.handle, "shared_noodle_handle");
+  assert.equal(secondPublicNoodleAccount.handle, "shared_noodle_handle_2");
+  await assert.rejects(
+    noodleStorage.updateAccount(secondPublicNoodleAccount.id, { handle: firstPublicNoodleAccount.handle }),
+    /unique value already exists/iu,
+  );
 
   const mariDb = new MariDbService(db);
   const customToolsStore = createCustomToolsStorage(db);
@@ -692,7 +729,86 @@ assert.deepEqual(completeProfessorMariPersona.convoBehavior, {
 assert.equal(resolveInitialGameGmConnectionId(undefined, "chat-connection"), "chat-connection");
 assert.equal(resolveInitialGameGmConnectionId("explicit-connection", "chat-connection"), "explicit-connection");
 assert.equal(resolveInitialGameGmConnectionId(undefined, null), null);
+assert.equal(
+  resolveIllustratorImageConnectionId(
+    "game",
+    { gameImageConnectionId: " game-images ", illustratorImageConnectionId: "roleplay-images" },
+    "agent-images",
+  ),
+  "game-images",
+);
+assert.equal(
+  resolveIllustratorImageConnectionId(
+    "roleplay",
+    { gameImageConnectionId: "game-images", illustratorImageConnectionId: " roleplay-images " },
+    "agent-images",
+  ),
+  "roleplay-images",
+);
+assert.equal(resolveIllustratorImageConnectionId("game", {}, " agent-images "), "agent-images");
 assert.equal(GAME_SETUP_GENERATION_TIMEOUT_MS, 500_000);
+const previousGameDynamicImagePromptTimeout = process.env.GAME_DYNAMIC_IMAGE_PROMPT_TIMEOUT_MS;
+try {
+  delete process.env.GAME_DYNAMIC_IMAGE_PROMPT_TIMEOUT_MS;
+  assert.equal(getGameDynamicImagePromptTimeoutMs(), DEFAULT_GAME_DYNAMIC_IMAGE_PROMPT_TIMEOUT_MS);
+  process.env.GAME_DYNAMIC_IMAGE_PROMPT_TIMEOUT_MS = "90000";
+  assert.equal(getGameDynamicImagePromptTimeoutMs(), 90_000);
+  process.env.GAME_DYNAMIC_IMAGE_PROMPT_TIMEOUT_MS = "999";
+  assert.equal(getGameDynamicImagePromptTimeoutMs(), DEFAULT_GAME_DYNAMIC_IMAGE_PROMPT_TIMEOUT_MS);
+} finally {
+  if (previousGameDynamicImagePromptTimeout === undefined) {
+    delete process.env.GAME_DYNAMIC_IMAGE_PROMPT_TIMEOUT_MS;
+  } else {
+    process.env.GAME_DYNAMIC_IMAGE_PROMPT_TIMEOUT_MS = previousGameDynamicImagePromptTimeout;
+  }
+}
+const refreshedCampaignPlan = normalizeNextSessionCampaignPlan(
+  {
+    openingSituation: "The party must enter the floating archive before dawn.",
+    pressureClocks: [{ name: "Archive collapse", steps: 6, current: 0, failure: "The archive falls into the sea." }],
+    factions: [{ name: "Glass Navigators", goal: "Claim the archive", method: "Race the party through hidden routes" }],
+    questSeeds: ["Find the cartographer who knows the archive's moving entrance."],
+    encounterPrinciples: ["Vertical exploration under time pressure."],
+  },
+  {
+    openingSituation: "The completed siege still waits to begin.",
+    questSeeds: ["Repeat the completed siege."],
+  },
+);
+assert.equal(refreshedCampaignPlan.openingSituation, "The party must enter the floating archive before dawn.");
+assert.deepEqual(refreshedCampaignPlan.questSeeds, ["Find the cartographer who knows the archive's moving entrance."]);
+assert.equal(refreshedCampaignPlan.pressureClocks?.[0]?.current, 0);
+
+const knownGameNpcs = [
+  {
+    id: "known-guide",
+    name: "Sera",
+    emoji: "🧭",
+    description: "The party's established guide.",
+    gender: null,
+    pronouns: null,
+    location: "Harbor",
+    reputation: 2,
+    notes: [],
+    avatarUrl: null,
+  },
+];
+const refreshedGameNpcs = normalizeNextSessionNpcs(
+  [
+    { name: "Sera", emoji: "🧭", description: "Duplicate known NPC." },
+    {
+      name: "Orin Vale",
+      emoji: "🗺️",
+      description: "A cartographer who remembers tomorrow's coastlines.",
+      roleOrAgenda: "Trade the route for help rescuing his crew.",
+      location: "Tide Observatory",
+    },
+  ],
+  knownGameNpcs,
+);
+assert.equal(refreshedGameNpcs.length, 2);
+assert.equal(refreshedGameNpcs[1]?.name, "Orin Vale");
+assert.deepEqual(refreshedGameNpcs[1]?.notes, ["Next-session role: Trade the route for help rescuing his crew."]);
 assert.equal(DEFAULT_GENERATION_PARAMS.reasoningEffort, "maximum");
 assert.match(DEFAULT_TRANSLATION_SYSTEM_PROMPT, /\{\{targetLanguage\}\}/u);
 assert.match(resolveTranslationSystemPrompt(DEFAULT_TRANSLATION_SYSTEM_PROMPT, "Japanese"), /into Japanese/u);
@@ -1142,7 +1258,11 @@ const themesRouteSource = readFileSync(
 );
 assert.doesNotMatch(conversationGroupSettingsSource, /Reply When Mentioned/u);
 assert.doesNotMatch(conversationGroupSettingsSource, /label="Cross-Chat Awareness"/u);
-assert.match(conversationGroupSettingsSource, /Individual replies can use many tokens/u);
+assert.match(
+  conversationGroupSettingsSource,
+  /ui\.chat\.chatsettingsdrawer\.individualRepliesCanUseManyTokens/u,
+  "Conversation group-token warning must remain wired through localization",
+);
 assert.match(
   conversationGroupSettingsSource,
   /chatCharIds\.length > 1 && modeCapabilities\.supportsGroupChatControls/u,
@@ -1182,7 +1302,7 @@ await Promise.all([firstMetadataSave, secondMetadataSave, pendingMetadataWait]);
 assert.deepEqual(metadataSaveOrder, ["first", "second"]);
 assert.match(
   conversationGroupSettingsSource,
-  /\{!isConversation && \(\s*<button[\s\S]{0,1500}Name Prefix History/u,
+  /\{!isConversation && \(\s*<button[\s\S]{0,1500}ui\.chat\.chatsettingsdrawer\.namePrefixHistory/u,
   "Conversation group settings should not show the roleplay-only Name Prefix History toggle",
 );
 assert.match(
@@ -1248,8 +1368,8 @@ assert.match(
 );
 assert.match(
   conversationGenerationSource,
-  /resolveIllustratorImageSize\(\s*imageSettings\.illustration,\s*illData\.aspectRatio/u,
-  "automatic Illustrator generation should use the same orientation resolver as manual Gallery generation",
+  /resolveIllustratorImageSize\(\s*requestChatMode === "game" \? imageSettings\.game : imageSettings\.illustration,\s*illData\.aspectRatio/u,
+  "automatic Illustrator generation should use the Game scene canvas in Game mode and preserve the shared orientation resolver",
 );
 assert.match(professorMariHomeSource, /Math\.min\(textarea\.scrollHeight, 128\)/u);
 assert.equal(
@@ -1315,6 +1435,24 @@ const gameSetupWizardSource = readFileSync(
   new URL("../../packages/client/src/components/game/GameSetupWizard.tsx", import.meta.url),
   "utf8",
 );
+const chatSettingsDrawerSource = readFileSync(
+  new URL("../../packages/client/src/components/chat/ChatSettingsDrawer.tsx", import.meta.url),
+  "utf8",
+);
+const conversationInputSource = readFileSync(
+  new URL("../../packages/client/src/components/chat/ConversationInput.tsx", import.meta.url),
+  "utf8",
+);
+const gameRoutesSource = readFileSync(
+  new URL("../../packages/server/src/routes/game.routes.ts", import.meta.url),
+  "utf8",
+);
+const backupRoutesSource = readFileSync(
+  new URL("../../packages/server/src/routes/backup.routes.ts", import.meta.url),
+  "utf8",
+);
+const gameTypesSource = readFileSync(new URL("../../packages/shared/src/types/game.ts", import.meta.url), "utf8");
+const backupGuideSource = readFileSync(new URL("../../docs/data/backup-and-restore.md", import.meta.url), "utf8");
 const gameAssetBrowserSource = readFileSync(
   new URL("../../packages/client/src/components/game-assets/GameAssetsBrowserView.tsx", import.meta.url),
   "utf8",
@@ -1383,7 +1521,7 @@ assert.doesNotMatch(localMusicPlayerSource, /return `\/api\/game-assets\/local-m
 assert.match(gameAssetsRoutesSource, /app\.get\("\/local-music-file"/u);
 assert.match(gameAssetsRoutesSource, /const \{ path: encoded \} = \(req\.query as \{ path\?: string \}\)/u);
 assert.doesNotMatch(gameAssetsRoutesSource, /app\.get\("\/local-music-file\/:encoded"/u);
-assert.match(characterEditorSource, /avatar preview/u);
+assert.match(characterEditorSource, /ui\.characters\.colorstab\.value1AvatarPreview/u);
 assert.match(characterEditorSource, /getAvatarCropStyle/u);
 assert.match(characterEditorSource, /downloadSpriteFile/u);
 assert.match(personaEditorSource, /downloadSpriteFile/u);
@@ -1397,7 +1535,7 @@ assert.match(androidMainActivitySource, /public void saveFile\(String base64Data
 assert.match(androidMainActivitySource, /MediaStore\.Images\.Media\.getContentUri/u);
 assert.match(
   characterEditorSource,
-  /"relative flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-xl/u,
+  /"mari-editor-avatar-tile group relative"/u,
   "The Metadata avatar preview must contain absolutely positioned saved crops",
 );
 assert.match(
@@ -1407,8 +1545,8 @@ assert.match(
 );
 assert.equal(
   characterEditorSource.match(/className="pointer-events-none h-full w-full object-cover"/gu)?.length,
-  2,
-  "Character avatar images inside upload targets must not intercept page clicks",
+  1,
+  "The Character header avatar inside its upload target must not intercept page clicks",
 );
 assert.equal(
   personaEditorSource.match(/className="pointer-events-none h-full w-full object-cover"/gu)?.length,
@@ -1417,8 +1555,44 @@ assert.equal(
 );
 assert.match(gameJournalSource, /data-game-journal-scroll/u);
 assert.match(gameSurfaceSource, /h-\[min\(42rem,calc\(100dvh-6rem\)\)\]/u);
-assert.match(gameSetupWizardSource, /Adjust Game Assets for this Game/u);
+assert.match(gameSetupWizardSource, /ui\.game\.gamesetupwizard\.adjustGameAssetsForThisGame/u);
 assert.match(gameSetupWizardSource, /selectFoldersByDefault/u);
+assert.match(gameSetupWizardSource, /enableAgents: enableAgents \|\| undefined/u);
+assert.match(gameTypesSource, /enableAgents\?: boolean;/u);
+assert.match(gameRoutesSource, /enableAgents: z\.boolean\(\)\.optional\(\)/u);
+assert.match(gameRoutesSource, /enableAgents: setupConfig\.enableAgents === true/u);
+assert.match(gameRoutesSource, /gameStoryboardsEnabled: setupConfig\.gameStoryboardsEnabled/u);
+assert.match(
+  gameRoutesSource,
+  /if \(templateId === fallbackTemplateId \|\| !selectedTemplate\?\.promptTemplate\.trim\(\)\)/u,
+);
+assert.match(presetsPanelSource, /\{!selectionMode && isSelected && \(/u);
+assert.match(chatSettingsDrawerSource, /type GreetingOption = \{[\s\S]*alternateIndex: number \| null;/u);
+assert.match(chatSettingsDrawerSource, /setFirstMesConfirm\(null\);[\s\S]*addSilentGreetingSwipes/u);
+assert.equal(
+  chatSettingsDrawerSource.match(/<GenerationSettingsLink/gu)?.length,
+  3,
+  "generation settings navigation should use one shared control in all three locations",
+);
+assert.match(conversationInputSource, /const createDurableMessageWithRollback = useCallback/u);
+assert.equal(
+  conversationInputSource.match(/createDurableMessageWithRollback\(\{/gu)?.length,
+  2,
+  "presence-delay and post-only persistence should share the rollback helper",
+);
+assert.match(backupRoutesSource, /tolerateSourceChanges: true/u);
+assert.match(backupRoutesSource, /record\.usesDataDescriptor \? 0x0808 : 0x0800/u);
+assert.match(backupRoutesSource, /PROFILE_IMPORT_MEMORY_WARNING_BYTES/u);
+assert.match(
+  backupRoutesSource,
+  /if \(automaticBackupRunning\) return;\s*automaticBackupRunning = true;\s*try \{\s*const settings = await loadAutomaticBackupSettings\(\);/u,
+);
+assert.match(
+  backupRoutesSource,
+  /runAutomaticBackupIfDue\(!current\.enabled \|\| !automaticBackupExists\)/u,
+  "enabling automatic backups or repairing a missing archive should run immediately",
+);
+assert.doesNotMatch(backupGuideSource, /Export profile as ZIP\?/u);
 assert.match(gameAssetBrowserSource, /createPortal/u);
 assert.match(gameAssetActionDropdownSource, /createPortal/u);
 assert.match(gameAssetActionDropdownSource, /window\.innerWidth - rect\.width/u);
@@ -1431,7 +1605,7 @@ assert.match(gameAssetHooksSource, /invalidateQueries\(\{ queryKey: gameAssetKey
 assert.doesNotMatch(gameAssetStoreSource, /api\.|fetchManifest|rescanAssets|\/game-assets\/manifest/u);
 assert.match(sidecarStoreSource, /consumeSidecarDownloadStream/u);
 assert.doesNotMatch(sidecarStoreSource, /readSseData|Best-effort delete|Best-effort unload/u);
-assert.match(connectionsPanelSource, /Failed to delete the Local Whisper model/u);
+assert.match(connectionsPanelSource, /ui\.panels\.sidecarcard\.failedToDeleteTheLocalWhisperModel/u);
 assert.match(presetsPanelSource, /MARINARA_UNIVERSAL_PRESET_ARTWORK/u);
 assert.match(
   presetsPanelSource,
@@ -1807,6 +1981,10 @@ const retryAgentsPromptReviewSource = readFileSync(
   "utf8",
 );
 const uiStoreSource = readFileSync(new URL("../../packages/client/src/stores/ui.store.ts", import.meta.url), "utf8");
+const settingsSyncSource = readFileSync(
+  new URL("../../packages/client/src/hooks/use-settings-sync.ts", import.meta.url),
+  "utf8",
+);
 const syncedSettingsSource = uiStoreSource.slice(
   uiStoreSource.indexOf("export function pickSyncedSettings"),
   uiStoreSource.indexOf("export const useUIStore"),
@@ -1829,6 +2007,27 @@ assert.equal(
 assert.deepEqual(openRouterModalities("krea/krea-2-large"), ["image"]);
 assert.deepEqual(openRouterModalities(" KREA/krea-2-medium-turbo "), ["image"]);
 assert.deepEqual(openRouterModalities("google/gemini-3.1-flash-image-preview"), ["image", "text"]);
+assert.equal(usesOpenRouterImagesApi(" krea/krea-2-medium "), true);
+assert.equal(usesOpenRouterImagesApi("google/gemini-3.1-flash-image-preview"), false);
+assert.equal(
+  openRouterImagesUrl("https://openrouter.ai/api/v1/chat/completions"),
+  "https://openrouter.ai/api/v1/images",
+);
+assert.deepEqual(
+  buildOpenRouterImagesRequest({
+    prompt: "plate of spaghetti",
+    negativePrompt: "burnt pasta",
+    model: "krea/krea-2-large",
+    width: 512,
+    height: 512,
+  }),
+  {
+    model: "krea/krea-2-large",
+    prompt: "plate of spaghetti\n\nAvoid in the image: burnt pasta",
+    resolution: "1K",
+    aspect_ratio: "1:1",
+  },
+);
 assert.deepEqual(
   filterCustomEmojisByName(
     [
@@ -1844,11 +2043,19 @@ assert.match(
   /gameTextEffectsEnabled: state\.gameTextEffectsEnabled/,
   "Game text effects must remain off after synced settings are restored",
 );
+assert.match(
+  settingsSyncSource,
+  /hadMissingSyncedSettings[\s\S]*pickSyncedSettings\(useUIStore\.getState\(\)\)/u,
+  "Incomplete server settings blobs must be rewritten with newly synced preferences",
+);
 assert.match(chatAreaPromptReviewSource, /MEDIA_PROMPT_PREVIEW_TIMEOUT_MS/);
 assert.match(chatAreaPromptReviewSource, /confirmRoleplayVideoPromptReview/);
 assert.match(chatAreaPromptReviewSource, /confirmConversationSelfiePromptReview/);
 assert.match(gameSurfacePromptReviewSource, /if \(imagePromptReviewResolveRef\.current\)/);
-assert.match(gameSurfacePromptReviewSource, /Video prompt preview timed out\. Continuing with the default prompt\./);
+assert.match(
+  gameSurfacePromptReviewSource,
+  /ui\.game\.gamesurfacecomponent\.videoPromptPreviewTimedOutContinuingWithTheDefault/u,
+);
 assert.match(
   imagePromptReviewModalSource,
   /item\.negativePrompt !== undefined \|\| negativePrompt \? \{ negativePrompt \} : \{\}/,
@@ -1896,6 +2103,7 @@ const sharedGameSetupSource: GameSetupShareSource = {
     generatedArtStylePrompt: "Original painterly cel-shaded fantasy",
     useCampaignArtStyle: false,
     imageStyleProfileId: "image-style-profile-local-id",
+    enableAgents: true,
     enableSpriteGeneration: true,
     imageConnectionId: "image-connection-local-id",
     videoConnectionId: "video-connection-local-id",
@@ -1984,6 +2192,7 @@ const resolvedGameSetup = resolveGameSetupImport(parsedGameSetup, {
 assert.equal(exportedGameSetup.format, "marinara-game-setup");
 assert.equal(exportedGameSetup.version, 1);
 assert.equal(exportedGameSetup.exportedAt, "2026-07-16T12:00:00.000Z");
+assert.equal(resolvedGameSetup.config.enableAgents, true);
 assert.equal(parsedGameSetup.setup.effectiveGenerationParameters?.temperature, 1.1);
 assert.equal(parsedGameSetup.setup.effectiveGenerationParameters?.maxContext, 128000);
 assert.deepEqual(parsedGameSetup.setup.effectiveGenerationParameters?.stopSequences, ["[END]"]);
@@ -2041,6 +2250,19 @@ assert.throws(
 assert.throws(
   () => parseGameSetupShareFileJson(JSON.stringify({ format: "other", version: 1 })),
   /not a Marinara Game Mode setup file/u,
+);
+assert.throws(
+  () =>
+    parseGameSetupShareFileJson(
+      JSON.stringify({
+        ...exportedGameSetup,
+        setup: {
+          ...exportedGameSetup.setup,
+          config: { ...exportedGameSetup.setup.config, enableAgents: "yes" },
+        },
+      }),
+    ),
+  /invalid Enable Agents value/u,
 );
 assert.throws(
   () =>
@@ -2880,7 +3102,8 @@ try {
     "shared.safetensors",
   ]);
   assert.deepEqual(
-    parseComfyLoaderModelNames({ CheckpointLoaderSimple: { input: { required: { ckpt_name: [[]] } } } },
+    parseComfyLoaderModelNames(
+      { CheckpointLoaderSimple: { input: { required: { ckpt_name: [[]] } } } },
       "CheckpointLoaderSimple",
       "ckpt_name",
     ),

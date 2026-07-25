@@ -96,19 +96,34 @@ export function ConversationMessageActions({
           ? "visible pointer-events-auto opacity-100"
           : "invisible pointer-events-none opacity-0 group-hover:visible group-hover:pointer-events-auto group-hover:opacity-100 focus-within:visible focus-within:pointer-events-auto focus-within:opacity-100",
         isBubbleStyle && !isUser ? "left-12" : "right-4",
-        thinkingOnly && "[&>*:not(.mari-message-thinking-action)]:hidden",
+        thinkingOnly &&
+          "max-sm:bottom-1 max-sm:left-12 max-sm:right-auto max-sm:top-auto [&>*:not(.mari-message-thinking-action)]:hidden",
       )}
       aria-hidden={!visible}
     >
-      <MsgAction icon={copied ? "✓" : <Copy size="0.75rem" />} onClick={onCopy} title={localizeUi("lorebook.editor.batch.copy")} tabIndex={tabIdx} />
+      <MsgAction
+        icon={copied ? "✓" : <Copy size="0.75rem" />}
+        onClick={onCopy}
+        title={localizeUi("lorebook.editor.batch.copy")}
+        tabIndex={tabIdx}
+      />
       {onPickReaction && <ReactionAddButton onPick={onPickReaction} tabIndex={tabIdx} />}
       <MsgAction
         icon={<Languages size="0.75rem" />}
         onClick={onTranslate}
-        title={translatedText ?localizeUi("ui.chat.chatmessage.hideTranslation") :localizeUi("ui.chat.chatmessage.translate")}
+        title={
+          translatedText
+            ? localizeUi("ui.chat.chatmessage.hideTranslation")
+            : localizeUi("ui.chat.chatmessage.translate")
+        }
         tabIndex={tabIdx}
       />
-      <MsgAction icon={<Pencil size="0.75rem" />} onClick={onEdit} title={localizeUi("ui.noodle.noodlepostcard.edit")} tabIndex={tabIdx} />
+      <MsgAction
+        icon={<Pencil size="0.75rem" />}
+        onClick={onEdit}
+        title={localizeUi("ui.noodle.noodlepostcard.edit")}
+        tabIndex={tabIdx}
+      />
       {canRegenerate && onRegenerate && (
         <MsgAction
           icon={<RefreshCw size="0.75rem" />}
@@ -122,7 +137,11 @@ export function ConversationMessageActions({
         <MsgAction
           icon={isHiddenFromAI ? <Eye size="0.75rem" /> : <EyeOff size="0.75rem" />}
           onClick={onToggleHiddenFromAI}
-          title={isHiddenFromAI ?localizeUi("ui.chat.conversationmessageactions.unhideFromAi") :localizeUi("ui.chat.conversationmessageactions.hideFromAi")}
+          title={
+            isHiddenFromAI
+              ? localizeUi("ui.chat.conversationmessageactions.unhideFromAi")
+              : localizeUi("ui.chat.conversationmessageactions.hideFromAi")
+          }
           className={
             isHiddenFromAI
               ? "text-[var(--marinara-chat-chrome-button-text-active)] hover:text-[var(--marinara-chat-chrome-button-text-hover)]"
@@ -132,10 +151,20 @@ export function ConversationMessageActions({
         />
       )}
       {isLastAssistantMessage && !isUser && onPeekPrompt && (
-        <MsgAction icon={<Search size="0.75rem" />} onClick={onPeekPrompt} title={localizeUi("ui.chat.chatmessage.peekPrompt")} tabIndex={tabIdx} />
+        <MsgAction
+          icon={<Search size="0.75rem" />}
+          onClick={onPeekPrompt}
+          title={localizeUi("ui.chat.chatmessage.peekPrompt")}
+          tabIndex={tabIdx}
+        />
       )}
       {onBranch && (
-        <MsgAction icon={<GitBranch size="0.75rem" />} onClick={onBranch} title={localizeUi("ui.chat.chatmessage.branchFromHere")} tabIndex={tabIdx} />
+        <MsgAction
+          icon={<GitBranch size="0.75rem" />}
+          onClick={onBranch}
+          title={localizeUi("ui.chat.chatmessage.branchFromHere")}
+          tabIndex={tabIdx}
+        />
       )}
       {generationReplay && (
         <MsgAction
