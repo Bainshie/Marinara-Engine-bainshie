@@ -488,6 +488,47 @@ export function isAllowedTTSAudioContentType(contentType: string | null): boolea
   return normalized.includes("audio/") || normalized.includes("application/octet-stream");
 }
 
+export function detectTTSAudioMimeType(bytes: Uint8Array): string | null {
+  if (bytes.length >= 3 && bytes[0] === 0x49 && bytes[1] === 0x44 && bytes[2] === 0x33) {
+    return "audio/mpeg";
+  }
+  if (bytes.length >= 2 && bytes[0] === 0xff && (bytes[1]! & 0xe0) === 0xe0) {
+    return "audio/mpeg";
+  }
+  if (
+    bytes.length >= 12 &&
+    bytes[0] === 0x52 &&
+    bytes[1] === 0x49 &&
+    bytes[2] === 0x46 &&
+    bytes[3] === 0x46 &&
+    bytes[8] === 0x57 &&
+    bytes[9] === 0x41 &&
+    bytes[10] === 0x56 &&
+    bytes[11] === 0x45
+  ) {
+    return "audio/wav";
+  }
+  if (bytes.length >= 4 && bytes[0] === 0x4f && bytes[1] === 0x67 && bytes[2] === 0x67 && bytes[3] === 0x53) {
+    return "audio/ogg";
+  }
+  if (bytes.length >= 4 && bytes[0] === 0x66 && bytes[1] === 0x4c && bytes[2] === 0x61 && bytes[3] === 0x43) {
+    return "audio/flac";
+  }
+  if (
+    bytes.length >= 4 &&
+    bytes[0] === 0x1a &&
+    bytes[1] === 0x45 &&
+    bytes[2] === 0xdf &&
+    bytes[3] === 0xa3
+  ) {
+    return "audio/webm";
+  }
+  if (bytes.length >= 12 && bytes[4] === 0x66 && bytes[5] === 0x74 && bytes[6] === 0x79 && bytes[7] === 0x70) {
+    return "audio/mp4";
+  }
+  return null;
+}
+
 function audioFormatMimeType(format: string): string {
   switch (format) {
     case "wav":
@@ -829,16 +870,20 @@ export async function ttsRoutes(app: FastifyInstance) {
     }
 
     const contentType = providerRes.headers.get("content-type");
-    if (!isAllowedTTSAudioContentType(contentType)) {
-      const body = await providerRes.text().catch(() => "");
+    const audioBuffer = await providerRes.arrayBuffer();
+    const detectedMimeType = detectTTSAudioMimeType(new Uint8Array(audioBuffer));
+    if (!isAllowedTTSAudioContentType(contentType) && !detectedMimeType) {
+      const body = new TextDecoder().decode(audioBuffer);
       return reply.status(502).send({
         error: "TTS provider returned a non-audio response",
         detail: readProviderErrorDetail(body) || `Content-Type: ${contentType || "missing"}`,
       });
     }
 
-    const audioBuffer = await providerRes.arrayBuffer();
-    reply.header("Content-Type", contentType?.startsWith("audio/") ? contentType : audioFormatMimeType(audioFormat));
+    const responseContentType = contentType?.toLowerCase().startsWith("audio/")
+      ? contentType
+      : (detectedMimeType ?? audioFormatMimeType(audioFormat));
+    reply.header("Content-Type", responseContentType);
     reply.header("Content-Length", String(audioBuffer.byteLength));
     return reply.send(Buffer.from(audioBuffer));
   });

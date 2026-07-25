@@ -584,7 +584,10 @@ import {
   GAME_STORYBOARD_ILLUSTRATION_DIRECTOR,
   listPromptOverrideKeys,
 } from "../../packages/server/src/services/prompt-overrides/index.js";
-import { buildElevenLabsTextInput } from "../../packages/server/src/routes/tts.routes.js";
+import {
+  buildElevenLabsTextInput,
+  detectTTSAudioMimeType,
+} from "../../packages/server/src/routes/tts.routes.js";
 import {
   buildCommittedTrackerContextBlock,
   MAX_WORLD_CUSTOM_FIELDS_IN_COMMITTED_CONTEXT,
@@ -1364,6 +1367,25 @@ const cases: RegressionCase[] = [
       );
       assert.equal(buildElevenLabsTextInput("Your ribs require rest.", "thinking"), "Your ribs require rest.");
       assert.equal(buildElevenLabsTextInput("A bold strategy.", "smirk"), "A bold strategy.");
+    },
+  },
+  {
+    name: "TTS recognizes encoded audio when providers omit or mislabel the content type",
+    run() {
+      assert.equal(
+        detectTTSAudioMimeType(new Uint8Array([0x49, 0x44, 0x33, 0x04, 0x00, 0x00])),
+        "audio/mpeg",
+      );
+      assert.equal(
+        detectTTSAudioMimeType(
+          new Uint8Array([0x52, 0x49, 0x46, 0x46, 0, 0, 0, 0, 0x57, 0x41, 0x56, 0x45]),
+        ),
+        "audio/wav",
+      );
+      assert.equal(
+        detectTTSAudioMimeType(new TextEncoder().encode('{"error":"provider failure"}')),
+        null,
+      );
     },
   },
   {
