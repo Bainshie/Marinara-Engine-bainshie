@@ -107,6 +107,7 @@ import {
   getNoodleAccentStyle,
   NoodleShell,
   NOODLE_PERSONA_SWITCHER_PAGE_SIZE,
+  NOODLE_PINK,
   useNoodleAccent,
 } from "./NoodleShell";
 import { NoodleProfileSurface } from "./NoodleProfileSurface";
@@ -884,7 +885,7 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
     activeView:
       navigation.mode === "private" && navigation.view === "profile" ? ("profile" as const) : ("noodler" as const),
     homeActive: navigation.mode === "private" && navigation.view === "hub",
-    accent: "var(--marinara-chat-chrome-accent)",
+    accent: NOODLE_PINK,
     enableNoodler: enabled,
     personaAccount: shellPersonaAccount,
     sortedPersonaAccounts: viewerAccounts,
