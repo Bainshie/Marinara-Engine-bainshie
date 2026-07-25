@@ -8691,17 +8691,15 @@ test("mobile chat composer follows the visual viewport above the software keyboa
   });
   expect(response.ok()).toBeTruthy();
   const chat = (await response.json()) as { id: string };
-  const messageResponses = await Promise.all(
-    Array.from({ length: 18 }, (_, index) =>
-      page.request.post(`/api/chats/${chat.id}/messages`, {
-        data: {
-          role: index % 2 === 0 ? "user" : "assistant",
-          content: `Keyboard viewport history line ${index + 1}. ${"Keep the latest turn visible. ".repeat(3)}`,
-        },
-      }),
-    ),
-  );
-  for (const messageResponse of messageResponses) expect(messageResponse.ok()).toBeTruthy();
+  for (let index = 0; index < 18; index += 1) {
+    const messageResponse = await page.request.post(`/api/chats/${chat.id}/messages`, {
+      data: {
+        role: index % 2 === 0 ? "user" : "assistant",
+        content: `Keyboard viewport history line ${index + 1}. ${"Keep the latest turn visible. ".repeat(3)}`,
+      },
+    });
+    expect(messageResponse.ok()).toBeTruthy();
+  }
 
   await page.addInitScript(() => {
     const state = {

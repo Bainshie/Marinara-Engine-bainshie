@@ -90,12 +90,8 @@ import {
   filterGameInternalAgentIds,
   resolveLorebookScopeExclusions,
 } from "../services/lorebook/game-lorebook-scope.js";
-import {
-  lorebookEntryPassesContextFilters,
-  scanForActivatedEntries,
-  type GameStateForScanning,
-} from "../services/lorebook/keyword-scanner.js";
-import { applyTokenBudget, injectAtDepth } from "../services/lorebook/prompt-injector.js";
+import { lorebookEntryPassesContextFilters, type GameStateForScanning } from "../services/lorebook/keyword-scanner.js";
+import { injectAtDepth } from "../services/lorebook/prompt-injector.js";
 import { resolveChatSummaryConnection } from "../services/chat-summary/connection-resolution.js";
 import { resolveConnectionImageDefaults } from "../services/image/image-generation-defaults.js";
 import { generateIllustratorImageVariants } from "../services/image/illustrator-image-variants.js";
@@ -403,6 +399,7 @@ import {
   resolveLorebookGenerationTriggers,
   resolveLorebookTokenBudget,
 } from "../services/generation/lorebook-generation-runtime.js";
+import { createAgentLorebookTriggerResolver } from "../services/generation/agent-lorebook-triggers.js";
 import { addLocationEntry, addInventoryEntry, upsertQuest, addNpcEntry } from "../services/game/journal.service.js";
 import { updateJournal } from "../services/generation/game-journal-runtime.js";
 import { buildGmFormatReminder } from "../services/game/gm-prompts.js";
@@ -3247,106 +3244,37 @@ export async function generateRoutes(app: FastifyInstance) {
           (agent) =>
             !builtInAgentTypes.has(agent.type) && agent.settings.triggerLorebooksForAgentCalls === true,
         );
-        const resolveTriggeredLorebookEntriesByAgentId = async (
-          contextMessages: AgentContext["recentMessages"],
-        ): Promise<NonNullable<AgentContext["triggeredLorebookEntriesByAgentId"]>> => {
-          const triggeredEntries: NonNullable<AgentContext["triggeredLorebookEntriesByAgentId"]> = {};
-          if (customAgentsWithLorebookTriggers.length === 0) return triggeredEntries;
-
-          const allLorebooks = (await lorebooksStore.list()) as unknown as Lorebook[];
-          const enabledLorebooksById = new Map(
-            allLorebooks.filter((lorebook) => lorebook.enabled !== false).map((lorebook) => [lorebook.id, lorebook]),
-          );
-          const activeCharacterTags = Array.from(
-            new Set(charInfo.flatMap((character) => (Array.isArray(character.tags) ? character.tags : []))),
-          );
-          const entryStateOverrides =
-            (chatMeta.entryStateOverrides as Record<string, { enabled?: boolean; ephemeral?: number | null }>) ?? {};
-
-          for (const agent of customAgentsWithLorebookTriggers) {
-            const { sourceLorebookIds: rawSourceIds, source } = resolveKnowledgeSourceLorebookIds({
+        const resolveTriggeredLorebookEntriesByAgentId = createAgentLorebookTriggerResolver({
+          agents: customAgentsWithLorebookTriggers.map((agent) => {
+            const { sourceLorebookIds, source } = resolveKnowledgeSourceLorebookIds({
               settings: agent.settings,
               chatActiveLorebookIds,
             });
-            const sourceIds = (await filterChatActiveLorebookSourceIdsForPrompt(rawSourceIds, source)).filter((id) =>
-              enabledLorebooksById.has(id),
-            );
-            if (sourceIds.length === 0) {
-              triggeredEntries[agent.id] = [];
-              continue;
-            }
-
-            const sourceIdSet = new Set(sourceIds);
-            const sourceLorebooks = sourceIds.flatMap((id) => {
-              const lorebook = enabledLorebooksById.get(id);
-              return lorebook ? [lorebook] : [];
-            });
-            const sourceEntries = ((await lorebooksStore.listEntriesByLorebooks(sourceIds)) as LorebookEntry[])
-              .filter((entry) => sourceIdSet.has(entry.lorebookId))
-              .filter((entry) => {
-                const override = entryStateOverrides[entry.id];
-                if ((override?.enabled ?? entry.enabled !== false) === false) return false;
-                if ((override?.ephemeral ?? entry.ephemeral) === 0) return false;
-                return lorebookEntryPassesContextFilters(entry, {
-                  activeCharacterIds: promptCharacterIds,
-                  activeCharacterTags,
-                  generationTriggers: lorebookGenerationTriggers,
-                });
-              })
-              .map((entry) => {
-                const ephemeral = entryStateOverrides[entry.id]?.ephemeral;
-                return ephemeral !== undefined ? { ...entry, ephemeral } : entry;
-              });
-            const contextSize = normalizeAgentContextSize(agent.settings.contextSize);
-            const scanMessages = contextMessages.slice(-contextSize).map((message) => ({
-              role: message.role,
-              content: message.content,
-            }));
-            let agentChatEmbedding: number[] | null = null;
-            let agentSemanticEmbeddings: Map<string, number[] | null> | undefined;
-            let agentSemanticBaseline = 0;
-            if (
-              sourceEntries.some((entry) => Array.isArray(entry.embedding) && entry.embedding.length > 0) &&
-              memoryRecallVectorizerAvailable
-            ) {
-              try {
-                const semanticEmbeddings = await buildLorebookSemanticEmbeddingsById({
-                  lorebooks: sourceLorebooks,
-                  entries: sourceEntries,
-                  scanMessages,
-                  embeddingSource: memoryRecallEmbeddingSource,
-                  signal: abortController.signal,
-                });
-                agentChatEmbedding = semanticEmbeddings.defaultEmbedding;
-                agentSemanticEmbeddings = semanticEmbeddings.embeddingsByLorebookId;
-                agentSemanticBaseline = semanticEmbeddings.similarityBaseline;
-              } catch {
-                // Keyword matching remains available when semantic retrieval fails.
-              }
-            }
-
-            const activated = scanForActivatedEntries(scanMessages, sourceEntries, {
-              scanDepth: contextSize,
-              gameState: gameState as GameStateForScanning | null,
-              chatEmbedding: agentChatEmbedding,
-              semanticEmbeddingsByLorebookId: agentSemanticEmbeddings,
-              semanticSimilarityBaseline: agentSemanticBaseline,
-              activeCharacterIds: promptCharacterIds,
-              activeCharacterTags,
-              generationTriggers: lorebookGenerationTriggers,
-              ignoreTiming: true,
-            });
-            const budgeted = applyTokenBudget(activated, resolveLorebookTokenBudget(chatMeta));
-            triggeredEntries[agent.id] = budgeted.map((match) => ({
-              id: match.entry.id,
-              name: match.entry.name,
-              content: resolvePromptMacrosForLorebook(match.entry.content).content,
-              matchedKeys: match.matchedKeys,
-              activationSources: match.activationSources,
-            }));
-          }
-          return triggeredEntries;
-        };
+            return {
+              id: agent.id,
+              contextSize: normalizeAgentContextSize(agent.settings.contextSize),
+              sourceLorebookIds,
+              source,
+            };
+          }),
+          activeCharacterIds: promptCharacterIds,
+          activeCharacterTags: Array.from(
+            new Set(charInfo.flatMap((character) => (Array.isArray(character.tags) ? character.tags : []))),
+          ),
+          embeddingSource: memoryRecallEmbeddingSource,
+          entryStateOverrides:
+            (chatMeta.entryStateOverrides as Record<string, { enabled?: boolean; ephemeral?: number | null }>) ?? {},
+          filterSourceLorebookIds: filterChatActiveLorebookSourceIdsForPrompt,
+          gameState: gameState as GameStateForScanning | null,
+          generationTriggers: lorebookGenerationTriggers,
+          listEntriesByLorebookIds: async (sourceIds) =>
+            (await lorebooksStore.listEntriesByLorebooks(sourceIds)) as LorebookEntry[],
+          listLorebooks: async () => (await lorebooksStore.list()) as unknown as Lorebook[],
+          resolveContent: (value) => resolvePromptMacrosForLorebook(value).content,
+          signal: abortController.signal,
+          tokenBudget: resolveLorebookTokenBudget(chatMeta),
+          vectorizerAvailable: memoryRecallVectorizerAvailable,
+        });
         const triggeredLorebookEntriesByAgentId = await resolveTriggeredLorebookEntriesByAgentId(recentMsgs);
         const resolvePersonaPromptText = (value?: string): string | undefined => {
           if (!value) return value;
