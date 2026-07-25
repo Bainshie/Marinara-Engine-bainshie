@@ -16,6 +16,7 @@ import { cn } from "../../../lib/utils";
 import { useTrackerGameState } from "../hooks/use-tracker-game-state";
 import { useTrackerFieldLockUpdater } from "../hooks/use-tracker-field-lock-updater";
 import { useTrackerPanelModel } from "../hooks/use-tracker-panel-model";
+import type { PersonaPortraitSaveSnapshot } from "../hooks/use-persona-portrait-save";
 import type { TrackerEditMode } from "../tracker-panel.types";
 import { EmptySection } from "./controls/SectionControls";
 import { TrackerSectionList } from "./TrackerSectionList";
@@ -60,7 +61,19 @@ class TrackerPanelErrorBoundary extends Component<
   }
 }
 
-export function TrackerDataSidebar({ fillHeight = false }: { fillHeight?: boolean } = {}) {
+export function TrackerDataSidebar({
+  detached = false,
+  fillHeight = false,
+  queuePersonaPortraitSave,
+  flushPersonaPortraitSave,
+  onToggleDetached,
+}: {
+  detached?: boolean;
+  fillHeight?: boolean;
+  queuePersonaPortraitSave: (snapshot: PersonaPortraitSaveSnapshot) => void;
+  flushPersonaPortraitSave: (personaId: string) => void;
+  onToggleDetached?: () => void;
+}) {
   const { t: localizeUi } = useUiTranslation();
   useRenderTimer("tracker-panel"); // [#3104 diagnostic]
   const activeChatId = useChatStore((s) => s.activeChatId);
@@ -174,10 +187,12 @@ export function TrackerDataSidebar({ fillHeight = false }: { fillHeight?: boolea
         <TrackerSidebarHeader
           trackerPanelSide={trackerPanelSide}
           sizeProfile={trackerPanelSizeProfile}
+          detached={detached}
           activeEditMode={activeEditMode}
           onSetEditMode={setActiveEditMode}
           onSetSide={setTrackerPanelSide}
           onSetSizeProfile={setTrackerPanelSizeProfile}
+          onToggleDetached={onToggleDetached}
           onClose={() => setTrackerPanelOpen(false, activeChatId)}
         />
 
@@ -210,6 +225,8 @@ export function TrackerDataSidebar({ fillHeight = false }: { fillHeight?: boolea
                 toggleTrackerPanelSectionCollapsed={toggleTrackerPanelSectionCollapsed}
                 deleteMode={deleteMode}
                 addMode={addMode}
+                queuePersonaPortraitSave={queuePersonaPortraitSave}
+                flushPersonaPortraitSave={flushPersonaPortraitSave}
               />
             </TrackerPanelErrorBoundary>
           ) : null}

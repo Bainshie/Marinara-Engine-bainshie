@@ -6,6 +6,7 @@ import { cn } from "../../../../lib/utils";
 import { visibleText } from "../../lib/tracker-display";
 import { InlineEdit } from "../controls/InlineControls";
 import { useTrackerFieldLock } from "../TrackerLockContext";
+import { useTrackerWindow } from "../TrackerWindowContext";
 import { useTranslation as useUiTranslation } from "react-i18next";
 
 type ThoughtBubbleSize = "short" | "medium" | "long";
@@ -446,6 +447,8 @@ export function ExternalThoughtBubble({
   hideMode?: boolean;
   onToggleHidden?: () => void;
 }) {
+  const trackerWindow = useTrackerWindow();
+  const trackerDocument = trackerWindow.document;
   const reducedMotion = useReducedMotion();
   const [position, setPosition] = useState<{
     left: number;
@@ -472,8 +475,8 @@ export function ExternalThoughtBubble({
         return;
       }
 
-      const viewportWidth = window.innerWidth;
-      const viewportHeight = window.innerHeight;
+      const viewportWidth = trackerWindow.innerWidth;
+      const viewportHeight = trackerWindow.innerHeight;
       const outsideSide = panelSide === "left" ? "right" : "left";
       const overlap = 4;
       const viewportMargin = 6;
@@ -512,18 +515,21 @@ export function ExternalThoughtBubble({
 
     updatePosition();
     const anchor = anchorRef.current;
-    const resizeObserver = anchor && typeof ResizeObserver !== "undefined" ? new ResizeObserver(updatePosition) : null;
+    const resizeObserver =
+      anchor && typeof trackerWindow.ResizeObserver !== "undefined"
+        ? new trackerWindow.ResizeObserver(updatePosition)
+        : null;
     if (anchor) resizeObserver?.observe(anchor);
-    window.addEventListener("resize", updatePosition);
-    window.addEventListener("scroll", updatePosition, true);
+    trackerWindow.addEventListener("resize", updatePosition);
+    trackerWindow.addEventListener("scroll", updatePosition, true);
     return () => {
       resizeObserver?.disconnect();
-      window.removeEventListener("resize", updatePosition);
-      window.removeEventListener("scroll", updatePosition, true);
+      trackerWindow.removeEventListener("resize", updatePosition);
+      trackerWindow.removeEventListener("scroll", updatePosition, true);
     };
-  }, [anchorRef, onSave, panelSide, value]);
+  }, [anchorRef, onSave, panelSide, trackerWindow, value]);
 
-  if (!position || typeof document === "undefined") return null;
+  if (!position) return null;
 
   return createPortal(
     <motion.div
@@ -548,6 +554,6 @@ export function ExternalThoughtBubble({
         onToggleHidden={onToggleHidden}
       />
     </motion.div>,
-    document.body,
+    trackerDocument.body,
   );
 }
