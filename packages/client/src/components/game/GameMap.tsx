@@ -749,7 +749,7 @@ export function GameMapPanel({
           {collapsed ? <ChevronDown size={12} /> : <ChevronUp size={12} />}
         </span>
       </div>
-      {!collapsed && hasWorldMap && (
+      {!collapsed && hasWorldMap && map && (
         <GameMapViewTabs value={effectiveMapView} onChange={setMapViewMode} />
       )}
       {!collapsed && effectiveMapView === "local" && mapOptions.length > 1 && (

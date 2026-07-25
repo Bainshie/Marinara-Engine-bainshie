@@ -49,8 +49,10 @@ import { useUIStore } from "../../stores/ui.store";
 import { useChatStore } from "../../stores/chat.store";
 import { useGameStateStore } from "../../stores/game-state.store";
 import { useThrottledStreamBuffer } from "../../hooks/use-throttled-stream-buffer";
+import { useSpatialContext } from "../../hooks/use-spatial-context";
 import { useActiveLorebookEntries, useLorebooks } from "../../hooks/use-lorebooks";
 import { usePresetFull, usePresets } from "../../hooks/use-presets";
+import { GameMapPanel } from "../game/GameMap";
 import { ChatMessage } from "./ChatMessage";
 import { ChatInput } from "./ChatInput";
 import { CyoaChoices } from "./CyoaChoices";
@@ -1272,6 +1274,7 @@ export function ChatRoleplaySurface({
   const prevMessageKeysRef = useRef<Set<string>>(new Set());
   const seenMessageKeysRef = useRef(roleplayNotificationSeenKeys);
   const pendingPostProcessingKeysRef = useRef<Set<string>>(new Set());
+  const roleplayStageRef = useRef<HTMLDivElement>(null);
   const topChromeRef = useRef<HTMLDivElement>(null);
   const inputChromeRef = useRef<HTMLDivElement>(null);
   const composerScrollTopRef = useRef(0);
@@ -1470,6 +1473,16 @@ export function ChatRoleplaySurface({
   const summaryActiveAgentIds = Array.isArray(chatMeta.activeAgentIds)
     ? chatMeta.activeAgentIds.filter((agentId): agentId is string => typeof agentId === "string")
     : [];
+  const hierarchicalMapsActive =
+    chatMode === "roleplay" &&
+    chatMeta.enableAgents === true &&
+    summaryActiveAgentIds.includes("hierarchical-maps");
+  const spatialContext = useSpatialContext(activeChatId, hierarchicalMapsActive);
+  const showRoleplayMinimap = Boolean(
+    hierarchicalMapsActive &&
+      spatialContext.data?.definition?.enabled &&
+      spatialContext.data.definition.locations.some((location) => location.status === "active"),
+  );
   const automaticSummaryEnabled =
     chatMeta.automaticSummaryEnabled === true ||
     (chatMeta.enableAgents === true && summaryActiveAgentIds.includes("chat-summary"));
@@ -1525,7 +1538,7 @@ export function ChatRoleplaySurface({
         )}
 
         <div className="relative flex flex-1 overflow-hidden">
-          <div className="relative flex flex-1 flex-col overflow-hidden">
+          <div ref={roleplayStageRef} className="relative flex flex-1 flex-col overflow-hidden">
             <div ref={topChromeRef} className="pointer-events-none absolute inset-x-0 top-0 z-40">
               <div
                 data-tracker-panel-anchor="roleplay-hud"
@@ -1830,6 +1843,23 @@ export function ChatRoleplaySurface({
                 )}
               </div>
             </div>
+
+            {showRoleplayMinimap && !centerCompact && (
+              <div
+                className="pointer-events-auto absolute left-3 z-20 hidden md:block"
+                style={{ top: Math.max(64, chromeHeights.top + 12) }}
+              >
+                <GameMapPanel
+                  map={null}
+                  onMove={() => undefined}
+                  disabled={isStreaming || agentProcessing}
+                  spatialContext={spatialContext.data}
+                  spatialContextLoading={spatialContext.isLoading}
+                  chatId={activeChatId}
+                  constraintsRef={roleplayStageRef}
+                />
+              </div>
+            )}
 
             {encounterActive && (
               <Suspense fallback={null}>
