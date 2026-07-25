@@ -10,6 +10,9 @@ import { createGalleryStorage } from "../storage/gallery.storage.js";
 
 const CHAT_GALLERY_ROOT = join(DATA_DIR, "gallery");
 
+export const SPATIAL_LOCATION_REFERENCE_PROMPT_LINE =
+  "Location handling: an attached location reference image is available. Use it to set the scene location.";
+
 function resolveGalleryImagePath(image: { chatId: string; filePath: string }): string | null {
   const normalizedPath = image.filePath.replace(/\\/g, "/");
   const filename = basename(normalizedPath);

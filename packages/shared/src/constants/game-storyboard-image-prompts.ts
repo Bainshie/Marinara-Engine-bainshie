@@ -11,6 +11,7 @@ export const GAME_STORYBOARD_IMAGE_PROMPT_TEMPLATE_VARIABLES = [
   "narrativePurposeLine",
   "charactersLine",
   "referenceHandlingLine",
+  "locationHandlingLine",
   "appearanceNotesBlock",
   "artDirectionLine",
   "imagePromptInstructionsLine",
@@ -23,6 +24,7 @@ export const GAME_STORYBOARD_IMAGE_PROMPT_TEMPLATE = [
   "${narrativePurposeLine}",
   "${charactersLine}",
   "${referenceHandlingLine}",
+  "${locationHandlingLine}",
   "${appearanceNotesBlock}",
   "${artDirectionLine}",
   "${imagePromptInstructionsLine}",
@@ -33,6 +35,7 @@ export const STORYBOARD_OPTIMIZED_IMAGE_PROMPT_TEMPLATE = [
   "Storyboard keyframe: ${scenePrompt}",
   "${finalVisibilityRuleLine}",
   "${referenceHandlingLine}",
+  "${locationHandlingLine}",
   "${appearanceNotesBlock}",
   "${artDirectionLine}",
   "${imagePromptInstructionsLine}",
@@ -40,6 +43,7 @@ export const STORYBOARD_OPTIMIZED_IMAGE_PROMPT_TEMPLATE = [
 
 export const STORYBOARD_FIRST_FRAME_IMAGE_PROMPT_TEMPLATE = [
   "${scenePrompt}",
+  "${locationHandlingLine}",
   "${imagePromptInstructionsLine}",
 ].join(" ");
 

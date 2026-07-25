@@ -9,6 +9,7 @@ import { z } from "zod";
 import { eq } from "../db/file-query.js";
 import { chats as chatsTable } from "../db/schema/index.js";
 import { logger, logDebugOverride } from "../lib/logger.js";
+import { readImageDimensionsFromFile } from "../utils/image-metadata.js";
 import { createChatsStorage } from "../services/storage/chats.storage.js";
 import { createConnectionsStorage } from "../services/storage/connections.storage.js";
 import { createCharactersStorage } from "../services/storage/characters.storage.js";
@@ -1334,6 +1335,10 @@ async function addGeneratedIllustrationToGallery(opts: {
   try {
     const ext = extname(assetPath).toLowerCase().replace(/^\./, "") || "png";
     const filePath = saveImageToDisk(opts.chatId, readFileSync(assetPath).toString("base64"), ext);
+    const dimensions = await readImageDimensionsFromFile(assetPath).catch((err) => {
+      logger.debug(err, "[game/generate-assets] Could not read illustration dimensions for %s", assetPath);
+      return null;
+    });
     const gallery = createGalleryStorage(opts.app.db);
     const prompt =
       opts.prompt?.trim() || [opts.illustration.reason, opts.illustration.prompt].filter(Boolean).join("\n\n");
@@ -1343,8 +1348,7 @@ async function addGeneratedIllustrationToGallery(opts: {
       prompt,
       provider: "game_scene_illustration",
       model: opts.model || "unknown",
-      width: 1024,
-      height: 576,
+      ...(dimensions ?? {}),
     });
   } catch (err) {
     opts.app.log.warn({ err, chatId: opts.chatId, tag: opts.tag }, "Failed to add game illustration to gallery");
@@ -11016,6 +11020,7 @@ export async function gameRoutes(app: FastifyInstance) {
               artStyle,
               imagePromptInstructions,
               referenceImages: illustrationAssets.referenceImages,
+              locationReferenceImageAttached: spatialLocationReferenceImage != null,
               characterPrompts: illustration.characterPrompts,
               imgSource,
               imgModel,
@@ -11180,6 +11185,7 @@ export async function gameRoutes(app: FastifyInstance) {
             artStyle,
             imagePromptInstructions,
             referenceImages: illustrationAssets.referenceImages,
+            locationReferenceImageAttached: spatialLocationReferenceImage != null,
             characterPrompts: illustration.characterPrompts,
             imgSource,
             imgModel,
@@ -11756,6 +11762,7 @@ export async function gameRoutes(app: FastifyInstance) {
       width: number;
       height: number;
     }> = [];
+    let resolvedIllustration: Pick<SceneIllustrationRequest, "prompt" | "characters"> | undefined;
 
     if (backgroundGenerationEnabled && input.backgroundTag) {
       const slug = generatedBackgroundSlug(input.backgroundTag);
@@ -11860,8 +11867,24 @@ export async function gameRoutes(app: FastifyInstance) {
           narration: input.illustrationNarration,
           characterAppearanceContextBlock,
         });
+        resolvedIllustration = {
+          prompt: illustration.prompt,
+          characters: illustration.characters,
+        };
         const promptOverride = promptOverrideById.get(gameImagePromptReviewId("illustration", illustrationReviewKey));
-        const illustrationAssets = collectIllustrationCharacterAssets({
+        const referenceImageLimit = resolveSceneIllustrationReferenceImageLimit({
+          imgSource,
+          imgModel,
+          imgBaseUrl,
+          imgService: imgServiceHint,
+        });
+        const ownerSpatialProjection = await resolveOwnerSpatialProjection(input.chatId, {}, meta);
+        const spatialLocationReferenceImage = await resolveSpatialLocationReferenceImage({
+          db: app.db,
+          chatId: input.chatId,
+          projection: ownerSpatialProjection?.ownerMode === "game" ? ownerSpatialProjection : null,
+        });
+        const characterIllustrationAssets = collectIllustrationCharacterAssets({
           illustration,
           characterNames: illustration.characters ?? [],
           trackedNpcs: [],
@@ -11871,13 +11894,16 @@ export async function gameRoutes(app: FastifyInstance) {
           charDescriptionByName,
           includeReferenceImages: useAvatarReferences,
           includeCharacterDescriptions: includeCharacterAppearance,
-          maxReferenceImages: resolveSceneIllustrationReferenceImageLimit({
-            imgSource,
-            imgModel,
-            imgBaseUrl,
-            imgService: imgServiceHint,
-          }),
+          maxReferenceImages: Math.max(0, referenceImageLimit - (spatialLocationReferenceImage ? 1 : 0)),
         });
+        const illustrationAssets = {
+          ...characterIllustrationAssets,
+          referenceImages: mergeSpatialLocationReferenceImages(
+            spatialLocationReferenceImage,
+            characterIllustrationAssets.referenceImages,
+            referenceImageLimit,
+          ),
+        };
         const compiledReviewPrompt = await buildSceneIllustrationProviderPrompt({
           chatId: input.chatId,
           title: illustration.title,
@@ -11891,6 +11917,7 @@ export async function gameRoutes(app: FastifyInstance) {
           artStyle,
           imagePromptInstructions,
           referenceImages: illustrationAssets.referenceImages,
+          locationReferenceImageAttached: spatialLocationReferenceImage != null,
           imgSource,
           imgModel,
           imgBaseUrl,
@@ -11906,6 +11933,7 @@ export async function gameRoutes(app: FastifyInstance) {
           size: backgroundSize,
           promptOverride: promptOverride?.prompt,
           negativePromptOverride: promptOverride?.negativePrompt,
+          preserveFullScenePrompt: true,
         });
         const previewSize = previewSizeFor(compiledReviewPrompt.prompt, backgroundSize);
         items.push({
@@ -12017,7 +12045,7 @@ export async function gameRoutes(app: FastifyInstance) {
       items.push(...portraitPreviewItems.filter((item): item is PreviewAssetItem => item !== null));
     }
 
-    return { items };
+    return { items, resolvedIllustration };
   });
 
   app.post("/generate-assets", async (req, reply) => {
@@ -12279,7 +12307,19 @@ export async function gameRoutes(app: FastifyInstance) {
             signal: assetAbortSignal,
           });
           const promptOverride = promptOverrideById.get(gameImagePromptReviewId("illustration", illustrationReviewKey));
-          const illustrationAssets = collectIllustrationCharacterAssets({
+          const referenceImageLimit = resolveSceneIllustrationReferenceImageLimit({
+            imgSource,
+            imgModel,
+            imgBaseUrl,
+            imgService: imgServiceHint,
+          });
+          const ownerSpatialProjection = await resolveOwnerSpatialProjection(input.chatId, {}, meta);
+          const spatialLocationReferenceImage = await resolveSpatialLocationReferenceImage({
+            db: app.db,
+            chatId: input.chatId,
+            projection: ownerSpatialProjection?.ownerMode === "game" ? ownerSpatialProjection : null,
+          });
+          const characterIllustrationAssets = collectIllustrationCharacterAssets({
             illustration,
             characterNames: illustration.characters ?? [],
             trackedNpcs: [],
@@ -12289,13 +12329,25 @@ export async function gameRoutes(app: FastifyInstance) {
             charDescriptionByName,
             includeReferenceImages: useAvatarReferences,
             includeCharacterDescriptions: includeCharacterAppearance,
-            maxReferenceImages: resolveSceneIllustrationReferenceImageLimit({
-              imgSource,
-              imgModel,
-              imgBaseUrl,
-              imgService: imgServiceHint,
-            }),
+            maxReferenceImages: Math.max(0, referenceImageLimit - (spatialLocationReferenceImage ? 1 : 0)),
           });
+          const illustrationAssets = {
+            ...characterIllustrationAssets,
+            referenceImages: mergeSpatialLocationReferenceImages(
+              spatialLocationReferenceImage,
+              characterIllustrationAssets.referenceImages,
+              referenceImageLimit,
+            ),
+          };
+          if (debugLogsEnabled) {
+            debugLog(
+              "[debug/game/illustration-references] location=%s characters=%d total=%d limit=%d",
+              spatialLocationReferenceImage ? "attached" : "none",
+              characterIllustrationAssets.referenceImages.length,
+              illustrationAssets.referenceImages.length,
+              referenceImageLimit,
+            );
+          }
           const illustrationCount = normalizeIllustratorImagesPerGeneration(meta.illustratorImagesPerGeneration);
           const generatedTags: string[] = [];
           for (let variantIndex = 0; variantIndex < illustrationCount; variantIndex += 1) {
@@ -12316,6 +12368,7 @@ export async function gameRoutes(app: FastifyInstance) {
               artStyle,
               imagePromptInstructions,
               referenceImages: illustrationAssets.referenceImages,
+              locationReferenceImageAttached: spatialLocationReferenceImage != null,
               imgSource,
               imgModel,
               imgBaseUrl,
@@ -12333,6 +12386,7 @@ export async function gameRoutes(app: FastifyInstance) {
               size: backgroundSize,
               promptOverride: promptOverride?.prompt,
               negativePromptOverride: promptOverride?.negativePrompt,
+              preserveFullScenePrompt: true,
               onCompiledPrompt: (compiled) => {
                 sentIllustrationPrompt = compiled.prompt;
               },

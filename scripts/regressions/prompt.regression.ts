@@ -2212,6 +2212,7 @@ const cases: RegressionCase[] = [
         narrativePurposeLine: "Narrative purpose: arrival.",
         charactersLine: "Characters: Mira.",
         referenceHandlingLine: "Reference handling: match the attached portrait.",
+        locationHandlingLine: "Location handling: use the attached gate image.",
         appearanceNotesBlock: "",
         artDirectionLine: "Art direction: painterly fantasy.",
         imagePromptInstructionsLine: "User image instructions: keep the silver cloak.",
@@ -2245,13 +2246,14 @@ const cases: RegressionCase[] = [
       assert.match(optimizedPrompt, /Storyboard keyframe: Mira braces beneath a storm-lit archway/);
       assert.match(optimizedPrompt, /Final visibility rule: Only depict these named visible characters: Mira/);
       assert.match(optimizedPrompt, /Reference handling: match the attached portrait/);
+      assert.match(optimizedPrompt, /Location handling: use the attached gate image/);
       assert.match(optimizedPrompt, /Art direction: painterly fantasy/);
       assert.doesNotMatch(optimizedPrompt, /GLOBAL SCENE/);
       assert.equal(customPrompt, "CUSTOM Mira braces beneath a storm-lit archway. Art direction: painterly fantasy.");
       assert.doesNotMatch(customPrompt, /Final visibility rule/);
       assert.equal(
         firstFramePrompt,
-        "Mira braces beneath a storm-lit archway. User image instructions: keep the silver cloak.",
+        "Mira braces beneath a storm-lit archway. Location handling: use the attached gate image. User image instructions: keep the silver cloak.",
       );
       assert.doesNotMatch(firstFramePrompt, /Mira at the gate|Storyboard keyframe|Final visibility rule|Art direction/);
       assert.equal(GAME_STORYBOARD_IMAGE_BUILT_IN_PROMPT_TEMPLATES.length, 3);
@@ -2921,7 +2923,7 @@ const cases: RegressionCase[] = [
       assert.match(directCompiled.prompt, /User image instructions: Keep the moon visible/u);
       assert.doesNotMatch(
         directCompiled.prompt,
-        /(?:^|\n)(?:Scene moment|Narrative purpose|Characters|Reference handling|Art direction):/iu,
+        /(?:^|\n)(?:Scene moment|Narrative purpose|Characters|Reference handling|Location handling|Art direction):/iu,
       );
 
       const chatSettingsSource = readFileSync(
@@ -4409,6 +4411,48 @@ Use HTML sparingly and diegetically. Do not replace normal prose/dialogue unless
       assert.deepEqual(compile(false, true), baseline);
       assert.deepEqual(compile(true, false), baseline);
       assert.deepEqual(compile(true, true), baseline);
+    },
+  },
+  {
+    name: "manual game illustrations preserve detailed natural-language scene prompts",
+    async run() {
+      const sceneDetail =
+        "2B balances an open leather-bound book in one hand while violet light reflects across the rain-dark guild hall windows.";
+      const compiled = await buildSceneIllustrationProviderPrompt({
+        chatId: "manual-game-illustration-regression",
+        title: "Manual scene illustration",
+        prompt: sceneDetail,
+        reason: "Manual Gallery Illustrate request",
+        characters: ["2B"],
+        artStyle: "anime illustration",
+        referenceImages: ["location-reference"],
+        locationReferenceImageAttached: true,
+        preserveFullScenePrompt: true,
+        styleProfiles: createDefaultImageStyleProfileSettings(),
+        styleProfileId: "anime",
+        imgModel: "unused",
+        imgBaseUrl: "",
+        imgApiKey: "",
+      });
+
+      assert.ok(compiled.prompt.includes(sceneDetail), compiled.prompt);
+      assert.match(
+        compiled.prompt,
+        /Location handling: an attached location reference image is available\. Use it to set the scene location\./,
+      );
+      assert.doesNotMatch(compiled.prompt, /Reference handling: attached character reference images/);
+
+      const withCharacterReference = await buildSceneIllustrationProviderPrompt({
+        chatId: "manual-game-illustration-character-reference-regression",
+        prompt: sceneDetail,
+        referenceImages: ["location-reference", "character-reference"],
+        locationReferenceImageAttached: true,
+        imgModel: "unused",
+        imgBaseUrl: "",
+        imgApiKey: "",
+      });
+      assert.match(withCharacterReference.prompt, /Location handling: an attached location reference image/);
+      assert.match(withCharacterReference.prompt, /Reference handling: attached character reference images/);
     },
   },
   {

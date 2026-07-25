@@ -76,6 +76,7 @@ import { compileImagePrompt } from "../../services/image/image-prompt-compiler.j
 import {
   mergeSpatialLocationReferenceImages,
   resolveSpatialLocationReferenceImage,
+  SPATIAL_LOCATION_REFERENCE_PROMPT_LINE,
 } from "../../services/image/spatial-location-reference.js";
 import { persistGeneratedImageToEntityGalleries } from "../../services/image/generated-image-entity-gallery.js";
 import { resolveImageConnectionFallback } from "../../services/generation/media-connection-fallback.js";
@@ -3251,6 +3252,7 @@ async function applyRetryResultEffects(args: {
               referenceImages = mergedReferenceImages;
             }
             if (spatialLocationReferenceImage) {
+              fullPrompt += `\n\n${SPATIAL_LOCATION_REFERENCE_PROMPT_LINE}`;
               logger.debug("[retry-agents] Illustrator sending the current Maps location reference image first");
             }
 

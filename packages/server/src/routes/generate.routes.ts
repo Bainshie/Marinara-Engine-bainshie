@@ -102,6 +102,7 @@ import { compileImagePrompt } from "../services/image/image-prompt-compiler.js";
 import {
   mergeSpatialLocationReferenceImages,
   resolveSpatialLocationReferenceImage,
+  SPATIAL_LOCATION_REFERENCE_PROMPT_LINE,
 } from "../services/image/spatial-location-reference.js";
 import { persistGeneratedImageToEntityGalleries } from "../services/image/generated-image-entity-gallery.js";
 import { resolveImageConnectionFallback } from "../services/generation/media-connection-fallback.js";
@@ -8271,6 +8272,7 @@ export async function generateRoutes(app: FastifyInstance) {
                         illustratorRefImages = mergedReferenceImages;
                       }
                       if (spatialLocationReferenceImage) {
+                        fullPrompt += `\n\n${SPATIAL_LOCATION_REFERENCE_PROMPT_LINE}`;
                         logger.debug("[illustrator] Sending the current Maps location reference image first");
                       }
 
