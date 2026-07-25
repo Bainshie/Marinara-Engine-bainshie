@@ -1633,6 +1633,7 @@ const gameSetupConfigSchema = z.object({
   partyCharacterIds: z.array(z.string()),
   personaId: z.string().nullable().optional(),
   sceneConnectionId: z.string().optional(),
+  enableAgents: z.boolean().optional(),
   enableSpriteGeneration: z.boolean().optional(),
   imageConnectionId: z.string().optional(),
   videoConnectionId: z.string().optional(),
@@ -5517,14 +5518,7 @@ async function loadStoryboardIllustratorSystemPrompt(args: {
   const selectedTemplate =
     options.find((template) => template.id === templateId) ??
     builtInTemplates.find((template) => template.id === fallbackTemplateId);
-  if (templateId === fallbackTemplateId) {
-    return loadPrompt(
-      args.promptOverridesStorage,
-      args.generateVideos ? GAME_STORYBOARD_ANIMATION_DIRECTOR : GAME_STORYBOARD_ILLUSTRATION_DIRECTOR,
-      args.ctx,
-    );
-  }
-  if (!selectedTemplate?.promptTemplate.trim()) {
+  if (templateId === fallbackTemplateId || !selectedTemplate?.promptTemplate.trim()) {
     return loadPrompt(
       args.promptOverridesStorage,
       args.generateVideos ? GAME_STORYBOARD_ANIMATION_DIRECTOR : GAME_STORYBOARD_ILLUSTRATION_DIRECTOR,
@@ -6265,7 +6259,7 @@ export async function gameRoutes(app: FastifyInstance) {
       gameSpecialInstructions,
       gameSceneConnectionId: setupConfig.sceneConnectionId || null,
       gameNpcs: [],
-      enableAgents: true,
+      enableAgents: setupConfig.enableAgents === true,
       activeAgentIds: setupActiveAgentIds,
       enableSpriteGeneration: setupConfig.enableSpriteGeneration || false,
       gameImageConnectionId: setupConfig.imageConnectionId || null,
@@ -6273,10 +6267,7 @@ export async function gameRoutes(app: FastifyInstance) {
       gameSceneVideosEnabled: false,
       gameStoryboardAutoIllustrationsEnabled: setupConfig.gameStoryboardAutoIllustrationsEnabled !== false,
       gameStoryboardAutoGenerationEnabled: setupConfig.gameStoryboardAutoGenerationEnabled === true,
-      gameStoryboardsEnabled:
-        setupConfig.gameStoryboardsEnabled ??
-        (setupConfig.gameStoryboardAutoIllustrationsEnabled === true ||
-          setupConfig.gameStoryboardAutoGenerationEnabled === true),
+      gameStoryboardsEnabled: setupConfig.gameStoryboardsEnabled,
       gameStoryboardKeyframeCount: storyboardKeyframeCount,
       gameGmPromptTemplateId: setupConfig.gameGmPromptTemplateId || null,
       gameStoryboardAnimationPromptTemplateId: setupConfig.gameStoryboardAnimationPromptTemplateId || null,
@@ -6981,7 +6972,7 @@ export async function gameRoutes(app: FastifyInstance) {
         gameRecentSpotifyTracks: [],
         ...(carriedSetupConfig ? { gameSetupConfig: carriedSetupConfig } : {}),
         gamePartyCharacterIds: carriedPartyIds,
-        enableAgents: true,
+        enableAgents: carriedSetupConfig?.enableAgents ?? (prevMeta.enableAgents === true),
         ...(carriedInventory.length > 0 ? { gameInventory: carriedInventory } : {}),
       };
       await chats.updateMetadata(newChat.id, updatedNewMeta);

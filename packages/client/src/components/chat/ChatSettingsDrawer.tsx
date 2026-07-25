@@ -312,6 +312,11 @@ interface ChatSettingsDrawerProps {
   onOpenScheduleEditor?: (characterId: string, options?: { initialDay?: string | null }) => void;
 }
 
+type GreetingOption = {
+  text: string;
+  alternateIndex: number | null;
+};
+
 const SPOTIFY_SOURCE_OPTIONS: Array<{ id: SpotifySourceType; label: string; description: string }> = [
   { id: "liked", label: "Liked Songs", description: "Pick from the user's saved tracks first." },
   { id: "playlist", label: "Playlist", description: "Keep choices inside one Spotify playlist." },
@@ -2399,7 +2404,7 @@ export function ChatSettingsDrawer({
   const [firstMesConfirm, setFirstMesConfirm] = useState<{
     charId: string;
     charName: string;
-    greetings: string[];
+    greetings: GreetingOption[];
     selectedIndex: number;
   } | null>(null);
 
@@ -2407,20 +2412,36 @@ export function ChatSettingsDrawer({
     if (!firstMesConfirm) return;
     const selectedGreeting = firstMesConfirm.greetings[firstMesConfirm.selectedIndex];
     if (!selectedGreeting) return;
+    let messageId: string | null = null;
     try {
       const msg = await createMessage.mutateAsync({
         role: "assistant",
-        content: selectedGreeting,
+        content: selectedGreeting.text,
         characterId: firstMesConfirm.charId,
       });
-      const remainingGreetings = firstMesConfirm.greetings.filter(
-        (_greeting, index) => index !== firstMesConfirm.selectedIndex,
-      );
-      if (msg?.id && remainingGreetings.length > 0) {
-        await addSilentGreetingSwipes(chat.id, msg.id, remainingGreetings);
-      }
-      await qc.invalidateQueries({ queryKey: chatKeys.messages(chat.id) });
+      messageId = msg?.id ?? null;
       setFirstMesConfirm(null);
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : localizeUi("ui.chat.chatsettingsdrawer.failedToAddSelectedGreeting"),
+      );
+      return;
+    }
+
+    const remainingGreetings = firstMesConfirm.greetings
+      .filter((_greeting, index) => index !== firstMesConfirm.selectedIndex)
+      .map((greeting) => greeting.text);
+    try {
+      if (messageId && remainingGreetings.length > 0) {
+        await addSilentGreetingSwipes(chat.id, messageId, remainingGreetings);
+      }
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : localizeUi("ui.chat.chatsettingsdrawer.failedToAddSelectedGreeting"),
+      );
+    }
+    try {
+      await qc.invalidateQueries({ queryKey: chatKeys.messages(chat.id) });
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : localizeUi("ui.chat.chatsettingsdrawer.failedToAddSelectedGreeting"),
@@ -2490,12 +2511,18 @@ export function ChatSettingsDrawer({
             if (!char) return;
             try {
               const parsed = typeof char.data === "string" ? JSON.parse(char.data) : char.data;
-              const firstMes = (parsed as { first_mes?: string }).first_mes;
-              const altGreetings = (parsed as { alternate_greetings?: string[] }).alternate_greetings ?? [];
-              const greetings = [firstMes, ...altGreetings]
-                .filter((greeting): greeting is string => typeof greeting === "string")
-                .map((greeting) => greeting.trim())
-                .filter(Boolean);
+              const firstMes = (parsed as { first_mes?: unknown }).first_mes;
+              const alternateGreetings = (parsed as { alternate_greetings?: unknown }).alternate_greetings;
+              const greetings: GreetingOption[] = [];
+              if (typeof firstMes === "string" && firstMes.trim()) {
+                greetings.push({ text: firstMes.trim(), alternateIndex: null });
+              }
+              if (Array.isArray(alternateGreetings)) {
+                alternateGreetings.forEach((greeting, index) => {
+                  if (typeof greeting !== "string" || !greeting.trim()) return;
+                  greetings.push({ text: greeting.trim(), alternateIndex: index + 1 });
+                });
+              }
               if (greetings.length > 0) {
                 setFirstMesConfirm({
                   charId,
@@ -5837,25 +5864,14 @@ export function ChatSettingsDrawer({
                           </div>
                         </div>
 
-                        <button
-                          type="button"
+                        <GenerationSettingsLink
                           onClick={openGenerationSettings}
-                          className="mari-chat-option-field flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-[var(--secondary)]/60"
                           title={localizeUi("ui.chat.chatsettingsdrawer.openSettingsGenerations")}
-                        >
-                          <Settings2 size="0.8125rem" className="shrink-0 text-[var(--primary)]" />
-                          <span className="min-w-0 flex-1">
-                            <span className="block text-[0.6875rem] font-medium text-[var(--foreground)]">
-                              {localizeUi("ui.chat.chatsettingsdrawer.imageGenerationSettings")}
-                            </span>
-                            <span className="mt-0.5 block text-[0.59375rem] leading-snug text-[var(--muted-foreground)]">
-                              {localizeUi(
-                                "ui.chat.chatsettingsdrawer.adjustGenerationBehaviorImageSizesAndStylesInSettings",
-                              )}
-                            </span>
-                          </span>
-                          <ChevronRight size="0.75rem" className="shrink-0 text-[var(--muted-foreground)]" />
-                        </button>
+                          label={localizeUi("ui.chat.chatsettingsdrawer.imageGenerationSettings")}
+                          description={localizeUi(
+                            "ui.chat.chatsettingsdrawer.adjustGenerationBehaviorImageSizesAndStylesInSettings",
+                          )}
+                        />
 
                         <AgentSettingsToggle
                           label={localizeUi("ui.chat.chatsettingsdrawer.generatedSelfies")}
@@ -7923,25 +7939,14 @@ export function ChatSettingsDrawer({
                         "ui.chat.chatsettingsdrawer.autoGenerateSceneIllustrationsNpcPortraitsAndLocationBackgrounds",
                       )}
                     >
-                      <button
-                        type="button"
+                      <GenerationSettingsLink
                         onClick={openGenerationSettings}
-                        className="mari-chat-option-field flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-[var(--secondary)]/60"
                         title={localizeUi("ui.chat.chatsettingsdrawer.openSettingsGenerations")}
-                      >
-                        <Settings2 size="0.8125rem" className="shrink-0 text-[var(--primary)]" />
-                        <span className="min-w-0 flex-1">
-                          <span className="block text-[0.6875rem] font-medium text-[var(--foreground)]">
-                            {localizeUi("ui.chat.chatsettingsdrawer.imageGenerationSettings")}
-                          </span>
-                          <span className="mt-0.5 block text-[0.59375rem] leading-snug text-[var(--muted-foreground)]">
-                            {localizeUi(
-                              "ui.chat.chatsettingsdrawer.adjustGenerationBehaviorImageSizesAndStylesInSettings",
-                            )}
-                          </span>
-                        </span>
-                        <ChevronRight size="0.75rem" className="shrink-0 text-[var(--muted-foreground)]" />
-                      </button>
+                        label={localizeUi("ui.chat.chatsettingsdrawer.imageGenerationSettings")}
+                        description={localizeUi(
+                          "ui.chat.chatsettingsdrawer.adjustGenerationBehaviorImageSizesAndStylesInSettings",
+                        )}
+                      />
                       <AgentSettingsToggle
                         label={localizeUi("ui.chat.chatsettingsdrawer.gameIllustrator")}
                         description={
@@ -8156,25 +8161,14 @@ export function ChatSettingsDrawer({
                       />
                       {gameSceneVideosEnabled && (
                         <>
-                          <button
-                            type="button"
+                          <GenerationSettingsLink
                             onClick={openGenerationSettings}
-                            className="mari-chat-option-field flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-[var(--secondary)]/60"
                             title={localizeUi("ui.chat.chatsettingsdrawer.openSettingsGenerations")}
-                          >
-                            <Settings2 size="0.8125rem" className="shrink-0 text-[var(--primary)]" />
-                            <span className="min-w-0 flex-1">
-                              <span className="block text-[0.6875rem] font-medium text-[var(--foreground)]">
-                                {localizeUi("ui.chat.chatsettingsdrawer.videoGenerationSettings")}
-                              </span>
-                              <span className="mt-0.5 block text-[0.59375rem] leading-snug text-[var(--muted-foreground)]">
-                                {localizeUi(
-                                  "ui.chat.chatsettingsdrawer.adjustVideoModelsSizesAndPromptOverridesInSettings",
-                                )}
-                              </span>
-                            </span>
-                            <ChevronRight size="0.75rem" className="shrink-0 text-[var(--muted-foreground)]" />
-                          </button>
+                            label={localizeUi("ui.chat.chatsettingsdrawer.videoGenerationSettings")}
+                            description={localizeUi(
+                              "ui.chat.chatsettingsdrawer.adjustVideoModelsSizesAndPromptOverridesInSettings",
+                            )}
+                          />
                           <label className="flex flex-col gap-1">
                             <span className="text-[0.625rem] font-medium text-[var(--foreground)]">
                               {localizeUi("ui.chat.chatsettingsdrawer.videoConnection")}
@@ -9473,7 +9467,7 @@ export function ChatSettingsDrawer({
                   const selected = index === firstMesConfirm.selectedIndex;
                   return (
                     <button
-                      key={`${index}:${greeting.slice(0, 32)}`}
+                      key={`${greeting.alternateIndex ?? "first"}:${greeting.text.slice(0, 32)}`}
                       type="button"
                       onClick={() =>
                         setFirstMesConfirm((current) => (current ? { ...current, selectedIndex: index } : current))
@@ -9486,10 +9480,10 @@ export function ChatSettingsDrawer({
                     >
                       <span className="flex items-center justify-between gap-2">
                         <span className="text-[0.6875rem] font-semibold text-[var(--foreground)]">
-                          {index === 0
+                          {greeting.alternateIndex === null
                             ? localizeUi("ui.characters.dialoguetab.firstMessage")
                             : localizeUi("ui.characters.dialoguetab.alternateGreetingValue1", {
-                                value1: index,
+                                value1: greeting.alternateIndex,
                               })}
                         </span>
                         <span
@@ -9504,9 +9498,11 @@ export function ChatSettingsDrawer({
                         </span>
                       </span>
                       <span className="mt-1 block whitespace-pre-wrap text-[0.6875rem] leading-relaxed text-[var(--muted-foreground)]">
-                        {greeting.length > 500
-                          ? localizeUi("ui.chat.chatsettingsdrawer.value1_30f5501", { value1: greeting.slice(0, 500) })
-                          : greeting}
+                        {greeting.text.length > 500
+                          ? localizeUi("ui.chat.chatsettingsdrawer.value1_30f5501", {
+                              value1: greeting.text.slice(0, 500),
+                            })
+                          : greeting.text}
                       </span>
                     </button>
                   );
@@ -9849,6 +9845,36 @@ function AgentCategorySection({
         </div>
       )}
     </div>
+  );
+}
+
+function GenerationSettingsLink({
+  onClick,
+  title,
+  label,
+  description,
+}: {
+  onClick: () => void;
+  title: string;
+  label: string;
+  description: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="mari-chat-option-field flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-[var(--secondary)]/60"
+      title={title}
+    >
+      <Settings2 size="0.8125rem" className="shrink-0 text-[var(--primary)]" />
+      <span className="min-w-0 flex-1">
+        <span className="block text-[0.6875rem] font-medium text-[var(--foreground)]">{label}</span>
+        <span className="mt-0.5 block text-[0.59375rem] leading-snug text-[var(--muted-foreground)]">
+          {description}
+        </span>
+      </span>
+      <ChevronRight size="0.75rem" className="shrink-0 text-[var(--muted-foreground)]" />
+    </button>
   );
 }
 

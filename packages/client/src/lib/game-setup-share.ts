@@ -199,6 +199,7 @@ function parseShareConfig(value: unknown): GameSetupConfig {
   }
 
   const optionalBooleans = [
+    "enableAgents",
     "enableSpriteGeneration",
     "gameStoryboardsEnabled",
     "gameStoryboardAutoIllustrationsEnabled",

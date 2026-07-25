@@ -112,6 +112,23 @@ type ConversationSlashCompletion = {
   kind: "command" | "status" | "character";
 };
 
+type SubmittedConversationInput = {
+  chatId: string;
+  draft: string;
+  height: string;
+  attachments: Attachment[];
+  completions: ConversationSlashCompletion[];
+  mentionQuery: string | null;
+  mentionCompletions: string[];
+};
+
+type PersistedAttachment = {
+  type: string;
+  data: string;
+  filename: string;
+  name: string;
+};
+
 const CONVERSATION_STATUS_COMPLETIONS = [
   { value: "online", description: "Set a character to online" },
   { value: "idle", description: "Set a character to away" },
@@ -643,6 +660,85 @@ export function ConversationInput({
     });
   }, []);
 
+  const restoreSubmittedInput = useCallback(
+    (submitted: SubmittedConversationInput) => {
+      const activeChatIdAfterFailure = useChatStore.getState().activeChatId;
+      const currentValue = textareaRef.current?.value ?? "";
+      const canRestoreVisibleDraft = activeChatIdAfterFailure === submitted.chatId && currentValue.length === 0;
+      if (canRestoreVisibleDraft && textareaRef.current) {
+        textareaRef.current.value = submitted.draft;
+        textareaRef.current.style.height = submitted.height;
+        syncInputState(submitted.draft);
+        setCompletions(submitted.completions);
+        setMentionQuery(submitted.mentionQuery);
+        setMentionCompletions(submitted.mentionCompletions);
+      }
+      if (submitted.attachments.length > 0) {
+        if (activeChatIdAfterFailure === submitted.chatId) {
+          updateAttachments((current) => (current.length === 0 ? submitted.attachments : current));
+        } else {
+          pendingAttachmentDraftsRef.current.set(submitted.chatId, submitted.attachments);
+        }
+      }
+      if (submitted.draft && (canRestoreVisibleDraft || activeChatIdAfterFailure !== submitted.chatId)) {
+        setInputDraft(submitted.chatId, submitted.draft);
+      }
+    },
+    [setInputDraft, syncInputState, updateAttachments],
+  );
+
+  const createDurableMessageWithRollback = useCallback(
+    async ({
+      content,
+      attachments: persistedAttachments,
+      submitted,
+      scrollToBottom = false,
+    }: {
+      content: string;
+      attachments: PersistedAttachment[];
+      submitted: SubmittedConversationInput;
+      scrollToBottom?: boolean;
+    }) => {
+      let createdMessageId: string | null = null;
+      try {
+        const created = await createMessage.mutateAsync({
+          role: "user",
+          content,
+          characterId: null,
+        });
+        createdMessageId = created.id;
+        if (persistedAttachments.length > 0) {
+          await updateMessageExtra.mutateAsync({
+            messageId: created.id,
+            extra: { attachments: persistedAttachments },
+          });
+        }
+        if (scrollToBottom) {
+          requestChatScrollToBottom({ chatId: submitted.chatId, behavior: "auto" });
+        }
+        return true;
+      } catch (error) {
+        let rollbackFailed = false;
+        if (createdMessageId) {
+          try {
+            await deleteMessage.mutateAsync(createdMessageId);
+          } catch {
+            rollbackFailed = true;
+          }
+        }
+        restoreSubmittedInput(submitted);
+        const message = error instanceof Error ? error.message : "Failed to post message";
+        toast.error(
+          rollbackFailed
+            ? localizeUi("ui.chat.chatinput.value1ThePartialMessageMayNeedToBeRemoved", { value1: message })
+            : message,
+        );
+        return false;
+      }
+    },
+    [createMessage, deleteMessage, localizeUi, restoreSubmittedInput, updateMessageExtra],
+  );
+
   const adjustPendingAttachmentReads = useCallback((chatId: string, delta: number) => {
     setPendingAttachmentReadsByChat((current) => {
       const nextCount = Math.max(0, (current[chatId] ?? 0) + delta);
@@ -955,12 +1051,15 @@ export function ConversationInput({
         availableCapabilityIds,
         conversationGames: conversationGameSlashContributions,
       };
-      const submittedDraft = textareaRef.current?.value ?? "";
-      const submittedHeight = textareaRef.current?.style.height ?? "auto";
-      const submittedAttachments = attachments;
-      const submittedCompletions = completions;
-      const submittedMentionQuery = _mentionQuery;
-      const submittedMentionCompletions = mentionCompletions;
+      const submittedInput: SubmittedConversationInput = {
+        chatId: activeChatId,
+        draft: textareaRef.current?.value ?? "",
+        height: textareaRef.current?.style.height ?? "auto",
+        attachments,
+        completions,
+        mentionQuery: _mentionQuery,
+        mentionCompletions,
+      };
       if (textareaRef.current) {
         textareaRef.current.value = "";
         textareaRef.current.style.height = "auto";
@@ -977,27 +1076,7 @@ export function ConversationInput({
           setFeedback(result.feedback);
         }
       } catch (error) {
-        const activeChatIdAfterFailure = useChatStore.getState().activeChatId;
-        const currentValue = textareaRef.current?.value ?? "";
-        const canRestoreVisibleDraft = activeChatIdAfterFailure === activeChatId && currentValue.length === 0;
-        if (canRestoreVisibleDraft && textareaRef.current) {
-          textareaRef.current.value = submittedDraft;
-          textareaRef.current.style.height = submittedHeight;
-          syncInputState(submittedDraft);
-          setCompletions(submittedCompletions);
-          setMentionQuery(submittedMentionQuery);
-          setMentionCompletions(submittedMentionCompletions);
-        }
-        if (submittedAttachments.length > 0) {
-          if (activeChatIdAfterFailure === activeChatId) {
-            updateAttachments((current) => (current.length === 0 ? submittedAttachments : current));
-          } else {
-            pendingAttachmentDraftsRef.current.set(activeChatId, submittedAttachments);
-          }
-        }
-        if (submittedDraft && (canRestoreVisibleDraft || activeChatIdAfterFailure !== activeChatId)) {
-          setInputDraft(activeChatId, submittedDraft);
-        }
+        restoreSubmittedInput(submittedInput);
         const msg = error instanceof Error ? error.message : "Command failed";
         toast.error(msg);
       }
@@ -1046,13 +1125,16 @@ export function ConversationInput({
     // Final pass: resolve macros introduced by translation while {{input}} still points to raw.
     message = resolveInputMacros(message);
 
-    const submittedDraft = textareaRef.current?.value ?? raw;
-    const submittedHeight = textareaRef.current?.style.height ?? "auto";
-    const submittedAttachments = attachments;
-    const submittedCompletions = completions;
-    const submittedMentionQuery = _mentionQuery;
-    const submittedMentionCompletions = mentionCompletions;
-    const pendingAttachments = submittedAttachments.map((attachment) => ({
+    const submittedInput: SubmittedConversationInput = {
+      chatId: activeChatId,
+      draft: textareaRef.current?.value ?? raw,
+      height: textareaRef.current?.style.height ?? "auto",
+      attachments,
+      completions,
+      mentionQuery: _mentionQuery,
+      mentionCompletions,
+    };
+    const pendingAttachments = submittedInput.attachments.map((attachment) => ({
       type: attachment.type,
       data: attachment.data,
       filename: attachment.name,
@@ -1077,58 +1159,12 @@ export function ConversationInput({
     // prompting. Persist additional user messages without starting a competing
     // generation; the waiting request will include all of them when it resumes.
     if (delayedCharacterInfo) {
-      let createdMessageId: string | null = null;
-      try {
-        const created = await createMessage.mutateAsync({
-          role: "user",
-          content: message,
-          characterId: null,
-        });
-        createdMessageId = created.id;
-        if (pendingAttachments.length > 0) {
-          await updateMessageExtra.mutateAsync({
-            messageId: created.id,
-            extra: { attachments: pendingAttachments },
-          });
-        }
-        requestChatScrollToBottom({ chatId: activeChatId, behavior: "auto" });
-      } catch (error) {
-        let rollbackFailed = false;
-        if (createdMessageId) {
-          try {
-            await deleteMessage.mutateAsync(createdMessageId);
-          } catch {
-            rollbackFailed = true;
-          }
-        }
-        const activeChatIdAfterFailure = useChatStore.getState().activeChatId;
-        const currentValue = textareaRef.current?.value ?? "";
-        const canRestoreVisibleDraft = activeChatIdAfterFailure === activeChatId && currentValue.length === 0;
-        if (canRestoreVisibleDraft && textareaRef.current) {
-          textareaRef.current.value = submittedDraft;
-          textareaRef.current.style.height = submittedHeight;
-          syncInputState(submittedDraft);
-          setCompletions(submittedCompletions);
-          setMentionQuery(submittedMentionQuery);
-          setMentionCompletions(submittedMentionCompletions);
-        }
-        if (submittedAttachments.length > 0) {
-          if (activeChatIdAfterFailure === activeChatId) {
-            updateAttachments((current) => (current.length === 0 ? submittedAttachments : current));
-          } else {
-            pendingAttachmentDraftsRef.current.set(activeChatId, submittedAttachments);
-          }
-        }
-        if (submittedDraft && (canRestoreVisibleDraft || activeChatIdAfterFailure !== activeChatId)) {
-          setInputDraft(activeChatId, submittedDraft);
-        }
-        const messageText = error instanceof Error ? error.message : "Failed to post message";
-        toast.error(
-          rollbackFailed
-            ? localizeUi("ui.chat.chatinput.value1ThePartialMessageMayNeedToBeRemoved", { value1: messageText })
-            : messageText,
-        );
-      }
+      await createDurableMessageWithRollback({
+        content: message,
+        attachments: pendingAttachments,
+        submitted: submittedInput,
+        scrollToBottom: true,
+      });
       return;
     }
 
@@ -1153,19 +1189,17 @@ export function ConversationInput({
     applyToUserInput,
     extractMentions,
     clearInputDraft,
+    createDurableMessageWithRollback,
     createMessage,
-    deleteMessage,
-    updateMessageExtra,
     activeCharacterNames,
     completions,
     _mentionQuery,
     mentionCompletions,
     latestAssistantMessage,
     qc,
+    restoreSubmittedInput,
     syncInputState,
-    setInputDraft,
     replaceAttachments,
-    updateAttachments,
     onPeekPrompt,
     onIllustrate,
     onGenerateSelfie,
@@ -1212,26 +1246,14 @@ export function ConversationInput({
         conversationGames: conversationGameSlashContributions,
       };
 
-      const previousDraft = textareaRef.current?.value ?? "";
-      const previousHeight = textareaRef.current?.style.height ?? "auto";
-      const previousCompletions = completions;
-      const previousMentionQuery = _mentionQuery;
-      const previousMentionCompletions = mentionCompletions;
-      const restoreSubmittedDraft = () => {
-        const currentValue = textareaRef.current?.value ?? "";
-        const canRestoreVisibleDraft =
-          useChatStore.getState().activeChatId === submittingChatId && currentValue.length === 0;
-        if (canRestoreVisibleDraft && textareaRef.current) {
-          textareaRef.current.value = previousDraft;
-          textareaRef.current.style.height = previousHeight;
-          syncInputState(previousDraft);
-          setCompletions(previousCompletions);
-          setMentionQuery(previousMentionQuery);
-          setMentionCompletions(previousMentionCompletions);
-        }
-        if (previousDraft && (canRestoreVisibleDraft || useChatStore.getState().activeChatId !== submittingChatId)) {
-          setInputDraft(submittingChatId, previousDraft);
-        }
+      const submittedInput: SubmittedConversationInput = {
+        chatId: submittingChatId,
+        draft: textareaRef.current?.value ?? "",
+        height: textareaRef.current?.style.height ?? "auto",
+        attachments: [],
+        completions,
+        mentionQuery: _mentionQuery,
+        mentionCompletions,
       };
       if (draftTimerRef.current) {
         clearTimeout(draftTimerRef.current);
@@ -1253,10 +1275,10 @@ export function ConversationInput({
           setFeedback(result.feedback);
         }
         if (generationStatus.succeeded === false) {
-          restoreSubmittedDraft();
+          restoreSubmittedInput(submittedInput);
         }
       } catch (error) {
-        restoreSubmittedDraft();
+        restoreSubmittedInput(submittedInput);
         const msg = error instanceof Error ? error.message : fallbackError;
         toast.error(msg);
       }
@@ -1278,7 +1300,7 @@ export function ConversationInput({
       availableCapabilityIds,
       conversationGameSlashContributions,
       qc,
-      setInputDraft,
+      restoreSubmittedInput,
       syncInputState,
       localizeUi,
     ],
@@ -1333,17 +1355,20 @@ export function ConversationInput({
     }
 
     message = resolveInputMacros(message);
-    const submittedDraft = raw;
-    const submittedHeight = textareaRef.current?.style.height ?? "auto";
-    const submittedAttachments = attachments;
-    const submittedCompletions = completions;
-    const submittedMentionQuery = _mentionQuery;
-    const submittedMentionCompletions = mentionCompletions;
-    const pendingAttachments = submittedAttachments.map((a) => ({
-      type: a.type,
-      data: a.data,
-      filename: a.name,
-      name: a.name,
+    const submittedInput: SubmittedConversationInput = {
+      chatId: submittingChatId,
+      draft: raw,
+      height: textareaRef.current?.style.height ?? "auto",
+      attachments,
+      completions,
+      mentionQuery: _mentionQuery,
+      mentionCompletions,
+    };
+    const pendingAttachments = submittedInput.attachments.map((attachment) => ({
+      type: attachment.type,
+      data: attachment.data,
+      filename: attachment.name,
+      name: attachment.name,
     }));
 
     if (textareaRef.current) {
@@ -1357,57 +1382,11 @@ export function ConversationInput({
     setMentionQuery(null);
     setMentionCompletions([]);
 
-    let createdMessageId: string | null = null;
-    try {
-      const created = await createMessage.mutateAsync({
-        role: "user",
-        content: message,
-        characterId: null,
-      });
-      createdMessageId = created.id;
-      if (pendingAttachments.length) {
-        await updateMessageExtra.mutateAsync({
-          messageId: created.id,
-          extra: { attachments: pendingAttachments },
-        });
-      }
-    } catch (error) {
-      let rollbackFailed = false;
-      if (createdMessageId) {
-        try {
-          await deleteMessage.mutateAsync(createdMessageId);
-        } catch {
-          rollbackFailed = true;
-        }
-      }
-      const activeChatIdAfterFailure = useChatStore.getState().activeChatId;
-      const currentValue = textareaRef.current?.value ?? "";
-      const canRestoreVisibleDraft = activeChatIdAfterFailure === submittingChatId && currentValue.length === 0;
-      if (canRestoreVisibleDraft && textareaRef.current) {
-        textareaRef.current.value = submittedDraft;
-        textareaRef.current.style.height = submittedHeight;
-        syncInputState(submittedDraft);
-        setCompletions(submittedCompletions);
-        setMentionQuery(submittedMentionQuery);
-        setMentionCompletions(submittedMentionCompletions);
-      }
-      if (submittedAttachments.length > 0) {
-        if (activeChatIdAfterFailure === submittingChatId) {
-          updateAttachments((current) => (current.length === 0 ? submittedAttachments : current));
-        } else {
-          pendingAttachmentDraftsRef.current.set(submittingChatId, submittedAttachments);
-        }
-      }
-      if (submittedDraft && (canRestoreVisibleDraft || activeChatIdAfterFailure !== submittingChatId)) {
-        setInputDraft(submittingChatId, submittedDraft);
-      }
-      const msg = error instanceof Error ? error.message : "Failed to post message";
-      toast.error(
-        rollbackFailed
-          ? localizeUi("ui.chat.chatinput.value1ThePartialMessageMayNeedToBeRemoved", { value1: msg })
-          : msg,
-      );
-    }
+    await createDurableMessageWithRollback({
+      content: message,
+      attachments: pendingAttachments,
+      submitted: submittedInput,
+    });
   }, [
     activeChatId,
     isSendBlocked,
@@ -1419,13 +1398,9 @@ export function ConversationInput({
     applyToUserInput,
     qc,
     clearInputDraft,
+    createDurableMessageWithRollback,
     syncInputState,
-    setInputDraft,
     replaceAttachments,
-    updateAttachments,
-    createMessage,
-    deleteMessage,
-    updateMessageExtra,
     handleSend,
     availableCapabilityIds,
     conversationGameSlashContributions,

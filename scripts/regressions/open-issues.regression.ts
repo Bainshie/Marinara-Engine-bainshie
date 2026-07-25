@@ -1435,6 +1435,24 @@ const gameSetupWizardSource = readFileSync(
   new URL("../../packages/client/src/components/game/GameSetupWizard.tsx", import.meta.url),
   "utf8",
 );
+const chatSettingsDrawerSource = readFileSync(
+  new URL("../../packages/client/src/components/chat/ChatSettingsDrawer.tsx", import.meta.url),
+  "utf8",
+);
+const conversationInputSource = readFileSync(
+  new URL("../../packages/client/src/components/chat/ConversationInput.tsx", import.meta.url),
+  "utf8",
+);
+const gameRoutesSource = readFileSync(
+  new URL("../../packages/server/src/routes/game.routes.ts", import.meta.url),
+  "utf8",
+);
+const backupRoutesSource = readFileSync(
+  new URL("../../packages/server/src/routes/backup.routes.ts", import.meta.url),
+  "utf8",
+);
+const gameTypesSource = readFileSync(new URL("../../packages/shared/src/types/game.ts", import.meta.url), "utf8");
+const backupGuideSource = readFileSync(new URL("../../docs/data/backup-and-restore.md", import.meta.url), "utf8");
 const gameAssetBrowserSource = readFileSync(
   new URL("../../packages/client/src/components/game-assets/GameAssetsBrowserView.tsx", import.meta.url),
   "utf8",
@@ -1539,6 +1557,42 @@ assert.match(gameJournalSource, /data-game-journal-scroll/u);
 assert.match(gameSurfaceSource, /h-\[min\(42rem,calc\(100dvh-6rem\)\)\]/u);
 assert.match(gameSetupWizardSource, /ui\.game\.gamesetupwizard\.adjustGameAssetsForThisGame/u);
 assert.match(gameSetupWizardSource, /selectFoldersByDefault/u);
+assert.match(gameSetupWizardSource, /enableAgents: enableAgents \|\| undefined/u);
+assert.match(gameTypesSource, /enableAgents\?: boolean;/u);
+assert.match(gameRoutesSource, /enableAgents: z\.boolean\(\)\.optional\(\)/u);
+assert.match(gameRoutesSource, /enableAgents: setupConfig\.enableAgents === true/u);
+assert.match(gameRoutesSource, /gameStoryboardsEnabled: setupConfig\.gameStoryboardsEnabled/u);
+assert.match(
+  gameRoutesSource,
+  /if \(templateId === fallbackTemplateId \|\| !selectedTemplate\?\.promptTemplate\.trim\(\)\)/u,
+);
+assert.match(presetsPanelSource, /\{!selectionMode && isSelected && \(/u);
+assert.match(chatSettingsDrawerSource, /type GreetingOption = \{[\s\S]*alternateIndex: number \| null;/u);
+assert.match(chatSettingsDrawerSource, /setFirstMesConfirm\(null\);[\s\S]*addSilentGreetingSwipes/u);
+assert.equal(
+  chatSettingsDrawerSource.match(/<GenerationSettingsLink/gu)?.length,
+  3,
+  "generation settings navigation should use one shared control in all three locations",
+);
+assert.match(conversationInputSource, /const createDurableMessageWithRollback = useCallback/u);
+assert.equal(
+  conversationInputSource.match(/createDurableMessageWithRollback\(\{/gu)?.length,
+  2,
+  "presence-delay and post-only persistence should share the rollback helper",
+);
+assert.match(backupRoutesSource, /tolerateSourceChanges: true/u);
+assert.match(backupRoutesSource, /record\.usesDataDescriptor \? 0x0808 : 0x0800/u);
+assert.match(backupRoutesSource, /PROFILE_IMPORT_MEMORY_WARNING_BYTES/u);
+assert.match(
+  backupRoutesSource,
+  /if \(automaticBackupRunning\) return;\s*automaticBackupRunning = true;\s*try \{\s*const settings = await loadAutomaticBackupSettings\(\);/u,
+);
+assert.match(
+  backupRoutesSource,
+  /runAutomaticBackupIfDue\(!current\.enabled \|\| !automaticBackupExists\)/u,
+  "enabling automatic backups or repairing a missing archive should run immediately",
+);
+assert.doesNotMatch(backupGuideSource, /Export profile as ZIP\?/u);
 assert.match(gameAssetBrowserSource, /createPortal/u);
 assert.match(gameAssetActionDropdownSource, /createPortal/u);
 assert.match(gameAssetActionDropdownSource, /window\.innerWidth - rect\.width/u);
@@ -2049,6 +2103,7 @@ const sharedGameSetupSource: GameSetupShareSource = {
     generatedArtStylePrompt: "Original painterly cel-shaded fantasy",
     useCampaignArtStyle: false,
     imageStyleProfileId: "image-style-profile-local-id",
+    enableAgents: true,
     enableSpriteGeneration: true,
     imageConnectionId: "image-connection-local-id",
     videoConnectionId: "video-connection-local-id",
@@ -2137,6 +2192,7 @@ const resolvedGameSetup = resolveGameSetupImport(parsedGameSetup, {
 assert.equal(exportedGameSetup.format, "marinara-game-setup");
 assert.equal(exportedGameSetup.version, 1);
 assert.equal(exportedGameSetup.exportedAt, "2026-07-16T12:00:00.000Z");
+assert.equal(resolvedGameSetup.config.enableAgents, true);
 assert.equal(parsedGameSetup.setup.effectiveGenerationParameters?.temperature, 1.1);
 assert.equal(parsedGameSetup.setup.effectiveGenerationParameters?.maxContext, 128000);
 assert.deepEqual(parsedGameSetup.setup.effectiveGenerationParameters?.stopSequences, ["[END]"]);
@@ -2194,6 +2250,19 @@ assert.throws(
 assert.throws(
   () => parseGameSetupShareFileJson(JSON.stringify({ format: "other", version: 1 })),
   /not a Marinara Game Mode setup file/u,
+);
+assert.throws(
+  () =>
+    parseGameSetupShareFileJson(
+      JSON.stringify({
+        ...exportedGameSetup,
+        setup: {
+          ...exportedGameSetup.setup,
+          config: { ...exportedGameSetup.setup.config, enableAgents: "yes" },
+        },
+      }),
+    ),
+  /invalid Enable Agents value/u,
 );
 assert.throws(
   () =>

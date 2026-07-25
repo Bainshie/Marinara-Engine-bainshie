@@ -76,8 +76,6 @@ Personal Extension code is preserved in a native profile, but its enabled state 
 
 Choose **Compatible JSON** only when you want to move characters or lorebooks to another tool. It downloads a **.zip** of plain files. You cannot restore this file back into Marinara with **Import Profile**.
 
-If a **Marinara Native** file would be very large, Marinara cannot fit it into one JSON file. It then asks **Export profile as ZIP?**. Click to accept, and it downloads `marinara-profile.zip` with the same data instead.
-
 ## Restoring with Import Profile
 
 To put a saved profile or a **Download Backup** archive back, use **Import Profile**. It lives on a different tab from the save tools.

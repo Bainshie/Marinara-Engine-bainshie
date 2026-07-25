@@ -984,7 +984,8 @@ export function GameSetupWizard({
         config.gameStoryboardAutoIllustrationsEnabled === true ||
         config.gameStoryboardAutoGenerationEnabled === true;
       setEnableAgents(
-        visualGenerationEnabled ||
+        config.enableAgents === true ||
+          visualGenerationEnabled ||
           config.enableSpotifyDj === true ||
           config.enableLorebookKeeper === true ||
           Boolean(config.spatialMapInstructions?.trim()),
@@ -1102,6 +1103,7 @@ export function GameSetupWizard({
         playerGoals: playerGoals || "Have an adventure",
         personaId: personaId ?? undefined,
         sceneConnectionId: sceneModelValue && sceneModelValue !== "local" ? sceneModelValue : undefined,
+        enableAgents: enableAgents || undefined,
         enableSpriteGeneration: illustratorEnabled || undefined,
         imageConnectionId: illustratorEnabled && imageConnectionId ? imageConnectionId : undefined,
         videoConnectionId: illustratorEnabled && videoConnectionId ? videoConnectionId : undefined,

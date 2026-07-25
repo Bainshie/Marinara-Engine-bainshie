@@ -68,6 +68,7 @@ const PROFILE_IMPORT_ARCHIVE_LIMIT_BYTES = 1024 * 1024 * 1024;
 const PROFILE_ARCHIVE_ENTRY_LIMIT_BYTES = 256 * 1024 * 1024;
 const PROFILE_ARCHIVE_CENTRAL_DIRECTORY_LIMIT_BYTES = 64 * 1024 * 1024;
 const PROFILE_ARCHIVE_TOTAL_UNCOMPRESSED_LIMIT_BYTES = 1024 * 1024 * 1024;
+const PROFILE_IMPORT_MEMORY_WARNING_BYTES = 512 * 1024 * 1024;
 const PROFILE_EXPORT_JSON_TOO_LARGE_CODE = "PROFILE_EXPORT_JSON_TOO_LARGE";
 const AUTOMATIC_BACKUP_SETTINGS_KEY = "automatic_backup";
 const AUTOMATIC_BACKUP_FILENAME = "marinara-automatic-backup.zip";
@@ -189,7 +190,13 @@ type ProfileZipArchive = {
 };
 type StoredZipEntrySource =
   | { entryName: string; data: Buffer; mtime?: Date }
-  | { entryName: string; filePath: string; size: number; mtime?: Date };
+  | {
+      entryName: string;
+      filePath: string;
+      size: number;
+      mtime?: Date;
+      tolerateSourceChanges?: boolean;
+    };
 type StoredZipEntryRecord = {
   entryName: string;
   crc32: number;
@@ -197,6 +204,7 @@ type StoredZipEntryRecord = {
   localHeaderOffset: number;
   dosTime: number;
   dosDate: number;
+  usesDataDescriptor: boolean;
 };
 type ProfileImportInput = {
   envelope: ExportEnvelope;
@@ -1346,13 +1354,13 @@ function buildLocalFileHeader(record: StoredZipEntryRecord) {
   const header = Buffer.alloc(30);
   header.writeUInt32LE(0x04034b50, 0);
   header.writeUInt16LE(20, 4);
-  header.writeUInt16LE(0x0800, 6);
+  header.writeUInt16LE(record.usesDataDescriptor ? 0x0808 : 0x0800, 6);
   header.writeUInt16LE(0, 8);
   header.writeUInt16LE(record.dosTime, 10);
   header.writeUInt16LE(record.dosDate, 12);
-  header.writeUInt32LE(record.crc32, 14);
-  header.writeUInt32LE(record.size, 18);
-  header.writeUInt32LE(record.size, 22);
+  header.writeUInt32LE(record.usesDataDescriptor ? 0 : record.crc32, 14);
+  header.writeUInt32LE(record.usesDataDescriptor ? 0 : record.size, 18);
+  header.writeUInt32LE(record.usesDataDescriptor ? 0 : record.size, 22);
   header.writeUInt16LE(filename.length, 26);
   header.writeUInt16LE(0, 28);
   return Buffer.concat([header, filename]);
@@ -1364,7 +1372,7 @@ function buildCentralDirectoryHeader(record: StoredZipEntryRecord) {
   header.writeUInt32LE(0x02014b50, 0);
   header.writeUInt16LE(20, 4);
   header.writeUInt16LE(20, 6);
-  header.writeUInt16LE(0x0800, 8);
+  header.writeUInt16LE(record.usesDataDescriptor ? 0x0808 : 0x0800, 8);
   header.writeUInt16LE(0, 10);
   header.writeUInt16LE(record.dosTime, 12);
   header.writeUInt16LE(record.dosDate, 14);
@@ -1379,6 +1387,15 @@ function buildCentralDirectoryHeader(record: StoredZipEntryRecord) {
   header.writeUInt32LE(0, 38);
   header.writeUInt32LE(record.localHeaderOffset, 42);
   return Buffer.concat([header, filename]);
+}
+
+function buildStoredZipDataDescriptor(record: StoredZipEntryRecord) {
+  const descriptor = Buffer.alloc(16);
+  descriptor.writeUInt32LE(0x08074b50, 0);
+  descriptor.writeUInt32LE(record.crc32, 4);
+  descriptor.writeUInt32LE(record.size, 8);
+  descriptor.writeUInt32LE(record.size, 12);
+  return descriptor;
 }
 
 function buildEndOfCentralDirectory(entryCount: number, centralDirectorySize: number, centralDirectoryOffset: number) {
@@ -1399,43 +1416,86 @@ async function writeStoredZipFileEntry(
   stream: WriteStream,
   source: StoredZipEntrySource,
   position: number,
-): Promise<{ record: StoredZipEntryRecord; position: number }> {
+): Promise<{ record: StoredZipEntryRecord; position: number } | null> {
   const entryName = normalizeStoredZipEntryName(source.entryName);
-  const { dosTime, dosDate } = getZipDosTimeDate(source.mtime);
-  const size = "data" in source ? source.data.length : source.size;
-  assertZip32Value(size, `${entryName} size`);
-  assertZip32Value(position, `${entryName} offset`);
-
-  const crc32 = "data" in source ? crc32Buffer(source.data) : await crc32File(source.filePath);
-  const record: StoredZipEntryRecord = {
-    entryName,
-    crc32,
-    size,
-    localHeaderOffset: position,
-    dosTime,
-    dosDate,
-  };
-  const header = buildLocalFileHeader(record);
-  await writeZipBuffer(stream, header);
-  position += header.length;
-
-  if ("data" in source) {
-    await writeZipBuffer(stream, source.data);
-    position += source.data.length;
-  } else {
-    let written = 0;
-    for await (const chunk of createReadStream(source.filePath)) {
-      const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
-      await writeZipBuffer(stream, buffer);
-      written += buffer.length;
-      position += buffer.length;
+  const tolerateSourceChanges = "filePath" in source && source.tolerateSourceChanges === true;
+  let sourceHandle: FileHandle | null = null;
+  try {
+    let sourceMtime = source.mtime;
+    if (tolerateSourceChanges) {
+      try {
+        sourceHandle = await open(source.filePath, "r");
+        const currentStat = await sourceHandle.stat();
+        assertZip32Value(currentStat.size, `${entryName} size`);
+        sourceMtime = currentStat.mtime;
+      } catch (error) {
+        await sourceHandle?.close().catch(() => {});
+        sourceHandle = null;
+        if ((error as NodeJS.ErrnoException | null)?.code === "ENOENT") {
+          logger.warn("[backup] Skipping ZIP source that disappeared during export: %s", entryName);
+          return null;
+        }
+        throw error;
+      }
     }
-    if (written !== source.size) {
-      throw new Error(`Profile ZIP source changed while exporting: ${entryName}`);
+
+    const { dosTime, dosDate } = getZipDosTimeDate(sourceMtime);
+    const size = "data" in source ? source.data.length : tolerateSourceChanges ? 0 : source.size;
+    assertZip32Value(size, `${entryName} size`);
+    assertZip32Value(position, `${entryName} offset`);
+
+    const crc32 =
+      "data" in source ? crc32Buffer(source.data) : tolerateSourceChanges ? 0 : await crc32File(source.filePath);
+    const record: StoredZipEntryRecord = {
+      entryName,
+      crc32,
+      size,
+      localHeaderOffset: position,
+      dosTime,
+      dosDate,
+      usesDataDescriptor: tolerateSourceChanges,
+    };
+    const header = buildLocalFileHeader(record);
+    await writeZipBuffer(stream, header);
+    position += header.length;
+
+    if ("data" in source) {
+      await writeZipBuffer(stream, source.data);
+      position += source.data.length;
+    } else if (sourceHandle) {
+      let crcState = 0xffffffff;
+      let written = 0;
+      for await (const chunk of sourceHandle.createReadStream({ autoClose: false })) {
+        const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+        await writeZipBuffer(stream, buffer);
+        crcState = updateCrc32State(crcState, buffer);
+        written += buffer.length;
+        position += buffer.length;
+      }
+      record.crc32 = finishCrc32(crcState);
+      record.size = written;
+      assertZip32Value(record.size, `${entryName} size`);
+      assertZip32Value(position, `${entryName} offset`);
+      const descriptor = buildStoredZipDataDescriptor(record);
+      await writeZipBuffer(stream, descriptor);
+      position += descriptor.length;
+    } else {
+      let written = 0;
+      for await (const chunk of createReadStream(source.filePath)) {
+        const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+        await writeZipBuffer(stream, buffer);
+        written += buffer.length;
+        position += buffer.length;
+      }
+      if (written !== source.size) {
+        throw new Error(`Profile ZIP source changed while exporting: ${entryName}`);
+      }
     }
+
+    return { record, position };
+  } finally {
+    await sourceHandle?.close().catch(() => {});
   }
-
-  return { record, position };
 }
 
 async function finishZipStream(stream: WriteStream) {
@@ -1462,6 +1522,7 @@ async function writeStoredZipArchive(outputPath: string, sources: StoredZipEntry
   try {
     for (const source of sources) {
       const result = await writeStoredZipFileEntry(stream, source, position);
+      if (!result) continue;
       records.push(result.record);
       position = result.position;
     }
@@ -1741,6 +1802,7 @@ async function hydrateProfileArchiveStorageSnapshot(
   if (!isProfileArchiveStorageSnapshot(archiveSnapshot)) return;
 
   const tables: ProfileTableSnapshots = {};
+  let memoryWarningLogged = false;
   for (const tableName of FILE_BACKED_TABLES) {
     const descriptor = archiveSnapshot.tables[tableName];
     if (!descriptor) {
@@ -1761,7 +1823,28 @@ async function hydrateProfileArchiveStorageSnapshot(
     if (!entry || entry.isDirectory) {
       throw new ProfileImportRequestError(`Profile archive is missing table ${tableName}.`);
     }
-    tables[tableName] = await readProfileArchiveTableRows(zip, entry, descriptor, tableName);
+    const rows = await readProfileArchiveTableRows(zip, entry, descriptor, tableName);
+    tables[tableName] = rows;
+    const memoryUsage = process.memoryUsage();
+    const heapMiB = Math.round(memoryUsage.heapUsed / (1024 * 1024));
+    const rssMiB = Math.round(memoryUsage.rss / (1024 * 1024));
+    logger.debug(
+      "[backup] Hydrated profile table %s (%d rows); heap=%d MiB, rss=%d MiB",
+      tableName,
+      rows.length,
+      heapMiB,
+      rssMiB,
+    );
+    // Hydration currently re-materializes tables; retain peak visibility until imports can consume table streams.
+    if (!memoryWarningLogged && Math.max(memoryUsage.heapUsed, memoryUsage.rss) >= PROFILE_IMPORT_MEMORY_WARNING_BYTES) {
+      memoryWarningLogged = true;
+      logger.warn(
+        "[backup] Profile import hydration exceeded 512 MiB after table %s; heap=%d MiB, rss=%d MiB",
+        tableName,
+        heapMiB,
+        rssMiB,
+      );
+    }
   }
 
   data.fileStorage = {
@@ -2005,13 +2088,23 @@ async function collectDirectoryZipSources(sourceDir: string, entryRoot: string) 
         continue;
       }
       if (!entry.isFile()) continue;
-      const fileStat = await stat(fullPath);
       const relativePath = relative(sourceDir, fullPath).split(/[\\/]/g).join("/");
+      let fileStat: Awaited<ReturnType<typeof stat>>;
+      try {
+        fileStat = await stat(fullPath);
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException | null)?.code === "ENOENT") {
+          logger.warn("[backup] Skipping ZIP source that disappeared during collection: %s/%s", entryRoot, relativePath);
+          continue;
+        }
+        throw error;
+      }
       sources.push({
         entryName: `${entryRoot}/${relativePath}`,
         filePath: fullPath,
         size: fileStat.size,
         mtime: fileStat.mtime,
+        tolerateSourceChanges: true,
       });
     }
   }
@@ -2121,17 +2214,17 @@ export async function backupRoutes(app: FastifyInstance) {
   });
   const runAutomaticBackupIfDue = async (force = false) => {
     if (automaticBackupRunning) return;
-    const settings = await loadAutomaticBackupSettings();
-    if (!settings.enabled) return;
-    const lastBackupMs = settings.lastBackupAt ? Date.parse(settings.lastBackupAt) : Number.NaN;
-    const due =
-      force ||
-      !Number.isFinite(lastBackupMs) ||
-      Date.now() - lastBackupMs >= automaticBackupPeriodMs(settings.frequency);
-    if (!due) return;
-
     automaticBackupRunning = true;
     try {
+      const settings = await loadAutomaticBackupSettings();
+      if (!settings.enabled) return;
+      const lastBackupMs = settings.lastBackupAt ? Date.parse(settings.lastBackupAt) : Number.NaN;
+      const due =
+        force ||
+        !Number.isFinite(lastBackupMs) ||
+        Date.now() - lastBackupMs >= automaticBackupPeriodMs(settings.frequency);
+      if (!due) return;
+
       await writeAutomaticBackup(app);
       const current = await loadAutomaticBackupSettings();
       await saveAutomaticBackupSettings({
@@ -2170,7 +2263,10 @@ export async function backupRoutes(app: FastifyInstance) {
       lastError: null,
     });
     await saveAutomaticBackupSettings(next);
-    if (next.enabled) queueMicrotask(() => void runAutomaticBackupIfDue());
+    if (next.enabled) {
+      const automaticBackupExists = existsSync(join(getDataDir(), "backups", AUTOMATIC_BACKUP_FILENAME));
+      queueMicrotask(() => void runAutomaticBackupIfDue(!current.enabled || !automaticBackupExists));
+    }
     return automaticBackupResponse(next);
   });
 

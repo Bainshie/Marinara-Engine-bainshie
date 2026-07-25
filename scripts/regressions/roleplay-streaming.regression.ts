@@ -254,7 +254,12 @@ assert.equal(
 );
 assert.match(
   conversationInputSource,
-  /if \(delayedCharacterInfo\) \{[\s\S]*?createMessage\.mutateAsync\(\{[\s\S]*?role: "user"/u,
+  /const createDurableMessageWithRollback = useCallback\([\s\S]*?createMessage\.mutateAsync\(\{[\s\S]*?role: "user"/u,
+  "the shared durable-message helper should persist user messages before attaching files",
+);
+assert.match(
+  conversationInputSource,
+  /if \(delayedCharacterInfo\) \{[\s\S]*?createDurableMessageWithRollback\(\{[\s\S]*?return;/u,
   "additional messages sent during a Conversation presence delay should persist without starting another generator",
 );
 assert.equal(
