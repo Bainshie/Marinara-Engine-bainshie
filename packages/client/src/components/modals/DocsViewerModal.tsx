@@ -9,14 +9,50 @@ import { renderMarkdownBlocks, applyInlineMarkdown } from "../../lib/markdown";
 import { useDocContent, useDocsIndex, useDocsSearch, type DocSummary } from "../../hooks/use-docs";
 import { useTranslation as useUiTranslation } from "react-i18next";
 
-const DIR_LABELS: Record<string, string> = {
-  "": "Guides",
-  installation: "Installation",
-  integrations: "Integrations",
+/**
+ * Sidebar category headers, keyed by the ACTIVE DOCS LANGUAGE (not the UI
+ * language): a user can run an English UI with Spanish docs, and the headers
+ * must match the content they sit above. Unlisted folders fall back to the
+ * English map, then to title-cased folder names, so new categories and new
+ * languages degrade gracefully. Spanish terms follow the docs translation
+ * glossary (loanwords like "roleplay"/"lorebooks"/"prompts" stay English).
+ */
+const DIR_LABELS_BY_DOCS_LANG: Record<string, Record<string, string>> = {
+  en: {
+    "": "Guides",
+    installation: "Installation",
+    integrations: "Integrations",
+  },
+  es: {
+    "": "Guías",
+    home: "Inicio",
+    installation: "Instalación",
+    connections: "Conexiones",
+    conversation: "Conversación",
+    roleplay: "Roleplay",
+    game: "Game Mode",
+    characters: "Personajes",
+    chats: "Chats",
+    lorebooks: "Lorebooks",
+    agents: "Agentes",
+    media: "Medios",
+    prompts: "Prompts",
+    noodle: "Noodle",
+    appearance: "Apariencia",
+    settings: "Configuración",
+    data: "Datos",
+    extending: "Extensiones",
+    integrations: "Integraciones",
+    development: "Desarrollo",
+  },
 };
 
-function dirLabel(dir: string) {
-  return DIR_LABELS[dir] ?? dir.charAt(0).toUpperCase() + dir.slice(1);
+function dirLabel(dir: string, docsLanguage: string) {
+  return (
+    DIR_LABELS_BY_DOCS_LANG[docsLanguage]?.[dir] ??
+    DIR_LABELS_BY_DOCS_LANG.en[dir] ??
+    dir.charAt(0).toUpperCase() + dir.slice(1)
+  );
 }
 
 function formatUpdatedAt(iso: string): string {
@@ -344,7 +380,7 @@ export function DocsViewerModal({
       if (block.querySelector(".docs-copy-button")) return;
       const button = document.createElement("button");
       button.type = "button";
-      button.textContent = "Copy";
+      button.textContent = localizeUi("ui.modals.docsviewermodal.copy");
       button.className =
         "docs-copy-button absolute bottom-1.5 right-1.5 rounded-md border border-[var(--border)] bg-[var(--card)]/90 px-1.5 py-0.5 font-sans text-[0.625rem] text-[var(--muted-foreground)] transition-colors hover:bg-[var(--accent)] hover:text-[var(--foreground)]";
       let resetTimer: ReturnType<typeof setTimeout> | undefined;
@@ -353,15 +389,15 @@ export function DocsViewerModal({
         navigator.clipboard
           .writeText(code)
           .then(() => {
-            button.textContent = "Copied!";
+            button.textContent = localizeUi("ui.modals.docsviewermodal.copied");
           })
           .catch(() => {
-            button.textContent = "Copy failed";
+            button.textContent = localizeUi("ui.modals.docsviewermodal.copyFailed");
           })
           .finally(() => {
             clearTimeout(resetTimer);
             resetTimer = setTimeout(() => {
-              button.textContent = "Copy";
+              button.textContent = localizeUi("ui.modals.docsviewermodal.copy");
             }, 1500);
           });
       };
@@ -374,7 +410,7 @@ export function DocsViewerModal({
       });
     });
     return () => cleanups.forEach((cleanup) => cleanup());
-  }, [scrollEl, rendered]);
+  }, [scrollEl, rendered, localizeUi]);
 
   /** Follow rewritten cross-doc links inside the modal instead of opening a new tab. */
   const handleContentClick = (event: React.MouseEvent<HTMLDivElement>) => {
@@ -394,6 +430,18 @@ export function DocsViewerModal({
   };
 
   const searchResults = search?.results ?? [];
+
+  // Active docs language; "en" until the index loads. A doc whose served
+  // language differs from it is an English fallback and gets an "EN" badge.
+  const docsLanguage = index?.language ?? "en";
+  const englishBadge = (
+    <span
+      className="shrink-0 rounded-full border border-[var(--border)]/60 bg-black/5 px-1.5 py-0.5 text-[0.5625rem] font-medium text-[var(--muted-foreground)]/80 dark:bg-white/6"
+      title={localizeUi("ui.modals.docsviewermodal.notYetTranslatedShowingEnglish")}
+    >
+      {localizeUi("ui.modals.docsviewermodal.englishBadge")}
+    </span>
+  );
 
   return (
     <Modal open={open} onClose={onClose} title={localizeUi("home.actions.documentation")} width="max-w-6xl" mobileFullscreen>
@@ -453,6 +501,7 @@ export function DocsViewerModal({
                         <span className="min-w-0 flex-1 truncate text-xs font-medium text-[var(--foreground)]">
                           {highlightTermNodes(result.title, highlightTerm)}
                         </span>
+                        {docsLanguage !== "en" && result.language === "en" ? englishBadge : null}
                         <span className="shrink-0 rounded-full border border-[var(--border)]/60 bg-black/5 px-1.5 py-0.5 text-[0.5625rem] text-[var(--muted-foreground)]/80 dark:bg-white/6">
                           {result.matches}
                         </span>
@@ -475,7 +524,7 @@ export function DocsViewerModal({
               groups.map((group) => (
                 <div key={group.dir || "root"}>
                   <p className="px-1 pb-1 text-[0.625rem] font-medium uppercase tracking-[0.16em] text-[var(--muted-foreground)]/70">
-                    {dirLabel(group.dir)}
+                    {dirLabel(group.dir, docsLanguage)}
                   </p>
                   <div className="space-y-1">
                     {group.docs.map((entry) => (
@@ -498,6 +547,7 @@ export function DocsViewerModal({
                             {entry.path}
                           </span>
                         </span>
+                        {docsLanguage !== "en" && entry.language === "en" ? englishBadge : null}
                       </button>
                     ))}
                   </div>
@@ -544,6 +594,7 @@ export function DocsViewerModal({
                 <p className="min-w-0 truncate text-[0.625rem] text-[var(--muted-foreground)]/70">{localizeUi("ui.modals.docsviewermodal.docs")}{selected}
                   {doc?.updatedAt ?localizeUi("ui.modals.docsviewermodal.lastUpdatedValue1_f97aff7", { value1: formatUpdatedAt(doc.updatedAt) }) : ""}
                 </p>
+                {doc && docsLanguage !== "en" && doc.language === "en" ? englishBadge : null}
               </div>
               <div
                 key={selected}
