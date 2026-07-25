@@ -19,6 +19,7 @@ import type {
 } from "../../../../stores/ui.store";
 import { cn } from "../../../../lib/utils";
 import { trackerEditableText } from "../../lib/tracker-display";
+import { useTrackerWindow } from "../TrackerWindowContext";
 import {
   makeUniqueCharacterCustomFieldName,
   normalizeCharacterCustomFieldName,
@@ -121,6 +122,8 @@ export function FeaturedCharacterTrackerCard({
   onUploadAvatar?: () => void;
 }) {
   const { t: localizeUi } = useUiTranslation();
+  const trackerWindow = useTrackerWindow();
+  const trackerDocument = trackerWindow.document;
   const {
     fieldLocks,
     hiddenTrackerFields,
@@ -190,11 +193,12 @@ export function FeaturedCharacterTrackerCard({
   }, [hasThoughtsControl]);
 
   useEffect(() => {
-    if (!thoughtsOpen || useInlineThoughtBubble || typeof document === "undefined") return;
+    if (!thoughtsOpen || useInlineThoughtBubble) return;
 
     let queuedClose: number | undefined;
     const isInsideThoughtSurface = (target: EventTarget | null) => {
-      if (!(target instanceof Node)) return false;
+      const TrackerNode = trackerDocument.defaultView?.Node;
+      if (!TrackerNode || !(target instanceof TrackerNode)) return false;
       return !!(
         thoughtAnchorRef.current?.contains(target) ||
         thoughtBubbleRef.current?.contains(target) ||
@@ -202,8 +206,8 @@ export function FeaturedCharacterTrackerCard({
       );
     };
     const closeAfterCurrentBlur = () => {
-      if (queuedClose !== undefined) window.clearTimeout(queuedClose);
-      queuedClose = window.setTimeout(() => {
+      if (queuedClose !== undefined) trackerWindow.clearTimeout(queuedClose);
+      queuedClose = trackerWindow.setTimeout(() => {
         setThoughtsOpen(false);
       }, 0);
     };
@@ -217,16 +221,16 @@ export function FeaturedCharacterTrackerCard({
       if (event.key === "Escape") setThoughtsOpen(false);
     };
 
-    document.addEventListener("pointerdown", handlePointerDown, true);
-    document.addEventListener("focusin", handleFocusIn, true);
-    document.addEventListener("keydown", handleKeyDown, true);
+    trackerDocument.addEventListener("pointerdown", handlePointerDown, true);
+    trackerDocument.addEventListener("focusin", handleFocusIn, true);
+    trackerDocument.addEventListener("keydown", handleKeyDown, true);
     return () => {
-      if (queuedClose !== undefined) window.clearTimeout(queuedClose);
-      document.removeEventListener("pointerdown", handlePointerDown, true);
-      document.removeEventListener("focusin", handleFocusIn, true);
-      document.removeEventListener("keydown", handleKeyDown, true);
+      if (queuedClose !== undefined) trackerWindow.clearTimeout(queuedClose);
+      trackerDocument.removeEventListener("pointerdown", handlePointerDown, true);
+      trackerDocument.removeEventListener("focusin", handleFocusIn, true);
+      trackerDocument.removeEventListener("keydown", handleKeyDown, true);
     };
-  }, [thoughtsOpen, useInlineThoughtBubble]);
+  }, [thoughtsOpen, trackerDocument, trackerWindow, useInlineThoughtBubble]);
 
   const addCharacterStat = () => {
     if (!onUpdate) return;
