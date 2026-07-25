@@ -46,6 +46,7 @@ import { estimateCharacterCardTokens, formatEstimatedTokens } from "../../lib/ch
 import { SelectionActionBar } from "../ui/SelectionActionBar";
 import { SmoothFolderContent } from "../ui/SmoothFolderContent";
 import { TouchDragHandle } from "../ui/TouchDragHandle";
+import { PanelLoadMoreBar } from "./PanelLoadMoreBar";
 
 type CharacterRow = {
   id: string;
@@ -1458,18 +1459,14 @@ export function CharactersPanel() {
       </div>
 
       {characterPages.hasNextPage && (
-        <div className="relative -mx-3 mt-2 border-t border-[var(--marinara-chat-chrome-panel-divider)] bg-[var(--sidebar)]/95 px-3 pt-2 pb-3 backdrop-blur-md md:sticky md:bottom-0 md:z-20">
-          <button
-            type="button"
-            onClick={() => void characterPages.fetchNextPage()}
-            disabled={characterPages.isFetchingNextPage}
-            className="mari-chrome-control mari-chrome-control--primary w-full justify-center text-xs"
-          >
-            {characterPages.isFetchingNextPage
-              ? localizeUi("ui.characters.characterlibraryview.loading")
-              : localizeUi("ui.panels.characterspanel.loadMoreValue1Loaded", { value1: parsedCharacters.length })}
-          </button>
-        </div>
+        <PanelLoadMoreBar
+          onLoadMore={() => void characterPages.fetchNextPage()}
+          disabled={characterPages.isFetchingNextPage}
+        >
+          {characterPages.isFetchingNextPage
+            ? localizeUi("ui.characters.characterlibraryview.loading")
+            : localizeUi("ui.panels.characterspanel.loadMoreValue1Loaded", { value1: parsedCharacters.length })}
+        </PanelLoadMoreBar>
       )}
 
       {selectionMode && (

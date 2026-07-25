@@ -73,8 +73,7 @@ export const ANIME_GAME_VIDEO_PROMPT_TEMPLATE = [
   "- Avoid unrelated movement, new characters, duplicated subjects, morphing, costume changes, distorted anatomy, subtitles, captions, speech bubbles, UI, logos, and watermarks.",
 ].join("\n");
 
-export const LTX_DIRECTOR_GAME_VIDEO_PROMPT_TEMPLATE =
-  "Continuous image-to-video shot beginning from the supplied first frame.";
+export const LTX_DIRECTOR_GAME_VIDEO_PROMPT_TEMPLATE = "${narrationSummary}";
 
 export const GAME_VIDEO_BUILT_IN_PROMPT_TEMPLATES: AgentPromptTemplateOption[] = [
   {
@@ -102,7 +101,7 @@ export const GAME_VIDEO_BUILT_IN_PROMPT_TEMPLATES: AgentPromptTemplateOption[] =
     id: LTX_DIRECTOR_GAME_VIDEO_PROMPT_TEMPLATE_ID,
     name: "LTX Director Video",
     description:
-      "Builds a stable LTX Director global prompt while the matching Storyboard planner supplies local action segments.",
+      "Passes the Storyboard planner's complete image-to-video direction through the universal video prompt contract.",
     promptTemplate: LTX_DIRECTOR_GAME_VIDEO_PROMPT_TEMPLATE,
   },
 ];

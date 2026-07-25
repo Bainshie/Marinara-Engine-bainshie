@@ -3088,7 +3088,10 @@ async function applyRetryResultEffects(args: {
               (typeof setupConfig.imageStyleProfileId === "string" ? setupConfig.imageStyleProfileId : "") ||
               (typeof chatMeta.imageStyleProfileId === "string" ? chatMeta.imageStyleProfileId : "") ||
               null;
-            const illustrationSize = resolveIllustratorImageSize(imageSettings.illustration, illData.aspectRatio);
+            const illustrationSize = resolveIllustratorImageSize(
+              chat.mode === "game" ? imageSettings.game : imageSettings.illustration,
+              illData.aspectRatio,
+            );
             const imgWidth = illustrationSize.width;
             const imgHeight = illustrationSize.height;
 

@@ -6,6 +6,7 @@ import { useApplyChatPreset, useChatPresets } from "../../hooks/use-chat-presets
 import { useCreateChat } from "../../hooks/use-chats";
 import { useConnections } from "../../hooks/use-connections";
 import { useChatStore } from "../../stores/chat.store";
+import { useUIStore } from "../../stores/ui.store";
 import { Modal } from "../ui/Modal";
 
 type LaunchMode = Exclude<ChatMode, "visual_novel">;
@@ -49,7 +50,7 @@ export function HomeNewChatLauncher() {
     const connectionRows = ((connections ?? []) as Array<{ id: string }>).filter((connection) => !!connection.id);
     const store = useChatStore.getState();
     if (connectionRows.length === 0) {
-      store.setPendingNewChatMode(mode);
+      store.setPendingNewChatMode(mode, "home");
       return;
     }
 
@@ -69,6 +70,7 @@ export function HomeNewChatLauncher() {
       },
       {
         onSuccess: (chat) => {
+          useUIStore.getState().setSidebarOpen(true);
           store.setActiveChatId(chat.id);
           store.setShouldOpenSettings(true);
           store.setShouldOpenWizard(true);
@@ -87,7 +89,7 @@ export function HomeNewChatLauncher() {
       <button
         type="button"
         onClick={() => setSelectorOpen(true)}
-        className="mari-chrome-control mari-chrome-control--small px-3 py-1.5 text-xs"
+        className="mari-chrome-control mari-chrome-control--small h-8 px-3 py-0 text-xs"
       >
         <Plus size="0.75rem" />
         {localizeUi("home.actions.newChat")}

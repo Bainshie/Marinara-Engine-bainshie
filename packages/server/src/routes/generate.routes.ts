@@ -2527,7 +2527,8 @@ export async function generateRoutes(app: FastifyInstance) {
         }
 
         // ── Author's Notes injection ──
-        const authorNotes = (chatMeta.authorNotes as string | undefined)?.trim();
+        const authorNotesRaw = (chatMeta.authorNotes as string | undefined)?.trim();
+        const authorNotes = authorNotesRaw ? resolvePromptMacros(authorNotesRaw).trim() : "";
         if (authorNotes) {
           const authorNotesDepth = (chatMeta.authorNotesDepth as number) ?? 4;
           finalMessages = injectAtDepth(finalMessages, [
@@ -8133,7 +8134,7 @@ export async function generateRoutes(app: FastifyInstance) {
                         null;
 
                       const illustrationSize = resolveIllustratorImageSize(
-                        imageSettings.illustration,
+                        requestChatMode === "game" ? imageSettings.game : imageSettings.illustration,
                         illData.aspectRatio,
                       );
                       const imgWidth = illustrationSize.width;

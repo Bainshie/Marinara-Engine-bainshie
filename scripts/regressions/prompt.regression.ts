@@ -63,6 +63,8 @@ import {
   GAME_STORYBOARD_NOVELAI_PROMPT_TEMPLATE_ID,
   GAME_STORYBOARD_LTX_DIRECTOR_PROMPT_TEMPLATE,
   GAME_STORYBOARD_LTX_DIRECTOR_PROMPT_TEMPLATE_ID,
+  GAME_STORYBOARD_LTX_SIMPLE_PROMPT_TEMPLATE,
+  GAME_STORYBOARD_LTX_SIMPLE_PROMPT_TEMPLATE_ID,
   GAME_STORYBOARD_STILL_ANIMATION_PROMPT_TEMPLATE,
   GAME_STORYBOARD_STILL_ANIMATION_PROMPT_TEMPLATE_ID,
   DEFERRED_RELOCATION_CONDITIONAL_TOKEN_RE,
@@ -492,13 +494,11 @@ import {
   buildDynamicGameImagePromptMessages,
   buildIllustrationNarrationSummaryMessages,
   buildStoryboardIllustratorMessages,
-  buildLtxDirectorStoryboardPrompt,
   dynamicGameImagePromptRequestOptions,
   extractCharacterAppearanceText,
   resolveDynamicGameImagePromptConnection,
   resolveNpcPortraitAppearance,
   sanitizeNpcPortraitAppearanceText,
-  sanitizeLtxDirectorStoryboardSegments,
   selectStoryboardAppearanceCharacterNames,
 } from "../../packages/server/src/routes/game.routes.js";
 import { buildLegacyDefaultAgentConfigUpdate } from "../../packages/server/src/services/agents/default-prompt-migration.js";
@@ -2160,6 +2160,14 @@ const cases: RegressionCase[] = [
         new URL("../../packages/client/src/components/game/StoryboardBackgroundControls.tsx", import.meta.url),
         "utf8",
       );
+      const settingsSource = readFileSync(
+        new URL("../../packages/client/src/components/panels/SettingsPanel.tsx", import.meta.url),
+        "utf8",
+      );
+      const gameAssetRegistrySource = readFileSync(
+        new URL("../../packages/server/src/services/prompt-overrides/registry/game-assets.ts", import.meta.url),
+        "utf8",
+      );
       const illustrationPreset = GAME_STORYBOARD_ILLUSTRATION_PROMPT_TEMPLATES.find(
         (template) => template.id === GAME_STORYBOARD_COMIC_PROMPT_TEMPLATE_ID,
       );
@@ -2173,7 +2181,7 @@ const cases: RegressionCase[] = [
       const animationIds = new Set(GAME_STORYBOARD_ANIMATION_PROMPT_TEMPLATES.map((template) => template.id));
 
       assert.equal(GAME_STORYBOARD_ILLUSTRATION_PROMPT_TEMPLATES.length, 5);
-      assert.equal(GAME_STORYBOARD_ANIMATION_PROMPT_TEMPLATES.length, 7);
+      assert.equal(GAME_STORYBOARD_ANIMATION_PROMPT_TEMPLATES.length, 8);
       assert.equal(GAME_STORYBOARD_ANIMATION_PROMPT_TEMPLATE_ID, GAME_STORYBOARD_COMIC_ANIMATION_PROMPT_TEMPLATE_ID);
       assert.notEqual(
         GAME_STORYBOARD_STILL_ANIMATION_PROMPT_TEMPLATE_ID,
@@ -2242,9 +2250,12 @@ const cases: RegressionCase[] = [
       );
       assert.match(drawerSource, /options=\{gameStoryboardImagePromptOptions\}/);
       assert.match(drawerSource, /label=\{localizeUi\("ui\.chat\.chatsettingsdrawer\.storyboardVideoPrompt"\)\}/);
-      assert.match(drawerSource, /kind="illustration"/);
-      assert.match(drawerSource, /kind="animation"/);
-      assert.match(drawerSource, /builtInTemplates\.map\(\(template\) =>/);
+      assert.doesNotMatch(drawerSource, /GameStoryboardPromptLibrary/u);
+      assert.doesNotMatch(drawerSource, /GameProviderPromptLibrary/u);
+      assert.match(settingsSource, /"game\.storyboardIllustrationDirector"/u);
+      assert.match(settingsSource, /"game\.storyboardAnimationDirector"/u);
+      assert.match(gameAssetRegistrySource, /key: "game\.storyboardIllustrationDirector"/u);
+      assert.match(gameAssetRegistrySource, /key: "game\.storyboardAnimationDirector"/u);
       assert.match(gameRouteSource, /getGameStoryboardPromptTemplateKind\(template, selectedAnimationTemplateId\)/);
       assert.match(gameRouteSource, /const builtInTemplates = args\.generateVideos/);
       assert.match(
@@ -2252,10 +2263,9 @@ const cases: RegressionCase[] = [
         /storyboardImagePromptTemplateId: readTrimmedString\(meta\.gameStoryboardImagePromptTemplateId\)/,
       );
       assert.match(
-        drawerSource,
-        /title=\{localizeUi\("ui\.chat\.chatsettingsdrawer\.editIllustrationPromptPresets"\)\}/,
+        gameRouteSource,
+        /args\.generateVideos \? GAME_STORYBOARD_ANIMATION_DIRECTOR : GAME_STORYBOARD_ILLUSTRATION_DIRECTOR/u,
       );
-      assert.match(drawerSource, /title=\{localizeUi\("ui\.chat\.chatsettingsdrawer\.editVideoPromptPresets"\)\}/);
       const backgroundViewerStart = gameSurfaceSource.indexOf("const renderStoryboardBackgroundVisual");
       const backgroundViewerEnd = gameSurfaceSource.indexOf("const renderGameAssetsPanel", backgroundViewerStart);
       const backgroundViewerSource = gameSurfaceSource.slice(backgroundViewerStart, backgroundViewerEnd);
@@ -2273,87 +2283,56 @@ const cases: RegressionCase[] = [
     },
   },
   {
-    name: "LTX Director Storyboard keeps stable context, temporal prompts, and media guides separate",
+    name: "LTX Storyboard sends one complete image-to-video prompt through the universal video contract",
     run() {
       const plannerPreset = GAME_STORYBOARD_ANIMATION_PROMPT_TEMPLATES.find(
         (template) => template.id === GAME_STORYBOARD_LTX_DIRECTOR_PROMPT_TEMPLATE_ID,
       );
+      const simplePlannerPreset = GAME_STORYBOARD_ANIMATION_PROMPT_TEMPLATES.find(
+        (template) => template.id === GAME_STORYBOARD_LTX_SIMPLE_PROMPT_TEMPLATE_ID,
+      );
       const videoPreset = GAME_VIDEO_BUILT_IN_PROMPT_TEMPLATES.find(
         (template) => template.id === LTX_DIRECTOR_GAME_VIDEO_PROMPT_TEMPLATE_ID,
+      );
+      const gameRouteSource = readFileSync(
+        new URL("../../packages/server/src/routes/game.routes.ts", import.meta.url),
+        "utf8",
       );
 
       assert.equal(plannerPreset?.name, "LTX Director Storyboard");
       assert.equal(plannerPreset?.promptTemplate, GAME_STORYBOARD_LTX_DIRECTOR_PROMPT_TEMPLATE);
-      assert.match(plannerPreset?.promptTemplate ?? "", /2-4 ordered local prompts/);
-      assert.match(plannerPreset?.promptTemplate ?? "", /3 for 5-8 seconds/);
-      assert.match(plannerPreset?.promptTemplate ?? "", /exact delimiter \|/);
-      assert.match(plannerPreset?.promptTemplate ?? "", /exact spoken dialogue in quotation marks/);
+      assert.match(plannerPreset?.promptTemplate ?? "", /LTX 2\.3 Image-to-Video Storyboard Planner/);
+      assert.match(plannerPreset?.promptTemplate ?? "", /strict screen-time budget/);
+      assert.match(plannerPreset?.promptTemplate ?? "", /For 1-6 seconds, use one primary action, one camera setup/);
+      assert.match(plannerPreset?.promptTemplate ?? "", /For 7-10 seconds, use up to two connected action phases/);
+      assert.match(plannerPreset?.promptTemplate ?? "", /For 11-15 seconds, use up to three connected action phases/);
+      assert.match(plannerPreset?.promptTemplate ?? "", /hard cuts, or anime music-video editing/);
+      assert.match(plannerPreset?.promptTemplate ?? "", /narrationBeat is the complete prompt sent to LTX 2\.3/);
+      assert.match(plannerPreset?.promptTemplate ?? "", /Put exact spoken dialogue in quotation marks/);
+      assert.match(plannerPreset?.promptTemplate ?? "", /Do not repeat static imagePrompt details in narrationBeat/);
+      assert.match(plannerPreset?.promptTemplate ?? "", /The supplied first-frame image defines static appearance/);
+      assert.match(plannerPreset?.promptTemplate ?? "", /Exact readable text, captions, subtitles, logos/);
+      assert.doesNotMatch(plannerPreset?.promptTemplate ?? "", /2-4 ordered local prompts|segment_lengths/);
+      assert.equal(simplePlannerPreset?.name, "LTX Simple Image-to-Video");
+      assert.equal(simplePlannerPreset?.promptTemplate, GAME_STORYBOARD_LTX_SIMPLE_PROMPT_TEMPLATE);
+      assert.match(simplePlannerPreset?.promptTemplate ?? "", /one focused, physically achievable primary action/);
+      assert.match(simplePlannerPreset?.promptTemplate ?? "", /4-8 short descriptive sentences/);
+      assert.match(simplePlannerPreset?.promptTemplate ?? "", /one camera behavior relative to the subject/);
+      assert.match(simplePlannerPreset?.promptTemplate ?? "", /Do not use labels, lists, timecodes/);
+      assert.match(simplePlannerPreset?.promptTemplate ?? "", /Do not pad the paragraph with extra actions/);
+      assert.doesNotMatch(simplePlannerPreset?.promptTemplate ?? "", /physics\.its/);
       assert.equal(videoPreset?.name, "LTX Director Video");
       assert.equal(videoPreset?.promptTemplate, LTX_DIRECTOR_GAME_VIDEO_PROMPT_TEMPLATE);
-      assert.doesNotMatch(LTX_DIRECTOR_GAME_VIDEO_PROMPT_TEMPLATE, /\$\{narrationSummary\}/);
-      assert.doesNotMatch(LTX_DIRECTOR_GAME_VIDEO_PROMPT_TEMPLATE, /\$\{illustrationPrompt\}/);
-      assert.doesNotMatch(LTX_DIRECTOR_GAME_VIDEO_PROMPT_TEMPLATE, /\$\{sourceIllustrationLine\}/);
-      assert.doesNotMatch(LTX_DIRECTOR_GAME_VIDEO_PROMPT_TEMPLATE, /\$\{durationSeconds\}|\$\{aspectRatio\}/);
+      assert.equal(LTX_DIRECTOR_GAME_VIDEO_PROMPT_TEMPLATE, "${narrationSummary}");
+      assert.doesNotMatch(gameRouteSource, /buildLtxDirectorStoryboardPrompt|sanitizeLtxDirectorStoryboardSegments/);
+      assert.doesNotMatch(gameRouteSource, /ltxDirectorPrompt:\s*promptBuild|storyboardVideoTemplateId/);
+      assert.match(gameRouteSource, /generateStoryboardVideos && !usedFallbackStoryboardPlanner/);
+      assert.match(gameRouteSource, /if \(storyboardAbortSignal\.aborted\)/);
+      assert.match(gameRouteSource, /Storyboard Illustrator returned no usable keyframes/);
+      assert.match(gameRouteSource, /Storyboard keyframe is missing its planned animation prompt/);
       assert.doesNotMatch(
-        LTX_DIRECTOR_GAME_VIDEO_PROMPT_TEMPLATE,
-        /\$\{charactersLine\}|\$\{settingLine\}|\$\{artStyleLine\}/,
-      );
-      assert.match(plannerPreset?.promptTemplate ?? "", /4-8 descriptive sentences total/);
-      assert.match(plannerPreset?.promptTemplate ?? "", /one primary subject or object movement/);
-      assert.match(plannerPreset?.promptTemplate ?? "", /Do not ask LTX to render exact readable text/);
-
-      assert.deepEqual(sanitizeLtxDirectorStoryboardSegments(" first beat | | second beat | third beat "), [
-        "first beat",
-        "second beat",
-        "third beat",
-      ]);
-      assert.deepEqual(sanitizeLtxDirectorStoryboardSegments("one | two | three | four | final hold"), [
-        "one",
-        "two",
-        "three",
-        "final hold",
-      ]);
-      assert.deepEqual(sanitizeLtxDirectorStoryboardSegments(undefined), []);
-
-      const built = buildLtxDirectorStoryboardPrompt({
-        globalPrompt:
-          "Continuous anime shot matching the supplied illustration. Preserve character identity and shrine lighting.",
-        narrationBeat:
-          "She lowers into a ready stance | She lunges as the camera tracks beside her | Sparks scatter and she settles into a guarded hold",
-        fallbackAction: "unused fallback",
-        useSegmentedPlanner: true,
-        maxLength: null,
-      });
-      assert.equal(
-        built.ltxDirectorPrompt.localPrompts,
-        "She lowers into a ready stance | She lunges as the camera tracks beside her | Sparks scatter and she settles into a guarded hold",
-      );
-      assert.equal((built.ltxDirectorPrompt.localPrompts.match(/\|/g) ?? []).length, 2);
-      assert.equal(built.ltxDirectorPrompt.segmentLengths, "");
-      assert.doesNotMatch(built.ltxDirectorPrompt.globalPrompt, /lowers|lunges|Sparks|\|/);
-      assert.match(built.prompt, /Action sequence: She lowers into a ready stance\./);
-      assert.match(built.prompt, /Sparks scatter and she settles into a guarded hold\./);
-
-      const malformed = buildLtxDirectorStoryboardPrompt({
-        globalPrompt: "Stable supplied illustration.",
-        narrationBeat: "Only one usable action",
-        fallbackAction: "fallback action",
-        useSegmentedPlanner: true,
-        maxLength: null,
-      });
-      assert.equal(malformed.ltxDirectorPrompt.localPrompts, "Only one usable action");
-      assert.equal(malformed.ltxDirectorPrompt.localPrompts.includes("|"), false);
-
-      const ordinaryPlannerFallback = buildLtxDirectorStoryboardPrompt({
-        globalPrompt: "Stable supplied illustration.",
-        narrationBeat: "ignored | untrusted segmentation",
-        fallbackAction: "One ordinary action | with a stray delimiter",
-        useSegmentedPlanner: false,
-        maxLength: null,
-      });
-      assert.equal(
-        ordinaryPlannerFallback.ltxDirectorPrompt.localPrompts,
-        "One ordinary action with a stray delimiter",
+        gameRouteSource,
+        /plannedFrame\.narrationBeat[\s\S]{0,160}\|\|[\s\S]{0,80}latestNarrationSummary/,
       );
 
       const timelineData = JSON.stringify({
@@ -2381,10 +2360,10 @@ const cases: RegressionCase[] = [
             duration_seconds: "%duration_seconds%",
             end_frame: "%length%",
             duration_frames: "%length%",
-            global_prompt: "%global_prompt%",
+            global_prompt: "%prompt%",
             timeline_data: timelineData,
-            local_prompts: "%local_prompts%",
-            segment_lengths: "%segment_lengths%",
+            local_prompts: "",
+            segment_lengths: "",
             guide_strength: "1.00",
             frame_rate: 16,
             custom_width: "%width%",
@@ -2392,13 +2371,14 @@ const cases: RegressionCase[] = [
           },
         },
       };
+      const completePrompt =
+        'She opens the door and walks outside as the camera follows behind her. A light breeze moves her hair. She glances toward the street and says, "Stay close." Footsteps and distant traffic continue as the camera settles behind her.';
       const resolved = resolveComfyUiVideoWorkflowPlaceholders(
         workflow,
         {
-          prompt: built.prompt,
+          prompt: completePrompt,
           durationSeconds: 6,
           model: "ltx-2.3-distilled",
-          ltxDirectorPrompt: built.ltxDirectorPrompt,
         },
         { seed: 123, width: 1280, height: 720, referenceImageName: "marinara-reference.png" },
       ) as typeof workflow;
@@ -2407,8 +2387,8 @@ const cases: RegressionCase[] = [
       assert.equal(inputs.duration_seconds, 6);
       assert.equal(inputs.end_frame, 96);
       assert.equal(inputs.duration_frames, 96);
-      assert.equal(inputs.global_prompt, built.ltxDirectorPrompt.globalPrompt);
-      assert.equal(inputs.local_prompts, built.ltxDirectorPrompt.localPrompts);
+      assert.equal(inputs.global_prompt, completePrompt);
+      assert.equal(inputs.local_prompts, "");
       assert.equal(inputs.segment_lengths, "");
       assert.equal(inputs.guide_strength, "1.00");
       assert.equal(inputs.custom_width, 1280);
@@ -2439,6 +2419,18 @@ const cases: RegressionCase[] = [
       assert.equal(ordinaryResolved["3678"].inputs.global_prompt, ordinaryRequest.prompt);
       assert.equal(ordinaryResolved["3678"].inputs.local_prompts, "");
       assert.equal(ordinaryResolved["3678"].inputs.segment_lengths, "");
+
+      const compatibleDirectorWorkflow = {
+        node: { inputs: { global_prompt: "%global_prompt%", local_prompts: "%local_prompts%" } },
+      };
+      assert.deepEqual(
+        resolveComfyUiVideoWorkflowPlaceholders(compatibleDirectorWorkflow, ordinaryRequest, {
+          seed: 654,
+          width: 1280,
+          height: 720,
+        }),
+        { node: { inputs: { global_prompt: ordinaryRequest.prompt, local_prompts: "" } } },
+      );
 
       const legacyWorkflow = {
         node: {
@@ -2940,8 +2932,11 @@ const cases: RegressionCase[] = [
       assert.equal(animationPreset?.promptTemplate, GAME_STORYBOARD_NOVELAI_ANIMATION_PROMPT_TEMPLATE);
       assert.match(animationPreset?.promptTemplate ?? "", /\$\{durationSeconds\}-second/);
       assert.match(drawerSource, /label=\{localizeUi\("ui\.chat\.chatsettingsdrawer\.useNovelaiCharacterPrompts"\)\}/);
-      assert.match(drawerSource, /builtInTemplates=\{GAME_STORYBOARD_ILLUSTRATION_PROMPT_TEMPLATES\}/);
-      assert.match(drawerSource, /builtInTemplates=\{GAME_STORYBOARD_ANIMATION_PROMPT_TEMPLATES\}/);
+      assert.match(
+        drawerSource,
+        /kind === "animation" \? GAME_STORYBOARD_ANIMATION_PROMPT_TEMPLATES : GAME_STORYBOARD_ILLUSTRATION_PROMPT_TEMPLATES/u,
+      );
+      assert.doesNotMatch(drawerSource, /GameStoryboardPromptLibrary/u);
       assert.match(gameRouteSource, /meta\.gameStoryboardUseNovelAiCharacterPrompts !== false/);
       assert.match(gameRouteSource, /useNovelAiCharacterPrompts\s*&&\s*providerSupportsStructuredCharacterPrompts/);
     },
@@ -3194,7 +3189,7 @@ const cases: RegressionCase[] = [
       assert.match(storyboardPrompt, /Stage severe harm with broadcast-anime restraint/);
       assert.doesNotMatch(storyboardPrompt, /CHAT VIDEO|GLOBAL VIDEO OVERRIDE/);
 
-      const ltxDirectorGlobalPrompt = await loadGameVideoPrompt({
+      const ltxDirectorPassThroughPrompt = await loadGameVideoPrompt({
         promptOverridesStorage,
         meta: {},
         templateId: LTX_DIRECTOR_GAME_VIDEO_PROMPT_TEMPLATE_ID,
@@ -3211,10 +3206,10 @@ const cases: RegressionCase[] = [
         },
       });
 
-      assert.equal(ltxDirectorGlobalPrompt, "Continuous image-to-video shot beginning from the supplied first frame.");
+      assert.equal(ltxDirectorPassThroughPrompt, "Mira runs through the gate and raises her sword.");
       assert.doesNotMatch(
-        ltxDirectorGlobalPrompt,
-        /Mira|Sol|sunset|rain|cel-shaded|runs through|raises her sword|storm of sparks|Arrival action|image-789|6-second|16:9/,
+        ltxDirectorPassThroughPrompt,
+        /Sol|sunset|rain|cel-shaded|storm of sparks|Arrival action|image-789|6-second|16:9/,
       );
 
       const comicReferencePrompt = await loadGameVideoPrompt({

@@ -63,6 +63,10 @@ export interface CharacterExtensions {
   /** Marinara Engine (Conversation mode ONLY): behavior directive + insertion strategy.
    *  Never read in RP/VN/Game. */
   convoBehavior?: ConvoBehaviorConfig;
+  /** Marinara Engine: character-specific direction for Conversation selfie image prompts. */
+  conversationImageInstructions?: string;
+  /** Marinara Engine: also apply conversationImageInstructions to this character's Noodle images. */
+  applyConversationImageInstructionsToNoodle?: boolean;
   [key: string]: unknown;
 }
 

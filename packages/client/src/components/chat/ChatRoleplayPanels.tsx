@@ -1,6 +1,17 @@
 import { useEffect, useRef, useState } from "react";
 import type { TFunction } from "i18next";
-import { AlertTriangle, BookOpen, ChevronDown, ChevronRight, Loader2, MapPin, PenLine, Sparkles, X } from "lucide-react";
+import {
+  AlertTriangle,
+  BookOpen,
+  ChevronDown,
+  ChevronRight,
+  Loader2,
+  MapPin,
+  Maximize2,
+  PenLine,
+  Sparkles,
+  X,
+} from "lucide-react";
 import { useUpdateChatMetadata } from "../../hooks/use-chats";
 import { type BudgetSkippedLorebookEntry, useActiveLorebookEntries } from "../../hooks/use-lorebooks";
 import { cn } from "../../lib/utils";
@@ -12,6 +23,7 @@ import {
   ROLEPLAY_POPOVER_TITLE,
 } from "./roleplay-popover-styles";
 import { useTranslation as useUiTranslation } from "react-i18next";
+import { ExpandedTextarea } from "../ui/ExpandedTextarea";
 
 type LorebookEntryStatus = "normal" | "constant" | "selective";
 
@@ -365,6 +377,7 @@ export function AuthorNotesPanel({
   const { t: localizeUi } = useUiTranslation();
   const [notes, setNotes] = useState((chatMeta.authorNotes as string) ?? "");
   const [depthStr, setDepthStr] = useState(String((chatMeta.authorNotesDepth as number) ?? 4));
+  const [expanded, setExpanded] = useState(false);
   const updateMeta = useUpdateChatMetadata();
 
   const initialBaseline = {
@@ -417,11 +430,21 @@ export function AuthorNotesPanel({
   return (
     <>
       <h3 className={cn(ROLEPLAY_POPOVER_TITLE, "mb-2")}>
-        <PenLine size="0.75rem" />{localizeUi("ui.chat.authornotespanel.authorSNotes")}<button
+        <PenLine size="0.75rem" />{localizeUi("ui.chat.authornotespanel.authorSNotes")}
+        <button
+          type="button"
+          onClick={() => setExpanded(true)}
+          aria-label={localizeUi("ui.chat.authornotespanel.expandAuthorSNotes")}
+          title={localizeUi("ui.chat.authornotespanel.expandAuthorSNotes")}
+          className={cn(ROLEPLAY_POPOVER_CLOSE_BUTTON, "ml-auto -my-1")}
+        >
+          <Maximize2 size={ROLEPLAY_POPOVER_CLOSE_ICON_SIZE} />
+        </button>
+        <button
           type="button"
           onClick={onClose}
           aria-label={localizeUi("ui.chat.authornotespanel.closeAuthorSNotes")}
-          className={cn(ROLEPLAY_POPOVER_CLOSE_BUTTON, "ml-auto -my-1")}
+          className={cn(ROLEPLAY_POPOVER_CLOSE_BUTTON, "-my-1")}
         >
           <X size={ROLEPLAY_POPOVER_CLOSE_ICON_SIZE} />
         </button>
@@ -435,6 +458,11 @@ export function AuthorNotesPanel({
         className="w-full resize-none rounded-lg border border-[var(--border)] bg-[var(--secondary)] px-2.5 py-2 text-xs text-[var(--foreground)] outline-none transition-colors placeholder:text-[var(--muted-foreground)] focus:ring-2 focus:ring-[var(--ring)]"
         rows={4}
       />
+      <p className="mt-1.5 text-[0.5625rem] leading-relaxed text-[var(--muted-foreground)]">
+        {localizeUi("ui.chat.authornotespanel.macroGuidance")}{" "}
+        <code>{"{{user}}"}</code>, <code>{"{{char}}"}</code>, <code>{"{{date}}"}</code>,{" "}
+        <code>{"{{time}}"}</code>.
+      </p>
       <div className="mt-2 flex items-center gap-2">
         <span className="shrink-0 text-[0.625rem] text-[var(--muted-foreground)]">{localizeUi("ui.chat.authornotespanel.injectionDepth")}</span>
         <input
@@ -451,6 +479,26 @@ export function AuthorNotesPanel({
         />
       </div>
       <p className="mt-1 text-[0.5625rem] text-[var(--muted-foreground)]/60">{localizeUi("ui.chat.authornotespanel.depth0AfterTheLatestMessage4FourMessages")}</p>
+      <ExpandedTextarea
+        open={expanded}
+        onClose={() => {
+          setExpanded(false);
+          handleSave();
+        }}
+        title={localizeUi("ui.chat.authornotespanel.authorSNotes")}
+        value={notes}
+        onChange={setNotes}
+        placeholder={localizeUi("ui.chat.authornotespanel.eGKeepTheToneDarkAndSuspensefulThe")}
+        closeLabel={localizeUi("ui.chat.authornotespanel.collapseAuthorSNotes")}
+        surface="chat"
+        footer={
+          <p className="text-xs leading-relaxed text-[var(--marinara-chat-chrome-panel-muted)]">
+            {localizeUi("ui.chat.authornotespanel.macroGuidance")}{" "}
+            <code>{"{{user}}"}</code>, <code>{"{{char}}"}</code>, <code>{"{{date}}"}</code>,{" "}
+            <code>{"{{time}}"}</code>.
+          </p>
+        }
+      />
     </>
   );
 }
