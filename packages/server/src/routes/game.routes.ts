@@ -117,7 +117,6 @@ import {
   GAME_STORYBOARD_BUILT_IN_PROMPT_TEMPLATES,
   GAME_STORYBOARD_ILLUSTRATION_PROMPT_TEMPLATE_ID,
   GAME_STORYBOARD_ILLUSTRATION_PROMPT_TEMPLATES,
-  GAME_STORYBOARD_LTX_DIRECTOR_PROMPT_TEMPLATE_ID,
   GAME_STORYBOARD_KEYFRAME_COUNT_DEFAULT,
   GAME_STORYBOARD_KEYFRAME_COUNT_MAX,
   GAME_STORYBOARD_KEYFRAME_COUNT_MIN,
@@ -133,7 +132,6 @@ import {
   serializeResolvedSkillCheckTag,
   applyTrackerFieldLocksToGameStatePatch,
   normalizeWorldCustomFields,
-  LTX_DIRECTOR_GAME_VIDEO_PROMPT_TEMPLATE_ID,
   parseTrackerFieldLocks,
   parseTrackerHiddenFields,
   normalizeRpgStatPools,
@@ -205,7 +203,6 @@ import {
   generateVideo,
   removeSavedVideoFromDisk,
   saveVideoToDisk,
-  type LtxDirectorPromptInput,
   type VideoReferenceImage,
 } from "../services/video/video-generation.js";
 import { resolveGameVideoRuntime, type GameVideoRuntime } from "../services/video/game-video-runtime.js";
@@ -1519,53 +1516,8 @@ function buildOmniSettingLine(
   return compactParts.length ? compactParts.join("; ") : "Current game scene.";
 }
 
-export function sanitizeLtxDirectorStoryboardSegments(value: unknown): string[] {
-  if (typeof value !== "string") return [];
-  const segments = value
-    .split("|")
-    .map((segment) => segment.trim())
-    .filter(Boolean);
-  if (segments.length <= 4) return segments;
-  return [...segments.slice(0, 3), segments[segments.length - 1]!];
-}
-
-function pipeNeutralizedPrompt(value: unknown): string {
-  return typeof value === "string" ? value.replaceAll("|", " ").replace(/\s+/g, " ").trim() : "";
-}
-
-function ensurePromptSentence(value: string): string {
-  return /[.!?]["']?$/.test(value) ? value : `${value}.`;
-}
-
-export function buildLtxDirectorStoryboardPrompt(args: {
-  globalPrompt: string;
-  narrationBeat: unknown;
-  fallbackAction: string;
-  useSegmentedPlanner: boolean;
-  maxLength: number | null;
-}): { prompt: string; ltxDirectorPrompt: LtxDirectorPromptInput } {
-  const plannedSegments = args.useSegmentedPlanner ? sanitizeLtxDirectorStoryboardSegments(args.narrationBeat) : [];
-  const fallbackSegment = pipeNeutralizedPrompt(args.fallbackAction);
-  const localSegments = plannedSegments.length > 0 ? plannedSegments : fallbackSegment ? [fallbackSegment] : [];
-  const globalPrompt = args.globalPrompt.trim();
-  const actionSequence = localSegments.map(ensurePromptSentence).join(" ");
-  const prompt = limitSceneVideoPromptForProvider(
-    [globalPrompt, actionSequence ? `Action sequence: ${actionSequence}` : ""].filter(Boolean).join("\n"),
-    args.maxLength,
-  );
-  return {
-    prompt,
-    ltxDirectorPrompt: {
-      globalPrompt,
-      localPrompts: localSegments.join(" | "),
-      segmentLengths: "",
-    },
-  };
-}
-
 type StoryboardGalleryAnimatePrompt = {
   prompt: string;
-  ltxDirectorPrompt?: LtxDirectorPromptInput;
 };
 
 async function buildStoryboardGalleryAnimatePrompt(args: {
@@ -1573,7 +1525,6 @@ async function buildStoryboardGalleryAnimatePrompt(args: {
   galleryImage: ChatGalleryImageRow;
   plannedFrame: PlannedStoryboardKeyframe;
   frameIndex: number;
-  messages: Array<{ role?: string | null; content?: string | null }>;
   setupConfig: Record<string, unknown> | null;
   latestState: unknown;
   meta: Record<string, unknown>;
@@ -1582,17 +1533,18 @@ async function buildStoryboardGalleryAnimatePrompt(args: {
   debugMode?: boolean;
 }): Promise<StoryboardGalleryAnimatePrompt> {
   const sourceDescription = `storyboard keyframe ${args.frameIndex + 1} (${args.galleryImage.id})`;
-  const narrationSummary =
-    compactVideoPromptText(args.plannedFrame.narrationBeat, args.promptLimits.narrationSummary) ||
-    latestNarrationSummary(args.messages, args.promptLimits.narrationSummary);
+  const narrationSummary = compactVideoPromptText(
+    args.plannedFrame.narrationBeat,
+    args.promptLimits.narrationSummary,
+  );
+  if (!narrationSummary) {
+    throw new Error("Storyboard keyframe is missing its planned animation prompt.");
+  }
   const characterNames =
     args.plannedFrame.characters.length > 0
       ? args.plannedFrame.characters
       : collectOmniCharacterNames(args.meta, args.latestState);
 
-  const storyboardVideoTemplateId =
-    readTrimmedString(args.meta.gameStoryboardVideoPromptTemplateId) ??
-    readTrimmedString(args.meta.gameVideoPromptTemplateId);
   const promptDraft = await loadGameVideoPrompt({
     promptOverridesStorage: args.promptOverridesStorage,
     meta: args.meta,
@@ -1621,18 +1573,7 @@ async function buildStoryboardGalleryAnimatePrompt(args: {
       sourceIllustrationLine: `Use ${sourceDescription} as the first frame/reference image.`,
     },
   });
-  if (storyboardVideoTemplateId !== LTX_DIRECTOR_GAME_VIDEO_PROMPT_TEMPLATE_ID) {
-    return { prompt: limitSceneVideoPromptForProvider(promptDraft, args.promptLimits.finalPrompt) };
-  }
-  return buildLtxDirectorStoryboardPrompt({
-    globalPrompt: promptDraft,
-    narrationBeat: args.plannedFrame.narrationBeat,
-    fallbackAction: narrationSummary,
-    useSegmentedPlanner:
-      readTrimmedString(args.meta.gameStoryboardAnimationPromptTemplateId) ===
-      GAME_STORYBOARD_LTX_DIRECTOR_PROMPT_TEMPLATE_ID,
-    maxLength: args.promptLimits.finalPrompt,
-  });
+  return { prompt: limitSceneVideoPromptForProvider(promptDraft, args.promptLimits.finalPrompt) };
 }
 
 async function resolveGameVideoConnectionId(
@@ -10801,6 +10742,7 @@ export async function gameRoutes(app: FastifyInstance) {
         allowedCharacterNames: storyboardCharacterContext.allowedCharacterNames,
         maxVisibleCharacters: storyboardMaxVisibleCharacters,
       } as const;
+      let usedFallbackStoryboardPlanner = false;
       if (input.plannedStoryboard !== undefined) {
         plan = sanitizeStoryboardPlan(input.plannedStoryboard, storyboardPlanSanitizerOptions);
         if (debugLogsEnabled) {
@@ -10828,13 +10770,35 @@ export async function gameRoutes(app: FastifyInstance) {
           const extraction = extractLeadingThinkingBlocks(directorResult.content || "", parameters?.customThinkingTags);
           const rawPlan = extraction.content.trim();
           if (debugLogsEnabled) debugLog("[debug/game/storyboard-illustrator] raw response:\n%s", rawPlan);
-          plan = sanitizeStoryboardPlan(parseJSON(rawPlan), storyboardPlanSanitizerOptions);
+          const parsedPlan = parseJSON(rawPlan);
+          const parsedKeyframes = asStoryboardRecord(parsedPlan).keyframes;
+          const hasRenderableKeyframe =
+            Array.isArray(parsedKeyframes) &&
+            parsedKeyframes.some((rawFrame) => {
+              const frame = asStoryboardRecord(rawFrame);
+              return Boolean(
+                compactStoryboardText(frame.narrationBeat, 1200) ||
+                  compactStoryboardText(frame.imagePrompt, 6500) ||
+                  compactStoryboardText(frame.mangaPanelPrompt, 5000),
+              );
+            });
+          if (!hasRenderableKeyframe) {
+            throw new Error("Storyboard Illustrator returned no usable keyframes");
+          }
+          plan = sanitizeStoryboardPlan(parsedPlan, storyboardPlanSanitizerOptions);
         } catch (err) {
+          if (storyboardAbortSignal.aborted) {
+            throw abortReasonAsError(storyboardAbortSignal, "Game storyboard generation cancelled");
+          }
+          usedFallbackStoryboardPlanner = true;
           illustratorErrorMessage =
             err instanceof Error
-              ? `${err.message}; used fallback storyboard planner.`
-              : "Used fallback storyboard planner.";
-          logger.warn(err, "[game/storyboard] Storyboard Illustrator failed; using fallback storyboard planner");
+              ? `${err.message}; used fallback storyboard planner and skipped video generation.`
+              : "Used fallback storyboard planner and skipped video generation.";
+          logger.warn(
+            err,
+            "[game/storyboard] Storyboard Illustrator failed; using fallback images and skipping video generation",
+          );
           plan = fallbackStoryboardPlan({
             sourceNarration,
             sections: sourceSections,
@@ -11030,7 +10994,7 @@ export async function gameRoutes(app: FastifyInstance) {
 
       let videoRuntime: GameVideoRuntime | null = null;
       let videoFallback: Awaited<ReturnType<typeof resolveVideoConnectionFallback>> = undefined;
-      if (generateStoryboardVideos) {
+      if (generateStoryboardVideos && !usedFallbackStoryboardPlanner) {
         const videoConnectionId = await resolveGameVideoConnectionId(meta, connections);
         const videoConn = videoConnectionId ? await connections.getWithKey(videoConnectionId) : null;
         if (videoConn?.provider === "video_generation") {
@@ -11156,7 +11120,6 @@ export async function gameRoutes(app: FastifyInstance) {
                 galleryImage,
                 plannedFrame,
                 frameIndex: frame.index,
-                messages: allMessages,
                 setupConfig: setupCfg,
                 latestState: fallbackState,
                 meta,
@@ -11181,7 +11144,6 @@ export async function gameRoutes(app: FastifyInstance) {
                   aspectRatio: plannedFrame.aspectRatio,
                   resolution: videoRuntime.resolution,
                   comfyWorkflow: videoRuntime.comfyWorkflow,
-                  ltxDirectorPrompt: promptBuild.ltxDirectorPrompt,
                   referenceImage,
                   publicReferenceUpload: videoRuntime.publicReferenceUpload,
                   fallback: videoFallback,
