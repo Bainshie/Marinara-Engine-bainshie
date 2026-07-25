@@ -4,8 +4,10 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useUIStore, type ChatModeShortcut } from "../../stores/ui.store";
 import { useTrackAchievement } from "../../hooks/use-achievements";
+import { useDocsLanguage, useSetDocsLanguage } from "../../hooks/use-docs-language";
 import { motion, AnimatePresence } from "framer-motion";
 import { ChevronRight } from "lucide-react";
+import { toast } from "sonner";
 import { useLocalizedUiText } from "../../localization/use-localized-ui-text";
 import { useTranslation as useUiTranslation } from "react-i18next";
 
@@ -38,6 +40,8 @@ interface TourStep {
   openNoodle?: boolean;
   /** Optional settings tab to show when the Settings panel is open */
   settingsTab?: string;
+  /** Render the documentation-language picker inside this step's card */
+  docsLanguagePicker?: boolean;
   /** Professor Mari sprite to display */
   sprite?: { src: string; flip?: boolean };
 }
@@ -170,6 +174,13 @@ const STEPS: TourStep[] = [
     side: "bottom",
     openPanel: "connections",
     sprite: { src: "/sprites/mari/Mari_greet.png" },
+  },
+  {
+    target: null,
+    title: "One Last Thing: Guide Language",
+    body: "Marinara's built-in guides can display in your language. Pick one below, and I'll use it whenever you open the documentation. You can change this anytime in Settings under General. Guides that are not translated yet will show in English.",
+    docsLanguagePicker: true,
+    sprite: { src: "/sprites/mari/Mari_explaining.png" },
   },
 ];
 
@@ -390,12 +401,15 @@ function TourCardContent({
   isLast,
   onNext,
   onSkip,
+  pickerSlot,
 }: {
   step: number;
   currentStep: TourStep;
   isLast: boolean;
   onNext: () => void;
   onSkip: () => void;
+  /** Extra interactive content rendered between the body and the progress dots */
+  pickerSlot?: React.ReactNode;
 }) {
   const { t: localizeUi } = useUiTranslation();
   const localize = useLocalizedUiText();
@@ -439,6 +453,8 @@ function TourCardContent({
           </span>
         ))}
       </p>
+
+      {pickerSlot}
 
       {/* Progress dots */}
       <div className="mb-3 flex items-center justify-center gap-1.5">
@@ -487,7 +503,9 @@ function OnboardingTutorialInner() {
   const requestChatModeShortcut = useUIStore((s) => s.requestChatModeShortcut);
   const openNoodle = useUIStore((s) => s.openNoodle);
   const closeNoodle = useUIStore((s) => s.closeNoodle);
+  const uiLanguage = useUIStore((s) => s.language);
   const trackAchievement = useTrackAchievement();
+  const { t: localizeUi } = useUiTranslation();
 
   const [step, setStep] = useState(0);
   const [targetRect, setTargetRect] = useState<Rect | null>(null);
@@ -496,6 +514,37 @@ function OnboardingTutorialInner() {
 
   const currentStep = STEPS[step];
   const isLast = step === STEPS.length - 1;
+
+  // ── Documentation-language picker (final step) ──
+  const { data: docsLanguageStatus } = useDocsLanguage();
+  const setDocsLanguage = useSetDocsLanguage();
+  const [docsLanguagePick, setDocsLanguagePick] = useState<string | null>(null);
+  const docsLanguageOptions = docsLanguageStatus?.available ?? [];
+  const activeDocsLanguage = docsLanguageStatus?.active ?? "en";
+  // Pre-select the UI language when a matching docs language exists, else the active one.
+  const uiLanguageBase = uiLanguage?.toLowerCase().split("-")[0] ?? "en";
+  const suggestedDocsLanguage = docsLanguageOptions.some((option) => option.code === uiLanguageBase)
+    ? uiLanguageBase
+    : activeDocsLanguage;
+  const effectiveDocsLanguagePick = docsLanguagePick ?? suggestedDocsLanguage;
+
+  /**
+   * Commit the picked docs language when the tour completes via "Get Started".
+   * Fire-and-forget: finishing onboarding must never block on the server, and a
+   * failure only means the user stays on English (fixable later in Settings).
+   */
+  const commitDocsLanguage = useCallback(() => {
+    if (effectiveDocsLanguagePick === activeDocsLanguage) return;
+    setDocsLanguage.mutate(effectiveDocsLanguagePick, {
+      onError: (err) => {
+        toast.error(
+          localizeUi("settings.application.docsLanguage.switchFailed", {
+            reason: err instanceof Error ? err.message : String(err),
+          }),
+        );
+      },
+    });
+  }, [activeDocsLanguage, effectiveDocsLanguagePick, localizeUi, setDocsLanguage]);
 
   useEffect(() => {
     const updateViewportMode = () => setIsMobileViewport(getViewportWidth() < MOBILE_BREAKPOINT);
@@ -582,17 +631,42 @@ function OnboardingTutorialInner() {
     trackAchievement.mutate("tutorial_completed");
   }, [setCompleted, trackAchievement]);
 
+  // "Get Started" on the final step commits the docs-language pick; Skip never does.
   const next = useCallback(() => {
     if (isLast) {
+      commitDocsLanguage();
       finish();
     } else {
       setStep((s) => s + 1);
     }
-  }, [isLast, finish]);
+  }, [isLast, commitDocsLanguage, finish]);
 
   const isCentered = isMobileViewport || !currentStep.target || !targetRect;
   const centeredTopOffset = getTutorialTopOffset();
   const centeredCardMaxHeight = Math.max(220, getViewportHeight() - centeredTopOffset - 16);
+
+  const pickerSlot = currentStep.docsLanguagePicker ? (
+    <div className="mb-4 flex flex-col gap-1 text-left">
+      <label
+        htmlFor="onboarding-docs-language"
+        className="text-[0.6875rem] font-medium text-[var(--marinara-chat-chrome-panel-text)]"
+      >
+        {localizeUi("settings.application.docsLanguage.label")}
+      </label>
+      <select
+        id="onboarding-docs-language"
+        value={effectiveDocsLanguagePick}
+        onChange={(event) => setDocsLanguagePick(event.target.value)}
+        className="w-full rounded-lg border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--marinara-chat-chrome-highlight-bg)] px-3 py-2 text-xs text-[var(--marinara-chat-chrome-panel-text)] outline-none focus:ring-1 focus:ring-[var(--marinara-chat-chrome-focus-ring)]"
+      >
+        {(docsLanguageOptions.length > 0 ? docsLanguageOptions : [{ code: "en", label: "English" }]).map((option) => (
+          <option key={option.code} value={option.code}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+    </div>
+  ) : undefined;
 
   return (
     <div className="mari-chrome-token-scope pointer-events-none fixed inset-0 z-[9999]">
@@ -626,7 +700,7 @@ function OnboardingTutorialInner() {
               className={TUTORIAL_CARD_CLASS}
               style={{ width: Math.min(380, getViewportWidth() - 32), maxHeight: centeredCardMaxHeight }}
             >
-              <TourCardContent step={step} currentStep={currentStep} isLast={isLast} onNext={next} onSkip={finish} />
+              <TourCardContent step={step} currentStep={currentStep} isLast={isLast} onNext={next} onSkip={finish} pickerSlot={pickerSlot} />
             </motion.div>
           </AnimatePresence>
         </div>
@@ -641,7 +715,7 @@ function OnboardingTutorialInner() {
             className={TUTORIAL_CARD_CLASS}
             style={computeTooltipStyle(targetRect!, currentStep)}
           >
-            <TourCardContent step={step} currentStep={currentStep} isLast={isLast} onNext={next} onSkip={finish} />
+            <TourCardContent step={step} currentStep={currentStep} isLast={isLast} onNext={next} onSkip={finish} pickerSlot={pickerSlot} />
           </motion.div>
         </AnimatePresence>
       )}

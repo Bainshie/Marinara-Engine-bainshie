@@ -2,17 +2,27 @@
 // Routes: In-app documentation (serves docs/*.md)
 // ──────────────────────────────────────────────
 import type { FastifyInstance } from "fastify";
+import {
+  DEFAULT_DOCS_LANGUAGE,
+  DOCS_LANGUAGE_LABELS,
+  DOCS_LANGUAGE_SETTINGS_KEY,
+  normalizeDocsLanguage,
+} from "@marinara-engine/shared";
 import { logger } from "../lib/logger.js";
 import { existsSync } from "fs";
 import { readdir, readFile, realpath, stat } from "fs/promises";
 import { join, resolve } from "path";
 import { getMonorepoRoot } from "../config/runtime-config.js";
 import { assertInsideDir } from "../utils/security.js";
+import { createAppSettingsStorage } from "../services/storage/app-settings.storage.js";
 
 const DOCS_DIR = resolve(getMonorepoRoot(), "docs");
 
-/** Internal artifact folders that are not user documentation */
-const EXCLUDED_DIRS = new Set(["evidence", "pr-evidence", "screenshots", "examples"]);
+/** Translated doc trees live at docs/i18n/<code>/, mirroring the English folder/file names 1:1 */
+const I18N_DIRNAME = "i18n";
+
+/** Internal artifact folders (plus the translation root) excluded from the English doc walk */
+const EXCLUDED_DIRS = new Set(["evidence", "pr-evidence", "screenshots", "examples", I18N_DIRNAME]);
 
 /** Max markdown file size served: 5 MB (real docs are well under 100 KB) */
 const MAX_DOC_BYTES = 5 * 1024 * 1024;
@@ -177,6 +187,8 @@ interface DocSummary {
   dir: string;
   /** File modification time (ISO). Reflects install/update time on fresh clones. */
   updatedAt: string;
+  /** Language actually served for this doc ("en" when a translation is missing) */
+  language: string;
 }
 
 interface DocSearchSnippet {
@@ -250,6 +262,7 @@ async function collectDocs(dir: string, relativeDir: string): Promise<DocSummary
         title: await extractTitle(filePath, entry.name.replace(/\.md$/i, "")),
         dir: relativeDir,
         updatedAt: (await stat(filePath)).mtime.toISOString(),
+        language: DEFAULT_DOCS_LANGUAGE,
       });
     } catch {
       // File vanished between readdir and stat; skip it rather than failing the whole index.
@@ -276,14 +289,166 @@ function docSortKey(doc: DocSummary): [number, number, string, number, string] {
   return [1, rankIn(DIR_ORDER, doc.dir), doc.dir, rankIn(DOC_ORDER[doc.dir], fileName), fileName];
 }
 
+// ──────────────────────────────────────────────
+// Documentation language (docs/i18n/<code>/ trees overlay the English paths)
+// ──────────────────────────────────────────────
+
+type AppSettingsStorage = ReturnType<typeof createAppSettingsStorage>;
+
+/** Root folder holding a language's translated tree. English is the docs root itself. */
+function langRoot(code: string): string {
+  return code === DEFAULT_DOCS_LANGUAGE ? DOCS_DIR : join(DOCS_DIR, I18N_DIRNAME, code);
+}
+
+/** A code is usable only when it is well-formed, path-safe, and present on disk. */
+function isInstalledLanguage(code: string): boolean {
+  if (code === DEFAULT_DOCS_LANGUAGE) return true;
+  return isSafeSegment(code) && existsSync(langRoot(code));
+}
+
+/** Languages present at this commit: "en" plus every valid folder under docs/i18n/ */
+export async function discoverDocLanguages(): Promise<string[]> {
+  const dir = join(DOCS_DIR, I18N_DIRNAME);
+  if (!existsSync(dir)) return [DEFAULT_DOCS_LANGUAGE];
+  try {
+    const entries = await readdir(dir, { withFileTypes: true });
+    const codes = entries
+      .filter((entry) => entry.isDirectory() && normalizeDocsLanguage(entry.name) === entry.name)
+      .map((entry) => entry.name)
+      .sort();
+    return [DEFAULT_DOCS_LANGUAGE, ...codes];
+  } catch (err) {
+    logger.warn(err, "Failed to list documentation languages");
+    return [DEFAULT_DOCS_LANGUAGE];
+  }
+}
+
+interface StoredDocsLanguage {
+  /** Normalized stored code, or null when the stored value is unparseable/invalid */
+  code: string | null;
+  /** Whether any value is stored at all */
+  present: boolean;
+}
+
+async function readStoredDocsLanguage(storage: AppSettingsStorage): Promise<StoredDocsLanguage> {
+  const raw = await storage.get(DOCS_LANGUAGE_SETTINGS_KEY);
+  if (raw === null) return { code: DEFAULT_DOCS_LANGUAGE, present: false };
+  try {
+    return { code: normalizeDocsLanguage((JSON.parse(raw) as { language?: unknown } | null)?.language), present: true };
+  } catch {
+    return { code: null, present: true };
+  }
+}
+
+/**
+ * Language the viewer serves right now. The stored choice is never mutated here:
+ * when its tree is absent at this commit (downgrade/channel switch) serving simply
+ * degrades to English, and a later update restores the choice automatically.
+ */
+async function getActiveDocLanguage(storage: AppSettingsStorage): Promise<string> {
+  const stored = await readStoredDocsLanguage(storage);
+  if (!stored.code) return DEFAULT_DOCS_LANGUAGE;
+  return isInstalledLanguage(stored.code) ? stored.code : DEFAULT_DOCS_LANGUAGE;
+}
+
+/** ?lang= override when valid and installed, else the stored active language. */
+async function resolveRequestLanguage(lang: unknown, storage: AppSettingsStorage): Promise<string> {
+  const requested = typeof lang === "string" ? normalizeDocsLanguage(lang) : null;
+  if (requested && isInstalledLanguage(requested)) return requested;
+  return getActiveDocLanguage(storage);
+}
+
+/**
+ * English is the canonical path set; a translated file is an overlay on an English
+ * path. Falls back to the English file when the overlay is missing, so untranslated
+ * docs still open instead of breaking cross-doc links.
+ */
+export function resolvePhysical(code: string, segments: string[]): { file: string; language: string } {
+  if (code !== DEFAULT_DOCS_LANGUAGE) {
+    const candidate = assertInsideDir(DOCS_DIR, join(langRoot(code), ...segments));
+    if (existsSync(candidate)) return { file: candidate, language: code };
+  }
+  return { file: assertInsideDir(DOCS_DIR, join(DOCS_DIR, ...segments)), language: DEFAULT_DOCS_LANGUAGE };
+}
+
+/** The English index with translated titles/mtimes overlaid where a translation exists. */
+async function collectLocalizedDocs(code: string): Promise<DocSummary[]> {
+  const base = await collectDocs(DOCS_DIR, "");
+  if (code === DEFAULT_DOCS_LANGUAGE) return base;
+  return Promise.all(
+    base.map(async (doc) => {
+      const { file, language } = resolvePhysical(code, doc.path.split("/"));
+      if (language === DEFAULT_DOCS_LANGUAGE) return doc;
+      try {
+        return {
+          ...doc,
+          language,
+          title: await extractTitle(file, doc.title),
+          updatedAt: (await stat(file)).mtime.toISOString(),
+        };
+      } catch {
+        return doc;
+      }
+    }),
+  );
+}
+
+interface DocLanguageInfo {
+  code: string;
+  label: string;
+  englishLabel: string;
+  /** Number of English paths with a translated overlay present ("en" reports total) */
+  translated: number;
+  total: number;
+}
+
+interface DocsLanguageStatus {
+  active: string;
+  available: DocLanguageInfo[];
+  integrity: {
+    ok: boolean;
+    /** A value is stored but it is not a usable language code */
+    unknownLanguage: boolean;
+    /** Stored language is valid but its tree is absent at this commit */
+    activeRootMissing: boolean;
+  };
+}
+
+async function buildLanguageStatus(storage: AppSettingsStorage): Promise<DocsLanguageStatus> {
+  const [stored, known, base] = await Promise.all([
+    readStoredDocsLanguage(storage),
+    discoverDocLanguages(),
+    collectDocs(DOCS_DIR, ""),
+  ]);
+  const available = known.map((code) => {
+    const labels = DOCS_LANGUAGE_LABELS[code] ?? { label: code, englishLabel: code };
+    const translated =
+      code === DEFAULT_DOCS_LANGUAGE
+        ? base.length
+        : base.filter((doc) => existsSync(join(langRoot(code), ...doc.path.split("/")))).length;
+    return { code, label: labels.label, englishLabel: labels.englishLabel, translated, total: base.length };
+  });
+  const unknownLanguage = stored.present && stored.code === null;
+  const activeRootMissing =
+    stored.code !== null && stored.code !== DEFAULT_DOCS_LANGUAGE && !isInstalledLanguage(stored.code);
+  return {
+    active: stored.code && isInstalledLanguage(stored.code) ? stored.code : DEFAULT_DOCS_LANGUAGE,
+    available,
+    integrity: { ok: !unknownLanguage && !activeRootMissing, unknownLanguage, activeRootMissing },
+  };
+}
+
 export async function docsRoutes(app: FastifyInstance) {
+  const storage = createAppSettingsStorage(app.db);
+
   /** List available documentation files plus the on-disk docs folder path */
-  app.get("/", async (_req, reply) => {
+  app.get<{ Querystring: { lang?: string } }>("/", async (req, reply) => {
     if (!existsSync(DOCS_DIR)) {
       return reply.status(404).send({ error: "Documentation folder not found" });
     }
     try {
-      const docs = await collectDocs(DOCS_DIR, "");
+      const language = await resolveRequestLanguage(req.query.lang, storage);
+      const docs = await collectLocalizedDocs(language);
       docs.sort((a, b) => {
         const ka = docSortKey(a);
         const kb = docSortKey(b);
@@ -295,7 +460,7 @@ export async function docsRoutes(app: FastifyInstance) {
           ka[4].localeCompare(kb[4])
         );
       });
-      return { root: DOCS_DIR, docs };
+      return { root: DOCS_DIR, language, docs };
     } catch (err) {
       logger.error(err, "Failed to list documentation files");
       return reply.status(500).send({ error: "Failed to list documentation files" });
@@ -304,7 +469,7 @@ export async function docsRoutes(app: FastifyInstance) {
 
   /** Full-text search across all documentation files (case-insensitive substring) */
   app.get("/search", async (req, reply) => {
-    const { q } = req.query as { q?: string };
+    const { q, lang } = req.query as { q?: string; lang?: string };
     const query = typeof q === "string" ? q.trim().slice(0, 200) : "";
     if (query.length < 2) {
       return reply.status(400).send({ error: "Query must be at least 2 characters" });
@@ -314,13 +479,14 @@ export async function docsRoutes(app: FastifyInstance) {
     }
 
     try {
+      const language = await resolveRequestLanguage(lang, storage);
       const needle = query.toLowerCase();
       const results: DocSearchResult[] = [];
 
-      for (const doc of await collectDocs(DOCS_DIR, "")) {
+      for (const doc of await collectLocalizedDocs(language)) {
         let content: string;
         try {
-          const filePath = join(DOCS_DIR, ...doc.path.split("/"));
+          const { file: filePath } = resolvePhysical(language, doc.path.split("/"));
           if ((await stat(filePath)).size > MAX_DOC_BYTES) continue;
           content = await readFile(filePath, "utf8");
         } catch {
@@ -346,7 +512,7 @@ export async function docsRoutes(app: FastifyInstance) {
       }
 
       results.sort((a, b) => b.matches - a.matches || a.path.localeCompare(b.path));
-      return { query, results };
+      return { query, language, results };
     } catch (err) {
       logger.error(err, "Failed to search documentation files");
       return reply.status(500).send({ error: "Failed to search documentation files" });
@@ -355,7 +521,7 @@ export async function docsRoutes(app: FastifyInstance) {
 
   /** Serve a single markdown file from the docs folder */
   app.get("/content", async (req, reply) => {
-    const { path: docPath } = req.query as { path?: string };
+    const { path: docPath, lang } = req.query as { path?: string; lang?: string };
     if (!docPath || typeof docPath !== "string") {
       return reply.status(400).send({ error: "Missing path" });
     }
@@ -370,13 +536,16 @@ export async function docsRoutes(app: FastifyInstance) {
       return reply.status(400).send({ error: "Invalid path" });
     }
 
+    const language = await resolveRequestLanguage(lang, storage);
     let filePath: string;
+    let servedLanguage = DEFAULT_DOCS_LANGUAGE;
     try {
-      const candidatePath = assertInsideDir(DOCS_DIR, join(DOCS_DIR, ...segments));
+      const { file: candidatePath, language: fileLanguage } = resolvePhysical(language, segments);
       if (!existsSync(candidatePath)) {
         return reply.status(404).send({ error: "Not found" });
       }
       filePath = await assertRealDocsPath(candidatePath);
+      servedLanguage = fileLanguage;
     } catch {
       return reply.status(400).send({ error: "Invalid path" });
     }
@@ -388,10 +557,48 @@ export async function docsRoutes(app: FastifyInstance) {
       }
       const content = await readFile(filePath, "utf8");
       const title = content.slice(0, 4096).match(/^#\s+(.+?)\s*$/m)?.[1] ?? filename;
-      return { path: docPath, title, content, updatedAt: info.mtime.toISOString() };
+      return { path: docPath, language: servedLanguage, title, content, updatedAt: info.mtime.toISOString() };
     } catch (err) {
       logger.error(err, "Failed to read documentation file");
       return reply.status(500).send({ error: "Failed to read documentation file" });
     }
+  });
+
+  /** Active docs language, discovered languages with coverage, and integrity flags */
+  app.get("/language", async () => buildLanguageStatus(storage));
+
+  /** Switch the served documentation language. Writes one setting; never touches docs/. */
+  app.put("/language", async (req, reply) => {
+    const body = req.body as { language?: unknown } | null;
+    const code = normalizeDocsLanguage(body?.language);
+    if (!code) {
+      return reply
+        .status(400)
+        .send({ error: "Unsupported documentation language", code: "unsupported-language" });
+    }
+    if (!isInstalledLanguage(code)) {
+      return reply.status(409).send({
+        error: "That documentation language is not included in this version",
+        code: "not-present-on-this-version",
+      });
+    }
+    await storage.set(DOCS_LANGUAGE_SETTINGS_KEY, JSON.stringify({ language: code }));
+    logger.info("Documentation language set to %s", code);
+    return buildLanguageStatus(storage);
+  });
+
+  /** Failsafe: reset a dangling or corrupt stored language to English. Never mutates docs/. */
+  app.post("/language/fix", async () => {
+    const before = await buildLanguageStatus(storage);
+    if (before.integrity.ok) {
+      return { ...before, repaired: false };
+    }
+    await storage.set(DOCS_LANGUAGE_SETTINGS_KEY, JSON.stringify({ language: DEFAULT_DOCS_LANGUAGE }));
+    logger.warn(
+      "Documentation language reset to English (unknownLanguage=%s, activeRootMissing=%s)",
+      before.integrity.unknownLanguage,
+      before.integrity.activeRootMissing,
+    );
+    return { ...(await buildLanguageStatus(storage)), repaired: true };
   });
 }

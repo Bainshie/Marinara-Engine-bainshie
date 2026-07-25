@@ -107,12 +107,14 @@ import {
   Settings2,
   Bell,
   Copy,
+  BookOpen,
 } from "lucide-react";
 import { useClearAllData, useExpungeData, useUpdateChatMetadata, type ExpungeScope } from "../../hooks/use-chats";
 import { useChatStore } from "../../stores/chat.store";
 import { useOpenGameAssetsFolder, useRescanGameAssets } from "../../hooks/use-game-assets";
 import { chatKeys } from "../../hooks/use-chats";
 import { useInstalledCapabilityPackages } from "../../hooks/use-capability-packages";
+import { useDocsLanguage, useFixDocsLanguage, useSetDocsLanguage } from "../../hooks/use-docs-language";
 import { HelpTooltip } from "../ui/HelpTooltip";
 import { ColorPicker } from "../ui/ColorPicker";
 import { TrackerPanelIcon } from "../ui/TrackerPanelIcon";
@@ -499,6 +501,14 @@ const SETTINGS_SEARCHABLE_CONTROLS: readonly SettingsSearchableControlMeta[] = [
     label: "Language",
     description: "Choose the app language.",
     aliases: ["locale", "translation"],
+    kind: "Select",
+  },
+  {
+    id: "docs-language",
+    sectionId: "application",
+    label: "Documentation Language",
+    description: "Choose the language for Marinara's built-in guides.",
+    aliases: ["documentation", "guides", "docs", "manual", "spanish", "español"],
     kind: "Select",
   },
   {
@@ -2761,6 +2771,136 @@ function CustomQuickRepliesManager() {
   );
 }
 
+/**
+ * Documentation Language row (Settings › General › App Behavior). Separate from
+ * the UI-language selector above it: this controls which docs/i18n/<code> tree
+ * the in-app guides are served from. The choice is server-authoritative (a
+ * data-dir app-setting), so it survives updates and applies to every device.
+ */
+function DocsLanguageSetting() {
+  const { t: localizeUi } = useUiTranslation();
+  const { data: status, isLoading: statusLoading } = useDocsLanguage();
+  const setDocsLanguage = useSetDocsLanguage();
+  const fixDocsLanguage = useFixDocsLanguage();
+  // null = "no pending pick"; the select then mirrors the server-active language.
+  const [pickedLanguage, setPickedLanguage] = useState<string | null>(null);
+
+  const active = status?.active ?? "en";
+  const options = status?.available ?? [];
+  const selection = pickedLanguage ?? active;
+  const pendingSwitch = selection !== active;
+  const selectionInfo = options.find((option) => option.code === selection);
+  const activeInfo = options.find((option) => option.code === active);
+  const integrityOk = status ? status.integrity.ok : true;
+
+  const handleSwitch = async () => {
+    try {
+      const result = await setDocsLanguage.mutateAsync(selection);
+      setPickedLanguage(null);
+      const label = result.available.find((option) => option.code === result.active)?.label ?? result.active;
+      toast.success(localizeUi("settings.application.docsLanguage.switched", { language: label }));
+    } catch (err) {
+      const reason =
+        err instanceof ApiError && err.status === 409
+          ? localizeUi("settings.application.docsLanguage.notOnThisVersion", {
+              language: selectionInfo?.label ?? selection,
+            })
+          : err instanceof Error
+            ? err.message
+            : String(err);
+      toast.error(localizeUi("settings.application.docsLanguage.switchFailed", { reason }));
+    }
+  };
+
+  const handleFix = async () => {
+    try {
+      const result = await fixDocsLanguage.mutateAsync();
+      setPickedLanguage(null);
+      toast.success(
+        result.repaired
+          ? localizeUi("settings.application.docsLanguage.fixed")
+          : localizeUi("settings.application.docsLanguage.healthy"),
+      );
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : String(err));
+    }
+  };
+
+  return (
+    <div id={getSettingsControlAnchorId("docs-language")} className="flex scroll-mt-3 flex-col gap-1">
+      <label className="flex flex-col gap-1">
+        <span className="inline-flex items-center gap-1 text-xs font-medium">
+          {localizeUi("settings.application.docsLanguage.label")}
+          <HelpTooltip text={localizeUi("settings.application.docsLanguage.help")} />
+        </span>
+        <select
+          value={selection}
+          onChange={(event) => setPickedLanguage(event.target.value)}
+          disabled={statusLoading || setDocsLanguage.isPending}
+          className="rounded-lg bg-[var(--secondary)] px-3 py-2 text-xs outline-none ring-1 ring-transparent transition-shadow focus:ring-[var(--primary)]"
+        >
+          {(options.length > 0 ? options : [{ code: "en", label: "English" }]).map((option) => (
+            <option key={option.code} value={option.code}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+      </label>
+      {activeInfo && active !== "en" ? (
+        <p className="text-[0.625rem] text-[var(--muted-foreground)]">
+          {localizeUi("settings.application.docsLanguage.active", {
+            language: activeInfo.label,
+            translated: activeInfo.translated,
+            total: activeInfo.total,
+          })}
+        </p>
+      ) : null}
+      {(pendingSwitch && selection !== "en") || active !== "en" ? (
+        <p className="text-[0.625rem] text-[var(--muted-foreground)]">
+          {localizeUi("settings.application.docsLanguage.fallbackNote")}
+        </p>
+      ) : null}
+      {pendingSwitch ? (
+        <button type="button" onClick={() => void handleSwitch()} disabled={setDocsLanguage.isPending} className={SETTINGS_PRIMARY_BUTTON_CLASS}>
+          {setDocsLanguage.isPending ? (
+            <>
+              <Loader2 size="0.8125rem" className="animate-spin" />
+              {localizeUi("settings.application.docsLanguage.switching")}
+            </>
+          ) : (
+            <>
+              <BookOpen size="0.8125rem" />
+              {localizeUi("settings.application.docsLanguage.switch", {
+                language: selectionInfo?.label ?? selection,
+              })}
+            </>
+          )}
+        </button>
+      ) : null}
+      {!integrityOk ? (
+        <div className="flex flex-col gap-1.5 rounded-lg bg-[var(--background)]/60 p-2 ring-1 ring-[var(--border)]">
+          <div className="flex items-start gap-1.5">
+            <AlertTriangle size="0.8125rem" className="mt-0.5 shrink-0 text-amber-500" />
+            <span className="text-[0.6875rem] text-[var(--muted-foreground)]">
+              {localizeUi("settings.application.docsLanguage.fixNeeded")}
+            </span>
+          </div>
+          <button type="button" onClick={() => void handleFix()} disabled={fixDocsLanguage.isPending} className={SETTINGS_PRIMARY_BUTTON_CLASS}>
+            {fixDocsLanguage.isPending ? (
+              <>
+                <Loader2 size="0.8125rem" className="animate-spin" />
+                {localizeUi("settings.application.docsLanguage.fixing")}
+              </>
+            ) : (
+              localizeUi("settings.application.docsLanguage.fix")
+            )}
+          </button>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function GeneralSettings() {
   const { t: localizeUi } = useUiTranslation();
   const { t, i18n: localization } = useTranslation();
@@ -2847,6 +2987,8 @@ function GeneralSettings() {
               {t("settings.application.language.fallback")}
             </p>
           </label>
+
+          <DocsLanguageSetting />
 
           <ToggleSetting
             anchorId={getSettingsControlAnchorId("confirm-before-delete")}
