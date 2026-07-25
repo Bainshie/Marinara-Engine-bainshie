@@ -1,5 +1,5 @@
 import { useRef, useState, type FocusEvent, type KeyboardEvent } from "react";
-import { EyeOff, Lock, PanelLeft, PanelRight, Plus, Settings2, Trash2, Unlock } from "lucide-react";
+import { ExternalLink, EyeOff, Lock, PanelLeft, PanelRight, Plus, Settings2, Trash2, Unlock } from "lucide-react";
 import { TrackerPanelIcon } from "../../../components/ui/TrackerPanelIcon";
 import { TrackerSizeTierIcon } from "../../../components/ui/TrackerSizeTierIcon";
 import type { TrackerPanelSide, TrackerPanelSizeProfile } from "../../../stores/ui.store";
@@ -13,24 +13,31 @@ const TRACKER_PANEL_SIZE_LABELS: Record<TrackerPanelSizeProfile, string> = {
   standard: "Standard",
   expanded: "Expanded",
 };
-const TRACKER_TOOLBAR_ITEM_ORDER = ["side", "size", "hide", "lock", "add", "delete"] as const;
+const TRACKER_TOOLBAR_ITEM_ORDER = ["side", "size", "detach", "hide", "lock", "add", "delete"] as const;
 type TrackerToolbarItem = (typeof TRACKER_TOOLBAR_ITEM_ORDER)[number];
+
+const isToolbarButton = (target: EventTarget | null): target is HTMLButtonElement =>
+  typeof target === "object" && target !== null && "localName" in target && target.localName === "button";
 
 export function TrackerSidebarHeader({
   trackerPanelSide,
   sizeProfile,
+  detached,
   activeEditMode,
   onSetEditMode,
   onSetSide,
   onSetSizeProfile,
+  onToggleDetached,
   onClose,
 }: {
   trackerPanelSide: TrackerPanelSide;
   sizeProfile: TrackerPanelSizeProfile;
+  detached: boolean;
   activeEditMode: TrackerEditMode | null;
   onSetEditMode: (mode: TrackerEditMode | null) => void;
   onSetSide: (side: TrackerPanelSide) => void;
   onSetSizeProfile: (profile: TrackerPanelSizeProfile) => void;
+  onToggleDetached?: () => void;
   onClose: () => void;
 }) {
   const { t: localizeUi } = useUiTranslation();
@@ -42,6 +49,10 @@ export function TrackerSidebarHeader({
   const deleteMode = activeEditMode === "delete";
   const hideMode = activeEditMode === "hide";
   const lockMode = activeEditMode === "lock";
+  const resolvedToolbarFocusIndex =
+    !onToggleDetached && toolbarFocusIndex === TRACKER_TOOLBAR_ITEM_ORDER.indexOf("detach")
+      ? TRACKER_TOOLBAR_ITEM_ORDER.indexOf("side")
+      : toolbarFocusIndex;
   const sizeIndex = Math.max(0, TRACKER_PANEL_SIZE_SEQUENCE.indexOf(sizeProfile));
   const nextSizeProfile = TRACKER_PANEL_SIZE_SEQUENCE[(sizeIndex + 1) % TRACKER_PANEL_SIZE_SEQUENCE.length]!;
   const sizeLabel = TRACKER_PANEL_SIZE_LABELS[sizeProfile];
@@ -58,7 +69,6 @@ export function TrackerSidebarHeader({
       <TrackerPanelIcon size="1.25rem" />
     </button>
   );
-
   const closeSettings = () => {
     setSettingsOpen(false);
     onSetEditMode(null);
@@ -74,13 +84,13 @@ export function TrackerSidebarHeader({
     const index = TRACKER_TOOLBAR_ITEM_ORDER.indexOf(item);
     return {
       "data-tracker-toolbar-item": index,
-      tabIndex: toolbarFocusIndex === index ? 0 : -1,
+      tabIndex: resolvedToolbarFocusIndex === index ? 0 : -1,
     };
   };
 
   const handleToolbarFocus = (event: FocusEvent<HTMLDivElement>) => {
     const target = event.target;
-    if (!(target instanceof HTMLButtonElement)) return;
+    if (!isToolbarButton(target)) return;
     const indexAttribute = target.getAttribute("data-tracker-toolbar-item");
     if (indexAttribute === null) return;
     const index = Number(indexAttribute);
@@ -90,7 +100,7 @@ export function TrackerSidebarHeader({
 
   const handleToolbarKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     const target = event.target;
-    if (!(target instanceof HTMLButtonElement)) return;
+    if (!isToolbarButton(target)) return;
     if (event.key === "Escape") {
       event.preventDefault();
       closeSettings();
@@ -182,6 +192,32 @@ export function TrackerSidebarHeader({
         >
           <TrackerSizeTierIcon sizeProfile={sizeProfile} />
         </button>
+        {onToggleDetached ? (
+          <button
+            {...getToolbarItemProps("detach")}
+            type="button"
+            onClick={onToggleDetached}
+            title={localizeUi(
+              detached
+                ? "ui.trackerPanel.trackersidebarheader.dockTrackerPanel"
+                : "ui.trackerPanel.trackersidebarheader.detachTrackerPanel",
+            )}
+            aria-label={localizeUi(
+              detached
+                ? "ui.trackerPanel.trackersidebarheader.dockTrackerPanel"
+                : "ui.trackerPanel.trackersidebarheader.detachTrackerPanel",
+            )}
+            aria-pressed={detached}
+            className={cn(
+              "flex h-6 w-6 shrink-0 items-center justify-center rounded-sm ring-1 transition-all focus-visible:outline-none focus-visible:ring-[var(--primary)] active:scale-90",
+              detached
+                ? "bg-[var(--foreground)]/12 text-[var(--foreground)] ring-[var(--foreground)]/24"
+                : "text-[var(--muted-foreground)]/62 ring-transparent hover:bg-[var(--accent)] hover:text-[var(--foreground)] hover:ring-[var(--border)]",
+            )}
+          >
+            <ExternalLink size="0.8rem" />
+          </button>
+        ) : null}
       </div>
       <div
         role="group"

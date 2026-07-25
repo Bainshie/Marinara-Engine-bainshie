@@ -34,7 +34,17 @@ import {
   resolveTrackerPanelContentScale,
   resolveTrackerPanelDesktopWidth,
 } from "../../lib/tracker-panel-layout";
+import {
+  closeTrackerPanelWindow,
+  openTrackerPanelWindow,
+  TrackerPanelDetachedWindow,
+  type TrackerPanelWindowTarget,
+} from "../../features/tracker-panel/components/TrackerPanelDetachedWindow";
+import { TrackerWindowProvider } from "../../features/tracker-panel/components/TrackerWindowContext";
+import { usePersonaPortraitSaveCoordinator } from "../../features/tracker-panel/hooks/use-persona-portrait-save";
 import { motion, AnimatePresence } from "framer-motion";
+import { toast } from "sonner";
+import { createPortal } from "react-dom";
 import {
   lazy,
   Suspense,
@@ -116,6 +126,16 @@ const MOBILE_SHELL_PANEL_TOP_CLASS = "top-[calc(env(safe-area-inset-top)_+_3rem)
 const CENTER_COMPACT_WIDTH = 768;
 const CENTER_COMPACT_HYSTERESIS = 80;
 const CENTER_COMPACT_SCAN_DEPTH = 6;
+
+function TrackerPanelHostSlot({ host }: { host: HTMLElement }) {
+  const slotRef = useRef<HTMLDivElement>(null);
+
+  useLayoutEffect(() => {
+    slotRef.current?.appendChild(host);
+  }, [host]);
+
+  return <div ref={slotRef} className="contents" />;
+}
 const CENTER_COMPACT_OVERFLOW_TOLERANCE = 2;
 
 function hasHorizontalOverflow(root: Element) {
@@ -301,6 +321,13 @@ export function AppShell() {
   const liveRightPanelWidth = rightPanelDragWidth ?? sidebarDragWidth ?? sharedSidebarWidth;
   const trackerPanelWidth = getTrackerPanelWidthForProfile(trackerPanelSizeProfile);
   const [trackerPanelResolvedWidth, setTrackerPanelResolvedWidth] = useState(trackerPanelWidth);
+  const [trackerPanelWindowTarget, setTrackerPanelWindowTarget] = useState<TrackerPanelWindowTarget | null>(null);
+  const [trackerPanelHost] = useState(() => {
+    const host = document.createElement("div");
+    host.style.display = "contents";
+    return host;
+  });
+  const { queuePersonaPortraitSave, flushPersonaPortraitSave } = usePersonaPortraitSaveCoordinator();
   const trackerPanelHasCustomBackground =
     trackerPanelBackgroundColor.trim().toLowerCase() !== TRACKER_PANEL_DEFAULT_BACKGROUND_COLOR;
   const trackerPanelBackgroundStyle = trackerPanelHasCustomBackground
@@ -701,9 +728,36 @@ export function AppShell() {
   const hasDetailView = detailView != null;
   const trackerPanelModeAvailable = activeChat?.mode === "roleplay" || activeChat?.mode === "visual_novel";
   const trackerPanelActive = trackerPanelEnabled && trackerPanelOpen;
+  const trackerPanelDetached = trackerPanelWindowTarget !== null;
   const trackerPanelSurfaceAvailable =
     trackerPanelModeAvailable && !botBrowserOpen && !gameAssetsBrowserOpen && !noodleOpen && !hasDetailView;
-  const trackerPanelVisible = trackerPanelActive && trackerPanelSurfaceAvailable;
+  const trackerPanelVisible = trackerPanelActive && trackerPanelSurfaceAvailable && !trackerPanelDetached;
+  const trackerWindowHost = trackerPanelWindowTarget?.popup ?? window;
+
+  const dockTrackerPanel = useCallback(() => {
+    if (trackerPanelWindowTarget) closeTrackerPanelWindow(trackerPanelWindowTarget);
+    setTrackerPanelWindowTarget(null);
+  }, [trackerPanelWindowTarget]);
+
+  const detachTrackerPanel = useCallback(async () => {
+    try {
+      const target = await openTrackerPanelWindow({
+        title: localizeUi("ui.layout.appshell.detachedTrackerPanelTitle"),
+        width: trackerPanelWidth,
+      });
+      if (!target) {
+        toast.error(localizeUi("ui.layout.appshell.trackerPanelPopupBlocked"));
+        return;
+      }
+      setTrackerPanelWindowTarget(target);
+    } catch {
+      toast.error(localizeUi("ui.layout.appshell.trackerPanelWindowFailed"));
+    }
+  }, [localizeUi, trackerPanelWidth]);
+
+  const handleTrackerPanelWindowClosed = useCallback(() => {
+    setTrackerPanelWindowTarget(null);
+  }, []);
 
   const professorMariFloatingActive = hasDetailView && hasProfessorMariFloatingFollowup();
 
@@ -714,6 +768,11 @@ export function AppShell() {
     if (!trackerPanelOpen || !activeChat?.mode || trackerPanelModeAvailable) return;
     setTrackerPanelOpen(false, activeChatId);
   }, [activeChat?.mode, activeChatId, setTrackerPanelOpen, trackerPanelModeAvailable, trackerPanelOpen]);
+  useEffect(() => {
+    if (!trackerPanelWindowTarget || (trackerPanelActive && trackerPanelModeAvailable)) return;
+    closeTrackerPanelWindow(trackerPanelWindowTarget);
+    setTrackerPanelWindowTarget(null);
+  }, [trackerPanelActive, trackerPanelModeAvailable, trackerPanelWindowTarget]);
   useEffect(() => {
     if (trackerPanelVisible) {
       trackerPanelWasActiveRef.current = true;
@@ -960,6 +1019,37 @@ export function AppShell() {
       ? trackerPanelResolvedWidth + TRACKER_PANEL_HUD_GAP
       : 0;
   const trackerPanelContentScale = resolveTrackerPanelContentScale(trackerPanelWidth, trackerPanelResolvedWidth);
+  const trackerPanelPortal =
+    trackerPanelActive &&
+    trackerPanelModeAvailable &&
+    (trackerPanelDetached || trackerPanelSurfaceAvailable) &&
+    createPortal(
+      <TrackerWindowProvider host={trackerWindowHost}>
+        <div
+          data-component={trackerPanelDetached ? "TrackerDataSidebarDetached" : undefined}
+          aria-label={trackerPanelDetached ? localizeUi("ui.layout.appshell.trackerDataPanel") : undefined}
+          className={
+            trackerPanelDetached
+              ? "mari-tracker-panel h-screen w-screen overflow-hidden bg-zinc-950/95"
+              : "contents"
+          }
+          style={trackerPanelDetached ? trackerPanelBackgroundStyle : undefined}
+        >
+          <Suspense fallback={<SidePanelFallback />}>
+            <TrackerDataSidebar
+              detached={trackerPanelDetached}
+              fillHeight={trackerPanelDetached || shellOverlayMode}
+              queuePersonaPortraitSave={queuePersonaPortraitSave}
+              flushPersonaPortraitSave={flushPersonaPortraitSave}
+              onToggleDetached={
+                trackerPanelDetached ? dockTrackerPanel : shellOverlayMode ? undefined : detachTrackerPanel
+              }
+            />
+          </Suspense>
+        </div>
+      </TrackerWindowProvider>,
+      trackerPanelHost,
+    );
 
   const trackerPanelDesktop = (side: "left" | "right") =>
     trackerPanelVisible && trackerPanelSide === side ? (
@@ -1019,9 +1109,7 @@ export function AppShell() {
           className="mari-tracker-panel-scroll max-h-[inherit] overflow-x-hidden overflow-y-auto"
           style={{ "--tracker-panel-font-scale": trackerPanelContentScale } as CSSProperties}
         >
-          <Suspense fallback={<SidePanelFallback />}>
-            <TrackerDataSidebar />
-          </Suspense>
+          <TrackerPanelHostSlot host={trackerPanelHost} />
         </div>
       </motion.aside>
     ) : null;
@@ -1168,6 +1256,16 @@ export function AppShell() {
         {!shellOverlayMode && trackerPanelSurfaceAvailable && trackerPanelDesktop("right")}
       </AnimatePresence>
 
+      {trackerPanelWindowTarget && trackerPanelActive && trackerPanelModeAvailable && (
+        <TrackerPanelDetachedWindow
+          host={trackerPanelHost}
+          target={trackerPanelWindowTarget}
+          onClosed={handleTrackerPanelWindowClosed}
+        />
+      )}
+
+      {trackerPanelPortal}
+
       {/* Overlay tracker panel backdrop */}
       {trackerPanelVisible && shellOverlayMode && (
         <div
@@ -1195,9 +1293,7 @@ export function AppShell() {
               )}
               style={trackerPanelBackgroundStyle}
             >
-              <Suspense fallback={<SidePanelFallback />}>
-                <TrackerDataSidebar fillHeight />
-              </Suspense>
+              <TrackerPanelHostSlot host={trackerPanelHost} />
             </motion.aside>
           )}
         </AnimatePresence>
