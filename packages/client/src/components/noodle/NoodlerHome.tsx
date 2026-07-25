@@ -1137,6 +1137,7 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
           )}
           onToggleSubscription={toggleCreatorSubscription}
           togglePending={toggleSubscription.isPending}
+          onOpenProfile={(accountId) => onNavigate({ mode: "private", view: "profile", accountId })}
         />
 
         <NoodlerBulkCreateButton />
@@ -2794,6 +2795,7 @@ function ViewerHub({
           creators={(scope?.creators ?? []).filter((creator) => creator.profile.id !== authorProfile?.id)}
           onToggleSubscription={onToggleSubscription}
           togglePending={togglePending}
+          onOpenProfile={postCardCtx.openAuthorProfile}
         />
       </div>
       {authorProfile ? (
@@ -3367,10 +3369,12 @@ function SubscriptionSections({
   creators,
   onToggleSubscription,
   togglePending,
+  onOpenProfile,
 }: {
   creators: NonNullable<ReturnType<typeof useNoodlerViewer>["data"]>["creators"];
   onToggleSubscription: (creatorAccountId: string, subscribed: boolean) => void;
   togglePending: boolean;
+  onOpenProfile?: (accountId: string) => void;
 }) {
   const { t: localizeUi } = useUiTranslation();
   return (
@@ -3380,13 +3384,30 @@ function SubscriptionSections({
       </div>
       {creators.length > 0 ? (
         <div className="divide-y divide-[var(--noodle-divider)]">
-          {creators.map((creator) => (
+          {creators.map((creator) => {
+            const openProfile = onOpenProfile ? () => onOpenProfile(creator.profile.id) : undefined;
+            return (
             <div key={creator.profile.id} className="flex items-center gap-3 px-4 py-3">
-              <ProfileInitial profile={creator.profile} />
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-sm font-semibold">{creator.profile.displayName}</span>
+              <button
+                type="button"
+                onClick={openProfile}
+                disabled={!openProfile}
+                className="h-fit rounded-full text-left transition-opacity enabled:hover:opacity-80 disabled:cursor-default"
+                title={openProfile ? localizeUi("ui.noodle.noodlehome.viewValue1", { value1: creator.profile.handle }) : undefined}
+              >
+                <ProfileInitial profile={creator.profile} />
+              </button>
+              <button
+                type="button"
+                onClick={openProfile}
+                disabled={!openProfile}
+                className="min-w-0 flex-1 text-left disabled:cursor-default"
+              >
+                <span className="block truncate text-sm font-semibold transition-colors enabled:hover:text-[var(--noodle-accent)]">
+                  {creator.profile.displayName}
+                </span>
                 <span className="block truncate text-xs text-[var(--muted-foreground)]">@{creator.profile.handle}</span>
-              </span>
+              </button>
               <button
                 type="button"
                 disabled={togglePending}
@@ -3404,7 +3425,8 @@ function SubscriptionSections({
                   : localizeUi("ui.noodle.lockedprivatepostcard.subscribe")}
               </button>
             </div>
-          ))}
+            );
+          })}
         </div>
       ) : (
         <p className="px-4 py-5 text-sm text-[var(--muted-foreground)]">
