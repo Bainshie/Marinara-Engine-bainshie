@@ -6905,6 +6905,7 @@
   "ui.trackerPanel.inlinenumber.lockField": "Lock field",
   "ui.trackerPanel.inlinenumber.unlockField": "Unlock field",
   "ui.trackerPanel.personainventorypanel.addItem": "Add item",
+  "ui.trackerPanel.personainventorypanel.failedToSavePortraitFraming": "Could not save the portrait position. Try again.",
   "ui.trackerPanel.personainventorypanel.inventory": "Inventory",
   "ui.trackerPanel.personainventorypanel.inventoryEmpty": "Inventory empty.",
   "ui.trackerPanel.personainventorypanel.status": "Status",

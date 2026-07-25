@@ -114,8 +114,6 @@ export function PersonaInventoryPanel({
   const { fieldLocks, lockMode, onToggleFieldLock } = useTrackerLockContext();
   const trackerWindow = useTrackerWindow();
   const personaPortraitSaveTimeoutsRef = useRef(new Map<string, number>());
-  const currentPersonaIdRef = useRef<string | null>(persona?.id ?? null);
-  currentPersonaIdRef.current = persona?.id ?? null;
   const [personaPortraitFocusOverride, setPersonaPortraitFocusOverride] = useState<{
     personaId: string;
     x: number;
@@ -250,11 +248,6 @@ export function PersonaInventoryPanel({
 
       for (const personaId of livePersonaIds) {
         flushPersonaPortraitSave(personaId);
-      }
-
-      const currentPersonaId = currentPersonaIdRef.current;
-      if (currentPersonaId && !livePersonaIds.includes(currentPersonaId)) {
-        flushPersonaPortraitSave(currentPersonaId);
       }
     };
     trackerWindow.addEventListener("pagehide", flushOnPageHide);

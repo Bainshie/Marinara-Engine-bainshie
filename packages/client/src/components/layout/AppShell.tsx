@@ -322,6 +322,7 @@ export function AppShell() {
   const trackerPanelWidth = getTrackerPanelWidthForProfile(trackerPanelSizeProfile);
   const [trackerPanelResolvedWidth, setTrackerPanelResolvedWidth] = useState(trackerPanelWidth);
   const [trackerPanelWindowTarget, setTrackerPanelWindowTarget] = useState<TrackerPanelWindowTarget | null>(null);
+  const detachTrackerPanelPendingRef = useRef(false);
   const [trackerPanelHost] = useState(() => {
     const host = document.createElement("div");
     host.style.display = "contents";
@@ -740,6 +741,9 @@ export function AppShell() {
   }, [trackerPanelWindowTarget]);
 
   const detachTrackerPanel = useCallback(async () => {
+    if (detachTrackerPanelPendingRef.current) return;
+    detachTrackerPanelPendingRef.current = true;
+
     try {
       const target = await openTrackerPanelWindow({
         title: localizeUi("ui.layout.appshell.detachedTrackerPanelTitle"),
@@ -752,6 +756,8 @@ export function AppShell() {
       setTrackerPanelWindowTarget(target);
     } catch {
       toast.error(localizeUi("ui.layout.appshell.trackerPanelWindowFailed"));
+    } finally {
+      detachTrackerPanelPendingRef.current = false;
     }
   }, [localizeUi, trackerPanelWidth]);
 
@@ -1193,10 +1199,6 @@ export function AppShell() {
         />
       )}
 
-      <AnimatePresence initial={false}>
-        {!shellOverlayMode && trackerPanelSurfaceAvailable && trackerPanelDesktop("left")}
-      </AnimatePresence>
-
       {/* Center content */}
       <main
         ref={mainRef}
@@ -1252,8 +1254,8 @@ export function AppShell() {
         </Suspense>
       </main>
 
-      <AnimatePresence initial={false}>
-        {!shellOverlayMode && trackerPanelSurfaceAvailable && trackerPanelDesktop("right")}
+      <AnimatePresence initial={false} mode="wait">
+        {!shellOverlayMode && trackerPanelSurfaceAvailable && trackerPanelDesktop(trackerPanelSide)}
       </AnimatePresence>
 
       {trackerPanelWindowTarget && trackerPanelActive && trackerPanelModeAvailable && (
