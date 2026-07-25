@@ -91,6 +91,7 @@ import {
   useNoodlePostCardController,
 } from "./NoodlePostCard";
 import { Avatar, NoodleShell, NOODLE_PERSONA_SWITCHER_PAGE_SIZE, NOODLE_PINK, useNoodleAccent } from "./NoodleShell";
+import { NoodlerAgeGate, NoodlerAgeGateSkip } from "./NoodlerAgeGate";
 import { NoodleProfileSurface } from "./NoodleProfileSurface";
 import { NOODLE_AUTO_POST_INTENSITIES } from "./noodle-auto-post";
 import { NoodlerBulkCreateButton } from "./NoodlerBulkCreatePanel";
@@ -245,7 +246,11 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
   const enabled = data?.settings.enableNoodler === true;
   const accountsQuery = useNoodlerAccounts(navigation.mode === "private" && enabled);
   const personasQuery = usePersonas(navigation.mode === "private" && enabled);
-  const activePersonaQuery = useActivePersona(navigation.mode === "private" && enabled);
+  // Also fetch on the verification/age-gate screen (enabled === false there) so the joke
+  // ID card and credit card can show the current persona's name and avatar.
+  const activePersonaQuery = useActivePersona(
+    (navigation.mode === "private" && enabled) || navigation.mode === "verification" || (Boolean(data) && !enabled),
+  );
   const storedPersonaId = useUIStore((state) => state.noodleSelectedPersonaId);
   const setStoredPersonaId = useUIStore((state) => state.setNoodleSelectedPersonaId);
   const personas = (personasQuery.data ?? []) as Persona[];
@@ -799,23 +804,18 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
   if (navigation.mode === "verification" || (data && !enabled)) {
     return (
       <NoodleShell {...shellProps} rightRail={emptyRightRail}>
-      <NoodlerFrame onBack={exitToPublic} title={localizeUi("ui.noodle.noodlerhome.aboutNoodler")}>
-        <div className="mx-auto flex max-w-xl flex-col items-center px-6 py-16 text-center">
-          <span className="flex h-14 w-14 items-center justify-center rounded-full bg-[var(--noodle-accent)]/15 text-[var(--noodle-accent)]">
-            <Lock size={28} />
-          </span>
-          <h2 className="mt-5 text-2xl font-black">{localizeUi("ui.noodle.noodlerhome.noodlerIsAnOptionalPrivateSpace")}</h2>
-          <p className="mt-3 text-sm leading-6 text-[var(--muted-foreground)]">{localizeUi("ui.noodle.noodlerhome.noodlerIsIntendedForAdultsPrivateCreatorAccountsStay")}</p>
-          <button
-            type="button"
-            onClick={enableNoodler}
-            disabled={!data?.settings || updateSettings.isPending}
-            className="mt-6 inline-flex h-11 items-center justify-center gap-2 rounded-md bg-[var(--noodle-accent)] px-6 text-sm font-bold text-zinc-950 [&_svg]:!text-zinc-950 hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {updateSettings.isPending ? <Loader2 size={17} className="animate-spin" /> : <Check size={17} />}
-            {updateSettings.isPending ?localizeUi("ui.noodle.noodlerhome.enabling") :localizeUi("ui.noodle.noodlerhome.iAm18AndWantToEnableNoodler")}
-          </button>
-        </div>
+      <NoodlerFrame
+        onBack={exitToPublic}
+        title={localizeUi("ui.noodle.noodlerhome.aboutNoodler")}
+        action={<NoodlerAgeGateSkip onSkip={enableNoodler} disabled={!data?.settings || updateSettings.isPending} />}
+      >
+        <NoodlerAgeGate
+          personaName={activePersonaQuery.data?.name ?? personas[0]?.name ?? ""}
+          avatarUrl={activePersonaQuery.data?.avatarPath ?? personas[0]?.avatarPath ?? null}
+          onComplete={enableNoodler}
+          onSkip={enableNoodler}
+          isPending={!data?.settings || updateSettings.isPending}
+        />
       </NoodlerFrame>
       </NoodleShell>
     );
