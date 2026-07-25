@@ -3,6 +3,7 @@ import {
   ArrowRight,
   Check,
   ChevronDown,
+  ChevronLeft,
   ChevronRight,
   Coins,
   Eye,
@@ -1047,6 +1048,7 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
             isError={postsQuery.isError}
             onRetry={() => void postsQuery.refetch()}
             onEdit={() => beginEdit(selectedProfile)}
+            onBack={() => onNavigate({ mode: "private", view: "profiles" })}
             onDelete={() => {
               if (
                 !window.confirm(
@@ -2099,6 +2101,7 @@ function StageProfileView({
   isError,
   onRetry,
   onEdit,
+  onBack,
   onDelete,
   onManualPost,
   onGuidedPost,
@@ -2130,6 +2133,7 @@ function StageProfileView({
   isError: boolean;
   onRetry: () => void;
   onEdit: () => void;
+  onBack: () => void;
   onDelete: () => void;
   onManualPost: (input: PrivatePostSubmission) => Promise<void>;
   onGuidedPost: (input: PrivatePostSubmission) => Promise<void>;
@@ -2309,7 +2313,17 @@ function StageProfileView({
   return (
     <>
       <NoodleProfileSurface
-        mobileHeader={null}
+        mobileHeader={
+          <button
+            type="button"
+            onClick={onBack}
+            className="absolute left-2 top-2 z-20 flex h-9 w-9 items-center justify-center rounded-full bg-black/30 text-white backdrop-blur-sm transition-colors hover:bg-black/45 lg:hidden"
+            title={localizeUi("ui.noodle.mobiletimelinebackbutton.backToTimeline")}
+            aria-label={localizeUi("ui.noodle.mobiletimelinebackbutton.backToNoodleTimeline")}
+          >
+            <ChevronLeft size={22} />
+          </button>
+        }
         account={profile}
         displayHandle={profile.handle}
         handleMeta={
