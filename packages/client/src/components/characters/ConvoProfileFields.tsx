@@ -5,10 +5,7 @@
 // ──────────────────────────────────────────────
 import { useEffect, useRef, useState } from "react";
 import { RotateCcw, Smile } from "lucide-react";
-import {
-  type ConvoBehaviorConfig,
-  type ConvoBehaviorInsertionStrategy,
-} from "@marinara-engine/shared";
+import { type ConvoBehaviorConfig, type ConvoBehaviorInsertionStrategy } from "@marinara-engine/shared";
 import { MacroTextarea } from "../ui/MacroTextarea";
 import { EmojiPicker } from "../ui/EmojiPicker";
 import { HelpTooltip } from "../ui/HelpTooltip";
@@ -38,6 +35,10 @@ interface ConvoProfileFieldsProps {
   onAboutMeChange: (value: string) => void;
   behavior: ConvoBehaviorConfig | null | undefined;
   onBehaviorChange: (value: ConvoBehaviorConfig) => void;
+  imageInstructions?: string;
+  onImageInstructionsChange?: (value: string) => void;
+  applyImageInstructionsToNoodle?: boolean;
+  onApplyImageInstructionsToNoodleChange?: (value: boolean) => void;
 }
 
 export function ConvoProfileFields({
@@ -52,6 +53,10 @@ export function ConvoProfileFields({
   onAboutMeChange,
   behavior,
   onBehaviorChange,
+  imageInstructions,
+  onImageInstructionsChange,
+  applyImageInstructionsToNoodle,
+  onApplyImageInstructionsToNoodleChange,
 }: ConvoProfileFieldsProps) {
   const { t: localizeUi } = useUiTranslation();
   const aboutMeRef = useRef<HTMLTextAreaElement>(null);
@@ -100,7 +105,9 @@ export function ConvoProfileFields({
   return (
     <div className="space-y-4" data-component="ConvoProfileFields">
       <div className="mari-editor-panel space-y-2 p-3">
-        <span className="inline-flex items-center gap-1 text-xs font-semibold">{localizeUi("ui.characters.convoprofilefields.convoDisplayName")}<HelpTooltip text={localizeUi("ui.characters.convoprofilefields.shownAsThisPersonSNameInConversationMode")} />
+        <span className="inline-flex items-center gap-1 text-xs font-semibold">
+          {localizeUi("ui.characters.convoprofilefields.convoDisplayName")}
+          <HelpTooltip text={localizeUi("ui.characters.convoprofilefields.shownAsThisPersonSNameInConversationMode")} />
         </span>
         <input
           value={displayName}
@@ -116,7 +123,11 @@ export function ConvoProfileFields({
               onChange={(e) => onDisplayNameInCardChange(e.target.checked)}
               className="mt-0.5 h-3.5 w-3.5 shrink-0 accent-[var(--primary)]"
             />
-            <span className="inline-flex items-center gap-1">{localizeUi("ui.characters.convoprofilefields.declareThisNameOnTheCardInThePrompt")}<HelpTooltip text={localizeUi("ui.characters.convoprofilefields.prependsALineLikeConversationDisplayNameXTo")} />
+            <span className="inline-flex items-center gap-1">
+              {localizeUi("ui.characters.convoprofilefields.declareThisNameOnTheCardInThePrompt")}
+              <HelpTooltip
+                text={localizeUi("ui.characters.convoprofilefields.prependsALineLikeConversationDisplayNameXTo")}
+              />
             </span>
           </label>
         )}
@@ -124,7 +135,11 @@ export function ConvoProfileFields({
 
       <div className="mari-editor-panel space-y-3 p-3">
         <div className="flex items-center justify-between gap-2">
-          <span className="inline-flex items-center gap-1 text-xs font-semibold">{localizeUi("ui.characters.convoprofilefields.aboutMe")}<HelpTooltip text={localizeUi("ui.characters.convoprofilefields.aShortSelfAuthoredProfileBioShownInConversation")} />
+          <span className="inline-flex items-center gap-1 text-xs font-semibold">
+            {localizeUi("ui.characters.convoprofilefields.aboutMe")}
+            <HelpTooltip
+              text={localizeUi("ui.characters.convoprofilefields.aShortSelfAuthoredProfileBioShownInConversation")}
+            />
           </span>
         </div>
         <MacroTextarea
@@ -148,7 +163,12 @@ export function ConvoProfileFields({
             </button>
           }
         />
-        <EmojiPicker open={emojiOpen} onClose={() => setEmojiOpen(false)} onSelect={insertEmoji} anchorRef={emojiBtnRef} />
+        <EmojiPicker
+          open={emojiOpen}
+          onClose={() => setEmojiOpen(false)}
+          onSelect={insertEmoji}
+          anchorRef={emojiBtnRef}
+        />
         {revertTo !== null && revertTo !== aboutMe && (
           <button
             type="button"
@@ -159,12 +179,16 @@ export function ConvoProfileFields({
             title={localizeUi("ui.characters.convoprofilefields.undoTheChangesToThisAboutMe")}
             className="inline-flex items-center gap-1 rounded-lg border border-[var(--border)] px-2 py-1.5 text-xs text-[var(--muted-foreground)] transition-colors hover:bg-[var(--accent)] hover:text-[var(--foreground)]"
           >
-            <RotateCcw size="0.8125rem" />{localizeUi("ui.characters.convoprofilefields.revert")}</button>
+            <RotateCcw size="0.8125rem" />
+            {localizeUi("ui.characters.convoprofilefields.revert")}
+          </button>
         )}
       </div>
 
       <div className="mari-editor-panel space-y-3 p-3">
-        <span className="inline-flex items-center gap-1 text-xs font-semibold">{localizeUi("ui.characters.convoprofilefields.convoBehavior")}<HelpTooltip
+        <span className="inline-flex items-center gap-1 text-xs font-semibold">
+          {localizeUi("ui.characters.convoprofilefields.convoBehavior")}
+          <HelpTooltip
             wide
             text={localizeUi("ui.characters.convoprofilefields.aConversationModeOnlyInstructionForHowThisPerson")}
           />
@@ -178,7 +202,9 @@ export function ConvoProfileFields({
           className="w-full resize-y rounded-xl border border-[var(--border)] bg-[var(--secondary)] p-3 text-sm outline-none transition-colors placeholder:text-[var(--muted-foreground)]/40 focus:border-[var(--primary)]/40 focus:ring-1 focus:ring-[var(--primary)]/20"
         />
         <label className="flex flex-wrap items-center gap-2 text-xs">
-          <span className="text-[var(--muted-foreground)]">{localizeUi("ui.characters.convoprofilefields.insertion")}</span>
+          <span className="text-[var(--muted-foreground)]">
+            {localizeUi("ui.characters.convoprofilefields.insertion")}
+          </span>
           <select
             value={behaviorStrategy}
             onChange={(e) =>
@@ -197,6 +223,31 @@ export function ConvoProfileFields({
           </select>
         </label>
       </div>
+
+      {kind === "character" && onImageInstructionsChange && onApplyImageInstructionsToNoodleChange && (
+        <div className="mari-editor-panel space-y-3 p-3">
+          <span className="inline-flex items-center gap-1 text-xs font-semibold">
+            {localizeUi("ui.characters.convoprofilefields.imageGenerationInstructions")}
+            <HelpTooltip wide text={localizeUi("ui.characters.convoprofilefields.imageGenerationInstructionsHelp")} />
+          </span>
+          <textarea
+            value={imageInstructions ?? ""}
+            onChange={(event) => onImageInstructionsChange(event.target.value)}
+            placeholder={localizeUi("ui.characters.convoprofilefields.imageGenerationInstructionsPlaceholder")}
+            rows={5}
+            className="w-full resize-y rounded-xl border border-[var(--border)] bg-[var(--secondary)] p-3 text-sm leading-relaxed outline-none transition-colors placeholder:text-[var(--muted-foreground)]/40 focus:border-[var(--primary)]/40 focus:ring-1 focus:ring-[var(--primary)]/20"
+          />
+          <label className="flex items-start gap-2 text-xs text-[var(--muted-foreground)]">
+            <input
+              type="checkbox"
+              checked={!!applyImageInstructionsToNoodle}
+              onChange={(event) => onApplyImageInstructionsToNoodleChange(event.target.checked)}
+              className="mt-0.5 h-3.5 w-3.5 shrink-0 accent-[var(--primary)]"
+            />
+            <span>{localizeUi("ui.characters.convoprofilefields.applyImageInstructionsToNoodle")}</span>
+          </label>
+        </div>
+      )}
     </div>
   );
 }

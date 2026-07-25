@@ -9,6 +9,7 @@ import {
   GAME_VIDEO_PROMPT_TEMPLATE,
   GAME_VIDEO_PROMPT_TEMPLATE_VARIABLES,
   GAME_STORYBOARD_PROMPT_TEMPLATE_VARIABLES,
+  GAME_STORYBOARD_STILL_ANIMATION_PROMPT_TEMPLATE,
   GAME_STORYBOARD_STILL_PROMPT_TEMPLATE,
 } from "@marinara-engine/shared";
 import { renderTemplate } from "../template.js";
@@ -377,6 +378,17 @@ export const GAME_STORYBOARD_ILLUSTRATION_DIRECTOR: PromptOverrideKeyDef<GameSto
     durationSeconds: 6,
     aspectRatio: "16:9",
   },
+};
+
+export const GAME_STORYBOARD_ANIMATION_DIRECTOR: PromptOverrideKeyDef<GameStoryboardIllustratorCtx> = {
+  key: "game.storyboardAnimationDirector",
+  label: "Game Mode Storyboard Animation Planner",
+  description:
+    "Game Mode storyboard animation planner instructions that split one GM turn into first frames and motion directions.",
+  variables: GAME_STORYBOARD_ILLUSTRATION_DIRECTOR.variables,
+  defaultBuilder: (ctx) =>
+    renderTemplate(GAME_STORYBOARD_STILL_ANIMATION_PROMPT_TEMPLATE, ctx, GAME_STORYBOARD_PROMPT_TEMPLATE_VARIABLES),
+  exampleContext: GAME_STORYBOARD_ILLUSTRATION_DIRECTOR.exampleContext,
 };
 
 // ── Game video prompt (scene illustration -> animated clip) ──

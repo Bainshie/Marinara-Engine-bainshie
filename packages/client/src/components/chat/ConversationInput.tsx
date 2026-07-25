@@ -112,6 +112,23 @@ type ConversationSlashCompletion = {
   kind: "command" | "status" | "character";
 };
 
+type SubmittedConversationInput = {
+  chatId: string;
+  draft: string;
+  height: string;
+  attachments: Attachment[];
+  completions: ConversationSlashCompletion[];
+  mentionQuery: string | null;
+  mentionCompletions: string[];
+};
+
+type PersistedAttachment = {
+  type: string;
+  data: string;
+  filename: string;
+  name: string;
+};
+
 const CONVERSATION_STATUS_COMPLETIONS = [
   { value: "online", description: "Set a character to online" },
   { value: "idle", description: "Set a character to away" },
@@ -398,14 +415,15 @@ export function ConversationInput({
   const agentsProcessing = useAgentStore((s) =>
     activeChatId ? s.processingChatIds.includes(activeChatId) : s.isProcessing,
   );
+  const delayedCharacterInfo = useChatStore((s) => s.delayedCharacterInfo);
   const hasActiveStream = isStreamingGlobal && streamingChatId === activeChatId;
   const isStreaming = hasActiveStream && !isBackgroundIllustration;
   const isSendBlocked = isGenerationSendBlocked({
     streamActive: hasActiveStream,
     agentsProcessing,
     backgroundIllustration: isBackgroundIllustration,
+    delayedResponse: delayedCharacterInfo !== null,
   });
-  const delayedCharacterInfo = useChatStore((s) => s.delayedCharacterInfo);
   // Show stop button only during actual generation, not during busy delay
   const isActuallyGenerating = isStreaming && !delayedCharacterInfo;
   const setInputDraft = useChatStore((s) => s.setInputDraft);
@@ -502,7 +520,7 @@ export function ConversationInput({
     return null;
   }, [messagesData]);
   const lastMessageRole = lastMessage?.role ?? null;
-  const canRetry = !isSendBlocked && lastMessageRole === "user";
+  const canRetry = !delayedCharacterInfo && !isSendBlocked && lastMessageRole === "user";
   const canSubmit = hasInput || attachments.length > 0 || canRetry;
   const showRetrySendState = canRetry && !hasInput && attachments.length === 0;
   const sendButtonTitle = isActuallyGenerating
@@ -641,6 +659,85 @@ export function ConversationInput({
       return next;
     });
   }, []);
+
+  const restoreSubmittedInput = useCallback(
+    (submitted: SubmittedConversationInput) => {
+      const activeChatIdAfterFailure = useChatStore.getState().activeChatId;
+      const currentValue = textareaRef.current?.value ?? "";
+      const canRestoreVisibleDraft = activeChatIdAfterFailure === submitted.chatId && currentValue.length === 0;
+      if (canRestoreVisibleDraft && textareaRef.current) {
+        textareaRef.current.value = submitted.draft;
+        textareaRef.current.style.height = submitted.height;
+        syncInputState(submitted.draft);
+        setCompletions(submitted.completions);
+        setMentionQuery(submitted.mentionQuery);
+        setMentionCompletions(submitted.mentionCompletions);
+      }
+      if (submitted.attachments.length > 0) {
+        if (activeChatIdAfterFailure === submitted.chatId) {
+          updateAttachments((current) => (current.length === 0 ? submitted.attachments : current));
+        } else {
+          pendingAttachmentDraftsRef.current.set(submitted.chatId, submitted.attachments);
+        }
+      }
+      if (submitted.draft && (canRestoreVisibleDraft || activeChatIdAfterFailure !== submitted.chatId)) {
+        setInputDraft(submitted.chatId, submitted.draft);
+      }
+    },
+    [setInputDraft, syncInputState, updateAttachments],
+  );
+
+  const createDurableMessageWithRollback = useCallback(
+    async ({
+      content,
+      attachments: persistedAttachments,
+      submitted,
+      scrollToBottom = false,
+    }: {
+      content: string;
+      attachments: PersistedAttachment[];
+      submitted: SubmittedConversationInput;
+      scrollToBottom?: boolean;
+    }) => {
+      let createdMessageId: string | null = null;
+      try {
+        const created = await createMessage.mutateAsync({
+          role: "user",
+          content,
+          characterId: null,
+        });
+        createdMessageId = created.id;
+        if (persistedAttachments.length > 0) {
+          await updateMessageExtra.mutateAsync({
+            messageId: created.id,
+            extra: { attachments: persistedAttachments },
+          });
+        }
+        if (scrollToBottom) {
+          requestChatScrollToBottom({ chatId: submitted.chatId, behavior: "auto" });
+        }
+        return true;
+      } catch (error) {
+        let rollbackFailed = false;
+        if (createdMessageId) {
+          try {
+            await deleteMessage.mutateAsync(createdMessageId);
+          } catch {
+            rollbackFailed = true;
+          }
+        }
+        restoreSubmittedInput(submitted);
+        const message = error instanceof Error ? error.message : "Failed to post message";
+        toast.error(
+          rollbackFailed
+            ? localizeUi("ui.chat.chatinput.value1ThePartialMessageMayNeedToBeRemoved", { value1: message })
+            : message,
+        );
+        return false;
+      }
+    },
+    [createMessage, deleteMessage, localizeUi, restoreSubmittedInput, updateMessageExtra],
+  );
 
   const adjustPendingAttachmentReads = useCallback((chatId: string, delta: number) => {
     setPendingAttachmentReadsByChat((current) => {
@@ -954,12 +1051,15 @@ export function ConversationInput({
         availableCapabilityIds,
         conversationGames: conversationGameSlashContributions,
       };
-      const submittedDraft = textareaRef.current?.value ?? "";
-      const submittedHeight = textareaRef.current?.style.height ?? "auto";
-      const submittedAttachments = attachments;
-      const submittedCompletions = completions;
-      const submittedMentionQuery = _mentionQuery;
-      const submittedMentionCompletions = mentionCompletions;
+      const submittedInput: SubmittedConversationInput = {
+        chatId: activeChatId,
+        draft: textareaRef.current?.value ?? "",
+        height: textareaRef.current?.style.height ?? "auto",
+        attachments,
+        completions,
+        mentionQuery: _mentionQuery,
+        mentionCompletions,
+      };
       if (textareaRef.current) {
         textareaRef.current.value = "";
         textareaRef.current.style.height = "auto";
@@ -976,27 +1076,7 @@ export function ConversationInput({
           setFeedback(result.feedback);
         }
       } catch (error) {
-        const activeChatIdAfterFailure = useChatStore.getState().activeChatId;
-        const currentValue = textareaRef.current?.value ?? "";
-        const canRestoreVisibleDraft = activeChatIdAfterFailure === activeChatId && currentValue.length === 0;
-        if (canRestoreVisibleDraft && textareaRef.current) {
-          textareaRef.current.value = submittedDraft;
-          textareaRef.current.style.height = submittedHeight;
-          syncInputState(submittedDraft);
-          setCompletions(submittedCompletions);
-          setMentionQuery(submittedMentionQuery);
-          setMentionCompletions(submittedMentionCompletions);
-        }
-        if (submittedAttachments.length > 0) {
-          if (activeChatIdAfterFailure === activeChatId) {
-            updateAttachments((current) => (current.length === 0 ? submittedAttachments : current));
-          } else {
-            pendingAttachmentDraftsRef.current.set(activeChatId, submittedAttachments);
-          }
-        }
-        if (submittedDraft && (canRestoreVisibleDraft || activeChatIdAfterFailure !== activeChatId)) {
-          setInputDraft(activeChatId, submittedDraft);
-        }
+        restoreSubmittedInput(submittedInput);
         const msg = error instanceof Error ? error.message : "Command failed";
         toast.error(msg);
       }
@@ -1045,18 +1125,48 @@ export function ConversationInput({
     // Final pass: resolve macros introduced by translation while {{input}} still points to raw.
     message = resolveInputMacros(message);
 
+    const submittedInput: SubmittedConversationInput = {
+      chatId: activeChatId,
+      draft: textareaRef.current?.value ?? raw,
+      height: textareaRef.current?.style.height ?? "auto",
+      attachments,
+      completions,
+      mentionQuery: _mentionQuery,
+      mentionCompletions,
+    };
+    const pendingAttachments = submittedInput.attachments.map((attachment) => ({
+      type: attachment.type,
+      data: attachment.data,
+      filename: attachment.name,
+      name: attachment.name,
+    }));
+
     if (textareaRef.current) {
       textareaRef.current.value = "";
       textareaRef.current.style.height = "auto";
     }
     clearInputDraft(activeChatId);
     syncInputState("");
-
-    const pendingAttachments = attachments.map((a) => ({ type: a.type, data: a.data, filename: a.name, name: a.name }));
     replaceAttachments([]);
+    setCompletions([]);
+    setMentionQuery(null);
+    setMentionCompletions([]);
 
     // Extract @mentions from the raw message (before regex transforms)
     const mentioned = extractMentions(raw);
+
+    // A presence-delayed request refreshes chat history immediately before
+    // prompting. Persist additional user messages without starting a competing
+    // generation; the waiting request will include all of them when it resumes.
+    if (delayedCharacterInfo) {
+      await createDurableMessageWithRollback({
+        content: message,
+        attachments: pendingAttachments,
+        submitted: submittedInput,
+        scrollToBottom: true,
+      });
+      return;
+    }
 
     await generate({
       chatId: activeChatId,
@@ -1074,10 +1184,12 @@ export function ConversationInput({
     canRetry,
     isReadingAttachments,
     isSendBlocked,
+    delayedCharacterInfo,
     generate,
     applyToUserInput,
     extractMentions,
     clearInputDraft,
+    createDurableMessageWithRollback,
     createMessage,
     activeCharacterNames,
     completions,
@@ -1085,10 +1197,9 @@ export function ConversationInput({
     mentionCompletions,
     latestAssistantMessage,
     qc,
+    restoreSubmittedInput,
     syncInputState,
-    setInputDraft,
     replaceAttachments,
-    updateAttachments,
     onPeekPrompt,
     onIllustrate,
     onGenerateSelfie,
@@ -1135,26 +1246,14 @@ export function ConversationInput({
         conversationGames: conversationGameSlashContributions,
       };
 
-      const previousDraft = textareaRef.current?.value ?? "";
-      const previousHeight = textareaRef.current?.style.height ?? "auto";
-      const previousCompletions = completions;
-      const previousMentionQuery = _mentionQuery;
-      const previousMentionCompletions = mentionCompletions;
-      const restoreSubmittedDraft = () => {
-        const currentValue = textareaRef.current?.value ?? "";
-        const canRestoreVisibleDraft =
-          useChatStore.getState().activeChatId === submittingChatId && currentValue.length === 0;
-        if (canRestoreVisibleDraft && textareaRef.current) {
-          textareaRef.current.value = previousDraft;
-          textareaRef.current.style.height = previousHeight;
-          syncInputState(previousDraft);
-          setCompletions(previousCompletions);
-          setMentionQuery(previousMentionQuery);
-          setMentionCompletions(previousMentionCompletions);
-        }
-        if (previousDraft && (canRestoreVisibleDraft || useChatStore.getState().activeChatId !== submittingChatId)) {
-          setInputDraft(submittingChatId, previousDraft);
-        }
+      const submittedInput: SubmittedConversationInput = {
+        chatId: submittingChatId,
+        draft: textareaRef.current?.value ?? "",
+        height: textareaRef.current?.style.height ?? "auto",
+        attachments: [],
+        completions,
+        mentionQuery: _mentionQuery,
+        mentionCompletions,
       };
       if (draftTimerRef.current) {
         clearTimeout(draftTimerRef.current);
@@ -1176,10 +1275,10 @@ export function ConversationInput({
           setFeedback(result.feedback);
         }
         if (generationStatus.succeeded === false) {
-          restoreSubmittedDraft();
+          restoreSubmittedInput(submittedInput);
         }
       } catch (error) {
-        restoreSubmittedDraft();
+        restoreSubmittedInput(submittedInput);
         const msg = error instanceof Error ? error.message : fallbackError;
         toast.error(msg);
       }
@@ -1201,7 +1300,7 @@ export function ConversationInput({
       availableCapabilityIds,
       conversationGameSlashContributions,
       qc,
-      setInputDraft,
+      restoreSubmittedInput,
       syncInputState,
       localizeUi,
     ],
@@ -1256,17 +1355,20 @@ export function ConversationInput({
     }
 
     message = resolveInputMacros(message);
-    const submittedDraft = raw;
-    const submittedHeight = textareaRef.current?.style.height ?? "auto";
-    const submittedAttachments = attachments;
-    const submittedCompletions = completions;
-    const submittedMentionQuery = _mentionQuery;
-    const submittedMentionCompletions = mentionCompletions;
-    const pendingAttachments = submittedAttachments.map((a) => ({
-      type: a.type,
-      data: a.data,
-      filename: a.name,
-      name: a.name,
+    const submittedInput: SubmittedConversationInput = {
+      chatId: submittingChatId,
+      draft: raw,
+      height: textareaRef.current?.style.height ?? "auto",
+      attachments,
+      completions,
+      mentionQuery: _mentionQuery,
+      mentionCompletions,
+    };
+    const pendingAttachments = submittedInput.attachments.map((attachment) => ({
+      type: attachment.type,
+      data: attachment.data,
+      filename: attachment.name,
+      name: attachment.name,
     }));
 
     if (textareaRef.current) {
@@ -1280,57 +1382,11 @@ export function ConversationInput({
     setMentionQuery(null);
     setMentionCompletions([]);
 
-    let createdMessageId: string | null = null;
-    try {
-      const created = await createMessage.mutateAsync({
-        role: "user",
-        content: message,
-        characterId: null,
-      });
-      createdMessageId = created.id;
-      if (pendingAttachments.length) {
-        await updateMessageExtra.mutateAsync({
-          messageId: created.id,
-          extra: { attachments: pendingAttachments },
-        });
-      }
-    } catch (error) {
-      let rollbackFailed = false;
-      if (createdMessageId) {
-        try {
-          await deleteMessage.mutateAsync(createdMessageId);
-        } catch {
-          rollbackFailed = true;
-        }
-      }
-      const activeChatIdAfterFailure = useChatStore.getState().activeChatId;
-      const currentValue = textareaRef.current?.value ?? "";
-      const canRestoreVisibleDraft = activeChatIdAfterFailure === submittingChatId && currentValue.length === 0;
-      if (canRestoreVisibleDraft && textareaRef.current) {
-        textareaRef.current.value = submittedDraft;
-        textareaRef.current.style.height = submittedHeight;
-        syncInputState(submittedDraft);
-        setCompletions(submittedCompletions);
-        setMentionQuery(submittedMentionQuery);
-        setMentionCompletions(submittedMentionCompletions);
-      }
-      if (submittedAttachments.length > 0) {
-        if (activeChatIdAfterFailure === submittingChatId) {
-          updateAttachments((current) => (current.length === 0 ? submittedAttachments : current));
-        } else {
-          pendingAttachmentDraftsRef.current.set(submittingChatId, submittedAttachments);
-        }
-      }
-      if (submittedDraft && (canRestoreVisibleDraft || activeChatIdAfterFailure !== submittingChatId)) {
-        setInputDraft(submittingChatId, submittedDraft);
-      }
-      const msg = error instanceof Error ? error.message : "Failed to post message";
-      toast.error(
-        rollbackFailed
-          ? localizeUi("ui.chat.chatinput.value1ThePartialMessageMayNeedToBeRemoved", { value1: msg })
-          : msg,
-      );
-    }
+    await createDurableMessageWithRollback({
+      content: message,
+      attachments: pendingAttachments,
+      submitted: submittedInput,
+    });
   }, [
     activeChatId,
     isSendBlocked,
@@ -1342,13 +1398,9 @@ export function ConversationInput({
     applyToUserInput,
     qc,
     clearInputDraft,
+    createDurableMessageWithRollback,
     syncInputState,
-    setInputDraft,
     replaceAttachments,
-    updateAttachments,
-    createMessage,
-    deleteMessage,
-    updateMessageExtra,
     handleSend,
     availableCapabilityIds,
     conversationGameSlashContributions,
@@ -1356,7 +1408,7 @@ export function ConversationInput({
   ]);
 
   const handleGuidedGenerationButton = useCallback(async () => {
-    if (!activeChatId || isSendBlocked) return;
+    if (!activeChatId || isSendBlocked || delayedCharacterInfo) return;
     if (hasPendingAttachments) {
       toast.info(localizeUi("ui.chat.chatinput.clearOrSendAttachmentsBeforeUsingGuidedGeneration"));
       return;
@@ -1364,7 +1416,7 @@ export function ConversationInput({
     const text = textareaRef.current?.value?.trim() ?? "";
     if (!text) return;
     await runQuickSlashCommand(`/guided ${text}`, "Guided generation failed");
-  }, [activeChatId, isSendBlocked, hasPendingAttachments, runQuickSlashCommand, localizeUi]);
+  }, [activeChatId, isSendBlocked, delayedCharacterInfo, hasPendingAttachments, runQuickSlashCommand, localizeUi]);
 
   const sendCustomQuickReply = useCallback(
     async (content: string) => {
@@ -1391,7 +1443,9 @@ export function ConversationInput({
     };
     const getGuideDisabledReason = () => {
       if (!activeChatId) return "Select or create a chat first.";
-      if (isSendBlocked) return "Wait for the current agents to finish.";
+      if (isSendBlocked || delayedCharacterInfo) {
+        return localizeUi("ui.chat.conversationinput.waitForTheCurrentResponseToBegin");
+      }
       if (hasPendingAttachments) return "Clear or post attachments first.";
       if (!hasInput) return "Type a direction first.";
       return undefined;
@@ -1413,7 +1467,7 @@ export function ConversationInput({
         label: "Guide reply",
         description: "Send as /guided direction",
         icon: <WandSparkles size="0.875rem" />,
-        disabled: !activeChatId || isSendBlocked || !hasInput || hasPendingAttachments,
+        disabled: !activeChatId || isSendBlocked || !!delayedCharacterInfo || !hasInput || hasPendingAttachments,
         disabledReason: getGuideDisabledReason(),
         onSelect: handleGuidedGenerationButton,
       });
@@ -1441,6 +1495,7 @@ export function ConversationInput({
   }, [
     activeChatId,
     isSendBlocked,
+    delayedCharacterInfo,
     isReadingAttachments,
     hasInput,
     attachments.length,
@@ -1451,6 +1506,7 @@ export function ConversationInput({
     sendCustomQuickReply,
     handlePostOnlyButton,
     handleGuidedGenerationButton,
+    localizeUi,
   ]);
 
   const handleKeyDown = useCallback(

@@ -3874,8 +3874,11 @@ function GameSurfaceComponent({
     chatMeta.enableSpriteGeneration === true &&
     typeof chatMeta.gameImageConnectionId === "string" &&
     chatMeta.gameImageConnectionId.trim().length > 0;
+  const gameSceneVideosEnabled = chatMeta.gameSceneVideosEnabled !== false;
   const gameVideoGenerationEnabled =
-    typeof chatMeta.gameVideoConnectionId === "string" && chatMeta.gameVideoConnectionId.trim().length > 0;
+    gameSceneVideosEnabled &&
+    typeof chatMeta.gameVideoConnectionId === "string" &&
+    chatMeta.gameVideoConnectionId.trim().length > 0;
   const gameImageAutoGenerationEnabled =
     gameImageGenerationEnabled && chatMeta.gameImageAutoGenerationEnabled !== false;
   const gameStoryboardBackgroundVisualEnabled = gameStoryboardViewerDisplayMode === "background";
@@ -3883,6 +3886,10 @@ function GameSurfaceComponent({
   const gameBackgroundAutoGenerationEnabled = gameImageAutoGenerationEnabled && !gameStoryboardBackgroundVisualEnabled;
   const gameStoryboardAutoIllustrationsEnabled = chatMeta.gameStoryboardAutoIllustrationsEnabled === true;
   const gameStoryboardAutoAnimationsEnabled = chatMeta.gameStoryboardAutoGenerationEnabled === true;
+  const gameStoryboardsEnabled =
+    chatMeta.gameStoryboardsEnabled === true ||
+    (chatMeta.gameStoryboardsEnabled !== false &&
+      (gameStoryboardAutoIllustrationsEnabled || gameStoryboardAutoAnimationsEnabled));
   const gameStoryboardAutoGenerationEnabled =
     gameStoryboardAutoIllustrationsEnabled || gameStoryboardAutoAnimationsEnabled;
   const gameStoryboardKeyframeCount = normalizeGameStoryboardKeyframeCount(chatMeta.gameStoryboardKeyframeCount);
@@ -10505,38 +10512,46 @@ function GameSurfaceComponent({
             }
           >
             {manualBackgroundGenerating ? <Loader2 size={14} className="animate-spin" /> : <ImagePlus size={14} />}{localizeUi("ui.game.gamesurfacecomponent.generateBackground")}</button>
-          <button
-            type="button"
-            onClick={() => void handleGenerateSceneVideo()}
-            disabled={
-              sceneVideoGenerating ||
-              !gameVideoGenerationEnabled ||
-              typeof chatMeta.gameLastIllustrationTag !== "string" ||
-              chatMeta.gameLastIllustrationTag.trim().length === 0
-            }
-            className="marinara-chat-popover__item flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium text-[var(--marinara-chat-chrome-panel-text)] transition-colors hover:bg-[var(--marinara-chat-chrome-highlight-bg-hover)] hover:text-[var(--marinara-chat-chrome-highlight-text)] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
-            title={localizeUi("ui.game.gamesurfacecomponent.generateASceneVideoFromTheLatestIllustration")}
-          >
-            {sceneVideoGenerating ? <Loader2 size={14} className="animate-spin" /> : <Film size={14} />}{localizeUi("ui.game.gamesurfacecomponent.generateVideo")}</button>
-          <button
-            type="button"
-            onClick={() => void handleGenerateTurnStoryboard()}
-            disabled={
-              storyboardGenerating ||
-              latestTurnStoryboardRendering ||
-              manualStoryboardReviewActive ||
-              isStreaming ||
-              !gameImageGenerationEnabled ||
-              !latestAssistantMsg?.id
-            }
-            className="marinara-chat-popover__item flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium text-[var(--marinara-chat-chrome-panel-text)] transition-colors hover:bg-[var(--marinara-chat-chrome-highlight-bg-hover)] hover:text-[var(--marinara-chat-chrome-highlight-text)] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
-            title={localizeUi("ui.game.gamesurfacecomponent.createStoryboardKeyframesFromTheCurrentGmNarration")}
-          >
-            {storyboardGenerating || latestTurnStoryboardRendering ? (
-              <Loader2 size={14} className="animate-spin" />
-            ) : (
-              <PanelsTopLeft size={14} />
-            )}{localizeUi("ui.game.gamesurfacecomponent.storyboardTurn")}</button>
+          {gameSceneVideosEnabled && (
+            <button
+              type="button"
+              onClick={() => void handleGenerateSceneVideo()}
+              disabled={
+                sceneVideoGenerating ||
+                !gameVideoGenerationEnabled ||
+                typeof chatMeta.gameLastIllustrationTag !== "string" ||
+                chatMeta.gameLastIllustrationTag.trim().length === 0
+              }
+              className="marinara-chat-popover__item flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium text-[var(--marinara-chat-chrome-panel-text)] transition-colors hover:bg-[var(--marinara-chat-chrome-highlight-bg-hover)] hover:text-[var(--marinara-chat-chrome-highlight-text)] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
+              title={localizeUi("ui.game.gamesurfacecomponent.generateASceneVideoFromTheLatestIllustration")}
+            >
+              {sceneVideoGenerating ? <Loader2 size={14} className="animate-spin" /> : <Film size={14} />}
+              {localizeUi("ui.game.gamesurfacecomponent.generateVideo")}
+            </button>
+          )}
+          {gameStoryboardsEnabled && (
+            <button
+              type="button"
+              onClick={() => void handleGenerateTurnStoryboard()}
+              disabled={
+                storyboardGenerating ||
+                latestTurnStoryboardRendering ||
+                manualStoryboardReviewActive ||
+                isStreaming ||
+                !gameImageGenerationEnabled ||
+                !latestAssistantMsg?.id
+              }
+              className="marinara-chat-popover__item flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium text-[var(--marinara-chat-chrome-panel-text)] transition-colors hover:bg-[var(--marinara-chat-chrome-highlight-bg-hover)] hover:text-[var(--marinara-chat-chrome-highlight-text)] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
+              title={localizeUi("ui.game.gamesurfacecomponent.createStoryboardKeyframesFromTheCurrentGmNarration")}
+            >
+              {storyboardGenerating || latestTurnStoryboardRendering ? (
+                <Loader2 size={14} className="animate-spin" />
+              ) : (
+                <PanelsTopLeft size={14} />
+              )}
+              {localizeUi("ui.game.gamesurfacecomponent.storyboardTurn")}
+            </button>
+          )}
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto">
           {(latestTurnStoryboard || storyboardGenerating) && (

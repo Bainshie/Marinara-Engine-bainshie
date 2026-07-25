@@ -597,7 +597,7 @@ export function ChatSidebar() {
       const connectionRows = ((connections ?? []) as Array<{ id: string }>).filter((connection) => !!connection.id);
       if (connectionRows.length === 0) {
         if (mode !== "visual_novel") {
-          setPendingNewChatMode(mode);
+          setPendingNewChatMode(mode, "sidebar");
         }
         if (typeof window !== "undefined" && window.innerWidth < 768) setSidebarOpen(false);
         return;

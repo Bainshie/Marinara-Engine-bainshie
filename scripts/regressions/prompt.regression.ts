@@ -2160,6 +2160,14 @@ const cases: RegressionCase[] = [
         new URL("../../packages/client/src/components/game/StoryboardBackgroundControls.tsx", import.meta.url),
         "utf8",
       );
+      const settingsSource = readFileSync(
+        new URL("../../packages/client/src/components/panels/SettingsPanel.tsx", import.meta.url),
+        "utf8",
+      );
+      const gameAssetRegistrySource = readFileSync(
+        new URL("../../packages/server/src/services/prompt-overrides/registry/game-assets.ts", import.meta.url),
+        "utf8",
+      );
       const illustrationPreset = GAME_STORYBOARD_ILLUSTRATION_PROMPT_TEMPLATES.find(
         (template) => template.id === GAME_STORYBOARD_COMIC_PROMPT_TEMPLATE_ID,
       );
@@ -2242,9 +2250,12 @@ const cases: RegressionCase[] = [
       );
       assert.match(drawerSource, /options=\{gameStoryboardImagePromptOptions\}/);
       assert.match(drawerSource, /label=\{localizeUi\("ui\.chat\.chatsettingsdrawer\.storyboardVideoPrompt"\)\}/);
-      assert.match(drawerSource, /kind="illustration"/);
-      assert.match(drawerSource, /kind="animation"/);
-      assert.match(drawerSource, /builtInTemplates\.map\(\(template\) =>/);
+      assert.doesNotMatch(drawerSource, /GameStoryboardPromptLibrary/u);
+      assert.doesNotMatch(drawerSource, /GameProviderPromptLibrary/u);
+      assert.match(settingsSource, /"game\.storyboardIllustrationDirector"/u);
+      assert.match(settingsSource, /"game\.storyboardAnimationDirector"/u);
+      assert.match(gameAssetRegistrySource, /key: "game\.storyboardIllustrationDirector"/u);
+      assert.match(gameAssetRegistrySource, /key: "game\.storyboardAnimationDirector"/u);
       assert.match(gameRouteSource, /getGameStoryboardPromptTemplateKind\(template, selectedAnimationTemplateId\)/);
       assert.match(gameRouteSource, /const builtInTemplates = args\.generateVideos/);
       assert.match(
@@ -2252,10 +2263,9 @@ const cases: RegressionCase[] = [
         /storyboardImagePromptTemplateId: readTrimmedString\(meta\.gameStoryboardImagePromptTemplateId\)/,
       );
       assert.match(
-        drawerSource,
-        /title=\{localizeUi\("ui\.chat\.chatsettingsdrawer\.editIllustrationPromptPresets"\)\}/,
+        gameRouteSource,
+        /args\.generateVideos \? GAME_STORYBOARD_ANIMATION_DIRECTOR : GAME_STORYBOARD_ILLUSTRATION_DIRECTOR/u,
       );
-      assert.match(drawerSource, /title=\{localizeUi\("ui\.chat\.chatsettingsdrawer\.editVideoPromptPresets"\)\}/);
       const backgroundViewerStart = gameSurfaceSource.indexOf("const renderStoryboardBackgroundVisual");
       const backgroundViewerEnd = gameSurfaceSource.indexOf("const renderGameAssetsPanel", backgroundViewerStart);
       const backgroundViewerSource = gameSurfaceSource.slice(backgroundViewerStart, backgroundViewerEnd);
@@ -2362,7 +2372,7 @@ const cases: RegressionCase[] = [
         },
       };
       const completePrompt =
-        "She opens the door and walks outside as the camera follows behind her. A light breeze moves her hair. She glances toward the street and says, \"Stay close.\" Footsteps and distant traffic continue as the camera settles behind her.";
+        'She opens the door and walks outside as the camera follows behind her. A light breeze moves her hair. She glances toward the street and says, "Stay close." Footsteps and distant traffic continue as the camera settles behind her.';
       const resolved = resolveComfyUiVideoWorkflowPlaceholders(
         workflow,
         {
@@ -2922,8 +2932,11 @@ const cases: RegressionCase[] = [
       assert.equal(animationPreset?.promptTemplate, GAME_STORYBOARD_NOVELAI_ANIMATION_PROMPT_TEMPLATE);
       assert.match(animationPreset?.promptTemplate ?? "", /\$\{durationSeconds\}-second/);
       assert.match(drawerSource, /label=\{localizeUi\("ui\.chat\.chatsettingsdrawer\.useNovelaiCharacterPrompts"\)\}/);
-      assert.match(drawerSource, /builtInTemplates=\{GAME_STORYBOARD_ILLUSTRATION_PROMPT_TEMPLATES\}/);
-      assert.match(drawerSource, /builtInTemplates=\{GAME_STORYBOARD_ANIMATION_PROMPT_TEMPLATES\}/);
+      assert.match(
+        drawerSource,
+        /kind === "animation" \? GAME_STORYBOARD_ANIMATION_PROMPT_TEMPLATES : GAME_STORYBOARD_ILLUSTRATION_PROMPT_TEMPLATES/u,
+      );
+      assert.doesNotMatch(drawerSource, /GameStoryboardPromptLibrary/u);
       assert.match(gameRouteSource, /meta\.gameStoryboardUseNovelAiCharacterPrompts !== false/);
       assert.match(gameRouteSource, /useNovelAiCharacterPrompts\s*&&\s*providerSupportsStructuredCharacterPrompts/);
     },

@@ -129,6 +129,9 @@ async function generateSelfie(
   const appearance =
     (typeof extensions?.appearance === "string" && extensions.appearance) ||
     (typeof args.charData?.description === "string" ? args.charData.description : "");
+  const personality = typeof args.charData?.personality === "string" ? args.charData.personality : "";
+  const characterImageInstructions =
+    typeof extensions?.conversationImageInstructions === "string" ? extensions.conversationImageInstructions : "";
 
   const selfieTags = Array.isArray(args.chatMeta.selfieTags) ? (args.chatMeta.selfieTags as string[]) : [];
   const selfiePositivePrompt =
@@ -172,6 +175,8 @@ async function generateSelfie(
     chatPromptTemplate: selfiePromptTemplate,
     appearance,
     charName: args.charName,
+    characterImageInstructions,
+    personality,
   });
   const selfieSystemPrompt = styleGuidance
     ? `${baseSelfieSystemPrompt}${formatImageStylePromptGuidance(styleGuidance)}`
@@ -181,11 +186,7 @@ async function generateSelfie(
     : `Generate a casual selfie of ${args.charName} based on the current conversation context.`;
   const debugOverrideEnabled = args.debugMode === true || isDebugAgentsEnabled();
   if (debugOverrideEnabled || logger.isLevelEnabled("debug")) {
-    logDebugOverride(
-      debugOverrideEnabled,
-      "[debug/commands/selfie] prompt-builder system:\n%s",
-      selfieSystemPrompt,
-    );
+    logDebugOverride(debugOverrideEnabled, "[debug/commands/selfie] prompt-builder system:\n%s", selfieSystemPrompt);
     logDebugOverride(debugOverrideEnabled, "[debug/commands/selfie] prompt-builder user:\n%s", userPrompt);
   }
   const promptResult = await promptRuntime.provider.chatComplete(

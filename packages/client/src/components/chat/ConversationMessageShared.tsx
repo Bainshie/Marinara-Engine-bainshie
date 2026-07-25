@@ -75,6 +75,7 @@ export interface MessageRenderContext {
   displayName: string;
   avatarUrl: string | null;
   avatarCropStyle: CSSProperties;
+  avatarCornerClass: string;
   nameColor?: string;
   mentionNames: string[];
   charByName: Map<string, CharInfo> | null;

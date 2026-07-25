@@ -976,6 +976,19 @@ function ConnectionRow({
           }}
         />
       )}
+      {selectionMode && (
+        <div
+          className={cn(
+            "flex h-5 w-5 shrink-0 items-center justify-center rounded border-2 transition-colors",
+            isBulkSelected
+              ? "border-[var(--marinara-chat-chrome-button-border-active)] bg-[var(--marinara-chat-chrome-highlight-bg)] text-[var(--marinara-chat-chrome-button-text-active)]"
+              : "border-[var(--muted-foreground)]/40 bg-[var(--secondary)] text-transparent",
+          )}
+          aria-hidden="true"
+        >
+          {isBulkSelected && <Check size="0.75rem" />}
+        </div>
+      )}
       <button
         type="button"
         onClick={(event) => {
@@ -996,7 +1009,7 @@ function ConnectionRow({
             <Camera size="0.875rem" />
           </span>
         </span>
-        {(selectionMode ? isBulkSelected : isSelected) && (
+        {!selectionMode && isSelected && (
           <div
             className={cn(
               "pointer-events-none absolute -right-1 -top-1 z-10 flex h-4 w-4 items-center justify-center rounded-md shadow-sm ring-1 ring-[var(--sidebar)]",

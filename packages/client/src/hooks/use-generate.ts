@@ -2241,14 +2241,14 @@ export function useGenerate() {
                 }
                 break;
               }
-              // The server saves fresh Roleplay output before post-processing
-              // agents start. Keep the live stream authoritative until `done`,
-              // otherwise the complete persisted row replaces the animated
-              // buffer as soon as agents begin their work.
+              // Keep the durable row in cache even while the live presentation
+              // remains authoritative. The Roleplay surface shadows the row that
+              // owns the current stream, then reveals it as soon as another
+              // response starts (for example while Illustrator is still working).
               if (!keepStreamLiveThroughPostProcessing) {
                 rememberContinuedMessageContent(savedMessage);
-                upsertPersistedMessages(qc, params.chatId, [savedMessage]);
               }
+              upsertPersistedMessages(qc, params.chatId, [savedMessage]);
               break;
             }
 

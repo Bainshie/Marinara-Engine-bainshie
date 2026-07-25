@@ -34,6 +34,7 @@ export function ConversationMessageBubble({ ctx }: { ctx: MessageRenderContext }
     displayName,
     avatarUrl,
     avatarCropStyle,
+    avatarCornerClass,
     nameColor,
     mentionNames,
     quoteFormat,
@@ -123,7 +124,10 @@ export function ConversationMessageBubble({ ctx }: { ctx: MessageRenderContext }
                   onClick={(e) => ctx.onOpenAboutMe?.(e.currentTarget.getBoundingClientRect())}
                   aria-label={localizeUi("ui.chat.conversationmessagebubble.viewValue1SAboutMe", { value1: displayName })}
                   title={localizeUi("ui.chat.conversationmessagebubble.viewValue1SAboutMe", { value1: displayName })}
-                  className="relative block h-10 w-10 overflow-hidden rounded-full bg-[var(--accent)] cursor-pointer transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)]/50"
+                  className={cn(
+                    "relative block h-10 w-10 overflow-hidden bg-[var(--accent)] cursor-pointer transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)]/50",
+                    avatarCornerClass,
+                  )}
                 >
                   {avatarUrl ? (
                     <img
@@ -140,7 +144,7 @@ export function ConversationMessageBubble({ ctx }: { ctx: MessageRenderContext }
                   )}
                 </button>
               ) : (
-                <div className="relative h-10 w-10 overflow-hidden rounded-full bg-[var(--accent)]">
+                <div className={cn("relative h-10 w-10 overflow-hidden bg-[var(--accent)]", avatarCornerClass)}>
                   {avatarUrl ? (
                     <img
                       src={avatarUrl}

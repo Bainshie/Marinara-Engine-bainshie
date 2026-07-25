@@ -820,7 +820,7 @@ export function PresetsPanel() {
                     : "border-[var(--muted-foreground)]/40 bg-[var(--secondary)] text-transparent",
                 )}
               >
-                <Check size="0.75rem" />
+                {isBulkSelected && <Check size="0.75rem" />}
               </div>
             )}
             <div className="mari-panel-gradient-surface mari-panel-gradient--presets relative flex h-10 w-10 shrink-0 items-center justify-center rounded-xl shadow-sm">
@@ -834,7 +834,7 @@ export function PresetsPanel() {
               ) : (
                 <FileText size="1rem" />
               )}
-              {isSelected && (
+              {!selectionMode && isSelected && (
                 <div className="mari-panel-gradient-surface mari-panel-gradient--presets absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-md shadow-sm">
                   <Check size="0.625rem" />
                 </div>

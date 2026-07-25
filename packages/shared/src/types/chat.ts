@@ -546,6 +546,8 @@ export interface ChatMetadata {
   gameLastIllustrationTag?: string;
   /** Connection used for Game Mode scene-video generation. */
   gameVideoConnectionId?: string | null;
+  /** Master visibility/runtime switch for manual Game Mode scene videos. */
+  gameSceneVideosEnabled?: boolean;
   /** Selected Game Mode scene/storyboard video prompt template. */
   gameVideoPromptTemplateId?: string | null;
   /** Selected Game Mode prompt template for storyboard keyframe clips only. */
@@ -560,6 +562,8 @@ export interface ChatMetadata {
   gameStoryboardAutoIllustrationsEnabled?: boolean;
   /** When true, completed Game Mode GM turns automatically create storyboard keyframe videos. */
   gameStoryboardAutoGenerationEnabled?: boolean;
+  /** Master visibility/runtime switch for Game Mode storyboard controls. */
+  gameStoryboardsEnabled?: boolean;
   /** Target number of Game Mode storyboard keyframes to create per GM turn. */
   gameStoryboardKeyframeCount?: number;
   /** Per-chat storyboard animation clip duration in seconds. Null/omitted uses Video Generation settings. */
