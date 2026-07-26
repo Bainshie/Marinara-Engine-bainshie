@@ -1702,9 +1702,11 @@ test("Character and Persona avatar actions stay separated and visually balanced"
     await expect(uploadButton).toHaveClass(/mari-chrome-control--small/);
     await expect(metadataGenerateButton).toHaveClass(/mari-chrome-control--small/);
     const fullImageButton = editor.getByRole("button", { name: "Full image", exact: true });
-    const resetCropButton = editor.getByRole("button", { name: "Reset", exact: true });
+    const resetCropButton = editor.getByTitle("Reset to centered max-square crop");
+    const resetVersionButton = editor.getByTitle("Reset card versioning");
     await expect(fullImageButton).toHaveClass(/mari-editor-action/u);
     await expect(resetCropButton).toHaveClass(/mari-editor-action/u);
+    await expect(resetVersionButton).toHaveClass(/mari-editor-action/u);
     await expect(editor.getByText(/^\d+ saved$/u).first()).toHaveClass(/mari-editor-chip--accent/u);
 
     const touchHoverActive = await metadataGenerateButton.evaluate((element) => element.matches(":hover"));
@@ -5793,7 +5795,7 @@ test("Conversation setup commands follow the installed agent library", async ({ 
   });
 
   const openAutomationStep = async () => {
-    const newConversationButton = page.getByLabel("New Conversation");
+    const newConversationButton = page.getByLabel("New Conversation", { exact: true });
     if (!(await newConversationButton.isVisible())) {
       await page.locator('[data-tour="sidebar-toggle"]').click();
     }

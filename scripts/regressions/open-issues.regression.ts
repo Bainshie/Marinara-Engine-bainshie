@@ -581,6 +581,55 @@ try {
     entries: [],
   });
 
+  // Issue #4130 — saved card versions can be renamed, and versioning can be
+  // reset to a clean 0.0 state without recreating the Character or Persona.
+  const versionControlCharacter = await characterStorage.create(
+    characterDataSchema.parse({ name: "Version control character", character_version: "1.0" }),
+  );
+  assert.ok(versionControlCharacter);
+  await characterStorage.update(versionControlCharacter.id, { character_version: "2.0" });
+  const characterVersionsBeforeReset = await characterStorage.listVersions(versionControlCharacter.id);
+  const savedCharacterVersion = characterVersionsBeforeReset.find((version) => !version.isCurrent);
+  assert.ok(savedCharacterVersion);
+  const renamedCharacterVersion = await characterStorage.renameVersion(
+    versionControlCharacter.id,
+    savedCharacterVersion.id,
+    "1.0-fixed",
+  );
+  assert.equal(renamedCharacterVersion?.version, "1.0-fixed");
+  assert.equal(renamedCharacterVersion?.data.character_version, "1.0-fixed");
+  const resetCharacter = await characterStorage.resetVersions(versionControlCharacter.id);
+  assert.equal((JSON.parse(resetCharacter?.data ?? "{}") as { character_version?: string }).character_version, "0.0");
+  const characterVersionsAfterReset = await characterStorage.listVersions(versionControlCharacter.id);
+  assert.equal(characterVersionsAfterReset.length, 1);
+  assert.equal(characterVersionsAfterReset[0]?.isCurrent, true);
+  assert.equal(characterVersionsAfterReset[0]?.revision, 1);
+
+  const versionControlPersona = await characterStorage.createPersona(
+    "Version control persona",
+    "Regression fixture",
+    undefined,
+    { personaVersion: "1.0" },
+  );
+  assert.ok(versionControlPersona);
+  await characterStorage.updatePersona(versionControlPersona.id, { personaVersion: "2.0" });
+  const personaVersionsBeforeReset = await characterStorage.listPersonaVersions(versionControlPersona.id);
+  const savedPersonaVersion = personaVersionsBeforeReset.find((version) => !version.isCurrent);
+  assert.ok(savedPersonaVersion);
+  const renamedPersonaVersion = await characterStorage.renamePersonaVersion(
+    versionControlPersona.id,
+    savedPersonaVersion.id,
+    "1.0-fixed",
+  );
+  assert.equal(renamedPersonaVersion?.version, "1.0-fixed");
+  assert.equal(renamedPersonaVersion?.data.personaVersion, "1.0-fixed");
+  const resetPersona = await characterStorage.resetPersonaVersions(versionControlPersona.id);
+  assert.equal(resetPersona?.personaVersion, "0.0");
+  const personaVersionsAfterReset = await characterStorage.listPersonaVersions(versionControlPersona.id);
+  assert.equal(personaVersionsAfterReset.length, 1);
+  assert.equal(personaVersionsAfterReset[0]?.isCurrent, true);
+  assert.equal(personaVersionsAfterReset[0]?.revision, 1);
+
   const firstPublicNoodleAccount = await noodleStorage.upsertAccountFromProfile({
     kind: "persona",
     entityId: "shared-noodle-handle-persona",
@@ -739,6 +788,7 @@ assert.deepEqual(generatedLorebookEntry.secondaryKeys, ["rain"]);
       content: markdownContent,
     },
   ]);
+  assert.match(approvalText, /^### Bob\r?\nKeys: Bob\r?\nTag: people/u);
   assert.deepEqual(parseLorebookWriteApprovalText(approvalText), [
     {
       action: "append",
@@ -1667,11 +1717,26 @@ assert.match(gameTypesSource, /enableAgents\?: boolean;/u);
 assert.match(gameRoutesSource, /enableAgents: z\.boolean\(\)\.optional\(\)/u);
 assert.match(gameRoutesSource, /enableAgents: setupConfig\.enableAgents === true/u);
 assert.match(gameRoutesSource, /gameStoryboardsEnabled: setupConfig\.gameStoryboardsEnabled/u);
+assert.equal(
+  gameRoutesSource.match(/const conclusionTimeoutMs = getChatGenerationTimeoutMs\(\);/gu)?.length,
+  2,
+  "Game session conclusion and regeneration must read the configured chat timeout",
+);
+assert.equal(
+  gameRoutesSource.match(/withLlmRequestTimeout\(conclusionTimeoutMs/gu)?.length,
+  2,
+  "Game session conclusion requests must scope provider body timeouts to the configured chat timeout",
+);
 assert.match(
   gameRoutesSource,
   /if \(templateId === fallbackTemplateId \|\| !selectedTemplate\?\.promptTemplate\.trim\(\)\)/u,
 );
 assert.match(presetsPanelSource, /\{!selectionMode && isSelected && \(/u);
+assert.match(
+  presetsPanelSource,
+  /PanelSection title=\{localizeUi\("ui\.panels\.presetspanel\.prompts"\)\}/u,
+  "The prompt-preset section must be labelled Prompts alongside Regexes and Functions",
+);
 assert.match(chatSettingsDrawerSource, /type GreetingOption = \{[\s\S]*alternateIndex: number \| null;/u);
 assert.match(chatSettingsDrawerSource, /setFirstMesConfirm\(null\);[\s\S]*addSilentGreetingSwipes/u);
 assert.equal(
@@ -1717,6 +1782,11 @@ assert.match(sidecarProcessSource, /this\.manuallyUnloaded = false;\s*this\.clea
 assert.match(connectionsPanelSource, /ui\.panels\.sidecarcard\.failedToDeleteTheLocalWhisperModel/u);
 assert.match(connectionsPanelSource, /ui\.panels\.sidecarcard\.unloadLocalModel/u);
 assert.match(connectionsPanelSource, /ui\.panels\.sidecarcard\.loadLocalModel/u);
+assert.match(
+  connectionsPanelSource,
+  /className="grid min-w-0 grid-cols-2 gap-2"/u,
+  "LinkAPI actions must share the available banner width instead of overflowing it",
+);
 assert.match(presetsPanelSource, /MARINARA_UNIVERSAL_PRESET_ARTWORK/u);
 assert.match(
   presetsPanelSource,
