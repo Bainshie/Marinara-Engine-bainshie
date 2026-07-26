@@ -22,6 +22,7 @@ import { useChatStore } from "../../stores/chat.store";
 import { useBackgroundAutonomousPolling } from "../../hooks/use-background-autonomous";
 import { useClearAutonomousUnread, useUpdateChatMetadata } from "../../hooks/use-chats";
 import { useIdleDetection } from "../../hooks/use-idle-detection";
+import { dispatchChatVisualViewportChange } from "../../hooks/use-visual-viewport-chat-bottom";
 import { usePageActivity } from "../../hooks/use-page-activity";
 import { useCapabilityAgentRegistry, useCapabilityClientModules } from "../../hooks/use-capability-packages";
 import { CapabilityElement } from "../capabilities/CapabilityElement";
@@ -236,6 +237,7 @@ export function AppShell() {
     const root = document.documentElement;
     let frame = 0;
     let focusTimers: number[] = [];
+    let largestViewportHeight = window.visualViewport?.height ?? window.innerHeight;
     const updateVisualViewportGeometry = () => {
       if (frame) cancelAnimationFrame(frame);
       frame = requestAnimationFrame(() => {
@@ -247,8 +249,14 @@ export function AppShell() {
         const height = heightCandidates.length > 0 ? Math.min(...heightCandidates) : window.innerHeight;
         const maxOffsetTop = Math.max(0, window.innerHeight - height);
         const offsetTop = Math.min(maxOffsetTop, Math.max(0, viewport?.offsetTop ?? 0));
+        largestViewportHeight = Math.max(largestViewportHeight, height);
         root.style.setProperty("--mari-visual-viewport-height", `${Math.max(0, Math.round(height))}px`);
         root.style.setProperty("--mari-visual-viewport-offset-top", `${Math.round(offsetTop)}px`);
+        dispatchChatVisualViewportChange({
+          height,
+          offsetTop,
+          keyboardOpen: largestViewportHeight - height >= 80,
+        });
       });
     };
     const refreshAfterFocusChange = () => {

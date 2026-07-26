@@ -48,7 +48,17 @@ export function KaomojiPicker({ open, onClose, onSelect, anchorRef, containerRef
     if (!open || embedded) return;
     const onPointerDown = (e: MouseEvent) => {
       const target = e.target as Node;
-      if (panelRef.current?.contains(target)) return;
+      const panel = panelRef.current;
+      // Firefox can report the document element as the target when a native
+      // scrollbar is pressed. Keep the picker open when the pointer itself is
+      // still inside the panel, so the scrollbar remains draggable.
+      if (panel) {
+        const path = e.composedPath();
+        const rect = panel.getBoundingClientRect();
+        const pointInsidePanel =
+          e.clientX >= rect.left && e.clientX <= rect.right && e.clientY >= rect.top && e.clientY <= rect.bottom;
+        if (panel.contains(target) || path.includes(panel) || pointInsidePanel) return;
+      }
       if (anchorRef?.current?.contains(target)) return;
       onClose();
     };
@@ -134,7 +144,7 @@ export function KaomojiPicker({ open, onClose, onSelect, anchorRef, containerRef
   const body = (
     <>
       <div className="flex items-center gap-2 border-b border-[var(--border)] px-2.5 py-2">
-        <Search size="0.8125rem" className="shrink-0 text-[var(--muted-foreground)]" />
+        <Search size="0.8125rem" className="shrink-0 text-[var(--marinara-chat-chrome-button-text-active)]" />
         <input
           ref={searchInputRef}
           value={search}
@@ -154,7 +164,7 @@ export function KaomojiPicker({ open, onClose, onSelect, anchorRef, containerRef
               className={cn(
                 "whitespace-nowrap rounded-lg px-2 py-1 text-[0.6875rem] font-medium transition-colors",
                 index === activeCategory
-                  ? "bg-[var(--primary)]/15 text-[var(--foreground)] ring-1 ring-[var(--primary)]/30"
+                  ? "bg-[var(--marinara-chat-chrome-highlight-bg)] text-[var(--marinara-chat-chrome-button-text-active)] ring-1 ring-[var(--marinara-chat-chrome-button-border-active)]"
                   : "text-[var(--muted-foreground)] hover:bg-[var(--secondary)]/50 hover:text-[var(--foreground)]",
               )}
             >

@@ -53,6 +53,7 @@ import { useInstalledCapabilityPackages } from "../../hooks/use-capability-packa
 import { CapabilityElement } from "../capabilities/CapabilityElement";
 import { TURN_GAME_BOT_REQUEST_EVENT } from "../../lib/capability-turn-game-events";
 import { useGenerate } from "../../hooks/use-generate";
+import { useKeepLatestChatMessageVisible } from "../../hooks/use-visual-viewport-chat-bottom";
 
 const ConversationAutonomousEffects = lazy(async () => {
   const module = await import("./ConversationAutonomousEffects");
@@ -556,6 +557,7 @@ export function ConversationView({
     },
     [scrollToMessagesBottom],
   );
+  useKeepLatestChatMessageVisible(scrollRef, isNearBottomRef, scheduleScrollToMessagesBottom);
 
   useEffect(() => {
     if (shouldKeepMobileComposerOpen) setMobileHistoryComposerCollapsed(false);

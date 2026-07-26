@@ -185,44 +185,46 @@ export function ConvoProfileFields({
         )}
       </div>
 
-      <div className="mari-editor-panel space-y-3 p-3">
-        <span className="inline-flex items-center gap-1 text-xs font-semibold">
-          {localizeUi("ui.characters.convoprofilefields.convoBehavior")}
-          <HelpTooltip
-            wide
-            text={localizeUi("ui.characters.convoprofilefields.aConversationModeOnlyInstructionForHowThisPerson")}
-          />
-        </span>
-        <MacroTextarea
-          value={behaviorInstruction}
-          onChange={(value) => onBehaviorChange({ instruction: value, insertionStrategy: behaviorStrategy })}
-          placeholder={localizeUi("ui.characters.convoprofilefields.eGKeepRepliesShortAndLowercaseTextsLike")}
-          rows={4}
-          title={localizeUi("ui.characters.convoprofilefields.convoBehavior")}
-          className="w-full resize-y rounded-xl border border-[var(--border)] bg-[var(--secondary)] p-3 text-sm outline-none transition-colors placeholder:text-[var(--muted-foreground)]/40 focus:border-[var(--primary)]/40 focus:ring-1 focus:ring-[var(--primary)]/20"
-        />
-        <label className="flex flex-wrap items-center gap-2 text-xs">
-          <span className="text-[var(--muted-foreground)]">
-            {localizeUi("ui.characters.convoprofilefields.insertion")}
+      {kind === "character" && (
+        <div className="mari-editor-panel space-y-3 p-3">
+          <span className="inline-flex items-center gap-1 text-xs font-semibold">
+            {localizeUi("ui.characters.convoprofilefields.convoBehavior")}
+            <HelpTooltip
+              wide
+              text={localizeUi("ui.characters.convoprofilefields.aConversationModeOnlyInstructionForHowThisPerson")}
+            />
           </span>
-          <select
-            value={behaviorStrategy}
-            onChange={(e) =>
-              onBehaviorChange({
-                instruction: behaviorInstruction,
-                insertionStrategy: e.target.value as ConvoBehaviorInsertionStrategy,
-              })
-            }
-            className="rounded-lg border border-[var(--border)] bg-[var(--secondary)] px-2 py-1 text-xs outline-none"
-          >
-            {STRATEGY_OPTIONS.map((opt) => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label}
-              </option>
-            ))}
-          </select>
-        </label>
-      </div>
+          <MacroTextarea
+            value={behaviorInstruction}
+            onChange={(value) => onBehaviorChange({ instruction: value, insertionStrategy: behaviorStrategy })}
+            placeholder={localizeUi("ui.characters.convoprofilefields.eGKeepRepliesShortAndLowercaseTextsLike")}
+            rows={4}
+            title={localizeUi("ui.characters.convoprofilefields.convoBehavior")}
+            className="w-full resize-y rounded-xl border border-[var(--border)] bg-[var(--secondary)] p-3 text-sm outline-none transition-colors placeholder:text-[var(--muted-foreground)]/40 focus:border-[var(--primary)]/40 focus:ring-1 focus:ring-[var(--primary)]/20"
+          />
+          <label className="flex flex-wrap items-center gap-2 text-xs">
+            <span className="text-[var(--muted-foreground)]">
+              {localizeUi("ui.characters.convoprofilefields.insertion")}
+            </span>
+            <select
+              value={behaviorStrategy}
+              onChange={(e) =>
+                onBehaviorChange({
+                  instruction: behaviorInstruction,
+                  insertionStrategy: e.target.value as ConvoBehaviorInsertionStrategy,
+                })
+              }
+              className="rounded-lg border border-[var(--border)] bg-[var(--secondary)] px-2 py-1 text-xs outline-none"
+            >
+              {STRATEGY_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+      )}
 
       {kind === "character" && onImageInstructionsChange && onApplyImageInstructionsToNoodleChange && (
         <div className="mari-editor-panel space-y-3 p-3">
