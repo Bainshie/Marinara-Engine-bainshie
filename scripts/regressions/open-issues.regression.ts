@@ -817,6 +817,27 @@ assert.deepEqual(generatedLorebookEntry.secondaryKeys, ["rain"]);
     ],
     "Unmarked approval text created before the delimiter fix must remain editable",
   );
+  assert.deepEqual(
+    parseLorebookWriteApprovalText(
+      [
+        "### Legacy Marker Content",
+        "Keys: legacy",
+        "Tag:",
+        "",
+        "Keep <!-- marinara:lorebook-entry:v1 --> as literal inline content.",
+      ].join("\n"),
+    ),
+    [
+      {
+        action: "append",
+        name: "Legacy Marker Content",
+        keys: ["legacy"],
+        tag: "",
+        content: "Keep <!-- marinara:lorebook-entry:v1 --> as literal inline content.",
+      },
+    ],
+    "An inline delimiter mention must not switch legacy approval text into explicit mode",
+  );
 }
 
 const completeProfessorMariPersona = buildPersonaCreateRow(

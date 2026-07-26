@@ -104,11 +104,13 @@ export function parseLorebookWriteApprovalText(text: string): Array<Record<strin
   const trimmed = text.trim();
   if (!trimmed) return [];
 
-  const hasExplicitDelimiters = trimmed.includes(LOREBOOK_APPROVAL_ENTRY_DELIMITER);
-  const headingPattern = hasExplicitDelimiters
-    ? /^<!-- marinara:lorebook-entry:v1 -->\r?\n###\s+(.+)$/gm
-    : /^###\s+(.+)(?=\r?\nKeys:\s*.*\r?\nTag:\s*.*(?:\r?\n|$))/gm;
-  const headings = [...trimmed.matchAll(headingPattern)];
+  const explicitHeadings = [
+    ...trimmed.matchAll(/^<!-- marinara:lorebook-entry:v1 -->\r?\n###\s+(.+)$/gm),
+  ];
+  const headings =
+    explicitHeadings.length > 0
+      ? explicitHeadings
+      : [...trimmed.matchAll(/^###\s+(.+)(?=\r?\nKeys:\s*.*\r?\nTag:\s*.*(?:\r?\n|$))/gm)];
   if (headings.length === 0) {
     return [{ action: "append", name: "Approved Agent Lore", content: trimmed, keys: [], tag: "" }];
   }
