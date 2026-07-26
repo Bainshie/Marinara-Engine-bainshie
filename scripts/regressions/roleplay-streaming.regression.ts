@@ -89,10 +89,31 @@ assert.match(
 );
 const generationCleanupSource =
   useGenerateSource.match(/\/\/ Stream has terminated[\s\S]*?const completedReply =/u)?.[0] ?? "";
+const missedSpatialRefreshBlock =
+  generationCleanupSource.match(
+    /if \(\s*\(chatModeForGeneration === "roleplay" \|\| chatModeForGeneration === "game"\) &&\s*!spatialCapabilityRefreshDispatched\s*\) \{[\s\S]*?\n        \}/u,
+  )?.[0] ?? "";
+assert.notEqual(missedSpatialRefreshBlock, "", "generation cleanup should contain the missed spatial refresh block");
 assert.match(
-  generationCleanupSource,
-  /if \([\s\S]*?chatModeForGeneration === "roleplay" \|\| chatModeForGeneration === "game"[\s\S]*?!spatialCapabilityRefreshDispatched[\s\S]*?dispatchCapabilityClientEvent\(\{[\s\S]*?packageId: "hierarchical-maps",[\s\S]*?type: "spatial_context_refresh",[\s\S]*?chatId: params\.chatId,[\s\S]*?await qc\.invalidateQueries\(\{[\s\S]*?queryKey: spatialContextKeys\.detail\(params\.chatId\),[\s\S]*?exact: true,[\s\S]*?refetchType: "active",[\s\S]*?\}\);[\s\S]*?clearPerChatState/u,
-  "Roleplay and Game cleanup should reconcile both spatial caches when the transition SSE is missed",
+  missedSpatialRefreshBlock,
+  /dispatchCapabilityClientEvent\(\{[\s\S]*?packageId: "hierarchical-maps",[\s\S]*?type: "spatial_context_refresh",[\s\S]*?chatId: params\.chatId,[\s\S]*?data: null,[\s\S]*?\}\)/u,
+  "missed spatial transition cleanup should notify the downloaded Maps client cache",
+);
+assert.match(
+  missedSpatialRefreshBlock,
+  /void qc\.invalidateQueries\(\{[\s\S]*?queryKey: spatialContextKeys\.detail\(params\.chatId\),[\s\S]*?exact: true,[\s\S]*?refetchType: "active",[\s\S]*?\}\)/u,
+  "missed spatial transition cleanup should refresh the Engine spatial cache without blocking teardown",
+);
+const ownerCleanupBlock =
+  generationCleanupSource.match(/if \(stillOwnerAtCleanupStart\) \{[\s\S]*?\n        \}/u)?.[0] ?? "";
+assert.match(
+  ownerCleanupBlock,
+  /clearPerChatState\(params\.chatId\)/u,
+  "the generation owner should clear per-chat state after spatial reconciliation is dispatched",
+);
+assert.ok(
+  generationCleanupSource.indexOf(missedSpatialRefreshBlock) < generationCleanupSource.indexOf(ownerCleanupBlock),
+  "spatial reconciliation should be dispatched before generation-owner cleanup",
 );
 assert.match(
   summaryPopoverSource,

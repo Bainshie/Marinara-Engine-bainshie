@@ -149,6 +149,7 @@ import type { SceneSegmentEffect } from "@marinara-engine/shared";
 import {
   PROFESSOR_MARI_ID,
   SPOTIFY_RECENT_TRACK_HISTORY_LIMIT,
+  STORYBOARD_AGENT_ID,
   formatTextQuotes,
   mergeBuiltInAgentSettings,
   normalizeStoryboardAgentSettings,
@@ -189,7 +190,6 @@ import {
   formatStoryboardSectionLabel,
   getInitialStoryboardViewerPosition,
   getStoryboardViewerPresetWidth,
-  hasGameStoryboardAnimationDuration,
   nextStoryboardViewerSize,
   normalizeGameStoryboardAnimationDuration,
   normalizeGameStoryboardKeyframeCount,
@@ -2129,14 +2129,15 @@ function GameSurfaceComponent({
   const storyboardAgentActive =
     chatMeta.enableAgents === true &&
     Array.isArray(chatMeta.activeAgentIds) &&
-    (chatMeta.activeAgentIds as string[]).includes("storyboard");
+    (chatMeta.activeAgentIds as string[]).includes(STORYBOARD_AGENT_ID);
   const { data: agentConfigs } = useAgentConfigs(storyboardAgentActive);
   const storyboardAgentConfig = useMemo(
-    () => agentConfigs?.find((config) => config.type === "storyboard") ?? null,
+    () => agentConfigs?.find((config) => config.type === STORYBOARD_AGENT_ID) ?? null,
     [agentConfigs],
   );
   const storyboardAgentSettings = useMemo(
-    () => normalizeStoryboardAgentSettings(mergeBuiltInAgentSettings("storyboard", storyboardAgentConfig?.settings)),
+    () =>
+      normalizeStoryboardAgentSettings(mergeBuiltInAgentSettings(STORYBOARD_AGENT_ID, storyboardAgentConfig?.settings)),
     [storyboardAgentConfig?.settings],
   );
 
@@ -3657,6 +3658,14 @@ function GameSurfaceComponent({
     setStoryboardViewerWidth(nextWidth);
     setStoryboardViewerPosition((pos) => clampStoryboardViewerPosition(pos, nextWidth));
   }, []);
+  const handleStoryboardViewerResizeByKeyboard = useCallback(
+    (delta: number) => {
+      const nextWidth = clampStoryboardViewerWidth(storyboardViewerWidth + delta);
+      setStoryboardViewerWidth(nextWidth);
+      setStoryboardViewerPosition((position) => clampStoryboardViewerPosition(position, nextWidth));
+    },
+    [storyboardViewerWidth],
+  );
   const handleStoryboardViewerResizeEnd = useCallback((event: ReactPointerEvent<HTMLElement>) => {
     storyboardViewerResizeRef.current = null;
     if (event.currentTarget.hasPointerCapture(event.pointerId))
@@ -3750,9 +3759,6 @@ function GameSurfaceComponent({
     gameStoryboardAutoIllustrationsEnabled || gameStoryboardAutoAnimationsEnabled;
   const gameStoryboardKeyframeCount = normalizeGameStoryboardKeyframeCount(
     chatMeta.gameStoryboardKeyframeCount ?? storyboardAgentSettings.keyframeCount,
-  );
-  const gameStoryboardAnimationDurationConfigured = hasGameStoryboardAnimationDuration(
-    chatMeta.gameStoryboardAnimationDurationSeconds ?? storyboardAgentSettings.animationDurationSeconds,
   );
   const gameStoryboardAnimationDurationSeconds = normalizeGameStoryboardAnimationDuration(
     chatMeta.gameStoryboardAnimationDurationSeconds ?? storyboardAgentSettings.animationDurationSeconds,
@@ -5754,10 +5760,7 @@ function GameSurfaceComponent({
       swipeIndex: latestAssistantSwipeIndex,
       sections: latestAssistantStoryboardSections,
       keyframeCount: gameStoryboardKeyframeCount,
-      durationSeconds:
-        gameStoryboardAutoAnimationsEnabled && gameStoryboardAnimationDurationConfigured
-          ? gameStoryboardAnimationDurationSeconds
-          : undefined,
+      durationSeconds: gameStoryboardAutoAnimationsEnabled ? gameStoryboardAnimationDurationSeconds : undefined,
       generateVideos: gameStoryboardAutoAnimationsEnabled,
       debugMode: useUIStore.getState().debugMode,
     };
@@ -5839,7 +5842,6 @@ function GameSurfaceComponent({
     }
   }, [
     activeChatId,
-    gameStoryboardAnimationDurationConfigured,
     gameStoryboardAnimationDurationSeconds,
     storyboardImageGenerationEnabled,
     gameStoryboardAutoAnimationsEnabled,
@@ -5878,9 +5880,7 @@ function GameSurfaceComponent({
       latestAssistantMsg.content.length,
       latestAssistantStoryboardSections.length,
       gameStoryboardKeyframeCount,
-      gameStoryboardAutoAnimationsEnabled && gameStoryboardAnimationDurationConfigured
-        ? gameStoryboardAnimationDurationSeconds
-        : "default",
+      gameStoryboardAutoAnimationsEnabled ? gameStoryboardAnimationDurationSeconds : "default",
       lastSection?.index ?? 0,
       lastSection?.content.length ?? 0,
     ].join(":");
@@ -5894,10 +5894,7 @@ function GameSurfaceComponent({
         swipeIndex: latestAssistantSwipeIndex,
         sections: latestAssistantStoryboardSections,
         keyframeCount: gameStoryboardKeyframeCount,
-        durationSeconds:
-          gameStoryboardAutoAnimationsEnabled && gameStoryboardAnimationDurationConfigured
-            ? gameStoryboardAnimationDurationSeconds
-            : undefined,
+        durationSeconds: gameStoryboardAutoAnimationsEnabled ? gameStoryboardAnimationDurationSeconds : undefined,
         generateVideos: gameStoryboardAutoAnimationsEnabled,
         debugMode: useUIStore.getState().debugMode,
       })
@@ -5909,7 +5906,6 @@ function GameSurfaceComponent({
       });
   }, [
     activeChatId,
-    gameStoryboardAnimationDurationConfigured,
     gameStoryboardAnimationDurationSeconds,
     storyboardImageGenerationEnabled,
     gameStoryboardAutoAnimationsEnabled,
@@ -10236,13 +10232,11 @@ function GameSurfaceComponent({
   };
 
   const handleStoryboardViewerSizeChange = () => {
-    setStoryboardViewerSize((size) => {
-      const nextSize = nextStoryboardViewerSize(size);
-      const nextWidth = getStoryboardViewerPresetWidth(nextSize);
-      setStoryboardViewerWidth(nextWidth);
-      setStoryboardViewerPosition((position) => clampStoryboardViewerPosition(position, nextWidth));
-      return nextSize;
-    });
+    const nextSize = nextStoryboardViewerSize(storyboardViewerSize);
+    const nextWidth = getStoryboardViewerPresetWidth(nextSize);
+    setStoryboardViewerSize(nextSize);
+    setStoryboardViewerWidth(nextWidth);
+    setStoryboardViewerPosition((position) => clampStoryboardViewerPosition(position, nextWidth));
   };
 
   const handleStoryboardVideoPlayingChange = (videoId: string, playing: boolean) => {
@@ -10283,6 +10277,7 @@ function GameSurfaceComponent({
         onTogglePlayback={handleStoryboardViewerPlaybackToggle}
         onToggleMute={() => setStoryboardViewerMuted((muted) => !muted)}
         onChangeSize={handleStoryboardViewerSizeChange}
+        onResizeByKeyboard={handleStoryboardViewerResizeByKeyboard}
         onVideoPlayingChange={handleStoryboardVideoPlayingChange}
       />
     );

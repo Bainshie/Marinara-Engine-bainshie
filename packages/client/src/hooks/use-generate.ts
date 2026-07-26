@@ -2807,7 +2807,7 @@ export function useGenerate() {
             chatId: params.chatId,
             data: null,
           });
-          await qc.invalidateQueries({
+          void qc.invalidateQueries({
             queryKey: spatialContextKeys.detail(params.chatId),
             exact: true,
             refetchType: "active",

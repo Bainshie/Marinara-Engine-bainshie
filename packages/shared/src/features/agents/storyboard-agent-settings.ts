@@ -49,6 +49,7 @@ function normalizeIdList(value: unknown): string[] {
 }
 
 function normalizeBoundedInteger(value: unknown, fallback: number, min: number, max: number): number {
+  if (value == null || value === "") return fallback;
   const parsed = typeof value === "number" ? value : Number(value);
   if (!Number.isFinite(parsed)) return fallback;
   return Math.min(max, Math.max(min, Math.trunc(parsed)));

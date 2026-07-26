@@ -55,9 +55,10 @@ export function buildStoryboardVisibleNarration(
   const segments = parseNarrationSegments(message, EMPTY_GAME_SPEAKER_COLORS);
   for (let index = 0; index < segments.length; index++) {
     const segment = segments[index]!;
-    if (segmentDeletes.has(`${message.id}:${index}`)) continue;
+    const sourceIndex = segment.sourceSegmentIndex ?? index;
+    if (segmentDeletes.has(`${message.id}:${sourceIndex}`)) continue;
     if (segment.partyType === "side" || segment.partyType === "extra") continue;
-    const text = formatNarrationSegmentForContext(segment, segmentEdits.get(`${message.id}:${index}`));
+    const text = formatNarrationSegmentForContext(segment, segmentEdits.get(`${message.id}:${sourceIndex}`));
     if (text) visibleText.push(text);
   }
   return visibleText.join("\n").trim();
@@ -117,10 +118,14 @@ export function nextStoryboardViewerSize(size: StoryboardViewerSize): Storyboard
 }
 
 export function clampStoryboardViewerWidth(width: number): number {
+  const { minWidth, maxWidth } = getStoryboardViewerWidthBounds();
+  return Math.max(minWidth, Math.min(width, maxWidth));
+}
+
+export function getStoryboardViewerWidthBounds(): { minWidth: number; maxWidth: number } {
   const viewportWidth = typeof window === "undefined" ? 1024 : window.innerWidth;
   const minWidth = viewportWidth < 640 ? 180 : 240;
-  const maxWidth = viewportWidth - 24;
-  return Math.max(minWidth, Math.min(width, Math.max(minWidth, maxWidth)));
+  return { minWidth, maxWidth: Math.max(minWidth, viewportWidth - 24) };
 }
 
 export function getStoryboardViewerPresetWidth(size: StoryboardViewerSize): number {

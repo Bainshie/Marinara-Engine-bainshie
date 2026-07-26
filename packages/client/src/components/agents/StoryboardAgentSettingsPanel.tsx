@@ -1,6 +1,13 @@
 import { Plus, RotateCcw, Trash2, Video, ImageIcon, PanelsTopLeft } from "lucide-react";
 import { useTranslation as useUiTranslation } from "react-i18next";
-import type { AgentPromptTemplateOption, StoryboardAgentSettings } from "@marinara-engine/shared";
+import {
+  GAME_STORYBOARD_ANIMATION_DURATION_SECONDS_MAX,
+  GAME_STORYBOARD_ANIMATION_DURATION_SECONDS_MIN,
+  GAME_STORYBOARD_KEYFRAME_COUNT_MAX,
+  GAME_STORYBOARD_KEYFRAME_COUNT_MIN,
+  type AgentPromptTemplateOption,
+  type StoryboardAgentSettings,
+} from "@marinara-engine/shared";
 import { MacroTextarea } from "../ui/MacroTextarea";
 
 interface ConnectionOption {
@@ -292,10 +299,20 @@ export function StoryboardAgentSettingsPanel({
           <span className="text-[0.6875rem] font-medium">{localizeUi("ui.agents.storyboard.keyframes")}</span>
           <input
             type="number"
-            min={1}
-            max={6}
+            min={GAME_STORYBOARD_KEYFRAME_COUNT_MIN}
+            max={GAME_STORYBOARD_KEYFRAME_COUNT_MAX}
             value={settings.keyframeCount}
-            onChange={(event) => update({ keyframeCount: Math.min(6, Math.max(1, Number(event.target.value) || 1)) })}
+            onChange={(event) =>
+              update({
+                keyframeCount: Math.min(
+                  GAME_STORYBOARD_KEYFRAME_COUNT_MAX,
+                  Math.max(
+                    GAME_STORYBOARD_KEYFRAME_COUNT_MIN,
+                    Number(event.target.value) || GAME_STORYBOARD_KEYFRAME_COUNT_MIN,
+                  ),
+                ),
+              })
+            }
             className="w-full rounded-xl bg-[var(--secondary)] px-3 py-2.5 text-sm ring-1 ring-[var(--border)]"
           />
         </label>
@@ -303,11 +320,19 @@ export function StoryboardAgentSettingsPanel({
           <span className="text-[0.6875rem] font-medium">{localizeUi("ui.agents.storyboard.duration")}</span>
           <input
             type="number"
-            min={1}
-            max={15}
+            min={GAME_STORYBOARD_ANIMATION_DURATION_SECONDS_MIN}
+            max={GAME_STORYBOARD_ANIMATION_DURATION_SECONDS_MAX}
             value={settings.animationDurationSeconds}
             onChange={(event) =>
-              update({ animationDurationSeconds: Math.min(15, Math.max(1, Number(event.target.value) || 1)) })
+              update({
+                animationDurationSeconds: Math.min(
+                  GAME_STORYBOARD_ANIMATION_DURATION_SECONDS_MAX,
+                  Math.max(
+                    GAME_STORYBOARD_ANIMATION_DURATION_SECONDS_MIN,
+                    Number(event.target.value) || GAME_STORYBOARD_ANIMATION_DURATION_SECONDS_MIN,
+                  ),
+                ),
+              })
             }
             className="w-full rounded-xl bg-[var(--secondary)] px-3 py-2.5 text-sm ring-1 ring-[var(--border)]"
           />

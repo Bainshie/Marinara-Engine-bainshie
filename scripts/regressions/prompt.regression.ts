@@ -2139,6 +2139,14 @@ const cases: RegressionCase[] = [
         },
         { includeCharacterAppearance: false, useAvatarReferences: false },
       );
+      assert.deepEqual(
+        {
+          keyframeCount: normalizeStoryboardAgentSettings({ keyframeCount: null }).keyframeCount,
+          animationDurationSeconds: normalizeStoryboardAgentSettings({ animationDurationSeconds: "" })
+            .animationDurationSeconds,
+        },
+        { keyframeCount: 3, animationDurationSeconds: 6 },
+      );
 
       const ctx = {
         sceneTitleLine: "Mira at the gate.",
@@ -2165,6 +2173,18 @@ const cases: RegressionCase[] = [
       });
       assert.match(rendered, /Mira braces beneath a storm-lit archway/u);
       assert.match(rendered, /Location handling: use the attached gate image/u);
+      const staleSelectionFallback = await loadGameStoryboardImagePrompt({
+        templateId: "removed-template",
+        customTemplates: [
+          {
+            id: STORYBOARD_OPTIMIZED_IMAGE_PROMPT_TEMPLATE_ID,
+            name: "Storyboard Illustration",
+            promptTemplate: "${scenePrompt}\n${locationHandlingLine}",
+          },
+        ],
+        ctx,
+      });
+      assert.match(staleSelectionFallback, /Mira braces beneath a storm-lit archway/u);
       await assert.rejects(
         () => loadGameStoryboardImagePrompt({ customTemplates: [], ctx }),
         /Storyboard Agent does not provide a usable image formatter prompt/u,

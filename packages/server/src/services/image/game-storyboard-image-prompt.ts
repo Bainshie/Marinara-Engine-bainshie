@@ -24,9 +24,10 @@ export async function loadGameStoryboardImagePrompt(args: {
 }): Promise<string> {
   const options = normalizeAgentPromptTemplateOptions(args.customTemplates).slice(0, 20);
   const selectedId = readTrimmedString(args.templateId);
-  const selectedTemplate = selectedId
-    ? options.find((template) => template.id === selectedId)
-    : (options.find((template) => template.id === GAME_STORYBOARD_IMAGE_PROMPT_TEMPLATE_ID) ?? options[0]);
+  const selectedTemplate =
+    (selectedId ? options.find((template) => template.id === selectedId) : undefined) ??
+    options.find((template) => template.id === GAME_STORYBOARD_IMAGE_PROMPT_TEMPLATE_ID) ??
+    options[0];
 
   if (!selectedTemplate) {
     throw new Error("The Storyboard Agent does not provide a usable image formatter prompt.");

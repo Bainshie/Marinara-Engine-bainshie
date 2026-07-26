@@ -1413,18 +1413,16 @@ export function AgentEditor() {
   );
 
   const handleAddPromptTemplate = useCallback(() => {
-    setLocalPromptTemplates((options) => {
-      const option = createBlankPromptOption(options);
-      if (isStoryboardAgent) {
-        setLocalStoryboardSettings((settings) => ({
-          ...settings,
-          illustrationPlannerTemplateIds: [...settings.illustrationPlannerTemplateIds, option.id],
-        }));
-      }
-      return [...options, option];
-    });
+    const option = createBlankPromptOption(localPromptTemplates);
+    setLocalPromptTemplates((options) => [...options, option]);
+    if (isStoryboardAgent) {
+      setLocalStoryboardSettings((settings) => ({
+        ...settings,
+        illustrationPlannerTemplateIds: [...settings.illustrationPlannerTemplateIds, option.id],
+      }));
+    }
     markDirty();
-  }, [isStoryboardAgent, markDirty]);
+  }, [isStoryboardAgent, localPromptTemplates, markDirty]);
 
   const handleUpdatePromptTemplate = useCallback(
     (id: string, patch: Partial<Pick<AgentPromptTemplateOption, "name" | "promptTemplate" | "description">>) => {
@@ -1520,7 +1518,9 @@ export function AgentEditor() {
     if (
       !(await showConfirmDialog({
         title: localizeUi("ui.agents.agenteditor.deleteAgent_09b378f"),
-        message: localizeUi("ui.agents.agenteditor.deleteThisCustomAgentThisCannotBeUndone"),
+        message: localizeUi("dialog.delete.namedPermanent", {
+          name: dbConfig.name,
+        }),
         confirmLabel: localizeUi("lorebook.editor.batch.delete"),
         tone: "destructive",
       }))

@@ -47,11 +47,21 @@ export function GameVolumeMixer({
 }: GameVolumeMixerProps) {
   const { t: localizeUi } = useUiTranslation();
   const rows = [
-    { id: "master", label: "Master", value: masterVolume, onChange: onMasterVolumeChange },
-    { id: "music", label: "Music", value: musicVolume, onChange: onMusicVolumeChange },
-    { id: "sfx", label: "Sound Effects", value: sfxVolume, onChange: onSfxVolumeChange },
-    { id: "tts", label: "TTS", value: ttsVolume, onChange: onTtsVolumeChange },
-    { id: "ambient", label: "Ambient", value: ambientVolume, onChange: onAmbientVolumeChange },
+    {
+      id: "master",
+      label: localizeUi("game.toolbar.volume.master"),
+      value: masterVolume,
+      onChange: onMasterVolumeChange,
+    },
+    { id: "music", label: localizeUi("game.toolbar.volume.music"), value: musicVolume, onChange: onMusicVolumeChange },
+    { id: "sfx", label: localizeUi("game.toolbar.volume.sfx"), value: sfxVolume, onChange: onSfxVolumeChange },
+    { id: "tts", label: localizeUi("game.toolbar.volume.tts"), value: ttsVolume, onChange: onTtsVolumeChange },
+    {
+      id: "ambient",
+      label: localizeUi("game.toolbar.volume.ambient"),
+      value: ambientVolume,
+      onChange: onAmbientVolumeChange,
+    },
   ];
 
   return (
