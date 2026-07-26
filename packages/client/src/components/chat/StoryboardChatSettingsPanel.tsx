@@ -44,9 +44,8 @@ function readString(value: unknown): string {
 }
 
 function readBoundedInteger(value: unknown, fallback: number, min: number, max: number): number {
-  const numeric = typeof value === "number" ? value : Number(value);
-  if (!Number.isFinite(numeric)) return fallback;
-  return Math.max(min, Math.min(max, Math.trunc(numeric)));
+  if (typeof value !== "number" || !Number.isFinite(value)) return fallback;
+  return Math.max(min, Math.min(max, Math.trunc(value)));
 }
 
 function resolveSelectedId(

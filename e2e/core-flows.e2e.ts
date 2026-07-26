@@ -6025,7 +6025,22 @@ test("Illustrator owns the merged scene-video and Storyboard subsections while a
       name: /Automatic Storyboard Animations/,
     });
     await expect(automaticAnimationsToggle).not.toBeChecked();
+    const keyframeSlider = storyboardsSubsection.getByRole("slider", { name: "Keyframes per Turn" });
+    const keyframeControl = storyboardsSubsection
+      .locator("label")
+      .filter({ hasText: "Keyframes per Turn" })
+      .locator("..");
+    await expect(keyframeSlider).toHaveValue("3");
+    await keyframeSlider.fill("5");
+    await expect(keyframeSlider).toHaveValue("5");
+    await keyframeControl.getByRole("button", { name: "Use agent default" }).click();
+    await expect(keyframeSlider).toHaveValue("3");
+    await expect(keyframeControl.getByText("Using agent default", { exact: true })).toBeVisible();
     const durationInput = storyboardsSubsection.getByRole("spinbutton", { name: "Animation Clip Duration" });
+    const durationControl = storyboardsSubsection
+      .locator("label")
+      .filter({ hasText: "Animation Clip Duration" })
+      .locator("..");
     await expect(durationInput).toBeDisabled();
     await storyboardsSubsection.getByText("Automatic Storyboard Animations", { exact: true }).click();
     await expect(automaticAnimationsToggle).toBeChecked();
@@ -6033,6 +6048,9 @@ test("Illustrator owns the merged scene-video and Storyboard subsections while a
     await durationInput.fill("9");
     await durationInput.blur();
     await expect(durationInput).toHaveValue("9");
+    await durationControl.getByRole("button", { name: "Use agent default" }).click();
+    await expect(durationInput).toHaveValue("6");
+    await expect(durationControl.getByText("Using agent default", { exact: true })).toBeVisible();
     await expect(gameIllustratorCard.getByText("Attach Card Appearance", { exact: true })).toHaveCount(1);
     await expect(gameIllustratorCard.getByText("Send Avatar References", { exact: true })).toHaveCount(1);
 
