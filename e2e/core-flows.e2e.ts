@@ -1147,7 +1147,7 @@ test("modal backdrops ignore drag releases but still close on a fresh outside cl
   await expect(dialog).toHaveCount(0);
 });
 
-test("connection model fetch errors inherit the configured chroma text color", async ({ page }, testInfo) => {
+test("connection model fetch errors inherit the configured editor accent", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name.includes("mobile"), "Desktop connection editor chrome is covered here.");
 
   const connectionResponse = await page.request.post("/api/connections", {
@@ -1159,18 +1159,40 @@ test("connection model fetch errors inherit the configured chroma text color", a
   expect(connectionResponse.ok()).toBeTruthy();
   const connection = (await connectionResponse.json()) as { id: string };
   const networkError = "NetworkError when attempting to fetch resource.";
+  const internalServerError = "Internal Server Error";
+  const accentColor = "rgb(20, 184, 166)";
+  let fetchCount = 0;
 
   try {
     await page.route(`**/api/connections/${connection.id}/models`, async (route) => {
+      const message = fetchCount === 0 ? networkError : internalServerError;
+      fetchCount += 1;
       await route.fulfill({
         status: 502,
         contentType: "application/json",
-        body: JSON.stringify({ error: { message: networkError } }),
+        body: JSON.stringify({ error: { message } }),
       });
     });
     await page.goto("/");
+    await page.evaluate(async (accent) => {
+      const { useUIStore } = (await import("/src/stores/ui.store.ts")) as {
+        useUIStore: {
+          getState: () => {
+            setAppAccentColor: (color: string) => void;
+          };
+        };
+      };
+      useUIStore.getState().setAppAccentColor(accent);
+    }, "#14b8a6");
+    await expect
+      .poll(() =>
+        page.evaluate(() =>
+          getComputedStyle(document.documentElement).getPropertyValue("--marinara-app-accent-static").trim(),
+        ),
+      )
+      .toBe("#14b8a6");
     await page.evaluate(() => {
-      document.documentElement.style.setProperty("--marinara-chat-chrome-panel-text", "rgb(12, 34, 56)");
+      document.documentElement.style.setProperty("--marinara-chat-chrome-panel-text", "rgb(236, 72, 153)");
       document.documentElement.style.setProperty("--destructive", "rgb(255, 0, 0)");
     });
 
@@ -1188,9 +1210,14 @@ test("connection model fetch errors inherit the configured chroma text color", a
 
     const errorText = editor.getByText(networkError, { exact: true });
     await expect(errorText).toBeVisible();
-    await expect(errorText).toHaveClass(/mari-chrome-text/u);
-    await expect(errorText).toHaveCSS("color", "rgb(12, 34, 56)");
+    await expect(errorText).toHaveCSS("color", accentColor);
     expect(await errorText.getAttribute("class")).not.toMatch(/destructive|pink|red|rose/iu);
+
+    await editor.getByRole("button", { name: "Fetch Models from API" }).click();
+    const internalErrorText = editor.getByText(internalServerError, { exact: true });
+    await expect(internalErrorText).toBeVisible();
+    await expect(internalErrorText).toHaveCSS("color", accentColor);
+    expect(await internalErrorText.getAttribute("class")).not.toMatch(/destructive|pink|red|rose/iu);
   } finally {
     await page.request.delete(`/api/connections/${connection.id}`).catch(() => undefined);
   }
