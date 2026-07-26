@@ -16,6 +16,7 @@ import {
 } from "../lib/agent-failures";
 import { chatBackgroundMetadataToUrl, chatBackgroundUrlToMetadata } from "../lib/backgrounds";
 import { formatGenerationParameterError } from "../lib/generation-parameter-errors";
+import { sanitizeAppCss } from "../lib/theme-css";
 import {
   getTypewriterRevealCharsPerSecond,
   isGenerationStartBlocked,
@@ -171,7 +172,7 @@ function applyAgentFrontendStyle(chatId: string, raw: unknown) {
   }
   const token = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
   style.dataset.agentStyleToken = token;
-  style.textContent = css;
+  style.textContent = sanitizeAppCss(css);
   window.setTimeout(() => {
     const current = document.getElementById(id) as HTMLStyleElement | null;
     if (current?.dataset.agentStyleToken === token) current.remove();
