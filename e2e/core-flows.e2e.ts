@@ -4246,76 +4246,113 @@ test("ElevenLabs keeps models visible and exposes scrollable account voices in e
       labels: { accent: index % 2 === 0 ? "Polish" : "English" },
     };
   });
-
-  await page.route("**/api/tts/config", async (route) => {
-    if (route.request().method() === "PUT") {
-      Object.assign(config, route.request().postDataJSON());
-      saveCount += 1;
-      await route.fulfill({ status: 204 });
-      return;
-    }
-    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(config) });
+  const characterName = `ElevenLabs Voice Picker Character ${Date.now()}`;
+  const characterResponse = await page.request.post("/api/characters", {
+    data: { data: { name: characterName } },
   });
-  await page.route("**/api/tts/voices", async (route) => {
-    voiceFetchCount += 1;
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({
-        voices: voiceOptions.map((voice) => voice.id),
-        voiceOptions,
-        fromProvider: true,
-        source: "elevenlabs",
-      }),
+  expect(characterResponse.ok()).toBeTruthy();
+  const character = (await characterResponse.json()) as { id: string };
+
+  try {
+    await page.route("**/api/tts/config", async (route) => {
+      if (route.request().method() === "PUT") {
+        Object.assign(config, route.request().postDataJSON());
+        saveCount += 1;
+        await route.fulfill({ status: 204 });
+        return;
+      }
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(config) });
     });
-  });
-  await page.route("**/api/tts/models", async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({
-        models: [
-          { id: "eleven_multilingual_v2", name: "Eleven Multilingual v2" },
-          { id: "eleven_v3", name: "Eleven v3" },
-          { id: "eleven_flash_v2_5", name: "Eleven Flash v2.5" },
-        ],
-        fromProvider: true,
-        source: "elevenlabs",
-      }),
+    await page.route("**/api/tts/voices", async (route) => {
+      voiceFetchCount += 1;
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          voices: voiceOptions.map((voice) => voice.id),
+          voiceOptions,
+          fromProvider: true,
+          source: "elevenlabs",
+        }),
+      });
     });
-  });
+    await page.route("**/api/tts/models", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          models: [
+            { id: "eleven_multilingual_v2", name: "Eleven Multilingual v2" },
+            { id: "eleven_v3", name: "Eleven v3" },
+            { id: "eleven_flash_v2_5", name: "Eleven Flash v2.5" },
+          ],
+          fromProvider: true,
+          source: "elevenlabs",
+        }),
+      });
+    });
 
-  await page.goto("/");
-  await page.locator('[data-tour="panel-connections"]').click();
-  const rightPanel = page.locator('[data-component="RightPanel"]');
-  const ttsLabel = rightPanel.getByText("Text to Speech", { exact: true });
-  const ttsCard = ttsLabel.locator("xpath=../../..");
-  await ttsCard.getByTitle("Expand").click();
+    await page.goto("/");
+    await page.locator('[data-tour="panel-connections"]').click();
+    const rightPanel = page.locator('[data-component="RightPanel"]');
+    const ttsLabel = rightPanel.getByText("Text to Speech", { exact: true });
+    const ttsCard = ttsLabel.locator("xpath=../../..");
+    await ttsCard.getByTitle("Expand").click();
 
-  const modelSelect = ttsCard.getByRole("combobox", { name: "Model" });
-  await expect(modelSelect.locator("option")).toHaveCount(3);
-  await expect(modelSelect.locator('option[value="eleven_v3"]')).toHaveText("Eleven v3 (eleven_v3)");
+    const modelSelect = ttsCard.getByRole("combobox", { name: "Model" });
+    await expect(modelSelect.locator("option")).toHaveCount(3);
+    await expect(modelSelect.locator('option[value="eleven_v3"]')).toHaveText("Eleven v3 (eleven_v3)");
 
-  await ttsCard.getByRole("button", { name: "All Characters Voice" }).click();
-  const voiceList = ttsCard.getByTestId("tts-voice-options");
-  await expect(voiceList.getByRole("option")).toHaveCount(49);
-  await expect(voiceList.getByText("Custom Voice 48 (voice-48)", { exact: true })).toBeAttached();
-  await expect(voiceList).toHaveCSS("overflow-y", "scroll");
-  expect(
-    await voiceList.evaluate((element) => ({
-      scrollable: element.scrollHeight > element.clientHeight,
-      gutter: getComputedStyle(element).scrollbarGutter,
-    })),
-  ).toEqual({ scrollable: true, gutter: "stable" });
+    const allCharactersVoicePicker = ttsCard.getByRole("button", { name: "All Characters Voice" });
+    await allCharactersVoicePicker.click();
+    const voiceList = page.getByTestId("tts-voice-options");
+    await expect(voiceList.getByRole("option")).toHaveCount(49);
+    await expect(voiceList.getByText("Custom Voice 48 (voice-48)", { exact: true })).toBeAttached();
+    await expect(voiceList).toHaveCSS("overflow-y", "scroll");
+    expect(
+      await voiceList.evaluate((element) => ({
+        scrollable: element.scrollHeight > element.clientHeight,
+        gutter: getComputedStyle(element).scrollbarGutter,
+      })),
+    ).toEqual({ scrollable: true, gutter: "stable" });
 
-  await page.keyboard.press("Escape");
-  await ttsCard.getByRole("combobox", { name: "Voice Option" }).selectOption("per-character");
-  const refreshButton = ttsCard.getByRole("button", { name: "Refresh", exact: true });
-  await expect(refreshButton).toBeVisible();
-  const fetchesBeforeRefresh = voiceFetchCount;
-  await refreshButton.click();
-  await expect.poll(() => saveCount).toBeGreaterThan(0);
-  await expect.poll(() => voiceFetchCount).toBeGreaterThan(fetchesBeforeRefresh);
+    await page.keyboard.press("Escape");
+    await expect(allCharactersVoicePicker).toBeFocused();
+    await ttsCard.getByRole("combobox", { name: "Voice Option" }).selectOption("per-character");
+    const refreshButton = ttsCard.getByRole("button", { name: "Refresh", exact: true });
+    await expect(refreshButton).toBeVisible();
+    await ttsCard.getByRole("button", { name: "Add character voice" }).click();
+
+    const characterPicker = ttsCard.getByRole("button", { name: "Select character" });
+    await characterPicker.click();
+    const characterList = page.getByTestId("tts-character-options");
+    await expect(characterList).toBeVisible();
+    await expect(characterList).toHaveCSS("overflow-y", "scroll");
+    await expect(characterList.locator("xpath=../..")).toHaveCSS("position", "fixed");
+    await characterList.getByRole("option", { name: characterName, exact: true }).click();
+    await expect(characterPicker).toBeFocused();
+    await characterPicker.click();
+    await page.keyboard.press("Escape");
+    await expect(characterPicker).toBeFocused();
+
+    const characterVoicePicker = ttsCard.getByRole("button", { name: /^Voice for / });
+    const characterVoiceTriggerBox = await characterVoicePicker.boundingBox();
+    await characterVoicePicker.click();
+    const characterVoiceList = page.getByTestId("tts-voice-options");
+    const characterVoiceMenuBox = await characterVoiceList.locator("xpath=../..").boundingBox();
+    expect(characterVoiceTriggerBox).not.toBeNull();
+    expect(characterVoiceMenuBox).not.toBeNull();
+    expect(characterVoiceMenuBox!.width).toBeGreaterThan(characterVoiceTriggerBox!.width + 40);
+    await page.keyboard.press("Escape");
+    await expect(characterVoicePicker).toBeFocused();
+
+    const fetchesBeforeRefresh = voiceFetchCount;
+    await refreshButton.click();
+    await expect.poll(() => saveCount).toBeGreaterThan(0);
+    await expect.poll(() => voiceFetchCount).toBeGreaterThan(fetchesBeforeRefresh);
+  } finally {
+    await page.request.delete(`/api/characters/${character.id}`).catch(() => undefined);
+  }
 });
 
 test("failed Game Lorebook Keeper run exposes a retry action", async ({ page }, testInfo) => {
