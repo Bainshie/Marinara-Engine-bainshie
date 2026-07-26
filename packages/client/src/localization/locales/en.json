@@ -7209,7 +7209,7 @@
   "ui.ui.generationparametersfields.controlsHowLongAndDetailedResponsesShouldBeLow": "Controls how long and detailed responses should be. Low keeps things concise; high encourages elaborate, descriptive output.",
   "ui.ui.generationparametersfields.controlsRandomnessLowerValuesMakeOutputMoreFocusedAnd": "Controls randomness. Lower values make output more focused and deterministic; higher values make it more creative and varied.",
   "ui.ui.generationparametersfields.frequency": "Frequency",
-  "ui.ui.generationparametersfields.howMuchReasoningWorkTheProviderShouldSpendBefore": "How much reasoning work the provider should spend before responding. Unsupported tiers are lowered to the strongest compatible tier automatically.",
+  "ui.ui.generationparametersfields.howMuchReasoningWorkTheProviderShouldSpendBefore": "How much reasoning work the provider should spend before responding. None requests that thinking be disabled when the selected provider and model support it; reasoning-mandatory models may still think. Turn off this parameter's switch to leave the provider default unchanged.",
   "ui.ui.generationparametersfields.limitsTheModelToOnlyConsiderTheTopK": "Limits the model to only consider the top K most likely tokens at each step. 0 disables this limit.",
   "ui.ui.generationparametersfields.nucleusSamplingOnlyConsidersTokensWhoseCumulativeProbabilityReaches": "Nucleus sampling: only considers tokens whose cumulative probability reaches this threshold. Lower values make output more focused.",
   "ui.ui.generationparametersfields.openrouterServiceTier": "OpenRouter Service Tier",
