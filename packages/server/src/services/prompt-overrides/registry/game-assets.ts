@@ -5,13 +5,7 @@
 // narration summarization for illustrations).
 // ──────────────────────────────────────────────
 import type { PromptOverrideKeyDef } from "../types.js";
-import {
-  GAME_VIDEO_PROMPT_TEMPLATE,
-  GAME_VIDEO_PROMPT_TEMPLATE_VARIABLES,
-  GAME_STORYBOARD_PROMPT_TEMPLATE_VARIABLES,
-  GAME_STORYBOARD_STILL_ANIMATION_PROMPT_TEMPLATE,
-  GAME_STORYBOARD_STILL_PROMPT_TEMPLATE,
-} from "@marinara-engine/shared";
+import { GAME_VIDEO_PROMPT_TEMPLATE, GAME_VIDEO_PROMPT_TEMPLATE_VARIABLES } from "@marinara-engine/shared";
 import { renderTemplate } from "../template.js";
 
 // ── NPC portrait ──
@@ -322,73 +316,6 @@ export const GAME_IMAGE_PROMPT_DIRECTOR: PromptOverrideKeyDef<GameImagePromptDir
     sourcePrompt: "Lyra, auburn hair, green eyes, centered portrait, polished anime VN art...",
     maxCharacters: 1400,
   },
-};
-
-// ── Turn storyboard directors (GM narration -> illustration or animation storyboard) ──
-
-export interface GameStoryboardIllustratorCtx extends Record<string, string | number | undefined> {
-  gameContextBlock: string;
-  sourceSectionsBlock: string;
-  sourceNarration: string;
-  keyframeCount: number;
-  durationSeconds: number;
-  aspectRatio: string;
-}
-
-export const GAME_STORYBOARD_ILLUSTRATION_DIRECTOR: PromptOverrideKeyDef<GameStoryboardIllustratorCtx> = {
-  key: "game.storyboardIllustrationDirector",
-  label: "Game Mode Storyboard Illustrator",
-  description:
-    "Game Mode storyboard illustrator instructions that split one GM turn narration into keyframe image prompts.",
-  variables: [
-    {
-      name: "gameContextBlock",
-      description: "Pre-formatted context block with mode, location, weather, world, style, and image instructions.",
-      example:
-        "<game_context>\nMode: exploration\nLocation: moonlit graveyard\nWeather: cold rain\nArt style: manga ink and watercolor\n</game_context>",
-    },
-    {
-      name: "sourceNarration",
-      description: "The stripped GM narration for one completed Game Mode turn.",
-      example: "Korr drops to one knee in the rain while Lyra steadies herself over the fallen blade.",
-    },
-    {
-      name: "sourceSectionsBlock",
-      description: "Pre-formatted <turn_sections> block with stable narration section indices from the reader UI.",
-      example:
-        '<turn_sections>\n<section index="0" kind="narration">Korr drops to one knee.</section>\n<section index="1" kind="dialogue" speaker="Lyra">Stay down.</section>\n</turn_sections>',
-    },
-    { name: "keyframeCount", description: "Target number of storyboard frames.", example: "4" },
-    {
-      name: "durationSeconds",
-      description: "Unused for illustration-only planning; present for template compatibility.",
-      example: "6",
-    },
-    { name: "aspectRatio", description: "Output aspect ratio.", example: "16:9" },
-  ],
-  defaultBuilder: (ctx) =>
-    renderTemplate(GAME_STORYBOARD_STILL_PROMPT_TEMPLATE, ctx, GAME_STORYBOARD_PROMPT_TEMPLATE_VARIABLES),
-  exampleContext: {
-    gameContextBlock:
-      "<game_context>\nMode: exploration\nLocation: moonlit graveyard\nWeather: cold rain\nArt style: manga ink and watercolor\n</game_context>",
-    sourceSectionsBlock:
-      '<turn_sections>\n<section index="0" kind="narration">Korr drops to one knee in the rain.</section>\n<section index="1" kind="dialogue" speaker="Lyra">Stay down.</section>\n</turn_sections>',
-    sourceNarration: "Korr drops to one knee in the rain while Lyra steadies herself over the fallen blade.",
-    keyframeCount: 4,
-    durationSeconds: 6,
-    aspectRatio: "16:9",
-  },
-};
-
-export const GAME_STORYBOARD_ANIMATION_DIRECTOR: PromptOverrideKeyDef<GameStoryboardIllustratorCtx> = {
-  key: "game.storyboardAnimationDirector",
-  label: "Game Mode Storyboard Animation Planner",
-  description:
-    "Game Mode storyboard animation planner instructions that split one GM turn into first frames and motion directions.",
-  variables: GAME_STORYBOARD_ILLUSTRATION_DIRECTOR.variables,
-  defaultBuilder: (ctx) =>
-    renderTemplate(GAME_STORYBOARD_STILL_ANIMATION_PROMPT_TEMPLATE, ctx, GAME_STORYBOARD_PROMPT_TEMPLATE_VARIABLES),
-  exampleContext: GAME_STORYBOARD_ILLUSTRATION_DIRECTOR.exampleContext,
 };
 
 // ── Game video prompt (scene illustration -> animated clip) ──

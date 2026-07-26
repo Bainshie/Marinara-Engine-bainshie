@@ -63,6 +63,7 @@ import {
 } from "../../hooks/use-knowledge-sources";
 import { cn } from "../../lib/utils";
 import { MacroTextarea } from "../ui/MacroTextarea";
+import { StoryboardAgentSettingsPanel } from "./StoryboardAgentSettingsPanel";
 import {
   getAgentRunIntervalMeta,
   getCadenceInputValue,
@@ -90,10 +91,12 @@ import {
   normalizeAgentPhaseForType,
   normalizeCustomAgentCapabilities,
   normalizeAgentPromptTemplateOptions,
+  normalizeStoryboardAgentSettings,
   parseAgentSettingsRecord,
   type AgentPhase,
   type AgentPromptTemplateOption,
   type AgentResultType,
+  type StoryboardAgentSettings,
   type CustomAgentCapability,
   type CustomAgentCapabilityMap,
   type ToolDefinition,
@@ -406,6 +409,27 @@ function normalizeStringArray(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === "string") : [];
 }
 
+function storyboardSettingsForStorage(settings: StoryboardAgentSettings): Record<string, unknown> {
+  return {
+    illustrationPlannerTemplateIds: settings.illustrationPlannerTemplateIds,
+    animationPlannerTemplateIds: settings.animationPlannerTemplateIds,
+    illustrationTemplates: settings.illustrationTemplates,
+    videoTemplates: settings.videoTemplates,
+    illustrationPlannerTemplateId: settings.illustrationPlannerTemplateId,
+    animationPlannerTemplateId: settings.animationPlannerTemplateId,
+    illustrationTemplateId: settings.illustrationTemplateId,
+    videoTemplateId: settings.videoTemplateId,
+    imageConnectionId: settings.imageConnectionId,
+    videoConnectionId: settings.videoConnectionId,
+    autoGenerateMode: settings.autoGenerateMode,
+    keyframeCount: settings.keyframeCount,
+    animationDurationSeconds: settings.animationDurationSeconds,
+    viewerDisplayMode: settings.viewerDisplayMode,
+    useNovelAiCharacterPrompts: settings.useNovelAiCharacterPrompts,
+    usePromptTemplate: settings.usePromptTemplate,
+  };
+}
+
 // ═══════════════════════════════════════════════
 //  Main Editor
 // ═══════════════════════════════════════════════
@@ -441,7 +465,9 @@ export function AgentEditor() {
       loaded: Array.isArray(connections),
       llmIds: new Set(
         rows
-          .filter((connection) => connection.provider !== "image_generation" && connection.provider !== "video_generation")
+          .filter(
+            (connection) => connection.provider !== "image_generation" && connection.provider !== "video_generation",
+          )
           .map((connection) => connection.id),
       ),
       imageIds: new Set(
@@ -524,6 +550,9 @@ export function AgentEditor() {
   const [localIncludeCharacterAppearance, setLocalIncludeCharacterAppearance] = useState(false);
   const [localImagePositivePrompt, setLocalImagePositivePrompt] = useState("");
   const [localImageNegativePrompt, setLocalImageNegativePrompt] = useState("");
+  const [localStoryboardSettings, setLocalStoryboardSettings] = useState<StoryboardAgentSettings>(() =>
+    normalizeStoryboardAgentSettings({}),
+  );
   const [localProseGuardianBanned, setLocalProseGuardianBanned] = useState(DEFAULT_PROSE_GUARDIAN_BANNED_WORDS);
   const [localProseGuardianAvoid, setLocalProseGuardianAvoid] = useState(DEFAULT_PROSE_GUARDIAN_AVOID);
   const [localProseGuardianPrefer, setLocalProseGuardianPrefer] = useState("");
@@ -569,6 +598,7 @@ export function AgentEditor() {
       setLocalPhase(normalizeAgentPhaseForType(agentType, dbConfig.phase));
       setLocalConnectionId(normalizeTextConnectionOverride(dbConfig.connectionId));
       const settings = mergeBuiltInAgentSettings(agentType, dbConfig.settings);
+      setLocalStoryboardSettings(normalizeStoryboardAgentSettings(settings));
       const promptTemplateSource = settings.promptTemplates ?? defaultSettings.promptTemplates;
       setLocalAuthor(
         normalizeAuthor(settings.author, builtIn?.author ?? (isCustomAgent ? "Unknown" : DEFAULT_AGENT_AUTHOR)),
@@ -680,6 +710,7 @@ export function AgentEditor() {
       setLocalDescription(builtIn.description);
       setLocalAuthor(builtIn.author ?? DEFAULT_AGENT_AUTHOR);
       setLocalPromptTemplates(normalizeAgentPromptTemplateOptions(defaultSettings.promptTemplates));
+      setLocalStoryboardSettings(normalizeStoryboardAgentSettings(defaultSettings));
       setLocalPhase(normalizeAgentPhaseForType(builtIn.id, builtIn.phase));
       setLocalConnectionId("");
       setLocalImageConnectionId("");
@@ -735,6 +766,7 @@ export function AgentEditor() {
       setLocalDescription("");
       setLocalAuthor("");
       setLocalPromptTemplates([]);
+      setLocalStoryboardSettings(normalizeStoryboardAgentSettings({}));
       setLocalPhase("post_processing");
       setLocalConnectionId("");
       setLocalImageConnectionId("");
@@ -818,6 +850,7 @@ export function AgentEditor() {
 
   // Illustrator agent — run interval setting
   const isIllustratorAgent = agentDetailId === "illustrator" || dbConfig?.type === "illustrator";
+  const isStoryboardAgent = agentDetailId === "storyboard" || dbConfig?.type === "storyboard";
 
   // Knowledge Retrieval agent — lorebook source selector
   const isKnowledgeRetrievalAgent = agentDetailId === "knowledge-retrieval" || dbConfig?.type === "knowledge-retrieval";
@@ -1072,6 +1105,7 @@ export function AgentEditor() {
               includeCharacterAppearance: localIncludeCharacterAppearance,
             }
           : {}),
+        ...(isStoryboardAgent ? storyboardSettingsForStorage(localStoryboardSettings) : {}),
         ...(isProseGuardianAgent
           ? {
               banned: localProseGuardianBanned.trim() || DEFAULT_PROSE_GUARDIAN_BANNED_WORDS,
@@ -1157,11 +1191,13 @@ export function AgentEditor() {
     localSecretPlotRunInterval,
     localImagePositivePrompt,
     localImageNegativePrompt,
+    localStoryboardSettings,
     dbConfig,
     builtIn,
     isCustomAgent,
     isNewCustomAgent,
     isIllustratorAgent,
+    isStoryboardAgent,
     isProseGuardianAgent,
     isContinuityAgent,
     isHtmlAgent,
@@ -1257,6 +1293,7 @@ export function AgentEditor() {
             includeCharacterAppearance: localIncludeCharacterAppearance,
           }
         : {}),
+      ...(isStoryboardAgent ? storyboardSettingsForStorage(localStoryboardSettings) : {}),
       ...(isProseGuardianAgent
         ? {
             banned: localProseGuardianBanned.trim() || DEFAULT_PROSE_GUARDIAN_BANNED_WORDS,
@@ -1292,7 +1329,11 @@ export function AgentEditor() {
       ]),
       createAgentFolderPackageFilename(localName || agentType, "agent"),
     );
-    toast.success(localizeUi("ui.agents.agenteditor.exportedValue1", { value1: localName ||localizeUi("ui.agents.agentcatalogview.agent") }));
+    toast.success(
+      localizeUi("ui.agents.agenteditor.exportedValue1", {
+        value1: localName || localizeUi("ui.agents.agentcatalogview.agent"),
+      }),
+    );
   };
 
   const handleResetPrompt = useCallback(() => {
@@ -1328,7 +1369,9 @@ export function AgentEditor() {
       toast.success(localizeUi("ui.agents.agenteditor.openedGameAssetsValue1", { value1: subfolder }));
     } catch (error) {
       if (error instanceof HostDeviceFileManagerError) return;
-      toast.error(getPrivilegedActionErrorMessage(error,localizeUi("ui.agents.agenteditor.couldNotOpenTheCustomMusicFolder")));
+      toast.error(
+        getPrivilegedActionErrorMessage(error, localizeUi("ui.agents.agenteditor.couldNotOpenTheCustomMusicFolder")),
+      );
     }
   };
 
@@ -1341,7 +1384,9 @@ export function AgentEditor() {
       setDirty(true);
       toast.success(localizeUi("ui.agents.agenteditor.selectedCustomMusicFolder"));
     } catch (error) {
-      toast.error(error instanceof Error ? error.message :localizeUi("ui.agents.agenteditor.couldNotSelectACustomMusicFolder"));
+      toast.error(
+        error instanceof Error ? error.message : localizeUi("ui.agents.agenteditor.couldNotSelectACustomMusicFolder"),
+      );
     }
   }, [localizeUi]);
 
@@ -1366,9 +1411,18 @@ export function AgentEditor() {
   );
 
   const handleAddPromptTemplate = useCallback(() => {
-    setLocalPromptTemplates((options) => [...options, createBlankPromptOption(options)]);
+    setLocalPromptTemplates((options) => {
+      const option = createBlankPromptOption(options);
+      if (isStoryboardAgent) {
+        setLocalStoryboardSettings((settings) => ({
+          ...settings,
+          illustrationPlannerTemplateIds: [...settings.illustrationPlannerTemplateIds, option.id],
+        }));
+      }
+      return [...options, option];
+    });
     markDirty();
-  }, [markDirty]);
+  }, [isStoryboardAgent, markDirty]);
 
   const handleUpdatePromptTemplate = useCallback(
     (id: string, patch: Partial<Pick<AgentPromptTemplateOption, "name" | "promptTemplate" | "description">>) => {
@@ -1383,12 +1437,24 @@ export function AgentEditor() {
   const handleRemovePromptTemplate = useCallback(
     (id: string) => {
       setLocalPromptTemplates((options) => options.filter((option) => option.id !== id));
+      if (isStoryboardAgent) {
+        setLocalStoryboardSettings((settings) => ({
+          ...settings,
+          illustrationPlannerTemplateIds: settings.illustrationPlannerTemplateIds.filter((entry) => entry !== id),
+          animationPlannerTemplateIds: settings.animationPlannerTemplateIds.filter((entry) => entry !== id),
+          illustrationPlannerTemplateId:
+            settings.illustrationPlannerTemplateId === id ? null : settings.illustrationPlannerTemplateId,
+          animationPlannerTemplateId:
+            settings.animationPlannerTemplateId === id ? null : settings.animationPlannerTemplateId,
+        }));
+      }
       markDirty();
     },
-    [markDirty],
+    [isStoryboardAgent, markDirty],
   );
 
   const currentAgentType = dbConfig?.type ?? builtIn?.id ?? agentDetailId ?? "";
+  const storyboardDefaultSettings = normalizeStoryboardAgentSettings(getDefaultBuiltInAgentSettings("storyboard"));
   const defaultPromptTemplateById = useMemo(() => {
     const defaultSettings = getDefaultBuiltInAgentSettings(currentAgentType);
     return new Map(
@@ -1451,9 +1517,9 @@ export function AgentEditor() {
     if (!dbConfig) return;
     if (
       !(await showConfirmDialog({
-        title:localizeUi("ui.agents.agenteditor.deleteAgent_09b378f"),
-        message:localizeUi("ui.agents.agenteditor.deleteThisCustomAgentThisCannotBeUndone"),
-        confirmLabel:localizeUi("lorebook.editor.batch.delete"),
+        title: localizeUi("ui.agents.agenteditor.deleteAgent_09b378f"),
+        message: localizeUi("ui.agents.agenteditor.deleteThisCustomAgentThisCannotBeUndone"),
+        confirmLabel: localizeUi("lorebook.editor.batch.delete"),
         tone: "destructive",
       }))
     ) {
@@ -1492,13 +1558,19 @@ export function AgentEditor() {
         <div className="mari-editor-actions flex max-md:w-full max-md:justify-end max-md:border-t max-md:border-[var(--marinara-editor-divider)] max-md:pt-2">
           {saveError && (
             <span className="mari-editor-status mr-2 text-red-400">
-              <AlertCircle size="0.6875rem" /> {localizeUi("ui.agents.agenteditor.saveFailed")}</span>
+              <AlertCircle size="0.6875rem" /> {localizeUi("ui.agents.agenteditor.saveFailed")}
+            </span>
           )}
           {savedFlash && !dirty && (
             <span className="mari-editor-status mr-2 text-emerald-400">
-              <Check size="0.6875rem" /> {localizeUi("chat.settings.inlineEditor.saved")}</span>
+              <Check size="0.6875rem" /> {localizeUi("chat.settings.inlineEditor.saved")}
+            </span>
           )}
-          {dirty && !saveError && <span className="mari-editor-status mr-2 text-amber-400">{localizeUi("ui.agents.agenteditor.unsaved")}</span>}
+          {dirty && !saveError && (
+            <span className="mari-editor-status mr-2 text-amber-400">
+              {localizeUi("ui.agents.agenteditor.unsaved")}
+            </span>
+          )}
           <button
             onClick={handleSave}
             disabled={isPending}
@@ -1535,18 +1607,24 @@ export function AgentEditor() {
             <button
               onClick={() => setShowUnsavedWarning(false)}
               className="rounded-lg px-3 py-1 hover:bg-[var(--accent)]"
-            >{localizeUi("ui.agents.agenteditor.keepEditing")}</button>
+            >
+              {localizeUi("ui.agents.agenteditor.keepEditing")}
+            </button>
             <button
               onClick={() => closeAgentDetail()}
               className="rounded-lg px-3 py-1 text-[var(--destructive)] hover:bg-[var(--destructive)]/15"
-            >{localizeUi("ui.agents.agenteditor.discard")}</button>
+            >
+              {localizeUi("ui.agents.agenteditor.discard")}
+            </button>
             <button
               onClick={async () => {
                 await handleSave();
                 closeAgentDetail();
               }}
               className="rounded-lg bg-amber-500/20 px-3 py-1 hover:bg-amber-500/30"
-            >{localizeUi("ui.agents.agenteditor.saveClose")}</button>
+            >
+              {localizeUi("ui.agents.agenteditor.saveClose")}
+            </button>
           </div>
         </div>
       )}
@@ -1570,7 +1648,11 @@ export function AgentEditor() {
         <div className="flex items-center gap-2 bg-amber-500/10 px-4 py-2 text-xs text-amber-400">
           <AlertCircle size="0.8125rem" />
           <span className="flex-1">
-            {isKnowledgeRouterAgent ?localizeUi("ui.agents.agenteditor.knowledgeRetrieval") :localizeUi("ui.agents.agenteditor.knowledgeRouter")} {localizeUi("ui.agents.agenteditor.isAlsoConfiguredBothAgentsCanRunInParallel")}</span>
+            {isKnowledgeRouterAgent
+              ? localizeUi("ui.agents.agenteditor.knowledgeRetrieval")
+              : localizeUi("ui.agents.agenteditor.knowledgeRouter")}{" "}
+            {localizeUi("ui.agents.agenteditor.isAlsoConfiguredBothAgentsCanRunInParallel")}
+          </span>
         </div>
       )}
 
@@ -1585,7 +1667,9 @@ export function AgentEditor() {
           >
             <div className="grid gap-3 sm:grid-cols-[1fr_14rem]">
               <label className="flex min-w-0 flex-col gap-1.5">
-                <span className="text-[0.6875rem] font-medium text-[var(--muted-foreground)]">{localizeUi("chat.settings.inlineEditor.fields.description")}</span>
+                <span className="text-[0.6875rem] font-medium text-[var(--muted-foreground)]">
+                  {localizeUi("chat.settings.inlineEditor.fields.description")}
+                </span>
                 <input
                   value={localDescription}
                   onChange={(e) => {
@@ -1597,7 +1681,9 @@ export function AgentEditor() {
                 />
               </label>
               <label className="flex min-w-0 flex-col gap-1.5">
-                <span className="text-[0.6875rem] font-medium text-[var(--muted-foreground)]">{localizeUi("ui.agents.agenteditor.author")}</span>
+                <span className="text-[0.6875rem] font-medium text-[var(--muted-foreground)]">
+                  {localizeUi("ui.agents.agenteditor.author")}
+                </span>
                 <input
                   value={localAuthor}
                   onChange={(e) => {
@@ -1605,7 +1691,7 @@ export function AgentEditor() {
                     markDirty();
                   }}
                   className="w-full rounded-xl bg-[var(--secondary)] px-3 py-2.5 text-sm ring-1 ring-[var(--border)] placeholder:text-[var(--muted-foreground)] focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
-                  placeholder={builtIn ? DEFAULT_AGENT_AUTHOR :localizeUi("ui.agents.agenteditor.yourName")}
+                  placeholder={builtIn ? DEFAULT_AGENT_AUTHOR : localizeUi("ui.agents.agenteditor.yourName")}
                 />
               </label>
             </div>
@@ -1719,9 +1805,10 @@ export function AgentEditor() {
                 })}
               </div>
               {localResultType === "text_rewrite" && (
-                <p className="mt-2 rounded-lg border border-amber-400/20 bg-amber-400/10 px-3 py-2 text-[0.625rem] leading-relaxed text-amber-200">{localizeUi("ui.agents.agenteditor.textRewriteAgentsAlwaysSaveAsPostProcessingTheir")}{" "}
+                <p className="mt-2 rounded-lg border border-amber-400/20 bg-amber-400/10 px-3 py-2 text-[0.625rem] leading-relaxed text-amber-200">
+                  {localizeUi("ui.agents.agenteditor.textRewriteAgentsAlwaysSaveAsPostProcessingTheir")}{" "}
                   <code className="rounded bg-black/20 px-1 py-0.5">
-                    {"{\"editedText\":\"...\",\"changes\":[{\"description\":\"...\"}]}"}
+                    {'{"editedText":"...","changes":[{"description":"..."}]}'}
                   </code>
                   .
                 </p>
@@ -1776,13 +1863,15 @@ export function AgentEditor() {
                   }}
                   description={
                     localCustomCapabilities.edit_lorebooks === true
-                      ?localizeUi("ui.agents.agenteditor.theAgentCanOnlyWriteToTheLorebookSelected")
-                      :localizeUi("ui.agents.agenteditor.enableEditLorebooksAboveBeforeSelectingATarget")
+                      ? localizeUi("ui.agents.agenteditor.theAgentCanOnlyWriteToTheLorebookSelected")
+                      : localizeUi("ui.agents.agenteditor.enableEditLorebooksAboveBeforeSelectingATarget")
                   }
                 />
 
                 <div className="space-y-1.5">
-                  <p className="text-[0.6875rem] font-medium text-[var(--muted-foreground)]">{localizeUi("ui.agents.agenteditor.targetLorebook")}</p>
+                  <p className="text-[0.6875rem] font-medium text-[var(--muted-foreground)]">
+                    {localizeUi("ui.agents.agenteditor.targetLorebook")}
+                  </p>
                   {allLorebooks && allLorebooks.length > 0 ? (
                     <select
                       value={localWritableLorebookId}
@@ -1801,7 +1890,9 @@ export function AgentEditor() {
                       ))}
                     </select>
                   ) : (
-                    <p className="rounded-lg border border-amber-400/20 bg-amber-400/10 px-3 py-2 text-[0.625rem] text-amber-200">{localizeUi("ui.agents.agenteditor.createALorebookBeforeEnablingWritesForThisAgent")}</p>
+                    <p className="rounded-lg border border-amber-400/20 bg-amber-400/10 px-3 py-2 text-[0.625rem] text-amber-200">
+                      {localizeUi("ui.agents.agenteditor.createALorebookBeforeEnablingWritesForThisAgent")}
+                    </p>
                   )}
                 </div>
               </div>
@@ -1823,10 +1914,14 @@ export function AgentEditor() {
               className="w-full rounded-xl bg-[var(--secondary)] px-3 py-2.5 text-sm ring-1 ring-[var(--border)] focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
             >
               <option value="">
-                {defaultAgentConn ?localizeUi("ui.agents.agenteditor.agentDefaultValue1", { value1: defaultAgentConn.name }) :localizeUi("ui.agents.agenteditor.useChatConnection")}
+                {defaultAgentConn
+                  ? localizeUi("ui.agents.agenteditor.agentDefaultValue1", { value1: defaultAgentConn.name })
+                  : localizeUi("ui.agents.agenteditor.useChatConnection")}
               </option>
               {import.meta.env.VITE_MARINARA_LITE !== "true" && (
-                <option value={LOCAL_SIDECAR_CONNECTION_ID}>{localizeUi("ui.agents.agenteditor.localModelSidecar")}</option>
+                <option value={LOCAL_SIDECAR_CONNECTION_ID}>
+                  {localizeUi("ui.agents.agenteditor.localModelSidecar")}
+                </option>
               )}
               {llmConnections.map((conn) => (
                 <option key={conn.id} value={conn.id}>
@@ -1836,8 +1931,8 @@ export function AgentEditor() {
             </select>
             <p className="mt-1 text-[0.625rem] text-[var(--muted-foreground)]">
               {localConnectionId === LOCAL_SIDECAR_CONNECTION_ID
-                ?localizeUi("ui.agents.agenteditor.usesTheBuiltInLocalModelFromTheConnections")
-                :localizeUi("ui.agents.agenteditor.whenEmptyUsesTheAgentDefaultConnectionIfOne")}
+                ? localizeUi("ui.agents.agenteditor.usesTheBuiltInLocalModelFromTheConnections")
+                : localizeUi("ui.agents.agenteditor.whenEmptyUsesTheAgentDefaultConnectionIfOne")}
             </p>
           </FieldGroup>
 
@@ -1858,8 +1953,10 @@ export function AgentEditor() {
               >
                 <option value="">
                   {defaultAgentImageConn
-                    ?localizeUi("ui.agents.agenteditor.illustratorAgentDefaultValue1", { value1: defaultAgentImageConn.name })
-                    :localizeUi("ui.agents.agenteditor.noneNoImageGeneration")}
+                    ? localizeUi("ui.agents.agenteditor.illustratorAgentDefaultValue1", {
+                        value1: defaultAgentImageConn.name,
+                      })
+                    : localizeUi("ui.agents.agenteditor.noneNoImageGeneration")}
                 </option>
                 {imageConnections.map((conn) => (
                   <option key={conn.id} value={conn.id}>
@@ -1867,10 +1964,14 @@ export function AgentEditor() {
                   </option>
                 ))}
               </select>
-              <p className="mt-1 text-[0.625rem] text-[var(--muted-foreground)]">{localizeUi("ui.agents.agenteditor.theIllustratorUsesTwoConnectionsTheLlmAboveAnalyzes")}</p>
+              <p className="mt-1 text-[0.625rem] text-[var(--muted-foreground)]">
+                {localizeUi("ui.agents.agenteditor.theIllustratorUsesTwoConnectionsTheLlmAboveAnalyzes")}
+              </p>
               <div className="mt-3 grid gap-3 md:grid-cols-2">
                 <div className="flex flex-col gap-1.5">
-                  <span className="text-[0.6875rem] font-medium text-[var(--muted-foreground)]">{localizeUi("ui.agents.agenteditor.positivePromptTags")}</span>
+                  <span className="text-[0.6875rem] font-medium text-[var(--muted-foreground)]">
+                    {localizeUi("ui.agents.agenteditor.positivePromptTags")}
+                  </span>
                   <MacroTextarea
                     value={localImagePositivePrompt}
                     onChange={(value) => {
@@ -1884,7 +1985,9 @@ export function AgentEditor() {
                   />
                 </div>
                 <div className="flex flex-col gap-1.5">
-                  <span className="text-[0.6875rem] font-medium text-[var(--muted-foreground)]">{localizeUi("ui.agents.agenteditor.negativePrompt")}</span>
+                  <span className="text-[0.6875rem] font-medium text-[var(--muted-foreground)]">
+                    {localizeUi("ui.agents.agenteditor.negativePrompt")}
+                  </span>
                   <MacroTextarea
                     value={localImageNegativePrompt}
                     onChange={(value) => {
@@ -1898,7 +2001,9 @@ export function AgentEditor() {
                   />
                 </div>
               </div>
-              <p className="mt-1 text-[0.625rem] text-[var(--muted-foreground)]">{localizeUi("ui.agents.agenteditor.savedOnTheIllustratorAgentPositiveTagsAreAppended")}</p>
+              <p className="mt-1 text-[0.625rem] text-[var(--muted-foreground)]">
+                {localizeUi("ui.agents.agenteditor.savedOnTheIllustratorAgentPositiveTagsAreAppended")}
+              </p>
               <div className="mt-3 grid gap-2">
                 <EditorSwitchRow
                   label={localizeUi("ui.agents.agenteditor.sendMatchingCharacterAndPersonaAvatarsAsReferenceImages")}
@@ -1907,10 +2012,14 @@ export function AgentEditor() {
                     setLocalUseAvatarReferences(checked);
                     markDirty();
                   }}
-                  description={localizeUi("ui.agents.agenteditor.sendsReferencesOnlyForCharactersOrPersonaNamesMatched")}
+                  description={localizeUi(
+                    "ui.agents.agenteditor.sendsReferencesOnlyForCharactersOrPersonaNamesMatched",
+                  )}
                 />
                 <EditorSwitchRow
-                  label={localizeUi("ui.agents.agenteditor.attachMatchingCharacterAppearanceDescriptionsToImagePrompts")}
+                  label={localizeUi(
+                    "ui.agents.agenteditor.attachMatchingCharacterAppearanceDescriptionsToImagePrompts",
+                  )}
                   checked={localIncludeCharacterAppearance}
                   onChange={(checked) => {
                     setLocalIncludeCharacterAppearance(checked);
@@ -1939,7 +2048,9 @@ export function AgentEditor() {
               />
               {localAutoGenerateAvatars && (
                 <div className="mt-2">
-                  <label className="block text-xs text-[var(--muted-foreground)] mb-1">{localizeUi("ui.agents.agenteditor.imageGenerationConnection")}</label>
+                  <label className="block text-xs text-[var(--muted-foreground)] mb-1">
+                    {localizeUi("ui.agents.agenteditor.imageGenerationConnection")}
+                  </label>
                   <select
                     value={localImageConnectionId}
                     onChange={(e) => {
@@ -1967,7 +2078,9 @@ export function AgentEditor() {
           >
             <div className="grid gap-3 sm:grid-cols-2">
               <div>
-                <label className="mb-1 block text-[0.6875rem] font-medium text-[var(--muted-foreground)]">{localizeUi("ui.agents.agenteditor.contextSize")}</label>
+                <label className="mb-1 block text-[0.6875rem] font-medium text-[var(--muted-foreground)]">
+                  {localizeUi("ui.agents.agenteditor.contextSize")}
+                </label>
                 <div className="flex items-center gap-3">
                   <input
                     type="number"
@@ -1982,11 +2095,15 @@ export function AgentEditor() {
                     placeholder={String(DEFAULT_AGENT_CONTEXT_SIZE)}
                     className="w-28 rounded-xl bg-[var(--secondary)] px-3 py-2.5 text-sm tabular-nums ring-1 ring-[var(--border)] placeholder:text-[var(--muted-foreground)] focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
                   />
-                  <span className="text-[0.6875rem] text-[var(--muted-foreground)]">{localizeUi("ui.agents.agenteditor.messages")}</span>
+                  <span className="text-[0.6875rem] text-[var(--muted-foreground)]">
+                    {localizeUi("ui.agents.agenteditor.messages")}
+                  </span>
                 </div>
               </div>
               <div>
-                <label className="mb-1 block text-[0.6875rem] font-medium text-[var(--muted-foreground)]">{localizeUi("ui.agents.agenteditor.maxOutputTokens")}</label>
+                <label className="mb-1 block text-[0.6875rem] font-medium text-[var(--muted-foreground)]">
+                  {localizeUi("ui.agents.agenteditor.maxOutputTokens")}
+                </label>
                 <div className="flex items-center gap-3">
                   <input
                     type="number"
@@ -2004,12 +2121,19 @@ export function AgentEditor() {
                     placeholder={String(DEFAULT_AGENT_MAX_TOKENS)}
                     className="w-32 rounded-xl bg-[var(--secondary)] px-3 py-2.5 text-sm tabular-nums ring-1 ring-[var(--border)] placeholder:text-[var(--muted-foreground)] focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
                   />
-                  <span className="text-[0.6875rem] text-[var(--muted-foreground)]">{localizeUi("ui.agents.agenteditor.tokens")}</span>
+                  <span className="text-[0.6875rem] text-[var(--muted-foreground)]">
+                    {localizeUi("ui.agents.agenteditor.tokens")}
+                  </span>
                 </div>
               </div>
             </div>
-            <p className="mt-1 text-[0.625rem] text-[var(--muted-foreground)]">{localizeUi("ui.agents.agenteditor.eachAgentOnlySeesItsOwnContextSizeWhen")}</p>
-            <p className="mt-1 text-[0.625rem] text-[var(--muted-foreground)]">{localizeUi("ui.agents.agenteditor.for8kLocalModelsTry")} {DEFAULT_AGENT_MAX_TOKENS.toLocaleString()} {localizeUi("ui.agents.agenteditor.orLowerSoTheAgentPromptKeepsEnoughRoom")}</p>
+            <p className="mt-1 text-[0.625rem] text-[var(--muted-foreground)]">
+              {localizeUi("ui.agents.agenteditor.eachAgentOnlySeesItsOwnContextSizeWhen")}
+            </p>
+            <p className="mt-1 text-[0.625rem] text-[var(--muted-foreground)]">
+              {localizeUi("ui.agents.agenteditor.for8kLocalModelsTry")} {DEFAULT_AGENT_MAX_TOKENS.toLocaleString()}{" "}
+              {localizeUi("ui.agents.agenteditor.orLowerSoTheAgentPromptKeepsEnoughRoom")}
+            </p>
           </FieldGroup>
 
           {isProseGuardianAgent && (
@@ -2020,7 +2144,8 @@ export function AgentEditor() {
             >
               <div className="grid gap-3 md:grid-cols-2">
                 <label className="flex flex-col gap-1.5">
-                  <span className="text-[0.6875rem] font-medium text-[var(--muted-foreground)]">{localizeUi("ui.agents.agenteditor.bannedWords")} {localizeUi("ui.agents.agenteditor.banned")}
+                  <span className="text-[0.6875rem] font-medium text-[var(--muted-foreground)]">
+                    {localizeUi("ui.agents.agenteditor.bannedWords")} {localizeUi("ui.agents.agenteditor.banned")}
                   </span>
                   <textarea
                     value={localProseGuardianBanned}
@@ -2034,7 +2159,8 @@ export function AgentEditor() {
                   />
                 </label>
                 <label className="flex flex-col gap-1.5">
-                  <span className="text-[0.6875rem] font-medium text-[var(--muted-foreground)]">{localizeUi("ui.agents.agenteditor.preferInWriting")} {localizeUi("ui.agents.agenteditor.prefer")}
+                  <span className="text-[0.6875rem] font-medium text-[var(--muted-foreground)]">
+                    {localizeUi("ui.agents.agenteditor.preferInWriting")} {localizeUi("ui.agents.agenteditor.prefer")}
                   </span>
                   <textarea
                     value={localProseGuardianPrefer}
@@ -2049,7 +2175,8 @@ export function AgentEditor() {
                 </label>
               </div>
               <label className="mt-3 flex flex-col gap-1.5">
-                <span className="text-[0.6875rem] font-medium text-[var(--muted-foreground)]">{localizeUi("ui.agents.agenteditor.removeFromWriting")} {localizeUi("ui.agents.agenteditor.avoid")}
+                <span className="text-[0.6875rem] font-medium text-[var(--muted-foreground)]">
+                  {localizeUi("ui.agents.agenteditor.removeFromWriting")} {localizeUi("ui.agents.agenteditor.avoid")}
                 </span>
                 <textarea
                   value={localProseGuardianAvoid}
@@ -2071,8 +2198,8 @@ export function AgentEditor() {
                 }}
                 description={
                   localProseGuardianHoldForRewrite
-                    ?localizeUi("ui.agents.agenteditor.showTheWorkingStateThenRevealTheRewrittenMessage")
-                    :localizeUi("ui.agents.agenteditor.showTheOriginalResponseFirstThenReplaceItIf")
+                    ? localizeUi("ui.agents.agenteditor.showTheWorkingStateThenRevealTheRewrittenMessage")
+                    : localizeUi("ui.agents.agenteditor.showTheOriginalResponseFirstThenReplaceItIf")
                 }
                 className="mt-3"
               />
@@ -2094,8 +2221,8 @@ export function AgentEditor() {
                 }}
                 description={
                   localProseGuardianHoldForRewrite
-                    ?localizeUi("ui.agents.agenteditor.showTheWorkingStateThenRevealTheContinuityChecked")
-                    :localizeUi("ui.agents.agenteditor.showTheOriginalResponseFirstThenReplaceItIf_24ec6c7")
+                    ? localizeUi("ui.agents.agenteditor.showTheWorkingStateThenRevealTheContinuityChecked")
+                    : localizeUi("ui.agents.agenteditor.showTheOriginalResponseFirstThenReplaceItIf_24ec6c7")
                 }
               />
             </FieldGroup>
@@ -2116,8 +2243,8 @@ export function AgentEditor() {
                 }}
                 description={
                   localProseGuardianHoldForRewrite
-                    ?localizeUi("ui.agents.agenteditor.showTheWorkingStateThenRevealTheHtmlEnhanced")
-                    :localizeUi("ui.agents.agenteditor.showTheOriginalResponseFirstThenReplaceItIf_999fd64")
+                    ? localizeUi("ui.agents.agenteditor.showTheWorkingStateThenRevealTheHtmlEnhanced")
+                    : localizeUi("ui.agents.agenteditor.showTheOriginalResponseFirstThenReplaceItIf_999fd64")
                 }
               />
             </FieldGroup>
@@ -2194,7 +2321,9 @@ export function AgentEditor() {
             >
               <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
                 <div>
-                  <label className="mb-1 block text-[0.6875rem] font-medium text-[var(--muted-foreground)]">{localizeUi("ui.agents.agenteditor.keywords")}</label>
+                  <label className="mb-1 block text-[0.6875rem] font-medium text-[var(--muted-foreground)]">
+                    {localizeUi("ui.agents.agenteditor.keywords")}
+                  </label>
                   <textarea
                     value={localActivationKeywordsText}
                     onChange={(e) => {
@@ -2207,7 +2336,9 @@ export function AgentEditor() {
                   />
                 </div>
                 <div>
-                  <label className="mb-1 block text-[0.6875rem] font-medium text-[var(--muted-foreground)]">{localizeUi("ui.agents.agenteditor.scanDepth")}</label>
+                  <label className="mb-1 block text-[0.6875rem] font-medium text-[var(--muted-foreground)]">
+                    {localizeUi("ui.agents.agenteditor.scanDepth")}
+                  </label>
                   <div className="flex items-center gap-3">
                     <input
                       type="number"
@@ -2226,11 +2357,15 @@ export function AgentEditor() {
                       placeholder={String(DEFAULT_CUSTOM_AGENT_ACTIVATION_SCAN_DEPTH)}
                       className="w-28 rounded-xl bg-[var(--secondary)] px-3 py-2.5 text-sm tabular-nums ring-1 ring-[var(--border)] placeholder:text-[var(--muted-foreground)] focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
                     />
-                    <span className="text-[0.6875rem] text-[var(--muted-foreground)]">{localizeUi("ui.agents.agenteditor.messages")}</span>
+                    <span className="text-[0.6875rem] text-[var(--muted-foreground)]">
+                      {localizeUi("ui.agents.agenteditor.messages")}
+                    </span>
                   </div>
                 </div>
               </div>
-              <p className="mt-1 text-[0.625rem] text-[var(--muted-foreground)]">{localizeUi("ui.agents.agenteditor.leaveKeywordsEmptyToRunThisCustomAgentOn")}</p>
+              <p className="mt-1 text-[0.625rem] text-[var(--muted-foreground)]">
+                {localizeUi("ui.agents.agenteditor.leaveKeywordsEmptyToRunThisCustomAgentOn")}
+              </p>
             </FieldGroup>
           )}
 
@@ -2255,9 +2390,13 @@ export function AgentEditor() {
                   placeholder="8"
                   className="w-28 rounded-xl bg-[var(--secondary)] px-3 py-2.5 text-sm tabular-nums ring-1 ring-[var(--border)] placeholder:text-[var(--muted-foreground)] focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
                 />
-                <span className="text-[0.6875rem] text-[var(--muted-foreground)]">{localizeUi("ui.agents.agenteditor.messages")}</span>
+                <span className="text-[0.6875rem] text-[var(--muted-foreground)]">
+                  {localizeUi("ui.agents.agenteditor.messages")}
+                </span>
               </div>
-              <p className="mt-1 text-[0.625rem] text-[var(--muted-foreground)]">{localizeUi("ui.agents.agenteditor.theChatRoleplayKeeperRunsOnceEveryNAssistant")}</p>
+              <p className="mt-1 text-[0.625rem] text-[var(--muted-foreground)]">
+                {localizeUi("ui.agents.agenteditor.theChatRoleplayKeeperRunsOnceEveryNAssistant")}
+              </p>
             </FieldGroup>
           )}
 
@@ -2282,9 +2421,13 @@ export function AgentEditor() {
                   placeholder="8"
                   className="w-28 rounded-xl bg-[var(--secondary)] px-3 py-2.5 text-sm tabular-nums ring-1 ring-[var(--border)] placeholder:text-[var(--muted-foreground)] focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
                 />
-                <span className="text-[0.6875rem] text-[var(--muted-foreground)]">{localizeUi("ui.agents.agenteditor.messages")}</span>
+                <span className="text-[0.6875rem] text-[var(--muted-foreground)]">
+                  {localizeUi("ui.agents.agenteditor.messages")}
+                </span>
               </div>
-              <p className="mt-1 text-[0.625rem] text-[var(--muted-foreground)]">{localizeUi("ui.agents.agenteditor.theAuditorProposesCharacterCardChangesForManualApproval")}</p>
+              <p className="mt-1 text-[0.625rem] text-[var(--muted-foreground)]">
+                {localizeUi("ui.agents.agenteditor.theAuditorProposesCharacterCardChangesForManualApproval")}
+              </p>
             </FieldGroup>
           )}
 
@@ -2305,7 +2448,9 @@ export function AgentEditor() {
               />
               {localSecretPlotEnabled && (
                 <div className="mt-3">
-                  <label className="mb-1 block text-[0.6875rem] font-medium text-[var(--muted-foreground)]">{localizeUi("ui.agents.agenteditor.runInterval")}</label>
+                  <label className="mb-1 block text-[0.6875rem] font-medium text-[var(--muted-foreground)]">
+                    {localizeUi("ui.agents.agenteditor.runInterval")}
+                  </label>
                   <div className="flex items-center gap-3">
                     <input
                       type="number"
@@ -2320,7 +2465,9 @@ export function AgentEditor() {
                       }}
                       className="w-28 rounded-xl bg-[var(--secondary)] px-3 py-2.5 text-sm tabular-nums ring-1 ring-[var(--border)] focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
                     />
-                    <span className="text-[0.6875rem] text-[var(--muted-foreground)]">{localizeUi("ui.agents.agenteditor.assistantMessages")}</span>
+                    <span className="text-[0.6875rem] text-[var(--muted-foreground)]">
+                      {localizeUi("ui.agents.agenteditor.assistantMessages")}
+                    </span>
                   </div>
                 </div>
               )}
@@ -2332,7 +2479,9 @@ export function AgentEditor() {
             <FieldGroup
               label={localizeUi("ui.agents.agenteditor.runInterval")}
               icon={<Clock size="0.875rem" className="text-[var(--primary)]" />}
-              help={localizeUi("ui.agents.agenteditor.howManyAssistantMessagesBetweenAllowedIllustratorImageGenerations")}
+              help={localizeUi(
+                "ui.agents.agenteditor.howManyAssistantMessagesBetweenAllowedIllustratorImageGenerations",
+              )}
             >
               <div className="flex items-center gap-3">
                 <input
@@ -2348,9 +2497,13 @@ export function AgentEditor() {
                   placeholder="5"
                   className="w-28 rounded-xl bg-[var(--secondary)] px-3 py-2.5 text-sm tabular-nums ring-1 ring-[var(--border)] placeholder:text-[var(--muted-foreground)] focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
                 />
-                <span className="text-[0.6875rem] text-[var(--muted-foreground)]">{localizeUi("ui.agents.agenteditor.messages")}</span>
+                <span className="text-[0.6875rem] text-[var(--muted-foreground)]">
+                  {localizeUi("ui.agents.agenteditor.messages")}
+                </span>
               </div>
-              <p className="mt-1 text-[0.625rem] text-[var(--muted-foreground)]">{localizeUi("ui.agents.agenteditor.theIllustratorCanOnlyCreateANewImageOnce")}</p>
+              <p className="mt-1 text-[0.625rem] text-[var(--muted-foreground)]">
+                {localizeUi("ui.agents.agenteditor.theIllustratorCanOnlyCreateANewImageOnce")}
+              </p>
             </FieldGroup>
           )}
 
@@ -2362,7 +2515,11 @@ export function AgentEditor() {
               help={localizeUi("ui.agents.agenteditor.whenEnabledThisAgentSOutputBecomesAvailableAs")}
             >
               <EditorSwitchRow
-                label={localInjectAsSection ?localizeUi("ui.noodle.noodlehome.enabled") :localizeUi("ui.agents.agenteditor.disabled")}
+                label={
+                  localInjectAsSection
+                    ? localizeUi("ui.noodle.noodlehome.enabled")
+                    : localizeUi("ui.agents.agenteditor.disabled")
+                }
                 checked={localInjectAsSection}
                 onChange={() => {
                   setLocalInjectAsSection(!localInjectAsSection);
@@ -2370,8 +2527,10 @@ export function AgentEditor() {
                 }}
                 description={
                   localInjectAsSection
-                    ?localizeUi("ui.agents.agenteditor.value1AppearsAsASectionOptionInPromptPresets", { value1: localName })
-                    :localizeUi("ui.agents.agenteditor.agentOutputWonTBeAvailableAsAMarker")
+                    ? localizeUi("ui.agents.agenteditor.value1AppearsAsASectionOptionInPromptPresets", {
+                        value1: localName,
+                      })
+                    : localizeUi("ui.agents.agenteditor.agentOutputWonTBeAvailableAsAMarker")
                 }
                 labelClassName="text-sm"
               />
@@ -2406,13 +2565,19 @@ export function AgentEditor() {
                     );
                   })}
                 </div>
-                <p className="text-[0.625rem] text-white/40">{localizeUi("ui.agents.agenteditor.visiblePlayer")}{" "}
-                  {musicPlayerSource === "spotify" ?localizeUi("ui.agents.agenteditor.spotify") : musicPlayerSource === "youtube" ?localizeUi("ui.chat.youtubeplayer.youtube") :localizeUi("settings.notifications.customSound.status.custom")}{localizeUi("ui.agents.agenteditor.savedProvider")}{" "}
+                <p className="text-[0.625rem] text-white/40">
+                  {localizeUi("ui.agents.agenteditor.visiblePlayer")}{" "}
+                  {musicPlayerSource === "spotify"
+                    ? localizeUi("ui.agents.agenteditor.spotify")
+                    : musicPlayerSource === "youtube"
+                      ? localizeUi("ui.chat.youtubeplayer.youtube")
+                      : localizeUi("settings.notifications.customSound.status.custom")}
+                  {localizeUi("ui.agents.agenteditor.savedProvider")}{" "}
                   {localMusicProvider === "spotify"
-                    ?localizeUi("ui.agents.agenteditor.spotify")
+                    ? localizeUi("ui.agents.agenteditor.spotify")
                     : localMusicProvider === "youtube"
-                      ?localizeUi("ui.chat.youtubeplayer.youtube")
-                      :localizeUi("settings.notifications.customSound.status.custom")}
+                      ? localizeUi("ui.chat.youtubeplayer.youtube")
+                      : localizeUi("settings.notifications.customSound.status.custom")}
                   .
                 </p>
               </div>
@@ -2429,7 +2594,9 @@ export function AgentEditor() {
               <div className="space-y-3">
                 {/* Client ID input */}
                 <div>
-                  <label className="block text-[0.6875rem] font-medium text-white/60 mb-1">{localizeUi("ui.agents.agenteditor.spotifyClientId")}</label>
+                  <label className="block text-[0.6875rem] font-medium text-white/60 mb-1">
+                    {localizeUi("ui.agents.agenteditor.spotifyClientId")}
+                  </label>
                   <input
                     type="text"
                     value={localSpotifyClientId}
@@ -2447,7 +2614,9 @@ export function AgentEditor() {
                   <div className="flex items-center gap-3">
                     <span className="flex items-center gap-1.5 rounded-lg bg-green-500/10 px-3 py-2 text-xs font-medium text-green-400">
                       <Check size="0.75rem" />
-                      {spotifyStatus.expired ?localizeUi("ui.agents.agenteditor.connectedTokenExpiredWillAutoRefresh") :localizeUi("ui.agents.agenteditor.connectedToSpotify")}
+                      {spotifyStatus.expired
+                        ? localizeUi("ui.agents.agenteditor.connectedTokenExpiredWillAutoRefresh")
+                        : localizeUi("ui.agents.agenteditor.connectedToSpotify")}
                     </span>
                     <button
                       type="button"
@@ -2486,7 +2655,9 @@ export function AgentEditor() {
                         await qc.invalidateQueries({ queryKey: agentKeys.all });
                       }}
                       className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs text-white/50 transition-colors hover:bg-red-500/10 hover:text-red-400 hover:border-red-500/20"
-                    >{localizeUi("ui.agents.agenteditor.disconnect")}</button>
+                    >
+                      {localizeUi("ui.agents.agenteditor.disconnect")}
+                    </button>
                   </div>
                 ) : (
                   <button
@@ -2578,7 +2749,9 @@ export function AgentEditor() {
                     )}
                   >
                     <Music size="0.875rem" />
-                    {spotifyConnecting ?localizeUi("ui.agents.agenteditor.waitingForAuthorization") :localizeUi("ui.agents.agenteditor.connectSpotifyAccount")}
+                    {spotifyConnecting
+                      ? localizeUi("ui.agents.agenteditor.waitingForAuthorization")
+                      : localizeUi("ui.agents.agenteditor.connectSpotifyAccount")}
                   </button>
                 )}
 
@@ -2594,10 +2767,16 @@ export function AgentEditor() {
                       onClick={() => setSpotifyPasteOpen((v) => !v)}
                       className="text-white/60 hover:text-white/80 transition-colors text-left w-full"
                     >
-                      {spotifyPasteOpen ? "▾" : "▸"} {localizeUi("ui.agents.agenteditor.browserCouldnTReachTheCallback")}</button>
+                      {spotifyPasteOpen ? "▾" : "▸"}{" "}
+                      {localizeUi("ui.agents.agenteditor.browserCouldnTReachTheCallback")}
+                    </button>
                     {spotifyPasteOpen && (
                       <div className="space-y-2 pt-1">
-                        <p className="text-white/40 leading-relaxed">{localizeUi("ui.agents.agenteditor.ifYouReRunningMarinaraOnADifferentMachine")} <code className="text-white/50">127.0.0.1</code> {localizeUi("ui.agents.agenteditor.orHttpsCallbacksCopyTheFullUrlFromThe")}</p>
+                        <p className="text-white/40 leading-relaxed">
+                          {localizeUi("ui.agents.agenteditor.ifYouReRunningMarinaraOnADifferentMachine")}{" "}
+                          <code className="text-white/50">127.0.0.1</code>{" "}
+                          {localizeUi("ui.agents.agenteditor.orHttpsCallbacksCopyTheFullUrlFromThe")}
+                        </p>
                         <textarea
                           value={spotifyPasteValue}
                           onChange={(e) => {
@@ -2663,7 +2842,9 @@ export function AgentEditor() {
                               : "bg-white/5 text-white/30 cursor-not-allowed",
                           )}
                         >
-                          {spotifyPasteSubmitting ?localizeUi("ui.agents.agenteditor.submitting") :localizeUi("ui.agents.agenteditor.completeConnection")}
+                          {spotifyPasteSubmitting
+                            ? localizeUi("ui.agents.agenteditor.submitting")
+                            : localizeUi("ui.agents.agenteditor.completeConnection")}
                         </button>
                       </div>
                     )}
@@ -2674,28 +2855,47 @@ export function AgentEditor() {
                 <div className="rounded-lg border border-green-500/10 bg-green-500/5 p-3 text-[0.6875rem] text-white/50 space-y-2">
                   <p className="font-medium text-green-400/80">{localizeUi("ui.agents.agenteditor.setup")}</p>
                   <ol className="list-decimal list-inside space-y-1 text-white/40">
-                    <li>{localizeUi("ui.agents.agenteditor.goToThe")}{" "}
+                    <li>
+                      {localizeUi("ui.agents.agenteditor.goToThe")}{" "}
                       <a
                         href="https://developer.spotify.com/dashboard"
                         target="_blank"
                         rel="noopener noreferrer"
                         className="text-green-400 hover:underline inline-flex items-center gap-0.5"
-                      >{localizeUi("ui.agents.agenteditor.spotifyDeveloperDashboard")} <ExternalLink size="0.5625rem" />
+                      >
+                        {localizeUi("ui.agents.agenteditor.spotifyDeveloperDashboard")}{" "}
+                        <ExternalLink size="0.5625rem" />
                       </a>
                     </li>
                     <li>{localizeUi("ui.agents.agenteditor.createANewAppSelectWebApi")}</li>
-                    <li>{localizeUi("ui.agents.agenteditor.inRedirectUrisAdd")}{" "}
+                    <li>
+                      {localizeUi("ui.agents.agenteditor.inRedirectUrisAdd")}{" "}
                       <code className="text-white/50 select-all">
                         {spotifyStatus?.redirectUri ?? getDisplayedSpotifyRedirectUri()}
                       </code>
                     </li>
-                    <li>{localizeUi("ui.agents.agenteditor.copyThe")} <strong>{localizeUi("ui.agents.agenteditor.clientId")}</strong> {localizeUi("ui.agents.agenteditor.andPasteItAbove")}</li>
-                    <li>{localizeUi("ui.agents.agenteditor.saveTheAgentThenClick")} <strong>{localizeUi("ui.agents.agenteditor.connectSpotifyAccount")}</strong>
+                    <li>
+                      {localizeUi("ui.agents.agenteditor.copyThe")}{" "}
+                      <strong>{localizeUi("ui.agents.agenteditor.clientId")}</strong>{" "}
+                      {localizeUi("ui.agents.agenteditor.andPasteItAbove")}
+                    </li>
+                    <li>
+                      {localizeUi("ui.agents.agenteditor.saveTheAgentThenClick")}{" "}
+                      <strong>{localizeUi("ui.agents.agenteditor.connectSpotifyAccount")}</strong>
                     </li>
                   </ol>
-                  <p className="text-[0.625rem] text-white/30 mt-1">{localizeUi("ui.agents.agenteditor.requiresSpotifyPremiumTokensRefreshAutomaticallyNoNeedTo")}</p>
-                  <p className="text-[0.625rem] text-white/30 leading-relaxed">{localizeUi("ui.agents.agenteditor.spotifyOnlyAccepts")} <code className="text-white/40">{"https://"}</code> {localizeUi("ui.agents.agenteditor.redirectUrisOrLoopback")}<code className="text-white/40">{"http://127.0.0.1"}</code>{localizeUi("ui.agents.agenteditor.ifYouReRunningMarinaraOnAnotherMachineOver")}{" "}
-                    <code className="text-white/40">{"SPOTIFY_REDIRECT_URI"}</code> {localizeUi("ui.agents.agenteditor.toYourHttpsUrl")}</p>
+                  <p className="text-[0.625rem] text-white/30 mt-1">
+                    {localizeUi("ui.agents.agenteditor.requiresSpotifyPremiumTokensRefreshAutomaticallyNoNeedTo")}
+                  </p>
+                  <p className="text-[0.625rem] text-white/30 leading-relaxed">
+                    {localizeUi("ui.agents.agenteditor.spotifyOnlyAccepts")}{" "}
+                    <code className="text-white/40">{"https://"}</code>{" "}
+                    {localizeUi("ui.agents.agenteditor.redirectUrisOrLoopback")}
+                    <code className="text-white/40">{"http://127.0.0.1"}</code>
+                    {localizeUi("ui.agents.agenteditor.ifYouReRunningMarinaraOnAnotherMachineOver")}{" "}
+                    <code className="text-white/40">{"SPOTIFY_REDIRECT_URI"}</code>{" "}
+                    {localizeUi("ui.agents.agenteditor.toYourHttpsUrl")}
+                  </p>
                 </div>
               </div>
             </FieldGroup>
@@ -2710,7 +2910,9 @@ export function AgentEditor() {
             >
               <div className="space-y-3">
                 <div>
-                  <label className="block text-[0.6875rem] font-medium text-white/60 mb-1">{localizeUi("ui.agents.agenteditor.youtubeDataApiKey")}</label>
+                  <label className="block text-[0.6875rem] font-medium text-white/60 mb-1">
+                    {localizeUi("ui.agents.agenteditor.youtubeDataApiKey")}
+                  </label>
                   <input
                     type="password"
                     value={localYoutubeApiKey}
@@ -2720,8 +2922,8 @@ export function AgentEditor() {
                     }}
                     placeholder={
                       youtubeConfigured
-                        ?localizeUi("ui.agents.agenteditor.keyConfiguredPasteANewOneToReplace")
-                        :localizeUi("ui.agents.agenteditor.pasteYourYoutubeDataApiKeyAiza")
+                        ? localizeUi("ui.agents.agenteditor.keyConfiguredPasteANewOneToReplace")
+                        : localizeUi("ui.agents.agenteditor.pasteYourYoutubeDataApiKeyAiza")
                     }
                     className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs text-white placeholder-white/30 outline-none focus:border-red-500/50 focus:ring-1 focus:ring-red-500/20 font-mono"
                   />
@@ -2759,13 +2961,19 @@ export function AgentEditor() {
                     }}
                     className="rounded-lg bg-red-500/15 px-3 py-2 text-xs font-medium text-red-300 transition-colors hover:bg-red-500/25 disabled:cursor-not-allowed disabled:opacity-40"
                   >
-                    {youtubeSaving ?localizeUi("chat.settings.inlineEditor.saving") : youtubeConfigured ?localizeUi("ui.agents.agenteditor.updateKey") :localizeUi("ui.agents.agenteditor.saveKey")}
+                    {youtubeSaving
+                      ? localizeUi("chat.settings.inlineEditor.saving")
+                      : youtubeConfigured
+                        ? localizeUi("ui.agents.agenteditor.updateKey")
+                        : localizeUi("ui.agents.agenteditor.saveKey")}
                   </button>
 
                   {youtubeConfigured && (
                     <>
                       <span className="flex items-center gap-1.5 rounded-lg bg-green-500/10 px-3 py-2 text-xs font-medium text-green-400">
-                        <Check size="0.75rem" />{localizeUi("ui.agents.agenteditor.apiKeyConfigured")}</span>
+                        <Check size="0.75rem" />
+                        {localizeUi("ui.agents.agenteditor.apiKeyConfigured")}
+                      </span>
                       <button
                         type="button"
                         onClick={async () => {
@@ -2778,7 +2986,9 @@ export function AgentEditor() {
                           setYoutubeConfigured(false);
                         }}
                         className="text-xs text-white/50 hover:text-red-400"
-                      >{localizeUi("settings.notifications.customSound.actions.remove")}</button>
+                      >
+                        {localizeUi("settings.notifications.customSound.actions.remove")}
+                      </button>
                     </>
                   )}
                 </div>
@@ -2786,22 +2996,42 @@ export function AgentEditor() {
                 {youtubeError && <p className="text-[0.6875rem] text-red-400">{youtubeError}</p>}
 
                 <div className="rounded-lg bg-white/5 p-3 text-[0.6875rem] text-white/50 leading-relaxed">
-                  <p className="mb-1 font-medium text-white/60">{localizeUi("ui.agents.agenteditor.howToGetAFreeKey")}</p>
+                  <p className="mb-1 font-medium text-white/60">
+                    {localizeUi("ui.agents.agenteditor.howToGetAFreeKey")}
+                  </p>
                   <ol className="ml-4 list-decimal space-y-1">
-                    <li>{localizeUi("ui.agents.agenteditor.openThe")}{" "}
+                    <li>
+                      {localizeUi("ui.agents.agenteditor.openThe")}{" "}
                       <a
                         href="https://console.cloud.google.com/apis/library/youtube.googleapis.com"
                         target="_blank"
                         rel="noopener noreferrer"
                         className="text-red-400 hover:underline inline-flex items-center gap-0.5"
-                      >{localizeUi("ui.agents.agenteditor.googleCloudConsole")} <ExternalLink size="0.5625rem" />
-                      </a>{" "}{localizeUi("ui.agents.agenteditor.andCreateOrPickAProject")}</li>
-                    <li>{localizeUi("ui.agents.agenteditor.enableThe")} <strong>{localizeUi("ui.agents.agenteditor.youtubeDataApiV3")}</strong>.
+                      >
+                        {localizeUi("ui.agents.agenteditor.googleCloudConsole")} <ExternalLink size="0.5625rem" />
+                      </a>{" "}
+                      {localizeUi("ui.agents.agenteditor.andCreateOrPickAProject")}
                     </li>
-                    <li>{localizeUi("ui.agents.agenteditor.goTo")} <strong>{localizeUi("ui.agents.agenteditor.credentialsCreateCredentialsApiKey")}</strong>{localizeUi("ui.agents.agenteditor.thenPasteItAbove")}</li>
-                    <li>{localizeUi("ui.agents.agenteditor.leaveTheKey")} <strong>{localizeUi("ui.agents.agenteditor.unrestricted")}</strong>{localizeUi("ui.agents.agenteditor.orRestrictItOnlyBy")} <em>{localizeUi("ui.agents.agenteditor.api")}</em> {localizeUi("ui.agents.agenteditor.youtubeDataApiV3NotByHttpReferrerSearch")}</li>
+                    <li>
+                      {localizeUi("ui.agents.agenteditor.enableThe")}{" "}
+                      <strong>{localizeUi("ui.agents.agenteditor.youtubeDataApiV3")}</strong>.
+                    </li>
+                    <li>
+                      {localizeUi("ui.agents.agenteditor.goTo")}{" "}
+                      <strong>{localizeUi("ui.agents.agenteditor.credentialsCreateCredentialsApiKey")}</strong>
+                      {localizeUi("ui.agents.agenteditor.thenPasteItAbove")}
+                    </li>
+                    <li>
+                      {localizeUi("ui.agents.agenteditor.leaveTheKey")}{" "}
+                      <strong>{localizeUi("ui.agents.agenteditor.unrestricted")}</strong>
+                      {localizeUi("ui.agents.agenteditor.orRestrictItOnlyBy")}{" "}
+                      <em>{localizeUi("ui.agents.agenteditor.api")}</em>{" "}
+                      {localizeUi("ui.agents.agenteditor.youtubeDataApiV3NotByHttpReferrerSearch")}
+                    </li>
                   </ol>
-                  <p className="mt-1 text-[0.625rem] text-white/30">{localizeUi("ui.agents.agenteditor.theFreeQuota100SearchesDayIsPlentyFor")}</p>
+                  <p className="mt-1 text-[0.625rem] text-white/30">
+                    {localizeUi("ui.agents.agenteditor.theFreeQuota100SearchesDayIsPlentyFor")}
+                  </p>
                 </div>
               </div>
             </FieldGroup>
@@ -2823,14 +3053,16 @@ export function AgentEditor() {
                   }}
                   description={
                     localCustomMusicSource === "game-assets"
-                      ?localizeUi("ui.agents.agenteditor.customModeWillSearchAudioUploadedToGameAssets")
-                      :localizeUi("ui.agents.agenteditor.customModeWillSearchTheFolderSelectedFromThis")
+                      ? localizeUi("ui.agents.agenteditor.customModeWillSearchAudioUploadedToGameAssets")
+                      : localizeUi("ui.agents.agenteditor.customModeWillSearchTheFolderSelectedFromThis")
                   }
                 />
 
                 {localCustomMusicSource === "game-assets" ? (
                   <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3">
-                    <label className="mb-1 block text-[0.6875rem] font-medium text-white/60">{localizeUi("ui.agents.agenteditor.gameAssetsMusicFolder")}</label>
+                    <label className="mb-1 block text-[0.6875rem] font-medium text-white/60">
+                      {localizeUi("ui.agents.agenteditor.gameAssetsMusicFolder")}
+                    </label>
                     <div className="flex flex-col gap-2 sm:flex-row">
                       <input
                         type="text"
@@ -2848,7 +3080,9 @@ export function AgentEditor() {
                         onClick={handleOpenCustomMusicFolder}
                         className="mari-editor-action mari-editor-action--secondary inline-flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold"
                       >
-                        <ExternalLink size="0.8rem" />{localizeUi("ui.agents.agenteditor.openFolder")}</button>
+                        <ExternalLink size="0.8rem" />
+                        {localizeUi("ui.agents.agenteditor.openFolder")}
+                      </button>
                     </div>
                     <p className="mt-2 text-[0.625rem] leading-relaxed text-white/40">
                       <Trans
@@ -2862,7 +3096,9 @@ export function AgentEditor() {
                   </div>
                 ) : (
                   <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3">
-                    <label className="mb-1 block text-[0.6875rem] font-medium text-white/60">{localizeUi("ui.agents.agenteditor.musicFolderOnThisDevice")}</label>
+                    <label className="mb-1 block text-[0.6875rem] font-medium text-white/60">
+                      {localizeUi("ui.agents.agenteditor.musicFolderOnThisDevice")}
+                    </label>
                     <div className="flex flex-col gap-2 sm:flex-row">
                       <input
                         type="text"
@@ -2882,9 +3118,13 @@ export function AgentEditor() {
                         onClick={handleSelectCustomMusicFolder}
                         className="mari-editor-action mari-editor-action--secondary inline-flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold"
                       >
-                        <FolderOpen size="0.8rem" />{localizeUi("ui.agents.agenteditor.selectFolder")}</button>
+                        <FolderOpen size="0.8rem" />
+                        {localizeUi("ui.agents.agenteditor.selectFolder")}
+                      </button>
                     </div>
-                    <p className="mt-2 text-[0.625rem] leading-relaxed text-white/40">{localizeUi("ui.agents.agenteditor.theFolderPickerOpensOnTheDeviceRunningMarinara")}</p>
+                    <p className="mt-2 text-[0.625rem] leading-relaxed text-white/40">
+                      {localizeUi("ui.agents.agenteditor.theFolderPickerOpensOnTheDeviceRunningMarinara")}
+                    </p>
                   </div>
                 )}
               </div>
@@ -2904,9 +3144,9 @@ export function AgentEditor() {
               icon={<BookOpen size="0.875rem" className="text-amber-400" />}
               help={
                 isKnowledgeRouterAgent
-                  ?localizeUi("ui.agents.agenteditor.useChatActiveLorebooksByDefaultOrSelectFixed")
+                  ? localizeUi("ui.agents.agenteditor.useChatActiveLorebooksByDefaultOrSelectFixed")
                   : isKnowledgeRetrievalAgent
-                    ?localizeUi("ui.agents.agenteditor.useChatActiveLorebooksByDefaultSelectFixedLorebooks")
+                    ? localizeUi("ui.agents.agenteditor.useChatActiveLorebooksByDefaultSelectFixedLorebooks")
                     : localizeUi("ui.agents.agenteditor.selectWhichLorebooksCanTriggerFromThisAgentSContext")
               }
             >
@@ -2923,7 +3163,9 @@ export function AgentEditor() {
                 {/* ── Lorebooks ── */}
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between">
-                    <p className="text-[0.6875rem] font-medium text-[var(--muted-foreground)]">{localizeUi("ui.agents.agenteditor.fixedSourceOverride")}</p>
+                    <p className="text-[0.6875rem] font-medium text-[var(--muted-foreground)]">
+                      {localizeUi("ui.agents.agenteditor.fixedSourceOverride")}
+                    </p>
                     {/* Description coverage badge — Knowledge Router only.
                         Tells the user how many entries in their selected source lorebooks
                         have descriptions filled in. Routing precision drops sharply when
@@ -2939,7 +3181,9 @@ export function AgentEditor() {
                       (descriptionCoverage.total === 0 ? (
                         <div className="flex items-center gap-1.5 text-[0.625rem]">
                           <div className="h-1.5 w-1.5 rounded-full bg-[var(--muted-foreground)] opacity-50" />
-                          <span className="text-[var(--muted-foreground)]">{localizeUi("ui.agents.agenteditor.noEntriesYet")}</span>
+                          <span className="text-[var(--muted-foreground)]">
+                            {localizeUi("ui.agents.agenteditor.noEntriesYet")}
+                          </span>
                         </div>
                       ) : (
                         <div className="flex items-center gap-1.5 text-[0.625rem]">
@@ -2954,7 +3198,9 @@ export function AgentEditor() {
                             )}
                           />
                           <span className="text-[var(--muted-foreground)]">
-                            {Math.round(descriptionCoverage.ratio * 100)}{localizeUi("ui.agents.agenteditor.described")}<span className="opacity-70">
+                            {Math.round(descriptionCoverage.ratio * 100)}
+                            {localizeUi("ui.agents.agenteditor.described")}
+                            <span className="opacity-70">
                               {" "}
                               ({descriptionCoverage.withDescription}/{descriptionCoverage.total})
                             </span>
@@ -3006,24 +3252,34 @@ export function AgentEditor() {
                       })}
                     </div>
                   ) : (
-                    <p className="text-[0.625rem] text-[var(--muted-foreground)]">{localizeUi("ui.agents.agenteditor.noLorebooksAvailable")}</p>
+                    <p className="text-[0.625rem] text-[var(--muted-foreground)]">
+                      {localizeUi("ui.agents.agenteditor.noLorebooksAvailable")}
+                    </p>
                   )}
                   {localSourceLorebookIds.length > 0 && (
-                    <p className="text-[0.625rem] text-[var(--muted-foreground)]">{localizeUi("ui.agents.agenteditor.fixedSelectionsOverrideChatActiveLorebooksForEveryChat")}</p>
+                    <p className="text-[0.625rem] text-[var(--muted-foreground)]">
+                      {localizeUi("ui.agents.agenteditor.fixedSelectionsOverrideChatActiveLorebooksForEveryChat")}
+                    </p>
                   )}
                   {/* Router-only tip explaining the description fallback behavior.
                       Without this, users have no way to know that filling in entry
                       descriptions improves routing precision — the fallback to a
                       content snippet works invisibly. */}
                   {isKnowledgeRouterAgent && (localSourceLorebookIds.length > 0 || localUseChatActiveLorebooks) && (
-                    <p className="text-[0.625rem] italic text-[var(--muted-foreground)]">{localizeUi("ui.agents.agenteditor.tipEntryDescriptionsHelpKnowledgeRouterChooseEntriesDescriptions")}</p>
+                    <p className="text-[0.625rem] italic text-[var(--muted-foreground)]">
+                      {localizeUi(
+                        "ui.agents.agenteditor.tipEntryDescriptionsHelpKnowledgeRouterChooseEntriesDescriptions",
+                      )}
+                    </p>
                   )}
                 </div>
 
                 {/* ── Uploaded Files (Knowledge Retrieval only) ── */}
                 {isKnowledgeRetrievalAgent && (
                   <div className="space-y-1.5">
-                    <p className="text-[0.6875rem] font-medium text-white/60">{localizeUi("ui.agents.agenteditor.files")}</p>
+                    <p className="text-[0.6875rem] font-medium text-white/60">
+                      {localizeUi("ui.agents.agenteditor.files")}
+                    </p>
                     {/* File list */}
                     {allKnowledgeSources && allKnowledgeSources.length > 0 && (
                       <div className="max-h-48 overflow-y-auto space-y-1 rounded-lg border border-white/10 bg-white/[0.02] p-2">
@@ -3059,7 +3315,9 @@ export function AgentEditor() {
                                 </div>
                                 <div className="min-w-0 flex-1">
                                   <p className="truncate font-medium">{src.originalName}</p>
-                                  <p className="text-[0.625rem] text-white/40">{(src.size / 1024).toFixed(1)} {localizeUi("ui.agents.agenteditor.kb")}</p>
+                                  <p className="text-[0.625rem] text-white/40">
+                                    {(src.size / 1024).toFixed(1)} {localizeUi("ui.agents.agenteditor.kb")}
+                                  </p>
                                 </div>
                               </button>
                               <button
@@ -3115,10 +3373,14 @@ export function AgentEditor() {
                     >
                       {uploadSource.isPending ? (
                         <>
-                          <Loader2 size="0.875rem" className="animate-spin" />{localizeUi("ui.noodle.noodleprofilesurface.uploading")}</>
+                          <Loader2 size="0.875rem" className="animate-spin" />
+                          {localizeUi("ui.noodle.noodleprofilesurface.uploading")}
+                        </>
                       ) : (
                         <>
-                          <Upload size="0.875rem" />{localizeUi("ui.agents.agenteditor.uploadFile")}</>
+                          <Upload size="0.875rem" />
+                          {localizeUi("ui.agents.agenteditor.uploadFile")}
+                        </>
                       )}
                     </button>
                   </div>
@@ -3136,9 +3398,28 @@ export function AgentEditor() {
                         : null,
                     ]
                       .filter(Boolean)
-                      .join(", ")}{" "}{localizeUi("ui.agents.agenteditor.selected")}</p>
+                      .join(", ")}{" "}
+                    {localizeUi("ui.agents.agenteditor.selected")}
+                  </p>
                 )}
               </div>
+            </FieldGroup>
+          )}
+
+          {isStoryboardAgent && (
+            <FieldGroup
+              label={localizeUi("ui.agents.storyboard.settings")}
+              icon={<ImageIcon size="0.875rem" className="text-[var(--primary)]" />}
+              help={localizeUi("ui.agents.storyboard.settingsDescription")}
+            >
+              <StoryboardAgentSettingsPanel
+                settings={localStoryboardSettings}
+                defaults={storyboardDefaultSettings}
+                plannerTemplates={localPromptTemplates}
+                connections={allConnections}
+                onChange={setLocalStoryboardSettings}
+                onDirty={markDirty}
+              />
             </FieldGroup>
           )}
 
@@ -3153,10 +3434,12 @@ export function AgentEditor() {
               <div className="flex items-center gap-2 mb-2">
                 {isUsingDefaultPrompt ? (
                   <span className="flex items-center gap-1 rounded-lg bg-emerald-400/10 px-2.5 py-1 text-[0.625rem] font-medium text-emerald-400">
-                    <Check size="0.625rem" /> {localizeUi("ui.agents.agenteditor.usingBuiltInDefault")}</span>
+                    <Check size="0.625rem" /> {localizeUi("ui.agents.agenteditor.usingBuiltInDefault")}
+                  </span>
                 ) : (
                   <span className="flex items-center gap-1 rounded-lg bg-amber-400/10 px-2.5 py-1 text-[0.625rem] font-medium text-amber-400">
-                    <FileText size="0.625rem" /> {localizeUi("ui.agents.agenteditor.customOverride")}</span>
+                    <FileText size="0.625rem" /> {localizeUi("ui.agents.agenteditor.customOverride")}
+                  </span>
                 )}
                 <div className="flex-1" />
                 {!isUsingDefaultPrompt && (
@@ -3164,14 +3447,16 @@ export function AgentEditor() {
                     onClick={handleResetPrompt}
                     className="flex items-center gap-1 rounded-lg px-2.5 py-1 text-[0.625rem] font-medium text-[var(--muted-foreground)] transition-colors hover:bg-[var(--accent)] hover:text-[var(--foreground)]"
                   >
-                    <RotateCcw size="0.625rem" /> {localizeUi("ui.agents.agenteditor.resetToDefault")}</button>
+                    <RotateCcw size="0.625rem" /> {localizeUi("ui.agents.agenteditor.resetToDefault")}
+                  </button>
                 )}
                 {isUsingDefaultPrompt && defaultPrompt && (
                   <button
                     onClick={handleLoadDefault}
                     className="flex items-center gap-1 rounded-lg px-2.5 py-1 text-[0.625rem] font-medium text-[var(--muted-foreground)] transition-colors hover:bg-[var(--accent)] hover:text-[var(--foreground)]"
                   >
-                    <FileText size="0.625rem" /> {localizeUi("ui.agents.agenteditor.copyDefaultToEdit")}</button>
+                    <FileText size="0.625rem" /> {localizeUi("ui.agents.agenteditor.copyDefaultToEdit")}
+                  </button>
                 )}
               </div>
             )}
@@ -3181,7 +3466,9 @@ export function AgentEditor() {
                 <pre className="w-full max-h-[50vh] overflow-y-auto resize-y rounded-xl bg-[var(--secondary)] px-4 py-3 font-mono text-xs leading-relaxed ring-1 ring-[var(--border)] text-[var(--muted-foreground)] whitespace-pre-wrap">
                   {defaultPrompt || "No default prompt."}
                 </pre>
-                <span className="absolute right-3 top-2 rounded-md bg-[var(--card)] px-1.5 py-0.5 text-[0.5625rem] font-medium text-[var(--muted-foreground)] ring-1 ring-[var(--border)]">{localizeUi("ui.agents.agenteditor.defaultClickCopyDefaultToEditToCustomize")}</span>
+                <span className="absolute right-3 top-2 rounded-md bg-[var(--card)] px-1.5 py-0.5 text-[0.5625rem] font-medium text-[var(--muted-foreground)] ring-1 ring-[var(--border)]">
+                  {localizeUi("ui.agents.agenteditor.defaultClickCopyDefaultToEditToCustomize")}
+                </span>
               </div>
             ) : (
               <MacroTextarea
@@ -3198,28 +3485,36 @@ export function AgentEditor() {
             )}
             <p className="mt-1 text-[0.625rem] text-[var(--muted-foreground)]">
               {builtIn
-                ?localizeUi("ui.agents.agenteditor.leaveEmptyToUseTheBuiltInDefaultPrompt")
+                ? localizeUi("ui.agents.agenteditor.leaveEmptyToUseTheBuiltInDefaultPrompt")
                 : localResultType === "text_rewrite"
-                  ?localizeUi("ui.agents.agenteditor.writeTheFullSystemPromptForThisCustomEditor")
-                  :localizeUi("ui.agents.agenteditor.writeTheFullSystemPromptForThisCustomAgent")}
+                  ? localizeUi("ui.agents.agenteditor.writeTheFullSystemPromptForThisCustomEditor")
+                  : localizeUi("ui.agents.agenteditor.writeTheFullSystemPromptForThisCustomAgent")}
             </p>
 
             <div className="mt-4 space-y-2">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
-                  <p className="text-xs font-semibold text-[var(--foreground)]">{localizeUi("ui.agents.agenteditor.namedPromptOptions")}</p>
-                  <p className="text-[0.625rem] text-[var(--muted-foreground)]">{localizeUi("ui.agents.agenteditor.chatsCanPickOneOfTheseWithoutChangingThe")}</p>
+                  <p className="text-xs font-semibold text-[var(--foreground)]">
+                    {localizeUi("ui.agents.agenteditor.namedPromptOptions")}
+                  </p>
+                  <p className="text-[0.625rem] text-[var(--muted-foreground)]">
+                    {localizeUi("ui.agents.agenteditor.chatsCanPickOneOfTheseWithoutChangingThe")}
+                  </p>
                 </div>
                 <button
                   type="button"
                   onClick={handleAddPromptTemplate}
                   className="flex items-center gap-1.5 rounded-lg bg-[var(--secondary)] px-2.5 py-1.5 text-[0.6875rem] font-medium text-[var(--foreground)] ring-1 ring-[var(--border)] transition-colors hover:bg-[var(--accent)]"
                 >
-                  <Plus size="0.6875rem" />{localizeUi("ui.agents.agenteditor.addOption")}</button>
+                  <Plus size="0.6875rem" />
+                  {localizeUi("ui.agents.agenteditor.addOption")}
+                </button>
               </div>
 
               {localPromptTemplates.length === 0 ? (
-                <p className="rounded-xl bg-[var(--secondary)]/60 px-3 py-2 text-[0.6875rem] text-[var(--muted-foreground)] ring-1 ring-[var(--border)]">{localizeUi("ui.agents.agenteditor.noNamedOptionsYetTheChatMenuWillShow")}</p>
+                <p className="rounded-xl bg-[var(--secondary)]/60 px-3 py-2 text-[0.6875rem] text-[var(--muted-foreground)] ring-1 ring-[var(--border)]">
+                  {localizeUi("ui.agents.agenteditor.noNamedOptionsYetTheChatMenuWillShow")}
+                </p>
               ) : (
                 <div className="space-y-3">
                   {localPromptTemplates.map((option, index) => {
@@ -3248,7 +3543,9 @@ export function AgentEditor() {
                               disabled={matchesDefaultPrompt}
                               className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-[var(--muted-foreground)] transition-colors hover:bg-[var(--accent)] hover:text-[var(--foreground)] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-[var(--muted-foreground)]"
                               title={
-                                matchesDefaultPrompt ?localizeUi("ui.agents.agenteditor.promptAlreadyMatchesTheDefault") :localizeUi("ui.agents.agenteditor.restoreDefaultPrompt")
+                                matchesDefaultPrompt
+                                  ? localizeUi("ui.agents.agenteditor.promptAlreadyMatchesTheDefault")
+                                  : localizeUi("ui.agents.agenteditor.restoreDefaultPrompt")
                               }
                             >
                               <RotateCcw size="0.75rem" />
@@ -3257,12 +3554,41 @@ export function AgentEditor() {
                           <button
                             type="button"
                             onClick={() => handleRemovePromptTemplate(option.id)}
-	                            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-[var(--muted-foreground)] transition-colors hover:bg-[var(--accent)] hover:text-[var(--foreground)]"
+                            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-[var(--muted-foreground)] transition-colors hover:bg-[var(--accent)] hover:text-[var(--foreground)]"
                             title={localizeUi("ui.agents.agenteditor.removePromptOption")}
                           >
                             <Trash2 size="0.75rem" />
                           </button>
                         </div>
+                        {isStoryboardAgent && (
+                          <label className="mb-2 flex items-center gap-2 text-[0.6875rem] text-[var(--muted-foreground)]">
+                            <span>{localizeUi("ui.agents.storyboard.plannerType")}</span>
+                            <select
+                              value={
+                                localStoryboardSettings.animationPlannerTemplateIds.includes(option.id)
+                                  ? "animation"
+                                  : "illustration"
+                              }
+                              onChange={(event) => {
+                                const animation = event.target.value === "animation";
+                                setLocalStoryboardSettings((settings) => ({
+                                  ...settings,
+                                  illustrationPlannerTemplateIds: animation
+                                    ? settings.illustrationPlannerTemplateIds.filter((id) => id !== option.id)
+                                    : Array.from(new Set([...settings.illustrationPlannerTemplateIds, option.id])),
+                                  animationPlannerTemplateIds: animation
+                                    ? Array.from(new Set([...settings.animationPlannerTemplateIds, option.id]))
+                                    : settings.animationPlannerTemplateIds.filter((id) => id !== option.id),
+                                }));
+                                markDirty();
+                              }}
+                              className="rounded-lg bg-[var(--background)] px-2 py-1 text-xs text-[var(--foreground)] ring-1 ring-[var(--border)]"
+                            >
+                              <option value="illustration">{localizeUi("ui.agents.storyboard.stillImages")}</option>
+                              <option value="animation">{localizeUi("ui.agents.storyboard.animations")}</option>
+                            </select>
+                          </label>
+                        )}
                         <input
                           value={option.description ?? ""}
                           onChange={(e) => handleUpdatePromptTemplate(option.id, { description: e.target.value })}
@@ -3273,7 +3599,11 @@ export function AgentEditor() {
                           value={option.promptTemplate}
                           onChange={(value) => handleUpdatePromptTemplate(option.id, { promptTemplate: value })}
                           rows={7}
-                          title={option.name ?localizeUi("ui.agents.agenteditor.value1Prompt", { value1: option.name }) :localizeUi("ui.agents.agenteditor.promptOptionValue1", { value1: index + 1 })}
+                          title={
+                            option.name
+                              ? localizeUi("ui.agents.agenteditor.value1Prompt", { value1: option.name })
+                              : localizeUi("ui.agents.agenteditor.promptOptionValue1", { value1: index + 1 })
+                          }
                           className="w-full resize-y rounded-lg bg-[var(--background)] px-3 py-2 font-mono text-xs leading-relaxed ring-1 ring-[var(--border)] placeholder:text-[var(--muted-foreground)]/50 focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
                           placeholder={localizeUi("ui.agents.agenteditor.writeThePromptTemplateForThisOption")}
                         />
@@ -3302,10 +3632,14 @@ export function AgentEditor() {
             }
           >
             {musicDjYoutubeMode ? (
-              <p className="rounded-xl bg-[var(--secondary)]/60 px-3 py-2 text-[0.6875rem] text-[var(--muted-foreground)] ring-1 ring-[var(--border)]">{localizeUi("ui.agents.agenteditor.inYoutubeModeMusicDjDoesnTUseFunction")}</p>
+              <p className="rounded-xl bg-[var(--secondary)]/60 px-3 py-2 text-[0.6875rem] text-[var(--muted-foreground)] ring-1 ring-[var(--border)]">
+                {localizeUi("ui.agents.agenteditor.inYoutubeModeMusicDjDoesnTUseFunction")}
+              </p>
             ) : (
               <>
-                <p className="text-[0.625rem] text-[var(--muted-foreground)] mb-3">{localizeUi("ui.agents.agenteditor.toggleToolsOnOrOffForThisAgentWhen")}</p>
+                <p className="text-[0.625rem] text-[var(--muted-foreground)] mb-3">
+                  {localizeUi("ui.agents.agenteditor.toggleToolsOnOrOffForThisAgentWhen")}
+                </p>
                 <div className="space-y-2">
                   {visibleBuiltInTools.map((tool: ToolDefinition) => (
                     <ToolCard
@@ -3339,7 +3673,9 @@ export function AgentEditor() {
                     />
                   ))}
                 </div>
-                <p className="mt-2 text-[0.625rem] text-[var(--muted-foreground)]">{localizeUi("ui.agents.agenteditor.toolUseMustAlsoBeEnabledPerChatVia")}</p>
+                <p className="mt-2 text-[0.625rem] text-[var(--muted-foreground)]">
+                  {localizeUi("ui.agents.agenteditor.toolUseMustAlsoBeEnabledPerChatVia")}
+                </p>
               </>
             )}
           </FieldGroup>
@@ -3495,7 +3831,11 @@ function ToolCard({
           <div className="min-w-0 flex-1">
             <p className="text-xs font-semibold font-mono text-[var(--foreground)]">
               {tool.name}
-              {isCustom && <span className="ml-1.5 text-[0.5625rem] font-normal text-[var(--primary)]">{localizeUi("ui.agents.toolcard.custom")}</span>}
+              {isCustom && (
+                <span className="ml-1.5 text-[0.5625rem] font-normal text-[var(--primary)]">
+                  {localizeUi("ui.agents.toolcard.custom")}
+                </span>
+              )}
             </p>
             <p className="text-[0.625rem] text-[var(--muted-foreground)] truncate">{tool.description}</p>
           </div>
@@ -3504,7 +3844,9 @@ function ToolCard({
       </div>
       {expanded && (
         <div className="border-t border-[var(--border)] px-3 py-2.5 space-y-1.5">
-          <p className="text-[0.625rem] font-medium text-[var(--muted-foreground)]">{localizeUi("ui.agents.toolcard.parameters")}</p>
+          <p className="text-[0.625rem] font-medium text-[var(--muted-foreground)]">
+            {localizeUi("ui.agents.toolcard.parameters")}
+          </p>
           {Object.entries(params).map(([name, prop]) => {
             const p = prop as { type?: string; description?: string; enum?: string[] };
             const isRequired = required.includes(name);
