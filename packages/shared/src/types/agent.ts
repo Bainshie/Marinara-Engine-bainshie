@@ -522,6 +522,11 @@ export const CUSTOM_AGENT_CAPABILITY_IDS = [
   "edit_messages",
   "edit_trackers",
   "change_frontend_styling",
+  "change_backgrounds",
+  "change_sprites",
+  "control_media",
+  "control_haptics",
+  "edit_about_me",
   "trigger_image_generation",
   "access_vectors",
   "edit_main_prompt",
@@ -529,6 +534,15 @@ export const CUSTOM_AGENT_CAPABILITY_IDS = [
 
 export type CustomAgentCapability = (typeof CUSTOM_AGENT_CAPABILITY_IDS)[number];
 export type CustomAgentCapabilityMap = Partial<Record<CustomAgentCapability, boolean>>;
+
+export interface CustomAgentImportPolicy {
+  enabled: boolean;
+}
+
+export type CustomAgentImportSource = "file" | "folder" | "repository";
+
+export const CUSTOM_AGENT_IMPORT_SOURCE_SETTING = "customAgentImportSource";
+export const CUSTOM_AGENT_PERMISSIONS_EXPLICIT_SETTING = "customAgentPermissionsExplicit";
 
 const CUSTOM_AGENT_CAPABILITY_SET = new Set<string>(CUSTOM_AGENT_CAPABILITY_IDS);
 
@@ -543,6 +557,15 @@ const CUSTOM_AGENT_RESULT_CAPABILITY: Partial<Record<AgentResultType, CustomAgen
   image_prompt: "trigger_image_generation",
   prompt_patch: "edit_main_prompt",
   frontend_theme_update: "change_frontend_styling",
+  background_change: "change_backgrounds",
+  sprite_change: "change_sprites",
+  spotify_control: "control_media",
+  youtube_control: "control_media",
+  local_music_control: "control_media",
+  haptic_command: "control_haptics",
+  about_me_update: "edit_about_me",
+  cyoa_choices: "edit_messages",
+  echo_message: "edit_messages",
 };
 
 function normalizeCapabilityMap(value: unknown): CustomAgentCapabilityMap {
@@ -567,7 +590,11 @@ export function normalizeCustomAgentCapabilities(
     capabilities.edit_lorebooks = true;
   }
 
-  if (resultType && Object.prototype.hasOwnProperty.call(CUSTOM_AGENT_RESULT_CAPABILITY, resultType)) {
+  if (
+    settings?.[CUSTOM_AGENT_PERMISSIONS_EXPLICIT_SETTING] !== true &&
+    resultType &&
+    Object.prototype.hasOwnProperty.call(CUSTOM_AGENT_RESULT_CAPABILITY, resultType)
+  ) {
     const capability = CUSTOM_AGENT_RESULT_CAPABILITY[resultType as AgentResultType];
     if (capability) capabilities[capability] = true;
   }
@@ -584,6 +611,14 @@ export function customAgentHasCapability(
 
 export function getCustomAgentResultCapability(resultType: AgentResultType): CustomAgentCapability | null {
   return CUSTOM_AGENT_RESULT_CAPABILITY[resultType] ?? null;
+}
+
+export function isExternallyImportedAgent(type: unknown, settings: unknown): boolean {
+  const parsed = parseAgentSettingsRecord(settings);
+  const source = parsed[CUSTOM_AGENT_IMPORT_SOURCE_SETTING];
+  if (source === "file" || source === "folder" || source === "repository") return true;
+  if (parsed.customAgentRepositorySource && typeof parsed.customAgentRepositorySource === "object") return true;
+  return typeof type === "string" && (type.startsWith("custom-import-") || type.startsWith("repo-"));
 }
 
 export function getDefaultBuiltInAgentSettings(agentType: string): Record<string, unknown> {

@@ -2734,6 +2734,118 @@ test("Personal Extensions default to the Professor Mari-only locked workflow", a
   expect(warningColors.warning).toBe(warningColors.accent);
 });
 
+test("external Agent imports require the Danger Zone gate and explicit capabilities", async ({ page, request }, testInfo) => {
+  test.skip(testInfo.project.name !== "mobile-chromium", "This stateful import-policy flow runs once against the shared test server");
+
+  const disabledPolicy = await request.patch("/api/agents/import-policy", { data: { enabled: false } });
+  expect(disabledPolicy.ok()).toBeTruthy();
+
+  const localAgentResponse = await request.post("/api/agents", {
+    data: {
+      type: `e2e-local-agent-${Date.now()}`,
+      name: "Locally Authored Agent",
+      description: "Must remain creatable while external imports are locked.",
+      phase: "parallel",
+      connectionId: null,
+      imagePath: null,
+      promptTemplate: "Return a short note.",
+      settings: { resultType: "context_injection", customCapabilities: {} },
+    },
+  });
+  expect(localAgentResponse.ok()).toBeTruthy();
+  const localAgent = (await localAgentResponse.json()) as { id: string };
+
+  const blockedImport = await request.post("/api/agents/import", {
+    data: {
+      agent: {
+        type: "untrusted-haptic",
+        name: "Blocked External Agent",
+        description: "",
+        phase: "post_processing",
+        connectionId: null,
+        imagePath: null,
+        resultType: "haptic_command",
+        promptTemplate: "Return a haptic command.",
+        settings: { customCapabilities: { control_haptics: true } },
+      },
+      source: "file",
+      approvedCapabilities: ["control_haptics"],
+      acknowledgePermissions: true,
+    },
+  });
+  expect(blockedImport.status()).toBe(403);
+
+  await page.goto("/");
+  await page.locator('[data-tour="panel-agents"]').click();
+  const disabledHelp =
+    "Enable Agent imports in the Danger Zone, in the Advanced Settings first to enable imports";
+  const lockedImportButton = page.getByTitle(disabledHelp).first();
+  await expect(lockedImportButton).toHaveAttribute("aria-disabled", "true");
+  await lockedImportButton.dispatchEvent("click");
+  await expect(page.getByText(disabledHelp, { exact: true }).last()).toBeVisible();
+
+  await page.locator('[data-tour="panel-settings"]').click();
+  await page.getByRole("tab", { name: "Advanced" }).click();
+  const agentImportToggle = page.getByLabel("Allow custom Agent imports");
+  const extensionImportToggle = page.getByLabel("Allow third-party extension imports");
+  await expect(agentImportToggle).toBeEnabled();
+  await expect(agentImportToggle).not.toBeChecked();
+  expect(
+    await agentImportToggle.evaluate((toggle) => {
+      const extensionLabel = [...document.querySelectorAll("label")].find(
+        (label) => label.textContent?.trim() === "Allow third-party extension imports",
+      );
+      const extension = extensionLabel instanceof HTMLLabelElement
+        ? document.getElementById(extensionLabel.htmlFor)
+        : null;
+      return Boolean(extension && (toggle.compareDocumentPosition(extension) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0);
+    }),
+  ).toBe(true);
+
+  const enabledPolicy = await request.patch("/api/agents/import-policy", { data: { enabled: true } });
+  expect(enabledPolicy.ok()).toBeTruthy();
+  await page.reload();
+  await page.locator('[data-tour="panel-agents"]').click();
+  await expect(page.getByTitle("Import agents")).toHaveAttribute("aria-disabled", "false");
+
+  const packageInput = page.locator('input[type="file"][accept*="application/json"]');
+  await packageInput.setInputFiles({
+    name: "permission-review-agent.json",
+    mimeType: "application/json",
+    buffer: Buffer.from(
+      JSON.stringify({
+        type: "untrusted-haptic",
+        name: "Permission Review Agent",
+        description: "Requests haptic control.",
+        phase: "post_processing",
+        resultType: "haptic_command",
+        promptTemplate: "Return a haptic command.",
+        settings: { customCapabilities: { control_haptics: true } },
+      }),
+    ),
+  });
+
+  await expect(page.getByRole("dialog", { name: "Review Agent Import Permissions" })).toBeVisible();
+  const hapticPermission = page.getByLabel("Control haptic devices");
+  await expect(hapticPermission).not.toBeChecked();
+  await page.getByRole("button", { name: "Approve Permissions and Import" }).click();
+  await expect(page.getByRole("dialog", { name: "Review Agent Import Permissions" })).toHaveCount(0);
+
+  const agentsResponse = await request.get("/api/agents");
+  expect(agentsResponse.ok()).toBeTruthy();
+  const agents = (await agentsResponse.json()) as Array<{ id: string; name: string; settings: string }>;
+  const importedAgent = agents.find((agent) => agent.name === "Permission Review Agent");
+  expect(importedAgent).toBeTruthy();
+  const importedSettings = JSON.parse(importedAgent!.settings) as Record<string, unknown>;
+  expect(importedSettings.customAgentImportSource).toBe("file");
+  expect(importedSettings.customAgentPermissionsExplicit).toBe(true);
+  expect(importedSettings.customCapabilities).toEqual({});
+
+  await request.delete(`/api/agents/${localAgent.id}`);
+  if (importedAgent) await request.delete(`/api/agents/${importedAgent.id}`);
+  await request.patch("/api/agents/import-policy", { data: { enabled: false } });
+});
+
 test("Roleplay Active Context shows rich lorebook activation provenance", async ({ page, request }, testInfo) => {
   const lorebookId = "roleplay-active-context-smoke-lorebook";
   const chatResponse = await request.post("/api/chats", {

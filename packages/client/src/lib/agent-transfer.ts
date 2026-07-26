@@ -1,5 +1,9 @@
 import {
+  CUSTOM_AGENT_IMPORT_SOURCE_SETTING,
+  CUSTOM_AGENT_PERMISSIONS_EXPLICIT_SETTING,
+  agentResultTypeSchema,
   getFolderManifestConfig,
+  normalizeCustomAgentCapabilities,
   normalizeAgentPhaseForType,
   normalizeAgentPhaseValue,
   sanitizeFolderSegment,
@@ -39,6 +43,8 @@ const TRANSFER_UNSAFE_AGENT_SETTING_KEYS = new Set([
   "imageConnectionId",
   "lorebookWriteEnabled",
   "customAgentRepositorySource",
+  CUSTOM_AGENT_IMPORT_SOURCE_SETTING,
+  CUSTOM_AGENT_PERMISSIONS_EXPLICIT_SETTING,
 ]);
 
 const TRANSFER_UNSAFE_ENABLED_TOOLS = new Set(["save_lorebook_entry"]);
@@ -134,7 +140,16 @@ export function normalizeAgentImportEntry(entry: unknown, resolveTextFile?: (pat
   if (typeof settings.author !== "string" || !settings.author.trim()) {
     settings.author = "Unknown";
   }
-  const resultType = typeof source.resultType === "string" ? source.resultType : settings.resultType;
+  const parsedResultType = agentResultTypeSchema.safeParse(
+    typeof source.resultType === "string" ? source.resultType : settings.resultType,
+  );
+  const resultType = parsedResultType.success ? parsedResultType.data : undefined;
+  const permissionSettings = { ...settings };
+  delete permissionSettings[CUSTOM_AGENT_PERMISSIONS_EXPLICIT_SETTING];
+  if (resultType) permissionSettings.resultType = resultType;
+  const requestedCapabilities = Object.entries(normalizeCustomAgentCapabilities(permissionSettings))
+    .filter(([, enabled]) => enabled === true)
+    .map(([capability]) => capability);
 
   return {
     type,
@@ -148,7 +163,8 @@ export function normalizeAgentImportEntry(entry: unknown, resolveTextFile?: (pat
       resolveTextFile?.(source.promptTemplatePath) ??
       (typeof source.promptTemplate === "string" ? source.promptTemplate : ""),
     settings,
-    ...(typeof resultType === "string" ? { resultType } : {}),
+    requestedCapabilities,
+    ...(resultType ? { resultType } : {}),
   };
 }
 
