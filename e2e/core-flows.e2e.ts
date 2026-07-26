@@ -8952,7 +8952,7 @@ test("chat mode tabs and new-chat actions stay reachable", async ({ page }) => {
 
   for (const mode of modes) {
     await page.locator(`[data-tour="${mode.tour}"]`).click();
-    await expect(page.getByLabel(mode.label)).toBeVisible();
+    await expect(page.getByLabel(mode.label, { exact: true })).toBeVisible();
   }
 
   expect(errors).toEqual([]);
