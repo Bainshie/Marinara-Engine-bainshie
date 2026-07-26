@@ -325,7 +325,7 @@ export async function generateNoodlerPost(
       persist({
         id: postId,
         imageUrl: persistedMedia.imageUrl,
-        metadata: { privateMediaPath: persistedMedia.privateMediaPath },
+        metadata: { noodlerMediaPath: persistedMedia.noodlerMediaPath },
       }),
     );
     if (!post) throw new Error("Failed to persist the generated NoodleR post.");

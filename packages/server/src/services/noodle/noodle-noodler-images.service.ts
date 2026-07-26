@@ -4,7 +4,7 @@ import { logger, logDebugOverride } from "../../lib/logger.js";
 import { newId } from "../../utils/id-generator.js";
 import { createNoodleStorage } from "../storage/noodle.storage.js";
 import { getErrorMessage } from "./noodle-public-support.js";
-import { noodlerPostMediaUrl } from "./noodle-noodler-media.js";
+import { NOODLER_MEDIA_PREFIX, noodlerPostMediaUrl } from "./noodle-noodler-media.js";
 import { resolveImageConnectionFallback } from "../generation/media-connection-fallback.js";
 import { generateImage, stageImageToDisk, type StagedGalleryImage } from "../image/image-generation.js";
 import { resolveConnectionImageDefaults } from "../image/image-generation-defaults.js";
@@ -35,7 +35,7 @@ type ImageConnection = NonNullable<Awaited<ReturnType<ReturnType<typeof createCo
  * Noodle: bytes stage into a NoodleR-owned media namespace and never touch the
  * public gallery or character gallery, so subscriber/PPV output can be served only
  * through the access-checked media endpoint. The staged file's on-disk path is persisted in
- * `metadata.privateMediaPath`; callers finalize via `stagedMedia` and derive the access-checked
+ * `metadata.noodlerMediaPath`; callers finalize via `stagedMedia` and derive the access-checked
  * URL from the persisted post id.
  */
 export async function generateNoodlerPostImage(input: {
@@ -186,14 +186,14 @@ export async function generateNoodlerPostImage(input: {
     },
   );
   const provider = input.imageConnection.provider ?? "image_generation";
-  const file = stageImageToDisk(`noodler-private/${input.account.id}`, image.base64, image.ext);
+  const file = stageImageToDisk(`${NOODLER_MEDIA_PREFIX}${input.account.id}`, image.base64, image.ext);
   return {
     metadata: {
       imageGenerated: true,
       imageProvider: provider,
       imageModel: imageModel || "unknown",
       imageStyleProfileId: compiledPrompt.profile.id,
-      privateMediaPath: file.filePath,
+      noodlerMediaPath: file.filePath,
     },
     preview: null,
     stagedMedia: file,

@@ -139,7 +139,7 @@ export async function createNoodlerPost(
 
   const locked = await tryNoodlerAccountOperation(input.targetAccountId, async () => {
     const postId = media ? newId() : undefined;
-    const persist = (persistedMedia?: { imageUrl: string; privateMediaPath: string }) =>
+    const persist = (persistedMedia?: { imageUrl: string; noodlerMediaPath: string }) =>
       noodle.createNoodlerPost({
         id: postId,
         authorAccountId: input.targetAccountId,
@@ -152,7 +152,7 @@ export async function createNoodlerPost(
         metadata: {
           ...(input.poll ? { poll: createNoodlePoll(input.poll) } : {}),
           ...(input.imageCrop ? { imageCrop: input.imageCrop } : {}),
-          ...(persistedMedia ? { privateMediaPath: persistedMedia.privateMediaPath } : {}),
+          ...(persistedMedia ? { noodlerMediaPath: persistedMedia.noodlerMediaPath } : {}),
         },
       });
     const post =

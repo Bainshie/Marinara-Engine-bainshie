@@ -10,9 +10,9 @@ import { stageImageToDisk } from "../image/image-generation.js";
 // path contains a slash, so the public gallery serve routes (which reject slashes in the
 // chatId segment) can never reach it. Only the access-checked media endpoint serves it.
 const GALLERY_DIR = join(DATA_DIR, "gallery");
-// The string value is deliberately unchanged: it is an on-disk path prefix, and renaming
-// it would orphan every already-stored file in existing installations.
-const NOODLER_MEDIA_PREFIX = "noodler-private/";
+// Renaming this orphans NoodleR media already on disk in existing installations. Accepted
+// while NoodleR is in alpha; if that stops being true, migrate rather than rename again.
+export const NOODLER_MEDIA_PREFIX = "noodler-media/";
 
 export type NoodlerPostMediaUpload = {
   buffer: Buffer;
@@ -32,7 +32,7 @@ export async function persistNoodlerPostWithUploadedMedia<T>(
   accountId: string,
   postId: string,
   upload: NoodlerPostMediaUpload,
-  persist: (media: { imageUrl: string; privateMediaPath: string }) => Promise<T | null>,
+  persist: (media: { imageUrl: string; noodlerMediaPath: string }) => Promise<T | null>,
 ): Promise<T | null> {
   const stagedMedia = stageImageToDisk(
     `${NOODLER_MEDIA_PREFIX}${accountId}`,
@@ -43,7 +43,7 @@ export async function persistNoodlerPostWithUploadedMedia<T>(
     stagedMedia.promote();
     const result = await persist({
       imageUrl: noodlerPostMediaUrl(postId),
-      privateMediaPath: stagedMedia.filePath,
+      noodlerMediaPath: stagedMedia.filePath,
     });
     if (result === null) stagedMedia.compensate();
     return result;
@@ -53,11 +53,8 @@ export async function persistNoodlerPostWithUploadedMedia<T>(
   }
 }
 
-// `privateMediaPath` is a legacy persisted key inside the stringified post metadata column.
-// Kept as-is through the platform rename: renaming it would mean migrating nested JSON on
-// every post row to change a key no user or reviewer ever sees.
 export function readNoodlerMediaPath(post: Pick<NoodlerManagedPost, "metadata">): string | null {
-  const value = (post.metadata as Record<string, unknown> | null | undefined)?.privateMediaPath;
+  const value = (post.metadata as Record<string, unknown> | null | undefined)?.noodlerMediaPath;
   return typeof value === "string" && value.startsWith(NOODLER_MEDIA_PREFIX) ? value : null;
 }
 

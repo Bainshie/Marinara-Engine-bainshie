@@ -1791,7 +1791,7 @@ export function createNoodleStorage(db: DB) {
     async updateNoodlerPost(
       id: string,
       input: NoodlerPostUpdateInput,
-      media?: { imageUrl: string; privateMediaPath: string },
+      media?: { imageUrl: string; noodlerMediaPath: string },
     ): Promise<NoodlerManagedPost | null> {
       const imageChanged = Boolean(media || input.removeImage);
       const updated = await db.transaction(async (tx) => {
@@ -1806,7 +1806,7 @@ export function createNoodleStorage(db: DB) {
         const nextMetadata = updatePollMetadata(mapManagedPost(existing).metadata, input.poll);
         if (imageChanged) {
           for (const key of [
-            "privateMediaPath",
+            "noodlerMediaPath",
             "imageGenerated",
             "imageProvider",
             "imageModel",
@@ -1818,7 +1818,7 @@ export function createNoodleStorage(db: DB) {
             delete nextMetadata[key];
           }
         }
-        if (media) nextMetadata.privateMediaPath = media.privateMediaPath;
+        if (media) nextMetadata.noodlerMediaPath = media.noodlerMediaPath;
         if (input.removeImage || input.imageCrop === null) delete nextMetadata.imageCrop;
         else if (input.imageCrop !== undefined) nextMetadata.imageCrop = input.imageCrop;
         await tx

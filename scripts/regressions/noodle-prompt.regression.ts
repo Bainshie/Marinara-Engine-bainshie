@@ -389,7 +389,7 @@ assert.equal(
   }).success,
   false,
 );
-// Slice 8b: the manual Guide path may request image-prompt review on private generation.
+// Slice 8b: the manual Guide path may request image-prompt review on NoodleR generation.
 assert.equal(
   noodleGenerationRequestSchema.safeParse({
     mode: "noodler",

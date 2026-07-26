@@ -20,7 +20,7 @@ assert.ok(noodleAccountSchedulerPatchSchema.parse({ autoPosting: { imagesEnabled
 // The removed per-run quota is rejected by the strict schema.
 assert.throws(() => noodleAccountSchedulerPatchSchema.parse({ autoPosting: { maxImagesPerRun: 3 } }));
 
-// The private generator surfaces its optional imagePrompt (no second text-model call) but
+// The NoodleR generator surfaces its optional imagePrompt (no second text-model call) but
 // never a poll.
 const generated = noodleGeneratedNoodlerPostSchema.parse({
   title: "Studio day",
@@ -39,14 +39,14 @@ assert.ok(!protectNoodlerGeneratedIdentity("portrait of Jane Doe smiling", "hint
 // Open disclosure keeps the identity.
 assert.ok(protectNoodlerGeneratedIdentity("portrait of @janedoe", "open", linked)!.includes("janedoe"));
 
-// Private media is only reachable through the access-checked endpoint namespace.
+// NoodleR media is only reachable through the access-checked endpoint namespace.
 assert.equal(noodlerPostMediaUrl("post123"), "/api/noodle/noodler/posts/post123/media");
-assert.equal(readNoodlerMediaPath({ metadata: { privateMediaPath: "noodler-private/acc/img.png" } }), "noodler-private/acc/img.png");
-assert.equal(readNoodlerMediaPath({ metadata: { privateMediaPath: "some/other/img.png" } }), null);
+assert.equal(readNoodlerMediaPath({ metadata: { noodlerMediaPath: "noodler-media/acc/img.png" } }), "noodler-media/acc/img.png");
+assert.equal(readNoodlerMediaPath({ metadata: { noodlerMediaPath: "some/other/img.png" } }), null);
 assert.equal(readNoodlerMediaPath({ metadata: {} }), null);
 // Traversal and non-namespaced paths never resolve to an on-disk file.
-assert.equal(resolveNoodlerMediaAbsolutePath("noodler-private/../../etc/passwd"), null);
+assert.equal(resolveNoodlerMediaAbsolutePath("noodler-media/../../etc/passwd"), null);
 assert.equal(resolveNoodlerMediaAbsolutePath("gallery/chat/img.png"), null);
-assert.ok(resolveNoodlerMediaAbsolutePath("noodler-private/acc/img.png")?.endsWith("noodler-private/acc/img.png"));
+assert.ok(resolveNoodlerMediaAbsolutePath("noodler-media/acc/img.png")?.endsWith("noodler-media/acc/img.png"));
 
 process.stdout.write("Noodle autopost image regression passed.\n");
