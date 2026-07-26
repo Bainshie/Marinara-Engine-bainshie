@@ -493,9 +493,7 @@ test("Chat Settings adds a formatted greeting after the setup wizard is skipped"
   }
 });
 
-test("settings profile exports use the new identity and legacy exports still import", async ({
-  request,
-}, testInfo) => {
+test("settings profile exports use the new identity and legacy exports still import", async ({ request }, testInfo) => {
   test.skip(!testInfo.project.name.includes("desktop"), "Settings profile transfer contract is covered once.");
 
   const suffix = Date.now().toString(36);
@@ -1524,9 +1522,7 @@ test("Character Chat actions reuse mode selection and seed the chosen setup wiza
     expect(folderRowBox).not.toBeNull();
     expect(folderActionsBox).not.toBeNull();
     expect(folderActionBoxes.every((box) => box !== null)).toBeTruthy();
-    expect(folderActionsBox!.x + folderActionsBox!.width).toBeLessThanOrEqual(
-      folderRowBox!.x + folderRowBox!.width,
-    );
+    expect(folderActionsBox!.x + folderActionsBox!.width).toBeLessThanOrEqual(folderRowBox!.x + folderRowBox!.width);
     const folderActionYPositions = folderActionBoxes.map((box) => box!.y);
     expect(Math.max(...folderActionYPositions) - Math.min(...folderActionYPositions)).toBeLessThan(0.1);
     expect(folderActionBoxes.map((box) => box!.x)).toEqual(
@@ -3166,9 +3162,7 @@ test("mobile roleplay quick preset editor keeps marker and metadata controls com
     await drawer.getByText("Prompt Preset", { exact: true }).click();
 
     const quickEditor = drawer.locator(".mari-quick-preset-editor");
-    const quickEditorToggle = drawer
-      .locator("[data-prompt-preset-quick-editor-disclosure]")
-      .locator(":scope > button");
+    const quickEditorToggle = drawer.locator("[data-prompt-preset-quick-editor-disclosure]").locator(":scope > button");
     await expect(quickEditor).toBeHidden();
     await expect(quickEditorToggle).toHaveAttribute("aria-expanded", "false");
     await quickEditorToggle.click();
@@ -4053,6 +4047,133 @@ test("PocketTTS discovers server voices and uses its speech endpoint", async ({ 
   }
 });
 
+test("ElevenLabs keeps models visible and exposes scrollable account voices in every assignment mode", async ({
+  page,
+}, testInfo) => {
+  test.skip(!testInfo.project.name.includes("desktop"), "ElevenLabs settings are covered on desktop.");
+
+  let voiceFetchCount = 0;
+  let saveCount = 0;
+  const config = {
+    enabled: true,
+    source: "elevenlabs",
+    baseUrl: "https://api.elevenlabs.io",
+    apiKey: "••••••",
+    voice: "voice-01",
+    model: "eleven_multilingual_v2",
+    speed: 1,
+    elevenLabsStability: 0.5,
+    elevenLabsLanguageCode: "",
+    elevenLabsGameSoundEffects: false,
+    elevenLabsGameMusic: false,
+    voiceMode: "single",
+    voiceAssignments: [],
+    narratorVoiceEnabled: false,
+    narratorVoice: "",
+    npcDefaultVoicesEnabled: false,
+    npcDefaultMaleVoices: [],
+    npcDefaultFemaleVoices: [],
+    autoplayRP: false,
+    autoplayConvo: false,
+    autoplayGame: false,
+    progressivePlayback: false,
+    dialogueOnly: false,
+    dialoguePauseMs: 1000,
+    audioFormat: "mp3",
+    callAudioEnabled: false,
+    callSttConnectionId: "",
+    callSttModel: "",
+    callAudioInputMode: "local_whisper",
+    callVideoInputEnabled: false,
+    callCharacterVideoEnabled: false,
+    callAutomaticVideoClipsEnabled: false,
+    callCustomVideoClipsEnabled: false,
+    callSoundboardEnabled: true,
+    sourceProfiles: {},
+  };
+  const voiceOptions = Array.from({ length: 48 }, (_, index) => {
+    const suffix = String(index + 1).padStart(2, "0");
+    return {
+      id: `voice-${suffix}`,
+      name: `Custom Voice ${suffix}`,
+      description: `Uploaded account voice ${suffix}`,
+      previewUrl: null,
+      category: "personal",
+      labels: { accent: index % 2 === 0 ? "Polish" : "English" },
+    };
+  });
+
+  await page.route("**/api/tts/config", async (route) => {
+    if (route.request().method() === "PUT") {
+      Object.assign(config, route.request().postDataJSON());
+      saveCount += 1;
+      await route.fulfill({ status: 204 });
+      return;
+    }
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(config) });
+  });
+  await page.route("**/api/tts/voices", async (route) => {
+    voiceFetchCount += 1;
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        voices: voiceOptions.map((voice) => voice.id),
+        voiceOptions,
+        fromProvider: true,
+        source: "elevenlabs",
+      }),
+    });
+  });
+  await page.route("**/api/tts/models", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        models: [
+          { id: "eleven_multilingual_v2", name: "Eleven Multilingual v2" },
+          { id: "eleven_v3", name: "Eleven v3" },
+          { id: "eleven_flash_v2_5", name: "Eleven Flash v2.5" },
+        ],
+        fromProvider: true,
+        source: "elevenlabs",
+      }),
+    });
+  });
+
+  await page.goto("/");
+  await page.locator('[data-tour="panel-connections"]').click();
+  const rightPanel = page.locator('[data-component="RightPanel"]');
+  const ttsLabel = rightPanel.getByText("Text to Speech", { exact: true });
+  const ttsCard = ttsLabel.locator("xpath=../../..");
+  await ttsCard.getByTitle("Expand").click();
+
+  const modelSelect = ttsCard.getByRole("combobox", { name: "Model" });
+  await expect(modelSelect.locator("option")).toHaveCount(3);
+  await expect(modelSelect.locator('option[value="eleven_v3"]')).toHaveText("Eleven v3 (eleven_v3)");
+
+  await ttsCard.getByRole("button", { name: "All Characters Voice" }).click();
+  const voiceList = ttsCard.getByTestId("tts-voice-options");
+  await expect(voiceList.getByRole("option")).toHaveCount(49);
+  await expect(voiceList.getByText("Custom Voice 48 (voice-48)", { exact: true })).toBeAttached();
+  await expect(voiceList).toHaveCSS("overflow-y", "scroll");
+  expect(
+    await voiceList.evaluate((element) => ({
+      scrollable: element.scrollHeight > element.clientHeight,
+      gutter: getComputedStyle(element).scrollbarGutter,
+    })),
+  ).toEqual({ scrollable: true, gutter: "stable" });
+
+  await page.keyboard.press("Escape");
+  await ttsCard.getByRole("combobox", { name: "Voice Option" }).selectOption("per-character");
+  const refreshButton = ttsCard.getByRole("button", { name: "Refresh", exact: true });
+  await expect(refreshButton).toBeVisible();
+  const fetchesBeforeRefresh = voiceFetchCount;
+  await refreshButton.click();
+  await expect.poll(() => saveCount).toBeGreaterThan(0);
+  await expect.poll(() => voiceFetchCount).toBeGreaterThan(fetchesBeforeRefresh);
+});
+
 test("failed Game Lorebook Keeper run exposes a retry action", async ({ page }, testInfo) => {
   test.skip(!testInfo.project.name.includes("desktop"), "Game session recovery regression is covered on desktop.");
 
@@ -4293,11 +4414,7 @@ test("Backup & Export identifies the automatic backup location", async ({ page }
   await page.goto("/");
   await page.locator('[data-tour="panel-settings"]').click();
   await page.getByPlaceholder("Search settings").fill("automatic backups");
-  await page
-    .locator(".mari-settings-search-header button")
-    .filter({ hasText: "Automatic backups" })
-    .first()
-    .click();
+  await page.locator(".mari-settings-search-header button").filter({ hasText: "Automatic backups" }).first().click();
 
   const backupSection = page.locator("#settings-section-backup-export");
   await expect(backupSection).toBeVisible();
@@ -7143,10 +7260,9 @@ test("selected Lorebook entries mirror safe edits and choose a move destination 
     await page.getByText(name, { exact: true }).click();
     await page.getByRole("button", { name: /^Entries/ }).click();
     await expect(
-      page.getByText(
-        "Use the Select button above to enter batch editing mode and edit multiple entries at once.",
-        { exact: true },
-      ),
+      page.getByText("Use the Select button above to enter batch editing mode and edit multiple entries at once.", {
+        exact: true,
+      }),
     ).toBeVisible();
     await page.getByTitle("Select entries for batch editing, copying, moving, or deletion").click();
     await page.getByRole("button", { name: "Select all", exact: true }).click();
@@ -9174,13 +9290,15 @@ test("mobile chat composer follows the visual viewport above the software keyboa
     const textarea = composer.locator("textarea:visible");
     const transcript = page.locator(".mari-messages-scroll:visible").first();
     await expect(transcript).toBeVisible();
+    await expect(page.getByText(/^Keyboard viewport history line 18\./)).toBeVisible();
+    await expect
+      .poll(() => transcript.evaluate((element) => element.scrollHeight - element.clientHeight))
+      .toBeGreaterThan(400);
     await transcript.evaluate((element) => {
       element.scrollTop = element.scrollHeight;
     });
     await expect
-      .poll(() =>
-        transcript.evaluate((element) => element.scrollHeight - element.scrollTop - element.clientHeight),
-      )
+      .poll(() => transcript.evaluate((element) => element.scrollHeight - element.scrollTop - element.clientHeight))
       .toBeLessThanOrEqual(2);
     await expect(textarea).toBeVisible();
     await textarea.focus();
@@ -9210,16 +9328,22 @@ test("mobile chat composer follows the visual viewport above the software keyboa
     expect(composerBox!.y).toBeGreaterThanOrEqual(72);
     expect(composerBox!.y + composerBox!.height).toBeLessThanOrEqual(432);
     await expect
-      .poll(() =>
-        transcript.evaluate((element) => element.scrollHeight - element.scrollTop - element.clientHeight),
-      )
+      .poll(() => transcript.evaluate((element) => element.scrollHeight - element.scrollTop - element.clientHeight))
       .toBeLessThanOrEqual(2);
+
+    await transcript.evaluate((element) => {
+      element.scrollTop = Math.max(0, element.scrollTop - 320);
+    });
+    await expect
+      .poll(() => transcript.evaluate((element) => element.scrollHeight - element.scrollTop - element.clientHeight))
+      .toBeGreaterThan(180);
+    await expect(textarea).toBeVisible();
   } finally {
     await page.request.delete(`/api/chats/${chat.id}`).catch(() => undefined);
   }
 });
 
-test("kaomoji scrollbar presses stay inside the picker and use chat chroma", async ({ page }, testInfo) => {
+test("kaomoji scrollbar presses stay inside the picker and use the theme accent", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name.includes("mobile"), "Native desktop scrollbar behavior is desktop-only.");
 
   const response = await page.request.post("/api/chats", {
@@ -9244,34 +9368,33 @@ test("kaomoji scrollbar presses stay inside the picker and use chat chroma", asy
     const pickerBox = await picker.boundingBox();
     expect(pickerBox).not.toBeNull();
 
-    await page.evaluate(({ x, y }) => {
-      document.documentElement.dispatchEvent(
-        new MouseEvent("mousedown", {
-          bubbles: true,
-          clientX: x,
-          clientY: y,
-        }),
-      );
-    }, {
-      x: pickerBox!.x + pickerBox!.width - 1,
-      y: pickerBox!.y + pickerBox!.height / 2,
-    });
+    await page.mouse.move(pickerBox!.x + pickerBox!.width - 2, pickerBox!.y + pickerBox!.height / 2);
+    await page.mouse.down();
+    await page.mouse.up();
     await expect(picker).toBeVisible();
 
-    const searchIconUsesChroma = await picker.locator("svg").first().evaluate((icon) => {
-      const iconColor = getComputedStyle(icon).color;
-      const chromaColor = getComputedStyle(document.documentElement)
-        .getPropertyValue("--marinara-chat-chrome-button-text-active")
-        .trim();
-      if (!chromaColor) return false;
-      const probe = document.createElement("span");
-      probe.style.color = chromaColor;
-      document.body.appendChild(probe);
-      const resolvedChromaColor = getComputedStyle(probe).color;
-      probe.remove();
-      return iconColor === resolvedChromaColor;
-    });
-    expect(searchIconUsesChroma).toBe(true);
+    const [categoriesFit, resultsFit] = await Promise.all([
+      picker.locator("[data-kaomoji-categories]").evaluate((element) => element.scrollWidth <= element.clientWidth),
+      picker.locator("[data-kaomoji-results]").evaluate((element) => element.scrollWidth <= element.clientWidth),
+    ]);
+    expect(categoriesFit).toBe(true);
+    expect(resultsFit).toBe(true);
+
+    const searchIconUsesTheme = await picker
+      .locator("svg")
+      .first()
+      .evaluate((icon) => {
+        const iconColor = getComputedStyle(icon).color;
+        const themeColor = getComputedStyle(document.documentElement).getPropertyValue("--primary").trim();
+        if (!themeColor) return false;
+        const probe = document.createElement("span");
+        probe.style.color = themeColor;
+        document.body.appendChild(probe);
+        const resolvedThemeColor = getComputedStyle(probe).color;
+        probe.remove();
+        return iconColor === resolvedThemeColor;
+      });
+    expect(searchIconUsesTheme).toBe(true);
   } finally {
     await page.request.delete(`/api/chats/${chat.id}`).catch(() => undefined);
   }

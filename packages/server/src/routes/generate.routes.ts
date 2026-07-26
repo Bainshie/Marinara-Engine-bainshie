@@ -359,6 +359,7 @@ import { handleConversationSceneCommand } from "../services/generation/conversat
 import { handleConversationSelfieCommand } from "../services/generation/conversation-selfie-command-runtime.js";
 import {
   CONTINUE_ASSISTANT_MESSAGE_PROMPT,
+  CONTINUE_ASSISTANT_MESSAGE_DIRECT_PROMPT,
   appendContinuationMessageContent,
   clampRoleplaySummaryContextSize,
   clampRoleplaySummaryInterval,
@@ -2626,6 +2627,7 @@ export async function generateRoutes(app: FastifyInstance) {
         const {
           connectionParams,
           resolvedEffort,
+          providerReasoningEffort,
           enableThinking,
           isClaudeNoSampling,
           providerTopK,
@@ -3143,7 +3145,12 @@ export async function generateRoutes(app: FastifyInstance) {
         }
 
         if (input.continueMessageId) {
-          finalMessages.push({ role: "user" as const, content: CONTINUE_ASSISTANT_MESSAGE_PROMPT });
+          finalMessages.push({
+            role: "user" as const,
+            content: input.continueAddsNewline
+              ? CONTINUE_ASSISTANT_MESSAGE_PROMPT
+              : CONTINUE_ASSISTANT_MESSAGE_DIRECT_PROMPT,
+          });
           logger.debug("[generate] Injected continuation prompt for assistant message %s", input.continueMessageId);
         }
 
@@ -3250,8 +3257,7 @@ export async function generateRoutes(app: FastifyInstance) {
           return msg;
         });
         const customAgentsWithLorebookTriggers = resolvedAgents.filter(
-          (agent) =>
-            !builtInAgentTypes.has(agent.type) && agent.settings.triggerLorebooksForAgentCalls === true,
+          (agent) => !builtInAgentTypes.has(agent.type) && agent.settings.triggerLorebooksForAgentCalls === true,
         );
         const resolveTriggeredLorebookEntriesByAgentId = createAgentLorebookTriggerResolver({
           agents: customAgentsWithLorebookTriggers.map((agent) => {
@@ -3366,9 +3372,7 @@ export async function generateRoutes(app: FastifyInstance) {
                 },
               }
             : {}),
-          ...(Object.keys(triggeredLorebookEntriesByAgentId).length > 0
-            ? { triggeredLorebookEntriesByAgentId }
-            : {}),
+          ...(Object.keys(triggeredLorebookEntriesByAgentId).length > 0 ? { triggeredLorebookEntriesByAgentId } : {}),
           streaming: input.streaming,
           ...(requestDebug
             ? {
@@ -5378,7 +5382,7 @@ export async function generateRoutes(app: FastifyInstance) {
                     cachingAtDepth: conn.cachingAtDepth ?? 5,
                     enableThinking,
                     captureReasoning,
-                    reasoningEffort: resolvedEffort ?? undefined,
+                    reasoningEffort: providerReasoningEffort,
                     excludePastReasoning,
                     verbosity: verbosity ?? undefined,
                     serviceTier,
@@ -5599,7 +5603,7 @@ export async function generateRoutes(app: FastifyInstance) {
                     cachingAtDepth: conn.cachingAtDepth ?? 5,
                     enableThinking,
                     captureReasoning,
-                    reasoningEffort: resolvedEffort ?? undefined,
+                    reasoningEffort: providerReasoningEffort,
                     excludePastReasoning,
                     verbosity: verbosity ?? undefined,
                     serviceTier,
@@ -5660,7 +5664,7 @@ export async function generateRoutes(app: FastifyInstance) {
               cachingAtDepth: conn.cachingAtDepth ?? 5,
               enableThinking,
               captureReasoning,
-              reasoningEffort: resolvedEffort ?? undefined,
+              reasoningEffort: providerReasoningEffort,
               excludePastReasoning,
               verbosity: verbosity ?? undefined,
               serviceTier,
@@ -6214,7 +6218,11 @@ export async function generateRoutes(app: FastifyInstance) {
             savedMsg = await chats.getMessage(input.regenerateMessageId);
           } else if (input.continueMessageId) {
             const targetMessage = (await chats.getMessage(input.continueMessageId)) ?? continueTargetMessage;
-            continuedMessageRewriteSource = appendContinuationMessageContent(targetMessage?.content, fullResponse);
+            continuedMessageRewriteSource = appendContinuationMessageContent(
+              targetMessage?.content,
+              fullResponse,
+              input.continueAddsNewline,
+            );
             savedMsg = await chats.updateMessageContent(input.continueMessageId, continuedMessageRewriteSource);
             savedSwipeIndex =
               typeof savedMsg?.activeSwipeIndex === "number" && Number.isInteger(savedMsg.activeSwipeIndex)
