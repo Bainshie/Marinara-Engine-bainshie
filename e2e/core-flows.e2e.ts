@@ -9214,6 +9214,16 @@ test("mobile chat composer follows the visual viewport above the software keyboa
         transcript.evaluate((element) => element.scrollHeight - element.scrollTop - element.clientHeight),
       )
       .toBeLessThanOrEqual(2);
+
+    await transcript.evaluate((element) => {
+      element.scrollTop = Math.max(0, element.scrollTop - 320);
+    });
+    await expect
+      .poll(() =>
+        transcript.evaluate((element) => element.scrollHeight - element.scrollTop - element.clientHeight),
+      )
+      .toBeGreaterThan(180);
+    await expect(textarea).toBeVisible();
   } finally {
     await page.request.delete(`/api/chats/${chat.id}`).catch(() => undefined);
   }
@@ -9244,34 +9254,32 @@ test("kaomoji scrollbar presses stay inside the picker and use chat chroma", asy
     const pickerBox = await picker.boundingBox();
     expect(pickerBox).not.toBeNull();
 
-    await page.evaluate(({ x, y }) => {
-      document.documentElement.dispatchEvent(
-        new MouseEvent("mousedown", {
-          bubbles: true,
-          clientX: x,
-          clientY: y,
-        }),
-      );
-    }, {
-      x: pickerBox!.x + pickerBox!.width - 1,
-      y: pickerBox!.y + pickerBox!.height / 2,
-    });
+    await page.mouse.move(pickerBox!.x + pickerBox!.width - 2, pickerBox!.y + pickerBox!.height / 2);
+    await page.mouse.down();
+    await page.mouse.up();
     await expect(picker).toBeVisible();
 
-    const searchIconUsesChroma = await picker.locator("svg").first().evaluate((icon) => {
+    const [categoriesFit, resultsFit] = await Promise.all([
+      picker
+        .locator("[data-kaomoji-categories]")
+        .evaluate((element) => element.scrollWidth <= element.clientWidth),
+      picker.locator("[data-kaomoji-results]").evaluate((element) => element.scrollWidth <= element.clientWidth),
+    ]);
+    expect(categoriesFit).toBe(true);
+    expect(resultsFit).toBe(true);
+
+    const searchIconUsesTheme = await picker.locator("svg").first().evaluate((icon) => {
       const iconColor = getComputedStyle(icon).color;
-      const chromaColor = getComputedStyle(document.documentElement)
-        .getPropertyValue("--marinara-chat-chrome-button-text-active")
-        .trim();
-      if (!chromaColor) return false;
+      const themeColor = getComputedStyle(document.documentElement).getPropertyValue("--primary").trim();
+      if (!themeColor) return false;
       const probe = document.createElement("span");
-      probe.style.color = chromaColor;
+      probe.style.color = themeColor;
       document.body.appendChild(probe);
-      const resolvedChromaColor = getComputedStyle(probe).color;
+      const resolvedThemeColor = getComputedStyle(probe).color;
       probe.remove();
-      return iconColor === resolvedChromaColor;
+      return iconColor === resolvedThemeColor;
     });
-    expect(searchIconUsesChroma).toBe(true);
+    expect(searchIconUsesTheme).toBe(true);
   } finally {
     await page.request.delete(`/api/chats/${chat.id}`).catch(() => undefined);
   }

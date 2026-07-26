@@ -49,6 +49,7 @@ import { useUIStore } from "../../stores/ui.store";
 import { useChatStore } from "../../stores/chat.store";
 import { useGameStateStore } from "../../stores/game-state.store";
 import { useThrottledStreamBuffer } from "../../hooks/use-throttled-stream-buffer";
+import { useChatKeyboardOpen } from "../../hooks/use-visual-viewport-chat-bottom";
 import { useActiveLorebookEntries, useLorebooks } from "../../hooks/use-lorebooks";
 import { usePresetFull, usePresets } from "../../hooks/use-presets";
 import { ChatMessage } from "./ChatMessage";
@@ -1282,7 +1283,8 @@ export function ChatRoleplaySurface({
   const compactToolbarOwnsAuthorNotes = centerCompact || isMobileToolbarViewport;
   const expandedAuthorNotesOpen = authorNotesOpenOwner === "expanded";
   const compactAuthorNotesOpen = authorNotesOpenOwner === "compact";
-  const shouldKeepMobileComposerOpen = hasLiveStream || hasDraftInput || isFetchingNextPage;
+  const keyboardOpen = useChatKeyboardOpen();
+  const shouldKeepMobileComposerOpen = keyboardOpen || hasLiveStream || hasDraftInput || isFetchingNextPage;
 
   useEffect(() => {
     if (shouldKeepMobileComposerOpen) setMobileHistoryComposerCollapsed(false);
