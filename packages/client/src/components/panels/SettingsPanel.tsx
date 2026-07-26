@@ -2971,6 +2971,8 @@ function GeneralSettings() {
   const setConvertLatexSymbols = useUIStore((s) => s.setConvertLatexSymbols);
   const trimIncompleteModelOutput = useUIStore((s) => s.trimIncompleteModelOutput);
   const setTrimIncompleteModelOutput = useUIStore((s) => s.setTrimIncompleteModelOutput);
+  const continueAddsNewline = useUIStore((s) => s.continueAddsNewline);
+  const setContinueAddsNewline = useUIStore((s) => s.setContinueAddsNewline);
   const speechToTextEnabled = useUIStore((s) => s.speechToTextEnabled);
   const setSpeechToTextEnabled = useUIStore((s) => s.setSpeechToTextEnabled);
   const chibiProfessorMariEnabled = useUIStore((s) => s.chibiProfessorMariEnabled);
@@ -3122,6 +3124,14 @@ function GeneralSettings() {
             checked={trimIncompleteModelOutput}
             onChange={setTrimIncompleteModelOutput}
             help={localizeUi("settings.controls.trimIncomplete.help")}
+          />
+
+          <ToggleSetting
+            anchorId={getSettingsControlAnchorId("continue-adds-newline")}
+            label={localizeUi("settings.controls.continueAddsNewline.label")}
+            checked={continueAddsNewline}
+            onChange={setContinueAddsNewline}
+            help={localizeUi("settings.controls.continueAddsNewline.help")}
           />
 
           <label
