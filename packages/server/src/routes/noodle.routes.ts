@@ -420,7 +420,7 @@ export async function noodleRoutes(app: FastifyInstance) {
     return readable;
   }
 
-  // Access-checked serving for NoodleR-owned NoodleR media. A persona query gates as a fan
+  // Access-checked serving for NoodleR-owned media. A persona query gates as a fan
   // (subscriber/PPV/hidden all enforced); no persona is the trusted owner/management path.
   // The bytes live outside any publicly readable gallery namespace, so this is the only way
   // to reach them.

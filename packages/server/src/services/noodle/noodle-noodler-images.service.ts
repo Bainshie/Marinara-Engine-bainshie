@@ -32,7 +32,7 @@ type ImageConnection = NonNullable<Awaited<ReturnType<ReturnType<typeof createCo
 
 /**
  * NoodleR analog of generateNoodlePostImage. The deliberate difference from public
- * Noodle: bytes stage into a NoodleR-owned NoodleR media namespace and never touch the
+ * Noodle: bytes stage into a NoodleR-owned media namespace and never touch the
  * public gallery or character gallery, so subscriber/PPV output can be served only
  * through the access-checked media endpoint. The staged file's on-disk path is persisted in
  * `metadata.privateMediaPath`; callers finalize via `stagedMedia` and derive the access-checked

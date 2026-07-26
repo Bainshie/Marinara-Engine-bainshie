@@ -431,7 +431,7 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
   const connectionsQuery = useConnections();
   const connections = (connectionsQuery.data ?? []) as Array<{ id: string; name: string; model?: string }>;
   const [profileDraft, setProfileDraft] = useState<NoodleStageProfileInput | null>(null);
-  const [draftNoodleAccountId, setDraftPublicAccountId] = useState<string | null>(null);
+  const [draftNoodleAccountId, setDraftNoodleAccountId] = useState<string | null>(null);
   const [imagePromptReview, setImagePromptReview] = useState<{
     accountId: string;
     items: ImagePromptReviewItem[];
@@ -465,7 +465,7 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
   useEffect(() => {
     if (navigation.mode !== "noodler" || navigation.view !== "create-profile") return;
     setEditingProfileId(null);
-    setDraftPublicAccountId(navigation.noodleAccountId);
+    setDraftNoodleAccountId(navigation.noodleAccountId);
     setProfileDraft(null);
     setCreationStep("disclosure");
     setCreationDisclosure("hinted");
@@ -654,11 +654,11 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
 
   const handleSourceSearch = (value: string) => {
     setSourceSearch(value);
-    setDraftPublicAccountId(null);
+    setDraftNoodleAccountId(null);
   };
   const handleSourceKind = (value: "all" | "character" | "persona") => {
     setSourceKind(value);
-    setDraftPublicAccountId(null);
+    setDraftNoodleAccountId(null);
   };
 
   const enableNoodler = () => {
@@ -673,7 +673,7 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
 
   const beginCreate = () => {
     setEditingProfileId(null);
-    setDraftPublicAccountId(null);
+    setDraftNoodleAccountId(null);
     setProfileDraft(null);
     setCreationStep("source");
     setCreationDisclosure("hinted");
@@ -692,7 +692,7 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
         : draftNoodleAccountId;
     setCreationStep(null);
     setProfileDraft(null);
-    setDraftPublicAccountId(null);
+    setDraftNoodleAccountId(null);
     setPreviousDraft(null);
     if (noodleAccountId && navigation.mode === "noodler" && navigation.view === "create-profile") {
       onNavigate({ mode: "public", view: "profile", accountId: noodleAccountId, connection: null });
@@ -701,7 +701,7 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
 
   const beginEdit = (profile: NoodlerStageProfile) => {
     setEditingProfileId(profile.id);
-    setDraftPublicAccountId(profile.noodleAccountId);
+    setDraftNoodleAccountId(profile.noodleAccountId);
     setCreationDisclosure(profile.disclosureMode ?? "hinted");
     setCreationStep("draft");
     setDraftGuidance("");
@@ -764,7 +764,7 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
     const onSuccess = (profile: NoodlerStageProfile) => {
       setProfileDraft(null);
       setEditingProfileId(null);
-      setDraftPublicAccountId(null);
+      setDraftNoodleAccountId(null);
       setPreviousDraft(null);
       setCreationStep(null);
       setAutoPostSetupId(null);
@@ -993,7 +993,7 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
             selectedId={draftNoodleAccountId}
             onSearch={handleSourceSearch}
             onKindChange={handleSourceKind}
-            onSelect={setDraftPublicAccountId}
+            onSelect={setDraftNoodleAccountId}
             hasMore={Boolean(eligibleAccountsQuery.hasNextPage)}
             isLoadingMore={eligibleAccountsQuery.isFetchingNextPage}
             isLoading={eligibleAccountsQuery.isLoading}

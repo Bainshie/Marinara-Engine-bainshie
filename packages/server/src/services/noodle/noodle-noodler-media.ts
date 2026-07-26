@@ -6,7 +6,7 @@ import { DATA_DIR } from "../../utils/data-dir.js";
 import { assertInsideDir } from "../../utils/security.js";
 import { stageImageToDisk } from "../image/image-generation.js";
 
-// NoodleR-owned NoodleR media lives under the gallery data dir but in a namespace whose
+// NoodleR-owned media lives under the gallery data dir but in a namespace whose
 // path contains a slash, so the public gallery serve routes (which reject slashes in the
 // chatId segment) can never reach it. Only the access-checked media endpoint serves it.
 const GALLERY_DIR = join(DATA_DIR, "gallery");
