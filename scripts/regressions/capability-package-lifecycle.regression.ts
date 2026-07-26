@@ -170,6 +170,7 @@ try {
     capabilityPackageManager,
     findCompatibleCapabilityPackageUpdates,
     findPendingCapabilityPackageUpdates,
+    getCapabilityAgentDetailDefinitionIssue,
     getCapabilityPackageArtifactSourceIssue,
     getCapabilityPackageInstallIssue,
     resolveCapabilityCatalogUrl,
@@ -190,6 +191,29 @@ try {
     "Non-release builds must fall back to the legacy catalog instead of requesting a nonexistent lane",
   );
   assert.equal(getCapabilityPackageInstallIssue(legacyManifest), null);
+  const agentDetailFixture = {
+    name: "Agent detail fixture",
+    description: "Capability lifecycle regression fixture.",
+    author: "Marinara",
+    phase: "post_processing" as const,
+    enabledByDefault: false,
+    category: "misc" as const,
+    defaultPromptTemplate: "Return a result.",
+  };
+  assert.equal(
+    getCapabilityAgentDetailDefinitionIssue("storyboard", [
+      { ...agentDetailFixture, id: "storyboard", execution: "host" },
+    ]),
+    null,
+    "Host-orchestrated agents may own package detail settings",
+  );
+  assert.match(
+    getCapabilityAgentDetailDefinitionIssue("pipeline-agent", [
+      { ...agentDetailFixture, id: "pipeline-agent", execution: "pipeline" },
+    ]) ?? "",
+    /feature or host agent/,
+    "Generic pipeline agents must not claim package detail contributions",
+  );
   const serverlessTurnGameManifest = capabilityPackageManifestSchema.parse({
     ...legacyManifest,
     id: "serverless-turn-game",
