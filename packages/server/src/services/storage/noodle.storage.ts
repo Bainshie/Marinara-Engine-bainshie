@@ -1107,6 +1107,9 @@ export function createNoodleStorage(db: DB) {
         settings: JSON.stringify(accountSettings),
         platform: "noodler",
         noodleAccountId,
+        // Rollback mirrors; see schema/noodle.ts.
+        visibility: "private",
+        publicAccountId: noodleAccountId,
         createdAt: timestamp,
         updatedAt: timestamp,
       });
@@ -1208,6 +1211,9 @@ export function createNoodleStorage(db: DB) {
           }),
           platform: "noodle",
           noodleAccountId: null,
+          // Rollback mirrors; see schema/noodle.ts.
+          visibility: "public",
+          publicAccountId: null,
           createdAt: timestamp,
           updatedAt: timestamp,
         });

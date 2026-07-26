@@ -7,15 +7,21 @@ import { migrateLegacyNoodleAccountRow } from "../../packages/server/src/db/nood
 // ── Pure migration ────────────────────────────────────────────────
 // A legacy NoodleR profile must survive as one. Without the rename it would fall
 // back to the schema default and leak into the public Noodle timeline.
+// The legacy keys must SURVIVE: an older build reads them, and stripping them would make a
+// downgrade republish NoodleR accounts onto the public Noodle timeline.
 assert.deepEqual(migrateLegacyNoodleAccountRow({ id: "a", visibility: "private", publicAccountId: "pub-1" }), {
   id: "a",
   platform: "noodler",
   noodleAccountId: "pub-1",
+  visibility: "private",
+  publicAccountId: "pub-1",
 });
 assert.deepEqual(migrateLegacyNoodleAccountRow({ id: "b", visibility: "public", publicAccountId: null }), {
   id: "b",
   platform: "noodle",
   noodleAccountId: null,
+  visibility: "public",
+  publicAccountId: null,
 });
 // A row with neither key predates the split entirely: it is a Noodle account.
 assert.deepEqual(migrateLegacyNoodleAccountRow({ id: "c" }), { id: "c", platform: "noodle" });

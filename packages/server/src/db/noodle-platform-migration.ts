@@ -27,8 +27,8 @@ export function migrateLegacyNoodleAccountRow(row: Row): Row {
     if ("publicAccountId" in row) migrated.noodleAccountId = row.publicAccountId;
     else if ("public_account_id" in row) migrated.noodleAccountId = row.public_account_id;
   }
-  delete migrated.visibility;
-  delete migrated.publicAccountId;
-  delete migrated.public_account_id;
+  // The legacy keys are deliberately left in place rather than deleted. A build from before
+  // the rename reads them; strip them and a downgrade silently republishes every NoodleR
+  // account onto the public Noodle timeline. See schema/noodle.ts.
   return migrated;
 }
