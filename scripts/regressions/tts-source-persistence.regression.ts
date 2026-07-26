@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
+import { gzipSync } from "node:zlib";
 import { TTS_API_KEY_MASK, ttsConfigSchema } from "../../packages/shared/src/types/tts.js";
 import { buildTTSVoiceRequests } from "../../packages/client/src/lib/tts-dialogue.ts";
 import { normalizeTTSPlaybackDelayMs } from "../../packages/client/src/lib/tts-service.ts";
 import {
   maskTTSConfigForResponse,
+  fetchAllElevenLabsVoiceOptions,
   fetchElevenLabsVoiceOptions,
   parseElevenLabsModelOptions,
   prepareTTSConfigForStorage,
@@ -24,9 +26,42 @@ assert.deepEqual(
 process.env.TTS_LOCAL_URLS_ENABLED = "true";
 const elevenLabsMock = createServer((request, response) => {
   const url = new URL(request.url ?? "/", "http://localhost");
-  assert.equal(request.headers["xi-api-key"], "test-elevenlabs-key");
+  const apiKey = request.headers["xi-api-key"];
+  if (apiKey === "compressed-error-key") {
+    const body = gzipSync(
+      JSON.stringify({
+        detail: {
+          status: "invalid_api_key",
+          message: "The supplied ElevenLabs API key is invalid.",
+        },
+      }),
+    );
+    response.writeHead(401, {
+      "Content-Type": "application/json",
+      "Content-Encoding": "gzip",
+      "Content-Length": String(body.length),
+    });
+    response.end(body);
+    return;
+  }
+
+  assert.equal(apiKey, "test-elevenlabs-key");
   assert.equal(url.pathname, "/v2/voices");
   assert.equal(url.searchParams.get("page_size"), "100");
+  if (url.searchParams.get("voice_type") === "saved") {
+    response.writeHead(200, { "Content-Type": "application/json" });
+    response.end(
+      JSON.stringify({
+        voices: [
+          { voice_id: "personal-second", name: "Personal Second", category: "generated" },
+          { voice_id: "saved-custom", name: "Saved Custom Voice", category: "professional" },
+        ],
+        has_more: false,
+        next_page_token: null,
+      }),
+    );
+    return;
+  }
   response.writeHead(200, { "Content-Type": "application/json" });
   if (!url.searchParams.get("next_page_token")) {
     response.end(
@@ -57,6 +92,18 @@ try {
   assert.deepEqual(
     paginatedVoices.map((voice) => voice.id),
     ["personal-first", "personal-second"],
+  );
+  const allVoices = await fetchAllElevenLabsVoiceOptions(
+    `http://127.0.0.1:${address.port}`,
+    "test-elevenlabs-key",
+  );
+  assert.deepEqual(
+    allVoices.map((voice) => voice.id),
+    ["personal-first", "personal-second", "saved-custom"],
+  );
+  await assert.rejects(
+    fetchElevenLabsVoiceOptions(`http://127.0.0.1:${address.port}`, "compressed-error-key"),
+    /The supplied ElevenLabs API key is invalid\./,
   );
 } finally {
   await new Promise<void>((resolve, reject) => {
