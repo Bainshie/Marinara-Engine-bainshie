@@ -1593,8 +1593,6 @@ const GAME_ASSET_CATEGORIES = [
 
 const VIDEO_PROMPT_TEMPLATE_KEYS = [
   "game.video",
-  "game.storyboardIllustrationDirector",
-  "game.storyboardAnimationDirector",
   "conversation.callVideo.idle",
   "conversation.callVideo.talking",
   "conversation.callVideo.laughing",

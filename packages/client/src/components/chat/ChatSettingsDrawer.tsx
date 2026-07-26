@@ -7988,9 +7988,7 @@ export function ChatSettingsDrawer({
                           )}
                           <GamePromptTemplateSelect
                             label={localizeUi("ui.chat.chatsettingsdrawer.gameVideoPrompt")}
-                            description={localizeUi(
-                              "ui.chat.chatsettingsdrawer.usedForGameSceneVideosAndStoryboardKeyframeClips",
-                            )}
+                            description={localizeUi("ui.chat.chatsettingsdrawer.usedForGameSceneVideos")}
                             options={gameVideoPromptOptions}
                             selectedId={selectedGameVideoPromptTemplateId}
                             fallbackId={GAME_VIDEO_PROMPT_TEMPLATE_ID}

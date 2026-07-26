@@ -10658,9 +10658,12 @@ export async function gameRoutes(app: FastifyInstance) {
       const generateStoryboardVideos = input.generateVideos ?? meta.gameStoryboardAutoGenerationEnabled === true;
       const enableGen =
         !!meta.enableSpriteGeneration || readTrimmedString(meta.storyboardAgentImageConnectionId) !== null;
-      const imgConnId = await resolveGameImageConnectionId(meta, agents);
+      const imgConnId =
+        readTrimmedString(meta.storyboardAgentImageConnectionId) ?? (await resolveGameImageConnectionId(meta, agents));
       if (!enableGen || !imgConnId) {
-        return reply.status(400).send({ error: "Choose an Illustrator image connection in Game Settings first." });
+        return reply.status(400).send({
+          error: "Choose an image connection in the Storyboard Agent or Game Illustrator settings first.",
+        });
       }
       const imgConn = await connections.getWithKey(imgConnId);
       if (!imgConn) return reply.status(404).send({ error: "Image generation connection not found" });
@@ -10676,8 +10679,7 @@ export async function gameRoutes(app: FastifyInstance) {
           input.chatId,
           { exactAnchor: { messageId: input.messageId, swipeIndex: input.swipeIndex } },
           meta,
-        )) ??
-        (await resolveOwnerSpatialProjection(input.chatId, { throughMessageId: input.messageId }, meta));
+        )) ?? (await resolveOwnerSpatialProjection(input.chatId, { throughMessageId: input.messageId }, meta));
       const spatialLocationReferenceImage = await resolveSpatialLocationReferenceImage({
         db: app.db,
         chatId: input.chatId,
@@ -10918,10 +10920,7 @@ export async function gameRoutes(app: FastifyInstance) {
           charDescriptionByName,
           includeReferenceImages: useAvatarReferences,
           includeCharacterDescriptions: includeCharacterAppearance,
-          maxReferenceImages: Math.max(
-            0,
-            storyboardReferenceImageLimit - (spatialLocationReferenceImage ? 1 : 0),
-          ),
+          maxReferenceImages: Math.max(0, storyboardReferenceImageLimit - (spatialLocationReferenceImage ? 1 : 0)),
         });
         const illustrationAssets = {
           ...characterIllustrationAssets,
@@ -11049,7 +11048,9 @@ export async function gameRoutes(app: FastifyInstance) {
       let videoRuntime: GameVideoRuntime | null = null;
       let videoFallback: Awaited<ReturnType<typeof resolveVideoConnectionFallback>> = undefined;
       if (generateStoryboardVideos && !usedFallbackStoryboardPlanner) {
-        const videoConnectionId = await resolveGameVideoConnectionId(meta, connections);
+        const videoConnectionId =
+          readTrimmedString(meta.storyboardAgentVideoConnectionId) ??
+          (await resolveGameVideoConnectionId(meta, connections));
         const videoConn = videoConnectionId ? await connections.getWithKey(videoConnectionId) : null;
         if (videoConn?.provider === "video_generation") {
           videoRuntime = resolveGameVideoRuntime(videoConn);

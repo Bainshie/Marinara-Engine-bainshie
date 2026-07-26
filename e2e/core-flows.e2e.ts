@@ -5859,7 +5859,7 @@ test("Roleplay and Game chat settings link empty agent libraries to Download Age
   }
 });
 
-test("Illustrator owns conditional media subsections and agent removal stays away from collapse", async ({
+test("Illustrator owns its conditional scene-video subsection and agent removal stays away from collapse", async ({
   page,
   request,
 }, testInfo) => {
@@ -5886,7 +5886,6 @@ test("Illustrator owns conditional media subsections and agent removal stays awa
       enableAgents: true,
       activeAgentIds: ["illustrator"],
       gameSceneVideosEnabled: false,
-      gameStoryboardsEnabled: false,
     },
   });
   expect(gameMetadataResponse.ok()).toBeTruthy();
@@ -5997,10 +5996,9 @@ test("Illustrator owns conditional media subsections and agent removal stays awa
     const gameIllustratorCard = drawer.locator(`#chat-settings-agent-menu-${gameChat.id}-illustrator`);
     const featureToggles = gameIllustratorCard.locator('[data-agent-settings-feature-toggles="illustrator"]');
     const sceneVideosToggle = featureToggles.getByRole("checkbox", { name: /Enable Scene Videos/ });
-    const storyboardsToggle = featureToggles.getByRole("checkbox", { name: /Enable Storyboards/ });
     await expect(gameIllustratorCard).toBeVisible();
     await expect(sceneVideosToggle).not.toBeChecked();
-    await expect(storyboardsToggle).not.toBeChecked();
+    await expect(featureToggles.getByRole("checkbox", { name: /Enable Storyboards/ })).toHaveCount(0);
     await expect(gameIllustratorCard.locator('[data-agent-settings-subsection="scene-videos"]')).toHaveCount(0);
     await expect(gameIllustratorCard.locator('[data-agent-settings-subsection="storyboards"]')).toHaveCount(0);
 
@@ -6010,13 +6008,6 @@ test("Illustrator owns conditional media subsections and agent removal stays awa
     await expect(gameSceneVideosSubsection).toBeVisible();
     await expect(gameSceneVideosSubsection.getByRole("heading", { name: "Scene Videos" })).toBeVisible();
     await expect(gameSceneVideosSubsection.locator("[data-agent-settings-subsection-header] > svg")).toHaveCount(0);
-
-    await featureToggles.getByText("Enable Storyboards", { exact: true }).click();
-    const gameStoryboardsSubsection = gameIllustratorCard.locator('[data-agent-settings-subsection="storyboards"]');
-    await expect(storyboardsToggle).toBeChecked();
-    await expect(gameStoryboardsSubsection).toBeVisible();
-    await expect(gameStoryboardsSubsection.getByRole("heading", { name: "Storyboards" })).toBeVisible();
-    await expect(gameStoryboardsSubsection.locator("[data-agent-settings-subsection-header] > svg")).toHaveCount(0);
     expect(errors).toEqual([]);
   } finally {
     await Promise.all([chat.id, gameChat.id].map((chatId) => request.delete(`/api/chats/${chatId}`)));

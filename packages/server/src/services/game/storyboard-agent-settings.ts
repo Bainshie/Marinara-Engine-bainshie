@@ -72,8 +72,6 @@ export async function applyStoryboardAgentSettings(
       gameStoryboardUseNovelAiCharacterPrompts:
         meta.gameStoryboardUseNovelAiCharacterPrompts ?? settings.useNovelAiCharacterPrompts,
       gameStoryboardUsePromptTemplate: meta.gameStoryboardUsePromptTemplate ?? settings.usePromptTemplate,
-      gameImageConnectionId: meta.gameImageConnectionId ?? settings.imageConnectionId,
-      gameVideoConnectionId: meta.gameVideoConnectionId ?? settings.videoConnectionId,
       gameStoryboardIllustrationPromptTemplateId:
         meta.gameStoryboardIllustrationPromptTemplateId ?? settings.illustrationPlannerTemplateId,
       gameStoryboardAnimationPromptTemplateId:
