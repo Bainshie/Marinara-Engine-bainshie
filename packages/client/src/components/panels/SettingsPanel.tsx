@@ -628,7 +628,7 @@ const SETTINGS_SEARCHABLE_CONTROLS: readonly SettingsSearchableControlMeta[] = [
   {
     id: "trim-incomplete-output",
     sectionId: "responses",
-    label: "Trim incomplete model endings",
+    label: "Trim incomplete sentences from the response",
     description: "Trim trailing unfinished sentences from AI responses.",
     aliases: ["trim", "unfinished", "sentence"],
     kind: "Toggle",
