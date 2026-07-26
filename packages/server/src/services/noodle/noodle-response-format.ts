@@ -113,8 +113,10 @@ const noodlerPostSchema = {
   properties: {
     title: { type: ["string", "null"], maxLength: NOODLER_POST_TITLE_MAX_LENGTH },
     content: { type: "string", maxLength: NOODLER_POST_CONTENT_MAX_LENGTH },
+    // strict mode has no optional properties — nullable + required is how optionality is spelled.
+    imagePrompt: { type: ["string", "null"] },
   },
-  required: ["title", "content"],
+  required: ["title", "content", "imagePrompt"],
   additionalProperties: false,
 } as const;
 

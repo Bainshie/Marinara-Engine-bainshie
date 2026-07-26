@@ -30,6 +30,7 @@ import {
   type NoodleInteractionType,
   type NoodleCarryoverMode,
   type NoodleCarryoverTarget,
+  type NoodlePlatform,
   type NoodlePost,
   type NoodlePostAccess,
   type NoodlePollInput,
@@ -107,7 +108,6 @@ type InsertInteractionCommand = {
   imageUrl?: string | null;
   parentInteractionId: string | null;
 };
-type PollVoteAuthorPlatform = "noodle" | "noodler";
 type NoodlerPostPersistenceInput = {
   /** Optional caller-supplied id so a serving URL can be derived before the row is inserted. */
   id?: string;
@@ -743,7 +743,7 @@ export function createNoodleStorage(db: DB) {
     postId: string,
     actorAccountId: string,
     optionId: string,
-    authorPlatform: PollVoteAuthorPlatform,
+    authorPlatform: NoodlePlatform,
     imageUrl: string | null,
   ): Promise<NoodleInteraction | null> => {
     return db.transaction(async (tx) => {

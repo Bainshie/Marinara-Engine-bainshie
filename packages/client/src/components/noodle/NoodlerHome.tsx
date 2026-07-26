@@ -3662,7 +3662,7 @@ function NoodlerPostComposer({
         maxLength={NOODLER_POST_CONTENT_MAX_LENGTH}
         disabled={composerBusy}
         aria-label={localizeUi("ui.noodle.noodlerpostcomposer.postBody")}
-        placeholder={localizeUi("ui.noodle.noodlerpostcomposer.whatSSimmeringPrivately")}
+        placeholder={localizeUi("ui.noodle.noodlerpostcomposer.whatSSimmering")}
         className="min-h-20 w-full resize-none border-0 bg-transparent py-2 text-[1rem] leading-6 text-[var(--foreground)] outline-none placeholder:text-[var(--muted-foreground)]"
       />
       {pendingImage && (

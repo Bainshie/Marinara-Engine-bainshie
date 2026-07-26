@@ -265,7 +265,7 @@ export const noodleStageProfileDraftRequestSchema = z
     connectionId: z.string().min(1).optional(),
   })
   .strict()
-  .refine((input) => Boolean(input.noodleAccountId || input.noodlerAccountId), {
+  .refine((input) => Boolean(input.noodleAccountId) !== Boolean(input.noodlerAccountId), {
     message: "Choose a source account.",
   });
 

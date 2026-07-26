@@ -332,11 +332,13 @@ try {
     firstNoodle.subscribe(viewer.id, noodlerCreator.id),
     firstNoodle.subscribe(viewer.id, noodlerCreator.id),
   ]);
+  assert.ok(firstSubscription);
   assert.equal(firstSubscription?.id, duplicateSubscription?.id);
   const [firstUnlock, duplicateUnlock] = await Promise.all([
     firstNoodle.unlockPost(viewer.id, ppvPost.id),
     firstNoodle.unlockPost(viewer.id, ppvPost.id),
   ]);
+  assert.ok(firstUnlock);
   assert.equal(firstUnlock?.id, duplicateUnlock?.id);
   assert.equal(await firstNoodle.subscribe(creatorSource.id, noodlerCreator.id), null);
   const personaCreatorSource = await firstNoodle.upsertAccountFromProfile({

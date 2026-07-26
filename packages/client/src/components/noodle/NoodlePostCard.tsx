@@ -1474,7 +1474,7 @@ export function NoodlePostCard({
                   value={editingPostContent}
                   onChange={(event) => setEditingPostContent(event.target.value)}
                 className="min-h-20 w-full resize-none rounded-lg border-0 bg-[var(--noodle-accent)]/5 px-3 py-2 text-[1rem] leading-6 text-[var(--foreground)] outline-none placeholder:text-[var(--muted-foreground)] focus:bg-[var(--noodle-accent)]/10"
-                  placeholder={localizeUi("ui.noodle.noodlerpostcomposer.whatSSimmeringPrivately")}
+                  placeholder={localizeUi("ui.noodle.noodlerpostcomposer.whatSSimmering")}
                 />
                 {imageEditing && (
                   <PostImageEditControls

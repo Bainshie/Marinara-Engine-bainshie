@@ -23,7 +23,7 @@ const files = execFileSync("git", ["ls-files", "packages/client/src"], { cwd: re
   .split("\n")
   .filter((f) => f.endsWith(".ts") || f.endsWith(".tsx"));
 
-const missing: string[] = [];
+const missing = new Map<string, string>(); // key -> "key  (file)" for the failure message
 for (const file of files) {
   let source: string;
   try {
@@ -33,19 +33,60 @@ for (const file of files) {
   }
   for (const match of source.matchAll(/localizeUi\(\s*"([^"]+)"/g)) {
     const key = match[1];
-    if (!(key in en)) missing.push(`${key}  (${file})`);
+    if (!(key in en)) missing.set(key, `${key}  (${file})`);
   }
 }
 
-// ponytail: a known-bad allowlist rather than a hard zero — the tree already carries
-// pre-existing dangling keys unrelated to this check's purpose, which is to stop NEW ones.
+// A known-bad allowlist rather than a hard zero — the tree already carries pre-existing
+// dangling keys unrelated to this check's purpose, which is to stop NEW ones. Named rather
+// than counted so that fixing one key and breaking another cannot cancel out.
 // Shrink this list when you fix one; never grow it.
-const KNOWN_MISSING = 31;
+const KNOWN_MISSING = new Set([
+  "ui.agents.customagentrepositoriesmodal.repositoryAgentsWillBeImported",
+  "ui.characters.lorebooktab.reimportedEmbeddedLorebookEntries",
+  "ui.characters.lorebooktab.importedEmbeddedLorebookEntries",
+  "chat.branches.importedMessages",
+  "chat.branches.switchCount",
+  "chat.branches.deleteAllConfirmation",
+  "chat.activeContext.skippedEntries",
+  "chat.activeContext.activeEntries",
+  "chat.summary.source.lastMessages",
+  "chat.summary.source.selectedMessages",
+  "chat.summary.headerActive",
+  "chat.summary.automatic.updateInterval",
+  "chat.summary.template.tokenEstimate",
+  "ui.game.gamecharactersheet.regenerating",
+  "ui.game.gamewidgetsetupeditor.importedWidgets",
+  "ui.lorebooks.lorebookeditor.enabledEntriesWouldActivate",
+  "ui.lorebooks.vectorizesection.reVectorizeAllEntriesWithConnection",
+  "ui.lorebooks.lorebookfolderrow.entriesInThisFolder",
+  "ui.modals.stbulkimportmodal.builtInPresetsDetectedAndUnchecked",
+  "ui.modals.stbulkimportmodal.selectedItems",
+  "ui.modals.stbulkimportmodal.importedCharacters",
+  "ui.modals.stbulkimportmodal.importedChats",
+  "ui.modals.stbulkimportmodal.importedGroupChats",
+  "ui.modals.stbulkimportmodal.importedPresets",
+  "ui.modals.stbulkimportmodal.importedLorebooks",
+  "ui.modals.stbulkimportmodal.importedBackgrounds",
+  "ui.modals.stbulkimportmodal.importedPersonas",
+  "ui.modals.stbulkimportmodal.importWarnings",
+  "ui.panels.importbutton.embeddedLorebookImportPrompt",
+  "ui.panels.advancedsettings.deleteSelectedDataCategories",
+  "ui.panels.extensionsettings.invalidExtensionEntriesSkipped",
+]);
 
-assert.ok(
-  missing.length <= KNOWN_MISSING,
-  `${missing.length} localizeUi keys do not exist in en.json (baseline ${KNOWN_MISSING}). New ones:\n` +
-    missing.slice(0, 40).join("\n"),
+const unexpected = [...missing].filter(([key]) => !KNOWN_MISSING.has(key)).map(([, display]) => display);
+assert.equal(
+  unexpected.length,
+  0,
+  `${unexpected.length} localizeUi keys do not exist in en.json:\n${unexpected.join("\n")}`,
 );
 
-process.stdout.write(`Localization key-reference regression passed (${missing.length} known-missing, none new).\n`);
+const fixed = [...KNOWN_MISSING].filter((key) => !missing.has(key));
+assert.equal(
+  fixed.length,
+  0,
+  `These keys resolve now — remove them from KNOWN_MISSING:\n${fixed.join("\n")}`,
+);
+
+process.stdout.write(`Localization key-reference regression passed (${missing.size} known-missing, none new).\n`);

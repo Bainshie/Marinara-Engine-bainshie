@@ -501,15 +501,19 @@ export async function noodleRoutes(app: FastifyInstance) {
     if (!nextContent.trim() && !nextPoll && !nextHasImage) {
       return reply.code(400).send({ error: "Posts need a body, image, or poll." });
     }
-    const locked = await tryNoodlerAccountOperation(existing.authorAccountId, () =>
-      noodle.updateNoodlerPost(id, parsed.data),
-    );
+    // The media path has to be re-read under the lock: the pre-lock `existing` snapshot can
+    // name a file a concurrent write already replaced, and unlinking that deletes live bytes.
+    const locked = await tryNoodlerAccountOperation(existing.authorAccountId, async () => {
+      const current = parsed.data.removeImage ? await noodle.getNoodlerPostById(id) : null;
+      const updated = await noodle.updateNoodlerPost(id, parsed.data);
+      return updated ? { updated, staleMedia: current ? readNoodlerMediaPath(current) : null } : null;
+    });
     if (!locked.acquired) {
       return reply.code(409).send({ error: "Another operation for this NoodleR account is already running." });
     }
     if (!locked.value) return reply.code(404).send({ error: "NoodleR post not found" });
-    if (parsed.data.removeImage) unlinkNoodlerMedia(readNoodlerMediaPath(existing));
-    return locked.value;
+    if (parsed.data.removeImage) unlinkNoodlerMedia(locked.value.staleMedia);
+    return locked.value.updated;
   });
 
   app.post("/noodler/posts", async (req, reply) => {

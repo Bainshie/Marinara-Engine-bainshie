@@ -32,6 +32,9 @@ assert.equal(migrateLegacyNoodleAccountRow(migrated), migrated);
 // ── End to end through the file store ─────────────────────────────
 const storageDir = mkdtempSync(join(tmpdir(), "marinara-noodle-platform-"));
 process.env.FILE_STORAGE_DIR = storageDir;
+// Closed in `finally`, not on the success path: a failed assertion must not leave the file
+// store holding the temp dir rmSync is about to delete.
+let closeStore: (() => Promise<void>) | null = null;
 try {
   mkdirSync(join(storageDir, "tables"), { recursive: true });
   writeFileSync(
@@ -71,6 +74,7 @@ try {
   const { createFileNativeDB } = await import("../../packages/server/src/db/file-backed-store.js");
   const { createNoodleStorage } = await import("../../packages/server/src/services/storage/noodle.storage.js");
   const db = await createFileNativeDB();
+  closeStore = () => db._fileStore.close();
   const noodle = createNoodleStorage(db as never);
 
   // The legacy private row must not appear as a Noodle account...
@@ -81,9 +85,8 @@ try {
   assert.equal(stageProfile?.id, "acct-noodler");
   assert.equal(stageProfile?.platform, "noodler");
   assert.equal(stageProfile?.noodleAccountId, "acct-noodle");
-
-  await db._fileStore.close();
 } finally {
+  await closeStore?.();
   rmSync(storageDir, { recursive: true, force: true });
 }
 
