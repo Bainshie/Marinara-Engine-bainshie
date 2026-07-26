@@ -203,6 +203,7 @@ import {
   type GameDynamicImagePromptRequest,
 } from "../services/game/game-asset-generation.js";
 import { saveImageToDisk } from "../services/image/image-generation.js";
+import { resolveGalleryImagePath } from "../services/image/gallery-image-path.js";
 import {
   generateVideo,
   removeSavedVideoFromDisk,
@@ -1362,7 +1363,6 @@ async function addGeneratedIllustrationToGallery(opts: {
 
 const GENERATED_ILLUSTRATION_TAG_PREFIX = "backgrounds:illustrations:";
 const GAME_SCENE_VIDEOS_ROOT = join(DATA_DIR, "game-scene-videos");
-const CHAT_GALLERY_ROOT = join(DATA_DIR, "gallery");
 const GAME_SCENE_VIDEO_FILENAME_RE = /^[A-Za-z0-9_-]+\.mp4$/;
 
 type GameSceneVideoRow = NonNullable<Awaited<ReturnType<ReturnType<typeof createGameSceneVideosStorage>["getById"]>>>;
@@ -1400,22 +1400,6 @@ function resolveGeneratedIllustrationAssetPath(tag: unknown): string | null {
       join(GAME_ASSETS_DIR, "backgrounds", "illustrations", `${slug}.${ext}`),
     ).find((candidate) => existsSync(candidate)) ?? null
   );
-}
-
-function resolveGalleryImagePath(image: ChatGalleryImageRow): string | null {
-  const normalizedPath = image.filePath.replace(/\\/g, "/");
-  const filename = basename(normalizedPath);
-  const candidates = new Set([normalizedPath, `${image.chatId}/${filename}`]);
-  for (const candidate of candidates) {
-    if (!candidate || candidate.includes("..") || candidate.includes("\0")) continue;
-    try {
-      const resolved = assertInsideDir(CHAT_GALLERY_ROOT, join(CHAT_GALLERY_ROOT, candidate));
-      if (existsSync(resolved)) return resolved;
-    } catch {
-      // Ignore invalid gallery path candidates and try the next one.
-    }
-  }
-  return null;
 }
 
 function imageMimeTypeForPath(path: string): VideoReferenceImage["mimeType"] | null {

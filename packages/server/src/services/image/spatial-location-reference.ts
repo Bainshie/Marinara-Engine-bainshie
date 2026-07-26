@@ -1,33 +1,12 @@
-import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
-import { basename, join } from "node:path";
 import type { ResolvedOwnerSpatialProjection } from "@marinara-engine/shared";
 import type { DB } from "../../db/connection.js";
 import { logger } from "../../lib/logger.js";
-import { DATA_DIR } from "../../utils/data-dir.js";
-import { assertInsideDir } from "../../utils/security.js";
 import { createGalleryStorage } from "../storage/gallery.storage.js";
-
-const CHAT_GALLERY_ROOT = join(DATA_DIR, "gallery");
+import { resolveGalleryImagePath } from "./gallery-image-path.js";
 
 export const SPATIAL_LOCATION_REFERENCE_PROMPT_LINE =
   "Location handling: an attached location reference image is available. Use it to set the scene location.";
-
-function resolveGalleryImagePath(image: { chatId: string; filePath: string }): string | null {
-  const normalizedPath = image.filePath.replace(/\\/g, "/");
-  const filename = basename(normalizedPath);
-  const candidates = new Set([normalizedPath, `${image.chatId}/${filename}`]);
-  for (const candidate of candidates) {
-    if (!candidate || candidate.includes("..") || candidate.includes("\0")) continue;
-    try {
-      const resolved = assertInsideDir(CHAT_GALLERY_ROOT, join(CHAT_GALLERY_ROOT, candidate));
-      if (existsSync(resolved)) return resolved;
-    } catch {
-      // Try the legacy chat-relative path before treating the reference as missing.
-    }
-  }
-  return null;
-}
 
 export async function resolveSpatialLocationReferenceImage(args: {
   db: DB;

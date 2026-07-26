@@ -31,7 +31,8 @@ import {
   type VideoReferenceImage,
 } from "../services/video/video-generation.js";
 import { resolveGameVideoRuntime } from "../services/video/game-video-runtime.js";
-import { generateImage, saveImageToDisk } from "../services/image/image-generation.js";
+import { generateImage, removeSavedImageFromDisk, saveImageToDisk } from "../services/image/image-generation.js";
+import { resolveGalleryImagePath } from "../services/image/gallery-image-path.js";
 import { resolveConnectionImageDefaults } from "../services/image/image-generation-defaults.js";
 import { loadImageGenerationUserSettings } from "../services/image/image-generation-settings.js";
 import {
@@ -322,22 +323,6 @@ function sceneTitleFromGalleryImage(image: ChatGalleryImageRow): string {
 
 function sourceGalleryImagePathForMetadata(image: ChatGalleryImageRow): string {
   return `gallery/${image.filePath.replace(/\\/g, "/")}`;
-}
-
-function resolveGalleryImagePath(image: ChatGalleryImageRow): string | null {
-  const normalizedPath = image.filePath.replace(/\\/g, "/");
-  const filename = basename(normalizedPath);
-  const candidates = new Set([normalizedPath, `${image.chatId}/${filename}`]);
-  for (const candidate of candidates) {
-    if (!candidate || candidate.includes("..") || candidate.includes("\0")) continue;
-    try {
-      const resolved = assertInsideDir(GALLERY_DIR, join(GALLERY_DIR, candidate));
-      if (existsSync(resolved)) return resolved;
-    } catch {
-      // Ignore invalid gallery path candidates and try the next one.
-    }
-  }
-  return null;
 }
 
 function imageMimeTypeForPath(path: string): VideoReferenceImage["mimeType"] | null {
@@ -1274,6 +1259,8 @@ export async function galleryRoutes(app: FastifyInstance) {
       debugLog("[debug/gallery/generate-image] negative prompt:\n%s", compiledPrompt.negativePrompt);
     }
 
+    let savedFilePath: string | null = null;
+    let metadataSaved = false;
     try {
       const connectionKey = imageConnection.id?.trim() || `${imageServiceHint}:${imageBaseUrl}:${imageModel}`;
       const generated = await runImageGenerationRequest({
@@ -1295,6 +1282,7 @@ export async function galleryRoutes(app: FastifyInstance) {
           }),
       });
       const filePath = saveImageToDisk(chatId, generated.base64, generated.ext);
+      savedFilePath = filePath;
       const image = await storage.create({
         chatId,
         filePath,
@@ -1305,9 +1293,17 @@ export async function galleryRoutes(app: FastifyInstance) {
         height: imageSettings.background.height,
       });
       if (!image) throw new Error("Generated Gallery image metadata could not be saved");
+      metadataSaved = true;
       logger.info("[gallery/generate-image] Generated Gallery image for chat %s", chatId);
       return { ...image, url: buildGalleryImageUrl(image, chatId) };
     } catch (err) {
+      if (savedFilePath && !metadataSaved) {
+        try {
+          removeSavedImageFromDisk(savedFilePath);
+        } catch (cleanupErr) {
+          logger.warn(cleanupErr, "[gallery/generate-image] Failed to clean up orphaned image file %s", savedFilePath);
+        }
+      }
       logger.warn(err, "[gallery/generate-image] Image generation failed for chat %s", chatId);
       return reply.status(502).send({
         error: err instanceof Error ? err.message : "Gallery image generation failed",
