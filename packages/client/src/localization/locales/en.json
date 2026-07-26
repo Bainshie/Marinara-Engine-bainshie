@@ -477,7 +477,7 @@
   "settings.agentImports.confirm.title": "Allow Custom Agent Imports?",
   "settings.agentImports.disabled": "Custom Agent imports are locked. Imported Agents will not run.",
   "settings.agentImports.enabled": "Custom Agent imports are enabled. Review every requested permission before importing.",
-  "settings.agentImports.enableFirst": "Enable Agent imports in the Danger Zone, in the Advanced Settings first to enable imports",
+  "settings.agentImports.enableFirst": "Enable \"Allow custom Agent imports\" in Advanced Settings → Danger Zone first.",
   "settings.agentImports.error": "Custom Agent imports could not be updated.",
   "settings.agentImports.import.failed_one": "{{count}} Agent import failed. {{error}}",
   "settings.agentImports.import.failed_other": "{{count}} Agent imports failed. {{error}}",

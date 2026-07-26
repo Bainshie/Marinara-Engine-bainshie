@@ -544,6 +544,19 @@ export type CustomAgentImportSource = "file" | "folder" | "repository";
 export const CUSTOM_AGENT_IMPORT_SOURCE_SETTING = "customAgentImportSource";
 export const CUSTOM_AGENT_PERMISSIONS_EXPLICIT_SETTING = "customAgentPermissionsExplicit";
 
+export function createImportedAgentType(sourceType: string): string {
+  const slug =
+    sourceType
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/(^-|-$)/g, "") || "agent";
+  const suffix =
+    globalThis.crypto && "randomUUID" in globalThis.crypto
+      ? globalThis.crypto.randomUUID()
+      : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+  return `custom-import-${slug}-${suffix}`;
+}
+
 const CUSTOM_AGENT_CAPABILITY_SET = new Set<string>(CUSTOM_AGENT_CAPABILITY_IDS);
 
 const CUSTOM_AGENT_RESULT_CAPABILITY: Partial<Record<AgentResultType, CustomAgentCapability>> = {
@@ -586,7 +599,10 @@ export function normalizeCustomAgentCapabilities(
   const enabledTools = Array.isArray(enabledToolsValue) ? enabledToolsValue : [];
   const resultType = typeof settings?.resultType === "string" ? settings.resultType : null;
 
-  if (settings?.lorebookWriteEnabled === true || enabledTools.includes("save_lorebook_entry")) {
+  if (
+    settings?.[CUSTOM_AGENT_PERMISSIONS_EXPLICIT_SETTING] !== true &&
+    (settings?.lorebookWriteEnabled === true || enabledTools.includes("save_lorebook_entry"))
+  ) {
     capabilities.edit_lorebooks = true;
   }
 

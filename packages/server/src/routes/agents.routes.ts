@@ -2,7 +2,6 @@
 // Routes: Agents
 // ──────────────────────────────────────────────
 import type { FastifyInstance } from "fastify";
-import { randomUUID } from "node:crypto";
 import { existsSync } from "fs";
 import { mkdir, readFile, writeFile } from "fs/promises";
 import { extname, join } from "path";
@@ -17,6 +16,7 @@ import {
   CUSTOM_AGENT_PERMISSIONS_EXPLICIT_SETTING,
   DEFAULT_AGENT_TOOLS,
   PROVIDERS,
+  createImportedAgentType,
   getDefaultBuiltInAgentSettings,
   localAuthProviderBaseUrl,
   normalizeCustomAgentCapabilities,
@@ -135,15 +135,6 @@ function parseAgentSettings(value: unknown): Record<string, unknown> {
     }
   }
   return typeof value === "object" ? (value as Record<string, unknown>) : {};
-}
-
-function createImportedAgentType(sourceType: string): string {
-  const slug =
-    sourceType
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/(^-|-$)/g, "") || "agent";
-  return `custom-import-${slug}-${randomUUID()}`;
 }
 
 function buildImportedAgentInput(input: ReturnType<typeof importAgentConfigSchema.parse>) {

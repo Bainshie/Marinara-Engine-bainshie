@@ -59,6 +59,24 @@ assert.equal(
   false,
   "an explicitly reviewed import must not gain a capability from its result type",
 );
+assert.equal(
+  customAgentHasCapability(
+    {
+      enabledTools: ["save_lorebook_entry"],
+      lorebookWriteEnabled: true,
+      customCapabilities: {},
+      [CUSTOM_AGENT_PERMISSIONS_EXPLICIT_SETTING]: true,
+    },
+    "edit_lorebooks",
+  ),
+  false,
+  "an explicitly reviewed import must not regain lorebook access from legacy tool settings",
+);
+assert.equal(
+  customAgentHasCapability({ enabledTools: ["save_lorebook_entry"] }, "edit_lorebooks"),
+  true,
+  "legacy locally authored agents must retain automatic lorebook capability derivation",
+);
 assert.equal(getCustomAgentResultCapability("haptic_command"), "control_haptics");
 assert.equal(
   isExternallyImportedAgent("custom-local", { customAgentImportSource: "folder" }),

@@ -595,6 +595,10 @@ export function AgentsPanel() {
     if (failed.length === 0) {
       setPendingAgentImport(null);
     } else {
+      const failedAgentTypes = new Set(failedAgents.map((agent) => agent.type));
+      setApprovedImportCapabilities((current) =>
+        Object.fromEntries(Object.entries(current).filter(([type]) => failedAgentTypes.has(type))),
+      );
       setPendingAgentImport({
         ...pendingAgentImport,
         agents: failedAgents,
@@ -1255,7 +1259,7 @@ export function AgentsPanel() {
 
             <div className="max-h-[55dvh] space-y-3 overflow-y-auto pr-1">
               {pendingAgentImport.agents.map((candidate) => {
-                const requestedCapabilities = candidate.requestedCapabilities as CustomAgentCapability[];
+                const requestedCapabilities = candidate.requestedCapabilities;
                 const selectedCapabilities = new Set(approvedImportCapabilities[candidate.type] ?? []);
                 return (
                   <section

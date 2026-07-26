@@ -61,7 +61,7 @@ Post-Processing custom agents also get a **Turn Data Access** section. It has tw
 |---|---|
 | **Create lorebooks** | Create a new agent-made lorebook when its lore output has no target. |
 | **Edit lorebooks** | Write lorebook entries or make lorebook update results. |
-| **Edit messages** | Replace the generated message text with rewritten text. |
+| **Edit messages** | Replace the generated message text with rewritten text, or add continuation choices to it. |
 | **Edit trackers** | Update game, character, persona, or custom tracker state. |
 | **Frontend styling** | Apply a temporary visual style effect during generation. |
 | **Change chat backgrounds** | Change and persist the background selected for a chat. |

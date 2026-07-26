@@ -11,7 +11,7 @@ export const agentKeys = {
   customRuns: (chatId: string) => ["agents", "runs", "custom", chatId] as const,
   // SecretPlotPanel also uses agentKeys.memory() directly, so invalidations stay coherent.
   memory: (agentType: string, chatId: string) => ["agent-memory", agentType, chatId] as const,
-  importPolicy: () => ["agents", "import-policy"] as const,
+  importPolicy: () => ["agents", "policy", "import"] as const,
 };
 
 export interface AgentConfigRow {

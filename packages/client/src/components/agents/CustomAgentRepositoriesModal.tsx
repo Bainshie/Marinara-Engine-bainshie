@@ -74,6 +74,10 @@ export function CustomAgentRepositoriesModal({ open, onClose }: { open: boolean;
     () => repositories.data?.repositories.find((entry) => entry.id === preview?.repository.id) ?? null,
     [preview?.repository.id, repositories.data?.repositories],
   );
+  const previewPermissionsByAgentId = useMemo(
+    () => new Map((preview?.changes ?? []).map((change) => [change.agentId, previewPermissions(change)])),
+    [preview],
+  );
   const contentChanges = preview?.changes.filter((change) => change.status !== "unchanged") ?? [];
   const pending =
     previewMutation.isPending || addMutation.isPending || syncMutation.isPending || removeMutation.isPending;
@@ -331,9 +335,9 @@ export function CustomAgentRepositoriesModal({ open, onClose }: { open: boolean;
                           <p className="text-xs font-semibold text-[var(--muted-foreground)]">
                             {localizeUi("settings.agentImports.review.permissions")}
                           </p>
-                          {previewPermissions(change).length > 0 ? (
+                          {(previewPermissionsByAgentId.get(change.agentId)?.length ?? 0) > 0 ? (
                             <ul className="mt-1 list-disc space-y-1 pl-5 text-xs text-[var(--foreground)]">
-                              {previewPermissions(change).map((capability) => (
+                              {(previewPermissionsByAgentId.get(change.agentId) ?? []).map((capability) => (
                                 <li key={capability}>
                                   {localizeUi(`settings.agentImports.capabilities.${capability}.label`)}
                                 </li>
