@@ -45,9 +45,6 @@ export async function applyStoryboardAgentSettings(
 
     const settings = normalizeStoryboardAgentSettings(mergeBuiltInAgentSettings(STORYBOARD_AGENT_ID, config.settings));
     const active = hasActiveStoryboardAgent(meta);
-    const hasLegacyAutoMode =
-      hasExplicitBoolean(meta, "gameStoryboardAutoIllustrationsEnabled") ||
-      hasExplicitBoolean(meta, "gameStoryboardAutoGenerationEnabled");
     const defaultAutoIllustrations = settings.autoGenerateMode !== "manual";
     const defaultAutoAnimations = settings.autoGenerateMode === "animation";
 
@@ -55,17 +52,17 @@ export async function applyStoryboardAgentSettings(
       ...meta,
       storyboardAgentInstalled: true,
       storyboardAgentActive: active,
-      storyboardAgentPromptConnectionId: meta.gameStoryboardPromptConnectionId ?? config.connectionId,
-      storyboardAgentImageConnectionId: meta.gameStoryboardImageConnectionId ?? settings.imageConnectionId,
-      storyboardAgentVideoConnectionId: meta.gameStoryboardVideoConnectionId ?? settings.videoConnectionId,
+      storyboardAgentPromptConnectionId: meta.gameSceneConnectionId ?? config.connectionId,
+      storyboardAgentImageConnectionId: meta.gameImageConnectionId ?? settings.imageConnectionId,
+      storyboardAgentVideoConnectionId: meta.gameVideoConnectionId ?? settings.videoConnectionId,
       storyboardAgentIncludeCharacterAppearance:
-        meta.gameStoryboardIncludeCharacterAppearance ?? settings.includeCharacterAppearance,
-      storyboardAgentUseAvatarReferences: meta.gameStoryboardUseAvatarReferences ?? settings.useAvatarReferences,
+        meta.gameImageIncludeCharacterAppearance ?? settings.includeCharacterAppearance,
+      storyboardAgentUseAvatarReferences: meta.gameImageUseAvatarReferences ?? settings.useAvatarReferences,
       gameStoryboardsEnabled: active ? true : meta.gameStoryboardsEnabled,
-      gameStoryboardAutoIllustrationsEnabled: hasLegacyAutoMode
+      gameStoryboardAutoIllustrationsEnabled: hasExplicitBoolean(meta, "gameStoryboardAutoIllustrationsEnabled")
         ? meta.gameStoryboardAutoIllustrationsEnabled
         : defaultAutoIllustrations,
-      gameStoryboardAutoGenerationEnabled: hasLegacyAutoMode
+      gameStoryboardAutoGenerationEnabled: hasExplicitBoolean(meta, "gameStoryboardAutoGenerationEnabled")
         ? meta.gameStoryboardAutoGenerationEnabled
         : defaultAutoAnimations,
       gameStoryboardKeyframeCount: meta.gameStoryboardKeyframeCount ?? settings.keyframeCount,

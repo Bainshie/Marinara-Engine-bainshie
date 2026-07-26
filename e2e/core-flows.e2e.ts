@@ -5859,7 +5859,7 @@ test("Roleplay and Game chat settings link empty agent libraries to Download Age
   }
 });
 
-test("Illustrator owns its conditional scene-video subsection and agent removal stays away from collapse", async ({
+test("Illustrator owns the merged scene-video and Storyboard subsections while agent removal stays away from collapse", async ({
   page,
   request,
 }, testInfo) => {
@@ -5884,7 +5884,8 @@ test("Illustrator owns its conditional scene-video subsection and agent removal 
       gameSessionNumber: 1,
       gameIntroPresented: true,
       enableAgents: true,
-      activeAgentIds: ["illustrator"],
+      activeAgentIds: ["illustrator", "storyboard"],
+      enableSpriteGeneration: true,
       gameSceneVideosEnabled: false,
     },
   });
@@ -5905,12 +5906,24 @@ test("Illustrator owns its conditional scene-video subsection and agent removal 
     modeAllowlist: ["roleplay", "game"],
     defaultPromptTemplate: "Return a scene image prompt.",
   };
+  const storyboardManifest = {
+    id: "storyboard",
+    name: "Storyboard",
+    description: "Plans still and animated Game keyframes.",
+    author: "Pasta Devs",
+    phase: "post_processing",
+    execution: "host",
+    enabledByDefault: false,
+    category: "misc",
+    modeAllowlist: ["game"],
+    defaultPromptTemplate: "Plan storyboard keyframes.",
+  };
 
   await page.route("**/api/capability-packages/agents", async (route) => {
     await route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify([illustratorManifest]),
+      body: JSON.stringify([illustratorManifest, storyboardManifest]),
     });
   });
   await page.route("**/api/capability-packages/installed", async (route) => {
@@ -5995,12 +6008,33 @@ test("Illustrator owns its conditional scene-video subsection and agent removal 
 
     const gameIllustratorCard = drawer.locator(`#chat-settings-agent-menu-${gameChat.id}-illustrator`);
     const featureToggles = gameIllustratorCard.locator('[data-agent-settings-feature-toggles="illustrator"]');
+    const storyboardFeatureToggles = gameIllustratorCard.locator('[data-agent-settings-feature-toggles="storyboard"]');
     const sceneVideosToggle = featureToggles.getByRole("checkbox", { name: /Enable Scene Videos/ });
+    const storyboardsToggle = storyboardFeatureToggles.getByRole("checkbox", { name: /Enable Storyboards/ });
     await expect(gameIllustratorCard).toBeVisible();
     await expect(sceneVideosToggle).not.toBeChecked();
-    await expect(featureToggles.getByRole("checkbox", { name: /Enable Storyboards/ })).toHaveCount(0);
+    await expect(storyboardsToggle).toBeChecked();
     await expect(gameIllustratorCard.locator('[data-agent-settings-subsection="scene-videos"]')).toHaveCount(0);
-    await expect(gameIllustratorCard.locator('[data-agent-settings-subsection="storyboards"]')).toHaveCount(0);
+    const storyboardsSubsection = gameIllustratorCard.locator('[data-agent-settings-subsection="storyboards"]');
+    await expect(storyboardsSubsection).toBeVisible();
+    await expect(storyboardsSubsection.getByRole("heading", { name: "Storyboards" })).toBeVisible();
+    await expect(
+      storyboardsSubsection.getByRole("checkbox", { name: /Automatic Storyboard Illustrations/ }),
+    ).toBeChecked();
+    const automaticAnimationsToggle = storyboardsSubsection.getByRole("checkbox", {
+      name: /Automatic Storyboard Animations/,
+    });
+    await expect(automaticAnimationsToggle).not.toBeChecked();
+    const durationInput = storyboardsSubsection.getByRole("spinbutton", { name: "Animation Clip Duration" });
+    await expect(durationInput).toBeDisabled();
+    await storyboardsSubsection.getByText("Automatic Storyboard Animations", { exact: true }).click();
+    await expect(automaticAnimationsToggle).toBeChecked();
+    await expect(durationInput).toBeEnabled();
+    await durationInput.fill("9");
+    await durationInput.blur();
+    await expect(durationInput).toHaveValue("9");
+    await expect(gameIllustratorCard.getByText("Attach Card Appearance", { exact: true })).toHaveCount(1);
+    await expect(gameIllustratorCard.getByText("Send Avatar References", { exact: true })).toHaveCount(1);
 
     await featureToggles.getByText("Enable Scene Videos", { exact: true }).click();
     const gameSceneVideosSubsection = gameIllustratorCard.locator('[data-agent-settings-subsection="scene-videos"]');

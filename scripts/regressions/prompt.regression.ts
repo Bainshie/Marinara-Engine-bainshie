@@ -2076,6 +2076,14 @@ const cases: RegressionCase[] = [
       assert.match(storyboardChatSettingsSource, /gameStoryboardAnimationPromptTemplateId/u);
       assert.match(storyboardChatSettingsSource, /gameStoryboardImagePromptTemplateId/u);
       assert.match(storyboardChatSettingsSource, /gameStoryboardVideoPromptTemplateId/u);
+      assert.match(storyboardChatSettingsSource, /automaticStoryboardIllustrations/u);
+      assert.match(storyboardChatSettingsSource, /automaticStoryboardAnimations/u);
+      assert.match(storyboardChatSettingsSource, /type="number"/u);
+      assert.doesNotMatch(
+        storyboardChatSettingsSource,
+        /gameStoryboard(?:Prompt|Image|Video)ConnectionId|gameStoryboard(?:IncludeCharacterAppearance|UseAvatarReferences)/u,
+      );
+      assert.match(drawerSource, /<StoryboardChatSettingsPanel[\s\S]*?<\/Suspense>\s*<\/AgentSettingsCard>/u);
       assert.doesNotMatch(setupSource, /setEnableStoryboard|setStoryboardKeyframeCount|gamePresentation/u);
       assert.match(editorSource, /StoryboardAgentSettingsPanel/u);
       assert.match(editorSource, /includeCharacterAppearance:\s*settings\.includeCharacterAppearance/u);
@@ -2083,12 +2091,12 @@ const cases: RegressionCase[] = [
       assert.match(serviceSource, /ensureBuiltinConfig\(STORYBOARD_AGENT_ID\)/u);
       assert.match(
         serviceSource,
-        /meta\.gameStoryboardIncludeCharacterAppearance \?\? settings\.includeCharacterAppearance/u,
+        /meta\.gameImageIncludeCharacterAppearance \?\? settings\.includeCharacterAppearance/u,
       );
-      assert.match(serviceSource, /meta\.gameStoryboardUseAvatarReferences \?\? settings\.useAvatarReferences/u);
-      assert.match(serviceSource, /meta\.gameStoryboardPromptConnectionId \?\? config\.connectionId/u);
-      assert.match(serviceSource, /meta\.gameStoryboardImageConnectionId \?\? settings\.imageConnectionId/u);
-      assert.match(serviceSource, /meta\.gameStoryboardVideoConnectionId \?\? settings\.videoConnectionId/u);
+      assert.match(serviceSource, /meta\.gameImageUseAvatarReferences \?\? settings\.useAvatarReferences/u);
+      assert.match(serviceSource, /meta\.gameSceneConnectionId \?\? config\.connectionId/u);
+      assert.match(serviceSource, /meta\.gameImageConnectionId \?\? settings\.imageConnectionId/u);
+      assert.match(serviceSource, /meta\.gameVideoConnectionId \?\? settings\.videoConnectionId/u);
       assert.match(routeSource, /Install the Storyboard Agent before generating Game storyboards/u);
       assert.match(routeSource, /storyboardAgentImageConnectionId/u);
       assert.match(routeSource, /storyboardAgentVideoConnectionId/u);
@@ -2723,10 +2731,10 @@ const cases: RegressionCase[] = [
       assert.match(storyboardSettingsSource, /update\(\{ includeCharacterAppearance: checked \}\)/u);
       assert.match(storyboardSettingsSource, /settings\.useAvatarReferences/u);
       assert.match(storyboardSettingsSource, /update\(\{ useAvatarReferences: checked \}\)/u);
-      assert.match(storyboardChatSettingsSource, /gameStoryboardIncludeCharacterAppearance/u);
-      assert.match(storyboardChatSettingsSource, /gameStoryboardUseAvatarReferences/u);
-      assert.match(storyboardChatSettingsSource, /appearanceOverridden/u);
-      assert.match(storyboardChatSettingsSource, /avatarReferencesOverridden/u);
+      assert.doesNotMatch(storyboardChatSettingsSource, /gameStoryboardIncludeCharacterAppearance/u);
+      assert.doesNotMatch(storyboardChatSettingsSource, /gameStoryboardUseAvatarReferences/u);
+      assert.doesNotMatch(storyboardChatSettingsSource, /appearanceOverridden/u);
+      assert.doesNotMatch(storyboardChatSettingsSource, /avatarReferencesOverridden/u);
       assert.doesNotMatch(gameSurfaceSource, /useGamePromptTemplate/u);
       assert.match(gameRouteSource, /characterAppearanceContextBlock:\s*storyboardAppearanceContextBlock/u);
       assert.equal(gameRouteSource.match(/^\s+characterAppearanceContextBlock,\s*$/gmu)?.length, 2);

@@ -292,9 +292,7 @@ const InlineLorebookEntriesEditor = lazy(() =>
     default: module.InlineLorebookEntriesEditor,
   })),
 );
-const StoryboardChatSettingsPanel = lazy(() =>
-  import("./StoryboardChatSettingsPanel"),
-);
+const StoryboardChatSettingsPanel = lazy(() => import("./StoryboardChatSettingsPanel"));
 
 interface ChatSettingsDrawerProps {
   chat: Chat;
@@ -8005,17 +8003,14 @@ export function ChatSettingsDrawer({
                           </p>
                         </AgentSettingsSubsection>
                       )}
+                      <Suspense fallback={null}>
+                        <StoryboardChatSettingsPanel
+                          chatId={chat.id}
+                          metadata={metadata as Record<string, unknown>}
+                          onClose={onClose}
+                        />
+                      </Suspense>
                     </AgentSettingsCard>
-                  )}
-
-                  {isGame && (
-                    <Suspense fallback={null}>
-                      <StoryboardChatSettingsPanel
-                        chatId={chat.id}
-                        metadata={metadata as Record<string, unknown>}
-                        onClose={onClose}
-                      />
-                    </Suspense>
                   )}
 
                   {/* Categorized agent sub-sections */}
