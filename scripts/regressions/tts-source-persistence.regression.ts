@@ -1,10 +1,68 @@
 import assert from "node:assert/strict";
+import { createServer } from "node:http";
 import { TTS_API_KEY_MASK, ttsConfigSchema } from "../../packages/shared/src/types/tts.js";
 import { buildTTSVoiceRequests } from "../../packages/client/src/lib/tts-dialogue.ts";
 import { normalizeTTSPlaybackDelayMs } from "../../packages/client/src/lib/tts-service.ts";
-import { maskTTSConfigForResponse, prepareTTSConfigForStorage } from "../../packages/server/src/routes/tts.routes.ts";
+import {
+  maskTTSConfigForResponse,
+  fetchElevenLabsVoiceOptions,
+  parseElevenLabsModelOptions,
+  prepareTTSConfigForStorage,
+} from "../../packages/server/src/routes/tts.routes.ts";
 
 const encryptForTest = (value: string) => (value ? `encrypted:${value}` : "");
+
+assert.deepEqual(
+  parseElevenLabsModelOptions([
+    { model_id: "eleven_v3", name: "Eleven v3", can_do_text_to_speech: true },
+    { model_id: "eleven_ttv_v3", name: "Voice Design", can_do_text_to_speech: false },
+    { name: "Missing ID", can_do_text_to_speech: true },
+  ]),
+  [{ id: "eleven_v3", name: "Eleven v3" }],
+);
+
+process.env.TTS_LOCAL_URLS_ENABLED = "true";
+const elevenLabsMock = createServer((request, response) => {
+  const url = new URL(request.url ?? "/", "http://localhost");
+  assert.equal(request.headers["xi-api-key"], "test-elevenlabs-key");
+  assert.equal(url.pathname, "/v2/voices");
+  assert.equal(url.searchParams.get("page_size"), "100");
+  response.writeHead(200, { "Content-Type": "application/json" });
+  if (!url.searchParams.get("next_page_token")) {
+    response.end(
+      JSON.stringify({
+        voices: [{ voice_id: "personal-first", name: "Personal First", category: "cloned" }],
+        has_more: true,
+        next_page_token: "custom-page-2",
+      }),
+    );
+    return;
+  }
+  assert.equal(url.searchParams.get("next_page_token"), "custom-page-2");
+  response.end(
+    JSON.stringify({
+      voices: [{ voice_id: "personal-second", name: "Personal Second", category: "generated" }],
+      has_more: false,
+      next_page_token: null,
+    }),
+  );
+});
+await new Promise<void>((resolve) => elevenLabsMock.listen(0, "127.0.0.1", resolve));
+try {
+  const address = elevenLabsMock.address();
+  assert.ok(address && typeof address !== "string");
+  const paginatedVoices = await fetchElevenLabsVoiceOptions(`http://127.0.0.1:${address.port}`, "test-elevenlabs-key", {
+    voice_type: "personal",
+  });
+  assert.deepEqual(
+    paginatedVoices.map((voice) => voice.id),
+    ["personal-first", "personal-second"],
+  );
+} finally {
+  await new Promise<void>((resolve, reject) => {
+    elevenLabsMock.close((error) => (error ? reject(error) : resolve()));
+  });
+}
 
 const legacyConfigWithoutDialoguePause = ttsConfigSchema.parse({});
 assert.equal(legacyConfigWithoutDialoguePause.dialoguePauseMs, 1000);
