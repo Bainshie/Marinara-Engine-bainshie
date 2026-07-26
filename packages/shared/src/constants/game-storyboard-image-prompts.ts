@@ -11,6 +11,7 @@ export const GAME_STORYBOARD_IMAGE_PROMPT_TEMPLATE_VARIABLES = [
   "narrativePurposeLine",
   "charactersLine",
   "referenceHandlingLine",
+  "locationHandlingLine",
   "appearanceNotesBlock",
   "artDirectionLine",
   "imagePromptInstructionsLine",

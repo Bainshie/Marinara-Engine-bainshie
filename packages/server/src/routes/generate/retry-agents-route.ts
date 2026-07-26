@@ -74,6 +74,11 @@ import {
   resolveIllustratorImageSize,
 } from "../../services/image/image-generation-settings.js";
 import { compileImagePrompt } from "../../services/image/image-prompt-compiler.js";
+import {
+  mergeSpatialLocationReferenceImages,
+  resolveSpatialLocationReferenceImage,
+  SPATIAL_LOCATION_REFERENCE_PROMPT_LINE,
+} from "../../services/image/spatial-location-reference.js";
 import { persistGeneratedImageToEntityGalleries } from "../../services/image/generated-image-entity-gallery.js";
 import { resolveImageConnectionFallback } from "../../services/generation/media-connection-fallback.js";
 import type { GenerationFallbackNotifier } from "../../services/generation/fallback-notification.js";
@@ -3190,6 +3195,12 @@ async function applyRetryResultEffects(args: {
               typeof chatMeta.illustratorIncludeCharacterAppearance === "boolean"
                 ? chatMeta.illustratorIncludeCharacterAppearance
                 : illustratorAgent?.resolved.settings?.includeCharacterAppearance === true;
+            const spatialLocationReferenceImage = await resolveSpatialLocationReferenceImage({
+              db: app.db,
+              chatId,
+              projection:
+                retryOwnerSpatialProjection?.ownerMode === "roleplay" ? retryOwnerSpatialProjection : null,
+            });
             let referenceImages: string[] | undefined;
             const referenceResolution = await resolveIllustratorCharacterReferences({
               charactersStore: chars,
@@ -3218,6 +3229,7 @@ async function applyRetryResultEffects(args: {
               ].join("\n"),
               fallbackToChatCharacters: false,
               includeReferenceImages: useAvatarRefs,
+              maxReferences: spatialLocationReferenceImage ? 5 : 6,
             });
             if (includeCharacterAppearance && referenceResolution.appearanceBlock) {
               fullPrompt += `\n\n${referenceResolution.appearanceBlock}`;
@@ -3227,7 +3239,6 @@ async function applyRetryResultEffects(args: {
               );
             }
             if (useAvatarRefs && referenceResolution.referenceImages.length > 0) {
-              referenceImages = referenceResolution.referenceImages;
               if (referenceResolution.referenceLine && !suppressReferencePromptLine)
                 fullPrompt += `\n\n${referenceResolution.referenceLine}`;
               logger.debug(
@@ -3235,6 +3246,18 @@ async function applyRetryResultEffects(args: {
                 referenceResolution.referenceImages.length,
                 referenceResolution.referenceNames.join(", "),
               );
+            }
+            const mergedReferenceImages = mergeSpatialLocationReferenceImages(
+              spatialLocationReferenceImage,
+              useAvatarRefs ? referenceResolution.referenceImages : [],
+              6,
+            );
+            if (mergedReferenceImages.length > 0) {
+              referenceImages = mergedReferenceImages;
+            }
+            if (spatialLocationReferenceImage) {
+              fullPrompt += `\n\n${SPATIAL_LOCATION_REFERENCE_PROMPT_LINE}`;
+              logger.debug("[retry-agents] Illustrator sending the current Maps location reference image first");
             }
 
             const compiledPrompt = compileImagePrompt({

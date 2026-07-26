@@ -249,6 +249,14 @@ type GameAssetGenerationPayload = {
   promptOverrides?: GameImagePromptOverride[];
 };
 
+type GameAssetGenerationPreview = {
+  items: GameImagePromptReviewItem[];
+  resolvedIllustration?: {
+    prompt: string;
+    characters?: string[];
+  };
+};
+
 type GameSceneVideoPayload = {
   chatId: string;
   illustrationTag?: string;
@@ -4885,11 +4893,11 @@ function GameSurfaceComponent({
       };
 
       if (options?.allowPromptReview !== false && useUIStore.getState().reviewImagePromptsBeforeSend) {
-        let preview: { items: GameImagePromptReviewItem[] } | undefined;
+        let preview: GameAssetGenerationPreview | undefined;
         try {
           preview = await withTimeout(
             (signal) =>
-              api.post<{ items: GameImagePromptReviewItem[] }>("/game/generate-assets/preview", payload, { signal }),
+              api.post<GameAssetGenerationPreview>("/game/generate-assets/preview", payload, { signal }),
             GAME_ASSET_PREVIEW_TIMEOUT_MS,
             () => {
               toast.error(
@@ -4903,6 +4911,15 @@ function GameSurfaceComponent({
           } else {
             throw error;
           }
+        }
+
+        if (preview.resolvedIllustration && payload.illustration) {
+          payload.illustration = {
+            ...payload.illustration,
+            prompt: preview.resolvedIllustration.prompt,
+            characters: preview.resolvedIllustration.characters,
+          };
+          payload.illustrationNarration = undefined;
         }
 
         if (preview.items.length > 0) {
