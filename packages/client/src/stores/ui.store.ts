@@ -2264,7 +2264,7 @@ export const useUIStore = create<UIState>()(
     }),
     {
       name: "marinara-engine-ui",
-      version: 84,
+      version: 85,
       // Debounce localStorage writes to avoid sync I/O on every state change
       storage: createJSONStorage(() => {
         let timer: ReturnType<typeof setTimeout> | null = null;
@@ -2837,6 +2837,12 @@ export const useUIStore = create<UIState>()(
         if (version <= 83) {
           if (persisted.imageGameWidth === undefined) persisted.imageGameWidth = 1280;
           if (persisted.imageGameHeight === undefined) persisted.imageGameHeight = 720;
+        }
+        // v84 → v85: navigation mode "private" became "noodler". A user who was in the NoodleR
+        // hub at upgrade time rehydrates the old mode, which no longer matches the union — it
+        // falls through to NoodleHome carrying view "hub" and breaks the Noodle screen.
+        if (version <= 84 && persisted.noodleNavigation?.mode === "private") {
+          persisted.noodleNavigation = { mode: "noodler", view: "hub" };
         }
         persisted.appAccentRgbMode = persisted.appAccentRgbMode === true;
         persisted.customCursorEnabled = persisted.customCursorEnabled !== false;
