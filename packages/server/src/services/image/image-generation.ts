@@ -324,6 +324,15 @@ export function saveImageToDisk(chatId: string, base64: string, ext: string): st
   return `${chatId}/${filename}`;
 }
 
+export function removeSavedImageFromDisk(filePath: string): void {
+  const fullPath = assertInsideDir(GALLERY_DIR, join(GALLERY_DIR, filePath));
+  try {
+    unlinkSync(fullPath);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+  }
+}
+
 export type StagedGalleryImage = {
   filePath: string;
   promote: () => void;

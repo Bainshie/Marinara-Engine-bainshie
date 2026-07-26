@@ -678,8 +678,9 @@ export function GameMapPanel({
       style={{ x, y }}
       className={cn(
         GAME_MAP_PANEL_CLASS,
-        "game-map-container flex flex-col gap-1 p-2",
+        "game-map-container flex flex-col gap-1 overflow-hidden p-2",
         effectiveMapView === "world" ? "w-80" : "w-52",
+        effectiveMapView === "world" && "max-h-[min(34rem,60svh)]",
         !locked && "cursor-grab ring-1 ring-[var(--marinara-chat-chrome-focus-ring)] active:cursor-grabbing",
       )}
     >
@@ -784,7 +785,7 @@ export function GameMapPanel({
               onOpenEditor: openFullMapEditor,
               onPendingTransitionChange: (pending: unknown) => syncPackageSpatialTransition(chatId, pending),
             }}
-            className="block h-full min-h-0"
+            className="block min-h-0 flex-1 overflow-y-auto overscroll-contain"
           />
         ) : !map ? (
           <div className="flex flex-col items-center justify-center gap-2 py-3">

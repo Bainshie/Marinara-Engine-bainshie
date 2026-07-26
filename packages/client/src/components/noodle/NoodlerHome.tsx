@@ -431,7 +431,7 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
   const connectionsQuery = useConnections();
   const connections = (connectionsQuery.data ?? []) as Array<{ id: string; name: string; model?: string }>;
   const [profileDraft, setProfileDraft] = useState<NoodleStageProfileInput | null>(null);
-  const [draftPublicAccountId, setDraftPublicAccountId] = useState<string | null>(null);
+  const [draftNoodleAccountId, setDraftPublicAccountId] = useState<string | null>(null);
   const [imagePromptReview, setImagePromptReview] = useState<{
     accountId: string;
     items: ImagePromptReviewItem[];
@@ -645,10 +645,10 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
   const postsQuery = useNoodlerPosts(selectedProfile?.id ?? null);
   const selectedViewerCreator =
     viewerQuery.data?.creators.find((creator) => creator.profile.id === selectedProfile?.id) ?? null;
-  const eligiblePublicAccounts = eligibleAccountsQuery.data?.pages.flatMap((page) => page.items) ?? [];
+  const eligibleNoodleAccounts = eligibleAccountsQuery.data?.pages.flatMap((page) => page.items) ?? [];
   const selectedSource =
-    eligiblePublicAccounts.find((account) => account.id === draftPublicAccountId) ??
-    data?.accounts.find((account) => account.id === draftPublicAccountId) ??
+    eligibleNoodleAccounts.find((account) => account.id === draftNoodleAccountId) ??
+    data?.accounts.find((account) => account.id === draftNoodleAccountId) ??
     null;
   const sourcePickerLoading = eligibleAccountsQuery.isLoading || eligibleAccountsQuery.isFetching;
 
@@ -689,7 +689,7 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
     const noodleAccountId =
       navigation.mode === "noodler" && navigation.view === "create-profile"
         ? navigation.noodleAccountId
-        : draftPublicAccountId;
+        : draftNoodleAccountId;
     setCreationStep(null);
     setProfileDraft(null);
     setDraftPublicAccountId(null);
@@ -730,14 +730,14 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
   };
 
   const generateDraft = () => {
-    if (!draftPublicAccountId && !editingProfileId) return;
+    if (!draftNoodleAccountId && !editingProfileId) return;
     if (connections.length === 0) {
       toast.error(localizeUi("ui.noodle.stageprofileform.noConnectionsConfiguredAddOneInSettingsConnections"));
       return;
     }
     generateProfileDraft.mutate(
       {
-        ...(editingProfileId ? { noodlerAccountId: editingProfileId } : { noodleAccountId: draftPublicAccountId! }),
+        ...(editingProfileId ? { noodlerAccountId: editingProfileId } : { noodleAccountId: draftNoodleAccountId! }),
         disclosureMode: creationDisclosure,
         guidance: draftGuidance,
         currentDraft: profileDraft ?? undefined,
@@ -776,9 +776,9 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
       );
     };
     const onError = async (error: unknown) => {
-      if (!editingProfileId && draftPublicAccountId && error instanceof ApiError && error.status === 409) {
+      if (!editingProfileId && draftNoodleAccountId && error instanceof ApiError && error.status === 409) {
         const refreshed = await accountsQuery.refetch();
-        const existing = refreshed.data?.find((profile) => profile.noodleAccountId === draftPublicAccountId);
+        const existing = refreshed.data?.find((profile) => profile.noodleAccountId === draftNoodleAccountId);
         if (existing) {
           setProfileDraft(null);
           setCreationStep(null);
@@ -791,8 +791,8 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
     };
     if (editingProfileId) {
       updateProfile.mutate({ accountId: editingProfileId, ...input }, { onSuccess, onError });
-    } else if (draftPublicAccountId) {
-      createProfile.mutate({ noodleAccountId: draftPublicAccountId, stageProfile: input }, { onSuccess, onError });
+    } else if (draftNoodleAccountId) {
+      createProfile.mutate({ noodleAccountId: draftNoodleAccountId, stageProfile: input }, { onSuccess, onError });
     }
   };
 
@@ -897,7 +897,7 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
     personaAccount: shellPersonaAccount,
     sortedPersonaAccounts: viewerAccounts,
     visiblePersonaAccounts,
-    linkedPublicAccountIds: new Set((accountsQuery.data ?? []).flatMap((profile) => profile.noodleAccountId ?? [])),
+    linkedNoodleAccountIds: new Set((accountsQuery.data ?? []).flatMap((profile) => profile.noodleAccountId ?? [])),
     onLoadMorePersonaAccounts: () => setPersonaAccountLimit((current) => current + NOODLE_PERSONA_SWITCHER_PAGE_SIZE),
     onSwitchPersona: switchViewerPersona,
     accountSwitcherOpen,
@@ -987,10 +987,10 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
           hideBack
         >
           <StageProfileSourcePicker
-            accounts={eligiblePublicAccounts}
+            accounts={eligibleNoodleAccounts}
             search={sourceSearch}
             kind={sourceKind}
-            selectedId={draftPublicAccountId}
+            selectedId={draftNoodleAccountId}
             onSearch={handleSourceSearch}
             onKindChange={handleSourceKind}
             onSelect={setDraftPublicAccountId}
@@ -1149,7 +1149,7 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
                 ...patch,
               }))
             }
-            noodleAccountId={draftPublicAccountId}
+            noodleAccountId={draftNoodleAccountId}
             isEditing={Boolean(editingProfileId)}
             isPending={createProfile.isPending || updateProfile.isPending}
             onCancel={editingProfileId ? closeProfileEditor : cancelCreateProfile}
@@ -1317,13 +1317,13 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
               <button
                 type="button"
                 onClick={beginCreate}
-                disabled={sourcePickerLoading || eligibleAccountsQuery.isError || eligiblePublicAccounts.length === 0}
+                disabled={sourcePickerLoading || eligibleAccountsQuery.isError || eligibleNoodleAccounts.length === 0}
                 title={
                   sourcePickerLoading
                     ? localizeUi("ui.noodle.noodlerhome.loadingEligibleSources")
                     : eligibleAccountsQuery.isError
                       ? localizeUi("ui.noodle.noodlerhome.sourcesUnavailable")
-                      : eligiblePublicAccounts.length === 0
+                      : eligibleNoodleAccounts.length === 0
                         ? localizeUi("ui.noodle.noodlerhome.everyEligibleAccountAlreadyHasAStageProfile")
                         : undefined
                 }
@@ -1373,9 +1373,9 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
                 title={localizeUi("ui.noodle.noodlerhome.noStageProfilesYet")}
                 detail="Create a separate stage identity for an eligible persona or character."
                 action={
-                  eligiblePublicAccounts.length > 0 ? localizeUi("ui.noodle.noodlehome.createStageProfile") : undefined
+                  eligibleNoodleAccounts.length > 0 ? localizeUi("ui.noodle.noodlehome.createStageProfile") : undefined
                 }
-                onAction={eligiblePublicAccounts.length > 0 ? beginCreate : undefined}
+                onAction={eligibleNoodleAccounts.length > 0 ? beginCreate : undefined}
               />
             )}
           </main>

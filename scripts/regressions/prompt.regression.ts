@@ -496,6 +496,7 @@ import {
   buildLorebookScanMessagesWithGenerationGuide,
   resolveLorebookTokenBudget,
 } from "../../packages/server/src/services/generation/lorebook-generation-runtime.js";
+import { createAgentLorebookTriggerResolver } from "../../packages/server/src/services/generation/agent-lorebook-triggers.js";
 import {
   buildGameIllustratorAppearanceContextBlock,
   buildDynamicGameImagePromptMessages,
@@ -2212,6 +2213,7 @@ const cases: RegressionCase[] = [
         narrativePurposeLine: "Narrative purpose: arrival.",
         charactersLine: "Characters: Mira.",
         referenceHandlingLine: "Reference handling: match the attached portrait.",
+        locationHandlingLine: "Location handling: use the attached gate image.",
         appearanceNotesBlock: "",
         artDirectionLine: "Art direction: painterly fantasy.",
         imagePromptInstructionsLine: "User image instructions: keep the silver cloak.",
@@ -2245,13 +2247,14 @@ const cases: RegressionCase[] = [
       assert.match(optimizedPrompt, /Storyboard keyframe: Mira braces beneath a storm-lit archway/);
       assert.match(optimizedPrompt, /Final visibility rule: Only depict these named visible characters: Mira/);
       assert.match(optimizedPrompt, /Reference handling: match the attached portrait/);
+      assert.match(optimizedPrompt, /Location handling: use the attached gate image/);
       assert.match(optimizedPrompt, /Art direction: painterly fantasy/);
       assert.doesNotMatch(optimizedPrompt, /GLOBAL SCENE/);
       assert.equal(customPrompt, "CUSTOM Mira braces beneath a storm-lit archway. Art direction: painterly fantasy.");
       assert.doesNotMatch(customPrompt, /Final visibility rule/);
       assert.equal(
         firstFramePrompt,
-        "Mira braces beneath a storm-lit archway. User image instructions: keep the silver cloak.",
+        "Mira braces beneath a storm-lit archway. Location handling: use the attached gate image. User image instructions: keep the silver cloak.",
       );
       assert.doesNotMatch(firstFramePrompt, /Mira at the gate|Storyboard keyframe|Final visibility rule|Art direction/);
       assert.equal(GAME_STORYBOARD_IMAGE_BUILT_IN_PROMPT_TEMPLATES.length, 3);
@@ -2921,7 +2924,7 @@ const cases: RegressionCase[] = [
       assert.match(directCompiled.prompt, /User image instructions: Keep the moon visible/u);
       assert.doesNotMatch(
         directCompiled.prompt,
-        /(?:^|\n)(?:Scene moment|Narrative purpose|Characters|Reference handling|Art direction):/iu,
+        /(?:^|\n)(?:Scene moment|Narrative purpose|Characters|Reference handling|Location handling|Art direction):/iu,
       );
 
       const chatSettingsSource = readFileSync(
@@ -3820,6 +3823,130 @@ Use HTML sparingly and diegetically. Do not replace normal prose/dialogue unless
     },
   },
   {
+    name: "custom-agent lorebook trigger resolution applies enabled overrides and reuses request data",
+    async run() {
+      let lorebookListCalls = 0;
+      let entryListCalls = 0;
+      const resolveTriggeredEntries = createAgentLorebookTriggerResolver({
+        agents: [
+          {
+            id: "custom:override-reader",
+            contextSize: 1,
+            sourceLorebookIds: ["book-override"],
+            source: "manual",
+          },
+        ],
+        activeCharacterIds: [],
+        activeCharacterTags: [],
+        entryStateOverrides: {
+          "entry-override": { enabled: true },
+        },
+        filterSourceLorebookIds: async (sourceIds) => sourceIds,
+        gameState: null,
+        generationTriggers: ["chat"],
+        listEntriesByLorebookIds: async () => {
+          entryListCalls += 1;
+          return [
+            {
+              id: "entry-override",
+              lorebookId: "book-override",
+              name: "Override Entry",
+              content: "State overrides can reactivate this entry.",
+              enabled: false,
+              constant: true,
+              keys: [],
+              secondaryKeys: [],
+              order: 0,
+              probability: 100,
+              activationConditions: [],
+              characterFilterMode: "any",
+              characterFilterIds: [],
+              characterTagFilterMode: "any",
+              characterTagFilters: [],
+              generationTriggerFilterMode: "any",
+              generationTriggerFilters: [],
+            } as any,
+          ];
+        },
+        listLorebooks: async () => {
+          lorebookListCalls += 1;
+          return [{ id: "book-override", enabled: true } as any];
+        },
+        resolveContent: (value) => value,
+        tokenBudget: 2048,
+        vectorizerAvailable: false,
+      });
+
+      const messages = [{ role: "user", content: "Inspect the override." }];
+      const first = await resolveTriggeredEntries(messages);
+      const second = await resolveTriggeredEntries(messages);
+
+      assert.equal(first["custom:override-reader"]?.[0]?.id, "entry-override");
+      assert.equal(second["custom:override-reader"]?.[0]?.id, "entry-override");
+      assert.equal(lorebookListCalls, 1);
+      assert.equal(entryListCalls, 1);
+    },
+  },
+  {
+    name: "custom-agent lorebook triggering injects only that agent's resolved context",
+    async run() {
+      const triggeredLorebookEntriesByAgentId = {
+        "custom:lore-reader": [
+          {
+            id: "entry-unidentified",
+            name: "Unidentified Specimen",
+            content: "The unidentified specimen is a dormant mechanical moth.",
+            matchedKeys: ["unidentified"],
+            activationSources: ["keyword"],
+          },
+        ],
+      };
+      const enabledCapture = makeCapturingProvider("Lorebook context received.");
+      const enabledConfig = makeRegressionAgentConfig({
+        id: "custom:lore-reader",
+        type: "custom-lore-reader",
+        name: "Lore Reader",
+        promptTemplate: "Transform the matching lore into a concise replacement.",
+        settings: {
+          contextSize: 1,
+          maxTokens: 256,
+          resultType: "context_injection",
+          triggerLorebooksForAgentCalls: true,
+        },
+      });
+      await executeAgent(
+        enabledConfig as any,
+        makeRegressionAgentContext({ triggeredLorebookEntriesByAgentId }),
+        enabledCapture.provider as any,
+        "regression-model",
+      );
+      const enabledSystem = enabledCapture.calls[0]?.[0]?.content ?? "";
+      assert.match(enabledSystem, /<triggered_lorebook_context>/u);
+      assert.match(enabledSystem, /Unidentified Specimen/u);
+      assert.match(enabledSystem, /dormant mechanical moth/u);
+
+      const disabledCapture = makeCapturingProvider("No lorebook context.");
+      const disabledConfig = makeRegressionAgentConfig({
+        ...enabledConfig,
+        settings: {
+          contextSize: 1,
+          maxTokens: 256,
+          resultType: "context_injection",
+          triggerLorebooksForAgentCalls: false,
+        },
+      });
+      await executeAgent(
+        disabledConfig as any,
+        makeRegressionAgentContext({ triggeredLorebookEntriesByAgentId }),
+        disabledCapture.provider as any,
+        "regression-model",
+      );
+      const disabledSystem = disabledCapture.calls[0]?.[0]?.content ?? "";
+      assert.doesNotMatch(disabledSystem, /<triggered_lorebook_context>/u);
+      assert.doesNotMatch(disabledSystem, /dormant mechanical moth/u);
+    },
+  },
+  {
     name: "agent current game state hides quest progress from non-quest agents",
     run() {
       const hiddenMoodKey = characterTrackerLockKey({ characterId: "mira", name: "Mira" }, 0, "mood");
@@ -4409,6 +4536,48 @@ Use HTML sparingly and diegetically. Do not replace normal prose/dialogue unless
       assert.deepEqual(compile(false, true), baseline);
       assert.deepEqual(compile(true, false), baseline);
       assert.deepEqual(compile(true, true), baseline);
+    },
+  },
+  {
+    name: "manual game illustrations preserve detailed natural-language scene prompts",
+    async run() {
+      const sceneDetail =
+        "2B balances an open leather-bound book in one hand while violet light reflects across the rain-dark guild hall windows.";
+      const compiled = await buildSceneIllustrationProviderPrompt({
+        chatId: "manual-game-illustration-regression",
+        title: "Manual scene illustration",
+        prompt: sceneDetail,
+        reason: "Manual Gallery Illustrate request",
+        characters: ["2B"],
+        artStyle: "anime illustration",
+        referenceImages: ["location-reference"],
+        locationReferenceImageAttached: true,
+        preserveFullScenePrompt: true,
+        styleProfiles: createDefaultImageStyleProfileSettings(),
+        styleProfileId: "anime",
+        imgModel: "unused",
+        imgBaseUrl: "",
+        imgApiKey: "",
+      });
+
+      assert.ok(compiled.prompt.includes(sceneDetail), compiled.prompt);
+      assert.match(
+        compiled.prompt,
+        /Location handling: an attached location reference image is available\. Use it to set the scene location\./,
+      );
+      assert.doesNotMatch(compiled.prompt, /Reference handling: attached character reference images/);
+
+      const withCharacterReference = await buildSceneIllustrationProviderPrompt({
+        chatId: "manual-game-illustration-character-reference-regression",
+        prompt: sceneDetail,
+        referenceImages: ["location-reference", "character-reference"],
+        locationReferenceImageAttached: true,
+        imgModel: "unused",
+        imgBaseUrl: "",
+        imgApiKey: "",
+      });
+      assert.match(withCharacterReference.prompt, /Location handling: an attached location reference image/);
+      assert.match(withCharacterReference.prompt, /Reference handling: attached character reference images/);
     },
   },
   {

@@ -517,6 +517,7 @@ export function AgentEditor() {
   const [localSpotifyClientId, setLocalSpotifyClientId] = useState("");
   const [localSourceLorebookIds, setLocalSourceLorebookIds] = useState<string[]>([]);
   const [localUseChatActiveLorebooks, setLocalUseChatActiveLorebooks] = useState(false);
+  const [localTriggerLorebooksForAgentCalls, setLocalTriggerLorebooksForAgentCalls] = useState(false);
   const [localSourceFileIds, setLocalSourceFileIds] = useState<string[]>([]);
   const [localAutoGenerateAvatars, setLocalAutoGenerateAvatars] = useState(false);
   const [localUseAvatarReferences, setLocalUseAvatarReferences] = useState(false);
@@ -627,6 +628,7 @@ export function AgentEditor() {
       setLocalUseChatActiveLorebooks(
         (settings.useChatActiveLorebooks as boolean | undefined) ?? defaultSettings.useChatActiveLorebooks === true,
       );
+      setLocalTriggerLorebooksForAgentCalls(settings.triggerLorebooksForAgentCalls === true);
       setLocalSourceFileIds(normalizeStringArray(settings.sourceFileIds));
       setLocalAutoGenerateAvatars(settings.autoGenerateAvatars === true);
       setLocalUseAvatarReferences(
@@ -691,6 +693,7 @@ export function AgentEditor() {
       setLocalSpotifyClientId("");
       setLocalSourceLorebookIds([]);
       setLocalUseChatActiveLorebooks(defaultSettings.useChatActiveLorebooks === true);
+      setLocalTriggerLorebooksForAgentCalls(false);
       setLocalSourceFileIds([]);
       setLocalAutoGenerateAvatars(false);
       setLocalUseAvatarReferences(defaultSettings.useAvatarReferences === true);
@@ -745,6 +748,7 @@ export function AgentEditor() {
       setLocalSpotifyClientId("");
       setLocalSourceLorebookIds([]);
       setLocalUseChatActiveLorebooks(false);
+      setLocalTriggerLorebooksForAgentCalls(false);
       setLocalSourceFileIds([]);
       setLocalAutoGenerateAvatars(false);
       setLocalUseAvatarReferences(false);
@@ -1016,6 +1020,7 @@ export function AgentEditor() {
         promptTemplates: savedPromptTemplates,
         ...(isEditingCustomAgent ? { customCapabilities } : {}),
         ...(isEditingCustomAgent ? { resultType: localResultType } : {}),
+        ...(isEditingCustomAgent ? { triggerLorebooksForAgentCalls: localTriggerLorebooksForAgentCalls } : {}),
         ...(activationKeywords.length > 0
           ? {
               activationKeywords,
@@ -1043,10 +1048,17 @@ export function AgentEditor() {
           ? { lorebookWriteEnabled: true, writableLorebookId, writableLorebookIds: [writableLorebookId] }
           : {}),
         ...(localSpotifyClientId ? { spotifyClientId: localSpotifyClientId } : {}),
-        ...(isKnowledgeRetrievalAgent || isKnowledgeRouterAgent
+        ...(isKnowledgeRetrievalAgent ||
+        isKnowledgeRouterAgent ||
+        (isEditingCustomAgent && localTriggerLorebooksForAgentCalls)
           ? { useChatActiveLorebooks: localUseChatActiveLorebooks }
           : {}),
-        ...(localSourceLorebookIds.length > 0 ? { sourceLorebookIds: localSourceLorebookIds } : {}),
+        ...((isKnowledgeRetrievalAgent ||
+          isKnowledgeRouterAgent ||
+          (isEditingCustomAgent && localTriggerLorebooksForAgentCalls)) &&
+        localSourceLorebookIds.length > 0
+          ? { sourceLorebookIds: localSourceLorebookIds }
+          : {}),
         // Only persist sourceFileIds for the Knowledge Retrieval agent — the Router
         // doesn't read this setting. Without this guard, switching an agent from
         // Retrieval to Router would leave behind stale file IDs the user can no
@@ -1131,6 +1143,7 @@ export function AgentEditor() {
     localCustomMusicExternalFolder,
     localSpotifyClientId,
     localUseChatActiveLorebooks,
+    localTriggerLorebooksForAgentCalls,
     localSourceLorebookIds,
     localSourceFileIds,
     localAutoGenerateAvatars,
@@ -1201,6 +1214,7 @@ export function AgentEditor() {
       promptTemplates: savedPromptTemplates,
       ...(isEditingCustomAgent ? { customCapabilities } : {}),
       ...(isEditingCustomAgent ? { resultType: localResultType } : {}),
+      ...(isEditingCustomAgent ? { triggerLorebooksForAgentCalls: localTriggerLorebooksForAgentCalls } : {}),
       ...(activationKeywords.length > 0 ? { activationKeywords, activationScanDepth } : {}),
       ...(mayIncludeTurnData && localIncludePreGenInjections ? { includePreGenInjections: true } : {}),
       ...(mayIncludeTurnData && localIncludeParallelResults ? { includeParallelResults: true } : {}),
@@ -1223,10 +1237,17 @@ export function AgentEditor() {
         ? { lorebookWriteEnabled: true, writableLorebookId, writableLorebookIds: [writableLorebookId] }
         : {}),
       ...(localSpotifyClientId ? { spotifyClientId: localSpotifyClientId } : {}),
-      ...(isKnowledgeRetrievalAgent || isKnowledgeRouterAgent
+      ...(isKnowledgeRetrievalAgent ||
+      isKnowledgeRouterAgent ||
+      (isEditingCustomAgent && localTriggerLorebooksForAgentCalls)
         ? { useChatActiveLorebooks: localUseChatActiveLorebooks }
         : {}),
-      ...(localSourceLorebookIds.length > 0 ? { sourceLorebookIds: localSourceLorebookIds } : {}),
+      ...((isKnowledgeRetrievalAgent ||
+        isKnowledgeRouterAgent ||
+        (isEditingCustomAgent && localTriggerLorebooksForAgentCalls)) &&
+      localSourceLorebookIds.length > 0
+        ? { sourceLorebookIds: localSourceLorebookIds }
+        : {}),
       ...(isKnowledgeRetrievalAgent && localSourceFileIds.length > 0 ? { sourceFileIds: localSourceFileIds } : {}),
       ...(agentType !== "background" && localImageConnectionId ? { imageConnectionId: localImageConnectionId } : {}),
       ...(localAutoGenerateAvatars ? { autoGenerateAvatars: true } : {}),
@@ -1642,6 +1663,20 @@ export function AgentEditor() {
                     />
                   );
                 })}
+              </div>
+              <div className="mt-3 border-t border-[var(--border)] pt-3">
+                <EditorSwitchRow
+                  label={localizeUi("ui.agents.agenteditor.triggerLorebooksForAgentCalls")}
+                  description={localizeUi("ui.agents.agenteditor.triggerLorebooksForAgentCallsDescription")}
+                  checked={localTriggerLorebooksForAgentCalls}
+                  onChange={() => {
+                    setLocalTriggerLorebooksForAgentCalls((enabled) => {
+                      if (!enabled && localSourceLorebookIds.length === 0) setLocalUseChatActiveLorebooks(true);
+                      return !enabled;
+                    });
+                    markDirty();
+                  }}
+                />
               </div>
             </FieldGroup>
           )}
@@ -2857,14 +2892,22 @@ export function AgentEditor() {
           )}
 
           {/* ── Knowledge Source Lorebooks (Knowledge Retrieval + Knowledge Router) ── */}
-          {(isKnowledgeRetrievalAgent || isKnowledgeRouterAgent) && (
+          {(isKnowledgeRetrievalAgent ||
+            isKnowledgeRouterAgent ||
+            ((isCustomAgent || isNewCustomAgent) && localTriggerLorebooksForAgentCalls)) && (
             <FieldGroup
-              label={localizeUi("ui.agents.agenteditor.knowledgeSources")}
+              label={
+                isKnowledgeRetrievalAgent || isKnowledgeRouterAgent
+                  ? localizeUi("ui.agents.agenteditor.knowledgeSources")
+                  : localizeUi("ui.agents.agenteditor.lorebookContextSources")
+              }
               icon={<BookOpen size="0.875rem" className="text-amber-400" />}
               help={
                 isKnowledgeRouterAgent
                   ?localizeUi("ui.agents.agenteditor.useChatActiveLorebooksByDefaultOrSelectFixed")
-                  :localizeUi("ui.agents.agenteditor.useChatActiveLorebooksByDefaultSelectFixedLorebooks")
+                  : isKnowledgeRetrievalAgent
+                    ?localizeUi("ui.agents.agenteditor.useChatActiveLorebooksByDefaultSelectFixedLorebooks")
+                    : localizeUi("ui.agents.agenteditor.selectWhichLorebooksCanTriggerFromThisAgentSContext")
               }
             >
               <div className="space-y-4">

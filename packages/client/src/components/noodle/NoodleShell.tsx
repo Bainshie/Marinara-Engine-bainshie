@@ -135,7 +135,7 @@ export interface NoodleShellProps {
   personaAccount: NoodleAccount | null;
   sortedPersonaAccounts: NoodleAccount[];
   visiblePersonaAccounts: NoodleAccount[];
-  linkedPublicAccountIds?: ReadonlySet<string>;
+  linkedNoodleAccountIds?: ReadonlySet<string>;
   onLoadMorePersonaAccounts: () => void;
   onSwitchPersona: (account: NoodleAccount, mobile: boolean) => void;
   accountSwitcherOpen: boolean;
@@ -178,7 +178,7 @@ export function NoodleShell({
   personaAccount,
   sortedPersonaAccounts,
   visiblePersonaAccounts,
-  linkedPublicAccountIds,
+  linkedNoodleAccountIds,
   onLoadMorePersonaAccounts,
   onSwitchPersona,
   accountSwitcherOpen,
@@ -338,7 +338,7 @@ export function NoodleShell({
                                 <span className="block truncate text-xs text-[var(--muted-foreground)]">
                                   @{account.handle}
                                 </span>
-                                {linkedPublicAccountIds?.has(account.id) && (
+                                {linkedNoodleAccountIds?.has(account.id) && (
                                   <span className="mt-0.5 block text-[0.65rem] font-semibold text-[var(--noodle-accent)]" aria-label={localizeUi("ui.noodle.noodleshell.noodlerProfileLinked")}>{localizeUi("ui.noodle.noodleshell.noodlerLinked")}</span>
                                 )}
                               </span>
@@ -478,7 +478,7 @@ export function NoodleShell({
                                 <span className="block truncate text-[0.68rem] text-[var(--muted-foreground)]">
                                   @{account.handle}
                                 </span>
-                                {linkedPublicAccountIds?.has(account.id) && (
+                                {linkedNoodleAccountIds?.has(account.id) && (
                                   <span className="mt-0.5 block text-[0.62rem] font-semibold text-[var(--noodle-accent)]" aria-label={localizeUi("ui.noodle.noodleshell.noodlerProfileLinked")}>{localizeUi("ui.noodle.noodleshell.noodlerLinked")}</span>
                                 )}
                               </span>

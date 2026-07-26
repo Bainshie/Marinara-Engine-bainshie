@@ -5,6 +5,7 @@ import {
   type GenerationParameterSendKey,
   type GenerationParameterSendMap,
   type GenerationParameters,
+  type ManagedGenerationParameterDefinition,
   type ThinkingTagPair,
 } from "@marinara-engine/shared";
 import { cn } from "../../lib/utils";
@@ -14,6 +15,7 @@ import { HelpTooltip } from "./HelpTooltip";
 import { parseGenerationParameterDraft } from "../../lib/generation-parameter-draft";
 import { parseCustomParametersDraft } from "../../lib/generation-custom-parameters";
 import { useTranslation as useUiTranslation } from "react-i18next";
+import { useCustomGenerationParameters } from "../../hooks/use-custom-generation-parameters";
 
 export type EditableGenerationParameters = Pick<
   GenerationParameters,
@@ -29,6 +31,7 @@ export type EditableGenerationParameters = Pick<
   | "assistantPrefill"
   | "customThinkingTags"
   | "customParameters"
+  | "managedCustomParameters"
   | "enabledParameters"
 >;
 
@@ -42,7 +45,7 @@ const PARAM_CHOICE_ACTIVE_CLASS = "bg-[var(--primary)]/15 text-[var(--primary)] 
 const PARAM_CHOICE_IDLE_CLASS =
   "bg-[var(--secondary)] text-[var(--muted-foreground)] ring-1 ring-[var(--border)] hover:bg-[var(--accent)]";
 const PARAM_TEXTAREA_CLASS =
-  "mt-1 w-full resize-y rounded-lg bg-[var(--secondary)] px-3 py-2 text-xs leading-relaxed ring-1 ring-[var(--border)] placeholder:text-[var(--muted-foreground)]/60 focus:outline-none focus:ring-[var(--ring)]";
+  "mt-1 w-full resize-y rounded-lg bg-[var(--secondary)] px-3 py-2 text-xs leading-relaxed [text-indent:0] ring-1 ring-[var(--border)] placeholder:text-[var(--muted-foreground)]/60 placeholder:[text-indent:0] focus:outline-none focus:ring-[var(--ring)]";
 
 const LEGACY_PARAMETER_SEND_DEFAULTS: GenerationParameterSendMap = Object.fromEntries(
   GENERATION_PARAMETER_SEND_KEYS.map((key) => [key, true]),
@@ -72,6 +75,7 @@ export const CHAT_PARAMETER_DEFAULTS: EditableGenerationParameters = {
   assistantPrefill: "",
   customThinkingTags: [],
   customParameters: {},
+  managedCustomParameters: {},
   enabledParameters: LEGACY_PARAMETER_SEND_DEFAULTS,
 };
 
@@ -88,6 +92,7 @@ export const ROLEPLAY_PARAMETER_DEFAULTS: EditableGenerationParameters = {
   assistantPrefill: "",
   customThinkingTags: [],
   customParameters: {},
+  managedCustomParameters: {},
   enabledParameters: LEGACY_PARAMETER_SEND_DEFAULTS,
 };
 
@@ -170,6 +175,23 @@ export function parseEditableGenerationParameters(raw: unknown): EditableGenerat
   ) {
     next.customParameters = source.customParameters as Record<string, unknown>;
   }
+  if (
+    source.managedCustomParameters &&
+    typeof source.managedCustomParameters === "object" &&
+    !Array.isArray(source.managedCustomParameters)
+  ) {
+    const managedValues = Object.fromEntries(
+      Object.entries(source.managedCustomParameters as Record<string, unknown>).flatMap(([id, candidate]) => {
+        if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) return [];
+        const record = candidate as Record<string, unknown>;
+        if (typeof record.enabled !== "boolean" || typeof record.value !== "number" || !Number.isFinite(record.value)) {
+          return [];
+        }
+        return [[id, { enabled: record.enabled, value: record.value }]];
+      }),
+    );
+    if (Object.keys(managedValues).length > 0) next.managedCustomParameters = managedValues;
+  }
   const enabledParameters = normalizeEnabledParameters(source.enabledParameters);
   if (enabledParameters) next.enabledParameters = enabledParameters;
 
@@ -200,6 +222,7 @@ export function GenerationParametersFields({
   enabledParametersFallback?: GenerationParameterSendMap;
 }) {
   const { t: localizeUi } = useUiTranslation();
+  const { data: managedDefinitions = [] } = useCustomGenerationParameters();
   const set = <K extends keyof EditableGenerationParameters>(key: K, nextValue: EditableGenerationParameters[K]) => {
     onChange({ ...value, [key]: nextValue });
   };
@@ -211,6 +234,19 @@ export function GenerationParametersFields({
   };
   const isSendEnabled = (key: GenerationParameterSendKey) =>
     (value.enabledParameters ?? enabledParametersFallback)[key] !== false;
+  const setManagedParameter = (
+    definition: ManagedGenerationParameterDefinition,
+    patch: Partial<{ enabled: boolean; value: number }>,
+  ) => {
+    const current = value.managedCustomParameters[definition.id] ?? {
+      enabled: false,
+      value: definition.min,
+    };
+    set("managedCustomParameters", {
+      ...value.managedCustomParameters,
+      [definition.id]: { ...current, ...patch },
+    });
+  };
 
   return (
     <div className="space-y-3">
@@ -259,6 +295,27 @@ export function GenerationParametersFields({
           step={1}
         />
       </div>
+      {managedDefinitions.length > 0 && (
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+          {managedDefinitions.map((definition) => {
+            const stored = value.managedCustomParameters[definition.id];
+            return (
+              <ParamInput
+                key={definition.id}
+                label={definition.name}
+                help={definition.tooltip}
+                value={stored?.value ?? definition.min}
+                onChange={(nextValue) => setManagedParameter(definition, { value: nextValue })}
+                sendEnabled={stored?.enabled === true}
+                onSendChange={(enabled) => setManagedParameter(definition, { enabled })}
+                min={definition.min}
+                max={definition.max}
+                step={Math.max(0.001, Math.min(1, (definition.max - definition.min) / 100))}
+              />
+            );
+          })}
+        </div>
+      )}
       <div className="grid grid-cols-2 gap-2">
         <ParamInput
           label={localizeUi("ui.ui.generationparametersfields.frequency")}
@@ -295,7 +352,7 @@ export function GenerationParametersFields({
             onCommit={(nextValue) => set("assistantPrefill", nextValue)}
             rows={3}
             className={PARAM_TEXTAREA_CLASS}
-            placeholder={localizeUi("ui.ui.generationparametersfields.thinking")}
+            placeholder={localizeUi("ui.ui.generationparametersfields.thinking").trimStart()}
           />
         </div>
         <ThinkingTagsInput
@@ -606,6 +663,7 @@ function ParamInput({
       <input
         type="text"
         inputMode="decimal"
+        aria-label={label}
         value={draft}
         onChange={(event) => {
           setDraft(event.target.value);

@@ -31,12 +31,14 @@ import {
   trackerFieldLocksAreEmpty,
   customAgentHasCapability,
   CHAT_SUMMARY_PROMPT_SETTINGS_KEY,
+  CUSTOM_GENERATION_PARAMETERS_SETTINGS_KEY,
   DEFAULT_CONVERSATION_PROMPT,
   DEFAULT_GENERATION_PARAMS,
   unwrapConversationInstructions,
   findKnownModel,
   LOCAL_SIDECAR_CONNECTION_ID,
   normalizeTextForMatch,
+  parseManagedGenerationParameterDefinitions,
   normalizeGameStoryboardKeyframeCount,
   type APIProvider,
   type MacroContext,
@@ -62,7 +64,10 @@ import {
   resolveOwnerSpatialProjection,
 } from "../services/spatial-context/projection.js";
 import { isHierarchicalMapsEnabledForChat } from "../services/spatial-context/activation.js";
-import { materializeAssistantSpatialState } from "../services/spatial-context/state-resolution.js";
+import {
+  extractAssistantSpatialDirective,
+  materializeAssistantSpatialState,
+} from "../services/spatial-context/state-resolution.js";
 import { createConnectionsStorage } from "../services/storage/connections.storage.js";
 import { createPromptsStorage } from "../services/storage/prompts.storage.js";
 import { createCharactersStorage } from "../services/storage/characters.storage.js";
@@ -99,6 +104,11 @@ import {
 } from "../services/image/image-generation-settings.js";
 import { textRewriteDropsProtectedMarkup } from "../services/generation/text-rewrite-safety.js";
 import { compileImagePrompt } from "../services/image/image-prompt-compiler.js";
+import {
+  mergeSpatialLocationReferenceImages,
+  resolveSpatialLocationReferenceImage,
+  SPATIAL_LOCATION_REFERENCE_PROMPT_LINE,
+} from "../services/image/spatial-location-reference.js";
 import { persistGeneratedImageToEntityGalleries } from "../services/image/generated-image-entity-gallery.js";
 import { resolveImageConnectionFallback } from "../services/generation/media-connection-fallback.js";
 import { extractLeadingThinkingBlocks } from "../services/llm/inline-thinking.js";
@@ -397,6 +407,7 @@ import {
   resolveLorebookGenerationTriggers,
   resolveLorebookTokenBudget,
 } from "../services/generation/lorebook-generation-runtime.js";
+import { createAgentLorebookTriggerResolver } from "../services/generation/agent-lorebook-triggers.js";
 import { addLocationEntry, addInventoryEntry, upsertQuest, addNpcEntry } from "../services/game/journal.service.js";
 import { updateJournal } from "../services/generation/game-journal-runtime.js";
 import { buildGmFormatReminder } from "../services/game/gm-prompts.js";
@@ -411,7 +422,6 @@ import { applyAllSegmentEdits } from "../services/game/segment-edits.js";
 import type { CharacterData, GameMap, GameNpc, Lorebook, LorebookEntry } from "@marinara-engine/shared";
 import {
   buildConversationProfileBlocks,
-  parsePersonaConvoBehavior,
   readCharacterConvoFields,
   type ConversationProfileParticipant,
 } from "../services/conversation/conversation-profiles.js";
@@ -708,6 +718,9 @@ export async function generateRoutes(app: FastifyInstance) {
       return reply.status(404).send({ error: "Chat not found" });
     }
     const requestChatMode = (chat.mode as ChatMode) ?? "roleplay";
+    const managedParameterDefinitions = parseManagedGenerationParameterDefinitions(
+      await appSettings.get(CUSTOM_GENERATION_PARAMETERS_SETTINGS_KEY),
+    );
     if (requestChatMode === "conversation" && input.impersonate) {
       return reply.status(400).send({ error: "Impersonate is not available in Conversation mode" });
     }
@@ -2204,7 +2217,9 @@ export async function generateRoutes(app: FastifyInstance) {
               displayName: personaConvoDisplay || persona.name,
               aboutMe: effectiveAbout(persona.id as string, personaAboutDefault),
               isPersona: true,
-              behavior: parsePersonaConvoBehavior(persona.convoBehavior),
+              // Personas represent the user. Preserve legacy card data for
+              // round-trips, but never use it to steer the user's behavior.
+              behavior: null,
               postHistoryInstructions: "",
             });
           }
@@ -2585,6 +2600,7 @@ export async function generateRoutes(app: FastifyInstance) {
           chatMode,
           isSceneChat,
           chatParameters: chatMeta.chatParameters,
+          managedParameterDefinitions,
           modelAccessPolicy,
           initial: {
             temperature,
@@ -3232,6 +3248,42 @@ export async function generateRoutes(app: FastifyInstance) {
           }
           return msg;
         });
+        const customAgentsWithLorebookTriggers = resolvedAgents.filter(
+          (agent) =>
+            !builtInAgentTypes.has(agent.type) && agent.settings.triggerLorebooksForAgentCalls === true,
+        );
+        const resolveTriggeredLorebookEntriesByAgentId = createAgentLorebookTriggerResolver({
+          agents: customAgentsWithLorebookTriggers.map((agent) => {
+            const { sourceLorebookIds, source } = resolveKnowledgeSourceLorebookIds({
+              settings: agent.settings,
+              chatActiveLorebookIds,
+            });
+            return {
+              id: agent.id,
+              contextSize: normalizeAgentContextSize(agent.settings.contextSize),
+              sourceLorebookIds,
+              source,
+            };
+          }),
+          activeCharacterIds: promptCharacterIds,
+          activeCharacterTags: Array.from(
+            new Set(charInfo.flatMap((character) => (Array.isArray(character.tags) ? character.tags : []))),
+          ),
+          embeddingSource: memoryRecallEmbeddingSource,
+          entryStateOverrides:
+            (chatMeta.entryStateOverrides as Record<string, { enabled?: boolean; ephemeral?: number | null }>) ?? {},
+          filterSourceLorebookIds: filterChatActiveLorebookSourceIdsForPrompt,
+          gameState: gameState as GameStateForScanning | null,
+          generationTriggers: lorebookGenerationTriggers,
+          listEntriesByLorebookIds: async (sourceIds) =>
+            (await lorebooksStore.listEntriesByLorebooks(sourceIds)) as LorebookEntry[],
+          listLorebooks: async () => (await lorebooksStore.list()) as unknown as Lorebook[],
+          resolveContent: (value) => resolvePromptMacrosForLorebook(value).content,
+          signal: abortController.signal,
+          tokenBudget: resolveLorebookTokenBudget(chatMeta),
+          vectorizerAvailable: memoryRecallVectorizerAvailable,
+        });
+        const triggeredLorebookEntriesByAgentId = await resolveTriggeredLorebookEntriesByAgentId(recentMsgs);
         const resolvePersonaPromptText = (value?: string): string | undefined => {
           if (!value) return value;
           return resolveHistoryMessageMacros([{ content: value, characterId: null }])[0]?.content ?? value;
@@ -3312,6 +3364,9 @@ export async function generateRoutes(app: FastifyInstance) {
                     })),
                 },
               }
+            : {}),
+          ...(Object.keys(triggeredLorebookEntriesByAgentId).length > 0
+            ? { triggeredLorebookEntriesByAgentId }
             : {}),
           streaming: input.streaming,
           ...(requestDebug
@@ -5726,6 +5781,7 @@ export async function generateRoutes(app: FastifyInstance) {
           // group conversations (null elsewhere — caller falls back to the message char).
           let parsedCommandCharacterIds: (string | null)[] | null = null;
           let parsedRawCommandCount = 0;
+          let assistantSpatialDirective: ReturnType<typeof extractAssistantSpatialDirective>["directive"] = null;
           let conversationCommandContent: string | null = null;
           let contentReplaced = false;
           if (tailMessages.assistantPrefillInjected && assistantPrefill && fullResponse.startsWith(assistantPrefill)) {
@@ -6006,6 +6062,26 @@ export async function generateRoutes(app: FastifyInstance) {
             }
           }
 
+          if (
+            !input.impersonate &&
+            hierarchicalMapsEnabledForChat &&
+            (requestChatMode === "roleplay" || requestChatMode === "game")
+          ) {
+            const parsedSpatial = extractAssistantSpatialDirective(fullResponse);
+            assistantSpatialDirective = parsedSpatial.directive;
+            if (parsedSpatial.cleanContent !== fullResponse) {
+              fullResponse = parsedSpatial.cleanContent;
+              contentReplaced = true;
+            }
+            if (assistantSpatialDirective) {
+              logger.debug(
+                "[generate/spatial] Parsed assistant %s directive for chat %s",
+                assistantSpatialDirective.type,
+                input.chatId,
+              );
+            }
+          }
+
           if (contentReplaced) {
             if (!holdForTextRewrite) {
               reply.raw.write(`data: ${JSON.stringify({ type: "content_replace", data: fullResponse })}\n\n`);
@@ -6031,7 +6107,10 @@ export async function generateRoutes(app: FastifyInstance) {
               },
               "[generate] Empty response after post-processing",
             );
-            if (!input.impersonate && (parsedCommands.length > 0 || parsedRawCommandCount > 0)) {
+            if (
+              !input.impersonate &&
+              (parsedCommands.length > 0 || parsedRawCommandCount > 0 || assistantSpatialDirective !== null)
+            ) {
               logger.info(
                 "[generate] Model emitted %d enabled command(s) (%d parsed) with no visible prose for chat %s; saving hidden command anchor",
                 parsedCommands.length,
@@ -6058,16 +6137,28 @@ export async function generateRoutes(app: FastifyInstance) {
                 hierarchicalMapsEnabledForChat &&
                 (requestChatMode === "roleplay" || requestChatMode === "game")
               ) {
-                await materializeAssistantSpatialState(
+                const assistantSpatialSnapshot = await materializeAssistantSpatialState(
                   {
                     chatId: input.chatId,
                     messageId: anchoredMsg.id,
                     swipeIndex: anchoredMsg.activeSwipeIndex ?? 0,
                     regenerate: false,
                     continuation: false,
+                    directive: assistantSpatialDirective,
                   },
                   chatMeta,
                 );
+                if (assistantSpatialSnapshot?.transitionCommandId) {
+                  sendSseEvent(reply, {
+                    type: "spatial_transition_committed",
+                    data: {
+                      chatId: input.chatId,
+                      commandId: assistantSpatialSnapshot.transitionCommandId,
+                      currentLocationId: assistantSpatialSnapshot.currentLocationId,
+                      definitionRevision: assistantSpatialSnapshot.definitionRevision,
+                    },
+                  });
+                }
               }
               if (markGenerationCommitted && anchoredMsg?.id) {
                 generationComplete = true;
@@ -6144,16 +6235,28 @@ export async function generateRoutes(app: FastifyInstance) {
             hierarchicalMapsEnabledForChat &&
             (requestChatMode === "roleplay" || requestChatMode === "game")
           ) {
-            await materializeAssistantSpatialState(
+            const assistantSpatialSnapshot = await materializeAssistantSpatialState(
               {
                 chatId: input.chatId,
                 messageId: savedMsg.id,
                 swipeIndex: savedSwipeIndex,
                 regenerate: Boolean(input.regenerateMessageId),
                 continuation: Boolean(input.continueMessageId),
+                directive: assistantSpatialDirective,
               },
               chatMeta,
             );
+            if (assistantSpatialSnapshot?.transitionCommandId) {
+              sendSseEvent(reply, {
+                type: "spatial_transition_committed",
+                data: {
+                  chatId: input.chatId,
+                  commandId: assistantSpatialSnapshot.transitionCommandId,
+                  currentLocationId: assistantSpatialSnapshot.currentLocationId,
+                  definitionRevision: assistantSpatialSnapshot.definitionRevision,
+                },
+              });
+            }
           }
           if (markGenerationCommitted && savedMsg?.id) {
             generationComplete = true;
@@ -6757,6 +6860,16 @@ export async function generateRoutes(app: FastifyInstance) {
         };
 
         if (hasPostWork && combinedResponse && !abortController.signal.aborted) {
+          if (customAgentsWithLorebookTriggers.some((agent) => agent.phase === "post_processing")) {
+            agentContext.triggeredLorebookEntriesByAgentId = await resolveTriggeredLorebookEntriesByAgentId([
+              ...recentMsgs,
+              {
+                id: latestAssistantMessageId || undefined,
+                role: "assistant",
+                content: combinedResponse,
+              },
+            ]);
+          }
           if (personaId && getLatestUserExpressionSource() && Array.isArray(agentContext.memory._availableSprites)) {
             generatedExpressionTargetIds.add(personaId);
           }
@@ -7189,9 +7302,45 @@ export async function generateRoutes(app: FastifyInstance) {
                 // Build the new snapshot from agent output, falling back to previous snapshot.
                 let newDate = coerceGameStateTextValue(gs.date) ?? coerceGameStateTextValue(prevSnap?.date);
                 let newTime = coerceGameStateTextValue(gs.time) ?? coerceGameStateTextValue(prevSnap?.time);
+                const trackerLocationGuidance = coerceGameStateTextValue(gs.location);
+                let effectiveSpatialProjection = ownerSpatialProjection;
+                if (hierarchicalMapsEnabledForChat && messageId) {
+                  effectiveSpatialProjection = await resolveOwnerSpatialProjection(input.chatId, {}, chatMeta);
+                  if (trackerLocationGuidance && effectiveSpatialProjection?.ownerMode === "game") {
+                    const previousSpatialLocationId = effectiveSpatialProjection?.currentLocationId ?? null;
+                    const previousSpatialRevision = effectiveSpatialProjection?.definitionRevision ?? 0;
+                    const guidedSpatialSnapshot = await materializeAssistantSpatialState(
+                      {
+                        chatId: input.chatId,
+                        messageId,
+                        swipeIndex: targetSwipeIndex,
+                        regenerate: Boolean(input.regenerateMessageId),
+                        continuation: Boolean(input.continueMessageId),
+                        locationGuidance: trackerLocationGuidance,
+                      },
+                      chatMeta,
+                    );
+                    if (
+                      guidedSpatialSnapshot?.transitionCommandId &&
+                      (guidedSpatialSnapshot.currentLocationId !== previousSpatialLocationId ||
+                        guidedSpatialSnapshot.definitionRevision !== previousSpatialRevision)
+                    ) {
+                      sendSseEvent(reply, {
+                        type: "spatial_transition_committed",
+                        data: {
+                          chatId: input.chatId,
+                          commandId: guidedSpatialSnapshot.transitionCommandId,
+                          currentLocationId: guidedSpatialSnapshot.currentLocationId,
+                          definitionRevision: guidedSpatialSnapshot.definitionRevision,
+                        },
+                      });
+                      effectiveSpatialProjection = await resolveOwnerSpatialProjection(input.chatId, {}, chatMeta);
+                    }
+                  }
+                }
                 const authoritativeGameLocation =
-                  ownerSpatialProjection?.ownerMode === "game"
-                    ? formatOwnerSpatialBreadcrumb(ownerSpatialProjection)
+                  effectiveSpatialProjection?.ownerMode === "game"
+                    ? formatOwnerSpatialBreadcrumb(effectiveSpatialProjection)
                     : null;
                 let newLocation =
                   authoritativeGameLocation ??
@@ -8210,6 +8359,11 @@ export async function generateRoutes(app: FastifyInstance) {
                         typeof chatMeta.illustratorIncludeCharacterAppearance === "boolean"
                           ? chatMeta.illustratorIncludeCharacterAppearance
                           : illustratorAgent?.settings?.includeCharacterAppearance === true;
+                      const spatialLocationReferenceImage = await resolveSpatialLocationReferenceImage({
+                        db: app.db,
+                        chatId: input.chatId,
+                        projection: ownerSpatialProjection?.ownerMode === "roleplay" ? ownerSpatialProjection : null,
+                      });
                       let illustratorRefImages: string[] | undefined;
                       const referenceResolution = await resolveIllustratorCharacterReferences({
                         charactersStore: chars,
@@ -8236,6 +8390,7 @@ export async function generateRoutes(app: FastifyInstance) {
                         ].join("\n"),
                         fallbackToChatCharacters: false,
                         includeReferenceImages: useAvatarRefs,
+                        maxReferences: spatialLocationReferenceImage ? 5 : 6,
                       });
                       if (includeCharacterAppearance && referenceResolution.appearanceBlock) {
                         fullPrompt += `\n\n${referenceResolution.appearanceBlock}`;
@@ -8245,7 +8400,6 @@ export async function generateRoutes(app: FastifyInstance) {
                         );
                       }
                       if (useAvatarRefs && referenceResolution.referenceImages.length > 0) {
-                        illustratorRefImages = referenceResolution.referenceImages;
                         if (referenceResolution.referenceLine && !suppressReferencePromptLine)
                           fullPrompt += `\n\n${referenceResolution.referenceLine}`;
                         logger.debug(
@@ -8253,6 +8407,18 @@ export async function generateRoutes(app: FastifyInstance) {
                           referenceResolution.referenceImages.length,
                           referenceResolution.referenceNames.join(", "),
                         );
+                      }
+                      const mergedReferenceImages = mergeSpatialLocationReferenceImages(
+                        spatialLocationReferenceImage,
+                        useAvatarRefs ? referenceResolution.referenceImages : [],
+                        6,
+                      );
+                      if (mergedReferenceImages.length > 0) {
+                        illustratorRefImages = mergedReferenceImages;
+                      }
+                      if (spatialLocationReferenceImage) {
+                        fullPrompt += `\n\n${SPATIAL_LOCATION_REFERENCE_PROMPT_LINE}`;
+                        logger.debug("[illustrator] Sending the current Maps location reference image first");
                       }
 
                       const compiledPrompt = compileImagePrompt({

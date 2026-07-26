@@ -7,10 +7,14 @@ import { eq } from "../../packages/server/src/db/file-query.js";
 import { createFileNativeDB } from "../../packages/server/src/db/file-backed-store.js";
 import { noodleAccounts } from "../../packages/server/src/db/schema/noodle.js";
 import {
+  DEFAULT_NOODLE_SETTINGS,
   noodleAccountSettingsPatchSchema,
   noodleAccountUpdateSchema,
 } from "../../packages/shared/src/schemas/noodle.schema.js";
-import { createNoodleStorage } from "../../packages/server/src/services/storage/noodle.storage.js";
+import {
+  createNoodleStorage,
+  normalizeNoodleSettings,
+} from "../../packages/server/src/services/storage/noodle.storage.js";
 import { resolveNoodleAvatarCropAfterProfileUpdate } from "../../packages/server/src/services/noodle/noodle-profile-avatar.js";
 
 const sourceCrop = { x: 12, y: 18, width: 62, height: 62, unit: "%" as const };
@@ -58,6 +62,21 @@ assert.equal(
   }),
   null,
 );
+
+// One invalid stored field must not reset unrelated settings: a bad autoPostingDefaultIntensity
+// used to wipe lorebook context, invited character folders, and the generation connection.
+const salvaged = normalizeNoodleSettings({
+  autoPostingDefaultIntensity: 4,
+  enableLorebookContext: true,
+  invitedCharacterGroupIds: ["folder-1"],
+  generationConnectionId: "conn-1",
+  refreshesPerDay: 6,
+});
+assert.equal(salvaged.enableLorebookContext, true);
+assert.deepEqual(salvaged.invitedCharacterGroupIds, ["folder-1"]);
+assert.equal(salvaged.generationConnectionId, "conn-1");
+assert.equal(salvaged.refreshesPerDay, 6);
+assert.equal(salvaged.autoPostingDefaultIntensity, DEFAULT_NOODLE_SETTINGS.autoPostingDefaultIntensity);
 
 const storageDir = mkdtempSync(join(tmpdir(), "marinara-noodle-settings-"));
 process.env.FILE_STORAGE_DIR = storageDir;

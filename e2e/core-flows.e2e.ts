@@ -3919,6 +3919,87 @@ test("settings search divider stays aligned with editor headers across text scal
   }
 });
 
+test("custom generation parameters become reusable chat controls", async ({ page }, testInfo) => {
+  test.skip(!testInfo.project.name.includes("desktop"), "Reusable parameter authoring is covered on desktop.");
+
+  let storedDefinitions = "[]";
+  await page.route("**/api/app-settings/custom-generation-parameters", async (route) => {
+    const request = route.request();
+    if (request.method() === "PUT") {
+      const body = request.postDataJSON() as { value?: unknown };
+      storedDefinitions = typeof body.value === "string" ? body.value : "[]";
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        key: "custom-generation-parameters",
+        value: storedDefinitions,
+      }),
+    });
+  });
+
+  const response = await page.request.post("/api/chats", {
+    data: {
+      name: "Managed Parameter Smoke",
+      mode: "roleplay",
+      characterIds: [],
+    },
+  });
+  expect(response.ok()).toBeTruthy();
+  const chat = (await response.json()) as { id: string };
+
+  try {
+    await page.goto("/");
+    await page.locator('[data-tour="panel-settings"]').click();
+    await page.getByPlaceholder("Search settings").fill("custom generation parameters");
+    await page
+      .locator(".mari-settings-search-header button")
+      .filter({ hasText: "Custom generation parameters" })
+      .first()
+      .click();
+
+    const parameterSettings = page.locator("#settings-control-custom-generation-parameters");
+    await expect(parameterSettings).toBeVisible();
+    await parameterSettings.getByRole("button", { name: "Add parameter" }).click();
+    await parameterSettings.getByLabel("Name").fill("Min P");
+    await parameterSettings.getByLabel("Value", { exact: true }).fill("min_p");
+    await parameterSettings.getByLabel("Minimum value").fill("0,1");
+    await parameterSettings.getByLabel("Maximum value").fill("1");
+    await parameterSettings.getByLabel("Tooltip (optional)").fill("Filters low-probability tokens.");
+    await parameterSettings.getByRole("button", { name: "Save parameter" }).click();
+
+    await expect(parameterSettings.getByText("min_p", { exact: true })).toBeVisible();
+    const savedDefinitions = JSON.parse(storedDefinitions) as Array<{
+      name: string;
+      requestKey: string;
+      min: number;
+      max: number;
+    }>;
+    expect(savedDefinitions).toMatchObject([{ name: "Min P", requestKey: "min_p", min: 0.1, max: 1 }]);
+
+    await page.evaluate((chatId) => {
+      localStorage.setItem("marinara-active-chat-id", chatId);
+    }, chat.id);
+    await page.reload();
+
+    await page.getByRole("button", { name: "Chat Settings", exact: true }).filter({ visible: true }).click();
+    const drawer = page.locator(".mari-chat-settings-drawer");
+    await drawer.getByText("Advanced Parameters", { exact: true }).click();
+    await expect(drawer.getByText("Min P", { exact: true })).toBeVisible();
+    const minPInput = drawer.getByRole("textbox", { name: "Min P", exact: true });
+    await minPInput.fill("0,35");
+    await minPInput.blur();
+    const minPSendToggle = drawer.getByRole("checkbox", { name: "Send Min P parameter" });
+    const minPSendToggleId = await minPSendToggle.getAttribute("id");
+    expect(minPSendToggleId).toBeTruthy();
+    await drawer.locator(`label[for="${minPSendToggleId}"]`).click();
+    await expect(minPSendToggle).toBeChecked();
+  } finally {
+    await page.request.delete(`/api/chats/${chat.id}`).catch(() => undefined);
+  }
+});
+
 test("UI language selection loads locale files and persists across reloads", async ({ page }) => {
   test.setTimeout(90_000);
   const errors = collectUnexpectedErrors(page);
@@ -8610,6 +8691,15 @@ test("mobile chat composer follows the visual viewport above the software keyboa
   });
   expect(response.ok()).toBeTruthy();
   const chat = (await response.json()) as { id: string };
+  for (let index = 0; index < 18; index += 1) {
+    const messageResponse = await page.request.post(`/api/chats/${chat.id}/messages`, {
+      data: {
+        role: index % 2 === 0 ? "user" : "assistant",
+        content: `Keyboard viewport history line ${index + 1}. ${"Keep the latest turn visible. ".repeat(3)}`,
+      },
+    });
+    expect(messageResponse.ok()).toBeTruthy();
+  }
 
   await page.addInitScript(() => {
     const state = {
@@ -8653,6 +8743,16 @@ test("mobile chat composer follows the visual viewport above the software keyboa
     const shell = page.locator('[data-component="AppShell"]');
     const composer = page.locator(".chat-input-container:visible");
     const textarea = composer.locator("textarea:visible");
+    const transcript = page.locator(".mari-messages-scroll:visible").first();
+    await expect(transcript).toBeVisible();
+    await transcript.evaluate((element) => {
+      element.scrollTop = element.scrollHeight;
+    });
+    await expect
+      .poll(() =>
+        transcript.evaluate((element) => element.scrollHeight - element.scrollTop - element.clientHeight),
+      )
+      .toBeLessThanOrEqual(2);
     await expect(textarea).toBeVisible();
     await textarea.focus();
 
@@ -8680,6 +8780,69 @@ test("mobile chat composer follows the visual viewport above the software keyboa
     expect(Math.abs(shellBox!.height - 360)).toBeLessThanOrEqual(1);
     expect(composerBox!.y).toBeGreaterThanOrEqual(72);
     expect(composerBox!.y + composerBox!.height).toBeLessThanOrEqual(432);
+    await expect
+      .poll(() =>
+        transcript.evaluate((element) => element.scrollHeight - element.scrollTop - element.clientHeight),
+      )
+      .toBeLessThanOrEqual(2);
+  } finally {
+    await page.request.delete(`/api/chats/${chat.id}`).catch(() => undefined);
+  }
+});
+
+test("kaomoji scrollbar presses stay inside the picker and use chat chroma", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name.includes("mobile"), "Native desktop scrollbar behavior is desktop-only.");
+
+  const response = await page.request.post("/api/chats", {
+    data: {
+      name: "Kaomoji Scrollbar Smoke",
+      mode: "roleplay",
+      characterIds: [],
+    },
+  });
+  expect(response.ok()).toBeTruthy();
+  const chat = (await response.json()) as { id: string };
+
+  try {
+    await page.addInitScript((chatId) => {
+      localStorage.setItem("marinara-active-chat-id", chatId);
+    }, chat.id);
+    await page.goto("/");
+
+    await page.getByRole("button", { name: "Kaomoji" }).click();
+    const picker = page.getByRole("dialog", { name: "Kaomoji picker" });
+    await expect(picker).toBeVisible();
+    const pickerBox = await picker.boundingBox();
+    expect(pickerBox).not.toBeNull();
+
+    await page.evaluate(({ x, y }) => {
+      document.documentElement.dispatchEvent(
+        new MouseEvent("mousedown", {
+          bubbles: true,
+          clientX: x,
+          clientY: y,
+        }),
+      );
+    }, {
+      x: pickerBox!.x + pickerBox!.width - 1,
+      y: pickerBox!.y + pickerBox!.height / 2,
+    });
+    await expect(picker).toBeVisible();
+
+    const searchIconUsesChroma = await picker.locator("svg").first().evaluate((icon) => {
+      const iconColor = getComputedStyle(icon).color;
+      const chromaColor = getComputedStyle(document.documentElement)
+        .getPropertyValue("--marinara-chat-chrome-button-text-active")
+        .trim();
+      if (!chromaColor) return false;
+      const probe = document.createElement("span");
+      probe.style.color = chromaColor;
+      document.body.appendChild(probe);
+      const resolvedChromaColor = getComputedStyle(probe).color;
+      probe.remove();
+      return iconColor === resolvedChromaColor;
+    });
+    expect(searchIconUsesChroma).toBe(true);
   } finally {
     await page.request.delete(`/api/chats/${chat.id}`).catch(() => undefined);
   }

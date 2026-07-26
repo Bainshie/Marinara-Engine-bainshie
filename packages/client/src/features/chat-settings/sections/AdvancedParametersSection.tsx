@@ -29,6 +29,7 @@ const EDITABLE_PARAMETER_KEYS: Array<keyof EditableGenerationParameters> = [
   "assistantPrefill",
   "customThinkingTags",
   "customParameters",
+  "managedCustomParameters",
   "enabledParameters",
 ];
 
@@ -166,6 +167,9 @@ export function AdvancedParametersSection({
       </div>
       {expanded && (
         <div className="px-4 pb-3 pt-3 space-y-3">
+          <p className="text-[0.625rem] leading-relaxed text-[var(--muted-foreground)]">
+            {localizeUi("settings.customGenerationParameters.availabilityHint")}
+          </p>
           <GenerationParametersFields
             value={effectiveParams}
             showOpenRouterServiceTier={conn?.provider === "openrouter"}

@@ -766,7 +766,7 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
   );
   const noodleCustomEmojiMap = useNoodleCustomEmojiMap(viewedProfileAccount);
   const viewingOwnProfile = Boolean(personaAccount && viewedProfileAccount?.id === personaAccount.id);
-  const linkedPublicAccountIds = useMemo(
+  const linkedNoodleAccountIds = useMemo(
     () => new Set((noodlerAccountsQuery.data ?? []).flatMap((profile) => profile.noodleAccountId ?? [])),
     [noodlerAccountsQuery.data],
   );
@@ -775,7 +775,7 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
       viewedProfileAccount &&
       (viewedProfileAccount.kind === "persona" || viewedProfileAccount.kind === "character") &&
       noodlerAccountsQuery.isSuccess &&
-      !linkedPublicAccountIds.has(viewedProfileAccount.id),
+      !linkedNoodleAccountIds.has(viewedProfileAccount.id),
   );
   const canEditViewedProfile = Boolean(
     viewingOwnProfile || (viewedProfileAccount?.kind === "character" && viewedProfileAccount.invited),
@@ -3717,7 +3717,7 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
       personaAccount={personaAccount}
       sortedPersonaAccounts={sortedPersonaAccounts}
       visiblePersonaAccounts={visiblePersonaAccounts}
-      linkedPublicAccountIds={linkedPublicAccountIds}
+      linkedNoodleAccountIds={linkedNoodleAccountIds}
       onLoadMorePersonaAccounts={() => setPersonaAccountLimit((current) => current + NOODLE_PERSONA_SWITCHER_PAGE_SIZE)}
       onSwitchPersona={switchPersona}
       accountSwitcherOpen={accountSwitcherOpen}

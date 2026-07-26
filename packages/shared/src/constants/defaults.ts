@@ -40,6 +40,7 @@ export const DEFAULT_GENERATION_PARAMS: GenerationParameters = {
   assistantPrefill: "",
   customThinkingTags: [],
   customParameters: {},
+  managedCustomParameters: {},
   squashSystemMessages: true,
   showThoughts: true,
   useMaxContext: false,
