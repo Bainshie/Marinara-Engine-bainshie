@@ -929,6 +929,7 @@ export function GameSetupWizard({
           visualGenerationEnabled ||
           config.enableSpotifyDj === true ||
           config.enableLorebookKeeper === true ||
+          config.gameWorldMapMode === "hierarchical" ||
           Boolean(config.spatialMapInstructions?.trim()),
       );
       setEnableSpriteGeneration(visualGenerationEnabled);
@@ -956,7 +957,10 @@ export function GameSetupWizard({
       setGameSystemPromptEdited(Boolean(importedCustomPrompt) || importedStoryboardGamePrompt);
       setGameSpecialInstructions(config.gameSpecialInstructions?.trim() || "");
       const importedSpatialMapInstructions = config.spatialMapInstructions?.trim() || "";
-      setDraftSpatialMap(hierarchicalMapsInstalled && Boolean(importedSpatialMapInstructions));
+      setDraftSpatialMap(
+        hierarchicalMapsInstalled &&
+          (config.gameWorldMapMode === "hierarchical" || Boolean(importedSpatialMapInstructions)),
+      );
       setSpatialMapDraftSize("medium");
       setSpatialMapGroundingMode("setup");
       setSpatialMapInstructions(importedSpatialMapInstructions);
@@ -1020,6 +1024,8 @@ export function GameSetupWizard({
           enableAgents && hierarchicalMapsInstalled && draftSpatialMap
             ? spatialMapInstructions.trim() || undefined
             : undefined,
+        gameWorldMapMode:
+          enableAgents && hierarchicalMapsInstalled && draftSpatialMap ? "hierarchical" : "standard",
         rating,
         gmMode,
         gmCharacterId: gmMode === "character" && gmCharacterId ? gmCharacterId : undefined,

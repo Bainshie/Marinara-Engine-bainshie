@@ -72,6 +72,12 @@ import {
   syncGameMapMetaPartyPosition,
   withActiveGameMapMeta,
 } from "../services/game/map-position.service.js";
+import {
+  buildInitialGameMapPatch,
+  HIERARCHICAL_MAPS_AGENT_ID,
+  resolveGameStartWorldMapPatch,
+  resolveInitialMapLocationName,
+} from "../services/game/world-map-mode.js";
 import { resolveCombatRound, type CombatantStats } from "../services/game/combat.service.js";
 import { generateCombatLoot, generateLootTable } from "../services/game/loot.service.js";
 import {
@@ -1620,6 +1626,7 @@ const gameSetupConfigSchema = z.object({
   difficulty: z.string().min(1).max(100),
   combatStyle: z.enum(["classic", "tactical"]).optional(),
   spatialMapInstructions: z.string().max(4000).optional(),
+  gameWorldMapMode: z.enum(["standard", "hierarchical"]).optional(),
   playerGoals: z.string().max(2000).default(""),
   gmMode: z.enum(["standalone", "character"]),
   rating: z.enum(["sfw", "nsfw"]).default("sfw"),
@@ -5733,6 +5740,7 @@ export async function gameRoutes(app: FastifyInstance) {
     const setupConfig = (meta.gameSetupConfig as GameSetupConfig | null) ?? null;
     const customHudWidgets = sanitizeGameHudWidgets(setupConfig?.customHudWidgets);
     const updates: Record<string, unknown> = { ...meta, gameSessionStatus: "ready" };
+    let generatedStartingMap: GameMap | null = null;
     if (setupData.worldOverview) updates.gameWorldOverview = setupData.worldOverview as string;
     if (setupData.storyArc) updates.gameStoryArc = setupData.storyArc as string;
     if (setupData.plotTwists) updates.gamePlotTwists = setupData.plotTwists as string[];
@@ -5797,13 +5805,13 @@ export async function gameRoutes(app: FastifyInstance) {
           edges,
           partyPosition: nodes[0]?.id || "region_1",
         };
-        updates.gameMap = map;
+        generatedStartingMap = map;
       } else {
-        updates.gameMap = raw as unknown as GameMap;
+        generatedStartingMap = raw as unknown as GameMap;
       }
     }
-    if (updates.gameMap) {
-      Object.assign(updates, withActiveGameMapMeta(updates, updates.gameMap as GameMap));
+    if (generatedStartingMap) {
+      Object.assign(updates, buildInitialGameMapPatch(updates, setupConfig, generatedStartingMap));
     }
     if (setupData.startingNpcs) {
       const charStore = createCharactersStorage(app.db);
@@ -5846,7 +5854,10 @@ export async function gameRoutes(app: FastifyInstance) {
           descriptionSource: description ? "model" : undefined,
           gender: typeof n.gender === "string" ? n.gender : null,
           pronouns: typeof n.pronouns === "string" ? n.pronouns : null,
-          location: typeof n.location === "string" && n.location ? n.location : "Unknown",
+          location:
+            typeof n.location === "string" && n.location
+              ? resolveInitialMapLocationName(generatedStartingMap, n.location)
+              : "Unknown",
           reputation: typeof n.reputation === "number" ? n.reputation : 0,
           notes: [] as string[],
           avatarUrl: findCharAvatarFuzzy(name, charAvatarByName) ?? undefined,
@@ -6084,8 +6095,18 @@ export async function gameRoutes(app: FastifyInstance) {
       storyboardIllustrationsEnabled &&
       parsedCreateGameInput.setupConfig.gameStoryboardAutoGenerationEnabled === true &&
       !!parsedCreateGameInput.setupConfig.videoConnectionId;
+    const requestedWorldMapMode =
+      parsedCreateGameInput.setupConfig.gameWorldMapMode ??
+      (parsedCreateGameInput.setupConfig.enableAgents === true &&
+      Boolean(parsedCreateGameInput.setupConfig.spatialMapInstructions?.trim())
+        ? "hierarchical"
+        : "standard");
     const setupConfig: GameSetupConfig = {
       ...parsedCreateGameInput.setupConfig,
+      gameWorldMapMode:
+        requestedWorldMapMode === "hierarchical" && parsedCreateGameInput.setupConfig.enableAgents === true
+          ? "hierarchical"
+          : "standard",
       enableSpriteGeneration: visualGenerationEnabled || undefined,
       gameStoryboardAutoIllustrationsEnabled: visualGenerationEnabled
         ? storyboardIllustrationsEnabled
@@ -6143,7 +6164,10 @@ export async function gameRoutes(app: FastifyInstance) {
     }
 
     const sessionMeta = parseMeta(sessionChat.metadata);
-    const setupActiveAgentIds = [...(setupConfig.enableSpotifyDj ? ["spotify"] : [])];
+    const setupActiveAgentIds = [
+      ...(setupConfig.enableSpotifyDj ? ["spotify"] : []),
+      ...(setupConfig.gameWorldMapMode === "hierarchical" ? [HIERARCHICAL_MAPS_AGENT_ID] : []),
+    ];
     const spotifySourceType = setupConfig.spotifySourceType ?? "liked";
     const gameChatParameters = mergeStoredGenerationParameters(
       defaultGenerationParameters,
@@ -6176,6 +6200,7 @@ export async function gameRoutes(app: FastifyInstance) {
       gameMap: null,
       gameMaps: [],
       activeGameMapId: null,
+      gameInitialMapFallback: null,
       gamePreviousSessionSummaries: [],
       gameStoryArc: null,
       gamePlotTwists: [],
@@ -6691,7 +6716,10 @@ export async function gameRoutes(app: FastifyInstance) {
         "[game/start] Stale-meta recovery for chatId=%s — GM turn already exists; restoring status to active without re-firing intro",
         chatId,
       );
-      await chats.patchMetadata(chatId, { gameSessionStatus: "active" });
+      await chats.patchMetadata(chatId, (current) => {
+        const worldMapStart = resolveGameStartWorldMapPatch(current);
+        return { ...worldMapStart.patch, gameSessionStatus: "active" };
+      });
       return { status: "active", alreadyStarted: true };
     }
 
@@ -6701,10 +6729,15 @@ export async function gameRoutes(app: FastifyInstance) {
     // the claim; the rest fall through to the alreadyStarted: true branch
     // below.
     let claimedStart = false;
+    const worldMapStartState: {
+      resolution: ReturnType<typeof resolveGameStartWorldMapPatch>["resolution"];
+    } = { resolution: "unchanged" };
     await chats.patchMetadata(chatId, (current) => {
       if (current.gameSessionStatus !== "ready") return {};
       claimedStart = true;
-      return { gameSessionStatus: "active" };
+      const worldMapStart = resolveGameStartWorldMapPatch(current);
+      worldMapStartState.resolution = worldMapStart.resolution;
+      return { ...worldMapStart.patch, gameSessionStatus: "active" };
     });
 
     if (!claimedStart) {
@@ -6714,6 +6747,12 @@ export async function gameRoutes(app: FastifyInstance) {
         return { status: "active", alreadyStarted: true };
       }
       throw new Error(`Cannot start game: status is "${latestStatus}", expected "ready"`);
+    }
+
+    if (worldMapStartState.resolution === "standard_fallback") {
+      logger.info("[game/start] Hierarchical map unavailable; promoted the staged Game map for chatId=%s", chatId);
+    } else if (worldMapStartState.resolution === "standard_mapless") {
+      logger.warn("[game/start] Hierarchical map unavailable and no staged Game map exists for chatId=%s", chatId);
     }
 
     return { status: "active", alreadyStarted: false };

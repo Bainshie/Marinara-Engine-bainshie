@@ -2126,6 +2126,8 @@ function GameSurfaceComponent({
     Array.isArray(chatMeta.activeAgentIds) &&
     (chatMeta.activeAgentIds as string[]).includes("hierarchical-maps");
   const spatialContext = useSpatialContext(activeChatId, hierarchicalMapsActive);
+  const activeSpatialContext = hierarchicalMapsActive ? spatialContext.data : null;
+  const activeSpatialContextLoading = hierarchicalMapsActive && spatialContext.isLoading;
   const storyboardAgentActive =
     chatMeta.enableAgents === true &&
     Array.isArray(chatMeta.activeAgentIds) &&
@@ -8899,13 +8901,13 @@ function GameSurfaceComponent({
         typeof position === "string"
           ? viewedMap?.nodes?.find((node) => node.id === position)?.spatialLocationId
           : viewedMap?.cells?.find((cell) => cell.x === position.x && cell.y === position.y)?.spatialLocationId;
-      if (boundSpatialLocationId && spatialContext.isLoading) {
+      if (boundSpatialLocationId && activeSpatialContextLoading) {
         toast.info(localizeUi("ui.game.gamesurfacecomponent.storyLocationsAreStillLoadingTryThatMapPosition"));
         setPendingMapMove(null);
         return;
       }
-      if (boundSpatialLocationId && spatialContext.data?.definition?.enabled) {
-        const spatial = spatialContext.data;
+      if (boundSpatialLocationId && activeSpatialContext?.definition?.enabled) {
+        const spatial = activeSpatialContext;
         const definition = spatial.definition;
         if (!definition) return;
         if (!spatial.currentLocationId) {
@@ -8953,8 +8955,8 @@ function GameSurfaceComponent({
       describeMapPosition,
       isSameMapPosition,
       sessionInteractive,
-      spatialContext.data,
-      spatialContext.isLoading,
+      activeSpatialContext,
+      activeSpatialContextLoading,
       viewedMap,
       viewedMapIsActive,
       localizeUi,
@@ -11059,8 +11061,8 @@ function GameSurfaceComponent({
                       day={currentGameDay}
                       onDayChange={handleGameDayChange}
                       onTimeChange={handleGameTimeChange}
-                      spatialContext={spatialContext.data}
-                      spatialContextLoading={spatialContext.isLoading}
+                      spatialContext={activeSpatialContext}
+                      spatialContextLoading={activeSpatialContextLoading}
                     />
                   </div>
                   {/* Desktop: inline minimap */}
@@ -11081,8 +11083,8 @@ function GameSurfaceComponent({
                       day={currentGameDay}
                       onDayChange={handleGameDayChange}
                       onTimeChange={handleGameTimeChange}
-                      spatialContext={spatialContext.data}
-                      spatialContextLoading={spatialContext.isLoading}
+                      spatialContext={activeSpatialContext}
+                      spatialContextLoading={activeSpatialContextLoading}
                       chatId={activeChatId}
                       constraintsRef={hudSurfaceRef}
                     />

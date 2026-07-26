@@ -219,6 +219,13 @@ function parseShareConfig(value: unknown): GameSetupConfig {
     throw new Error("This file has an invalid combat style.");
   }
   if (
+    value.gameWorldMapMode !== undefined &&
+    value.gameWorldMapMode !== "standard" &&
+    value.gameWorldMapMode !== "hierarchical"
+  ) {
+    throw new Error("This file has an invalid world map mode.");
+  }
+  if (
     value.spotifySourceType !== undefined &&
     value.spotifySourceType !== "liked" &&
     value.spotifySourceType !== "playlist" &&
