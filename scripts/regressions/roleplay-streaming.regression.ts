@@ -75,6 +75,25 @@ const summaryPopoverSource = readFileSync(
   new URL("../../packages/client/src/components/chat/SummaryPopover.tsx", import.meta.url),
   "utf8",
 );
+const spatialTransitionEventSource =
+  useGenerateSource.match(/case "spatial_transition_committed": \{[\s\S]*?case "token":/u)?.[0] ?? "";
+assert.match(
+  spatialTransitionEventSource,
+  /dispatchCapabilityClientEvent\(\{[\s\S]*?packageId: "hierarchical-maps",[\s\S]*?type: event\.type,[\s\S]*?chatId: params\.chatId,[\s\S]*?data: event\.data,[\s\S]*?\}\)/u,
+  "the spatial transition SSE should immediately notify the downloaded Maps client cache",
+);
+assert.match(
+  spatialTransitionEventSource,
+  /invalidateQueries\(\{ queryKey: spatialContextKeys\.detail\(params\.chatId\) \}\)/u,
+  "the spatial transition SSE should immediately refresh the Engine spatial cache",
+);
+const generationCleanupSource =
+  useGenerateSource.match(/\/\/ Stream has terminated[\s\S]*?const completedReply =/u)?.[0] ?? "";
+assert.match(
+  generationCleanupSource,
+  /if \([\s\S]*?chatModeForGeneration === "roleplay" \|\| chatModeForGeneration === "game"[\s\S]*?!spatialCapabilityRefreshDispatched[\s\S]*?dispatchCapabilityClientEvent\(\{[\s\S]*?packageId: "hierarchical-maps",[\s\S]*?type: "spatial_context_refresh",[\s\S]*?chatId: params\.chatId,[\s\S]*?await qc\.invalidateQueries\(\{[\s\S]*?queryKey: spatialContextKeys\.detail\(params\.chatId\),[\s\S]*?exact: true,[\s\S]*?refetchType: "active",[\s\S]*?\}\);[\s\S]*?clearPerChatState/u,
+  "Roleplay and Game cleanup should reconcile both spatial caches when the transition SSE is missed",
+);
 assert.match(
   summaryPopoverSource,
   /const \[draft, setDraft\] = useState\(\(\) => \(\{ \.\.\.entry \}\)\);/u,

@@ -1321,6 +1321,7 @@ export function useGenerate() {
       let illustrationSettled = false;
       let passiveStreamRecovered = false;
       let spatialTransitionCommitted = false;
+      let spatialCapabilityRefreshDispatched = false;
       let passiveStreamSettled = false;
       let passiveRecoveryDurableMessage: Message | null = null;
       let typingActive = false;
@@ -1601,9 +1602,16 @@ export function useGenerate() {
                 | undefined;
               if (transitionData?.chatId === params.chatId && transitionData.commandId) {
                 spatialTransitionCommitted = true;
+                spatialCapabilityRefreshDispatched = true;
                 useChatStore
                   .getState()
                   .clearPendingSpatialTransition(params.chatId, transitionData.commandId);
+                dispatchCapabilityClientEvent({
+                  packageId: "hierarchical-maps",
+                  type: event.type,
+                  chatId: params.chatId,
+                  data: event.data,
+                });
                 void qc.invalidateQueries({ queryKey: spatialContextKeys.detail(params.chatId) });
                 void qc.invalidateQueries({ queryKey: chatKeys.detail(params.chatId) });
               }
@@ -2784,6 +2792,24 @@ export function useGenerate() {
         }
         const stillOwnerAtCleanupStart =
           useChatStore.getState().abortControllers.get(params.chatId) === abortController;
+        if (
+          (chatModeForGeneration === "roleplay" || chatModeForGeneration === "game") &&
+          !spatialCapabilityRefreshDispatched
+        ) {
+          // Narrated Maps transitions commit near the end of the server stream.
+          // Reconcile both client caches when the transition SSE was missed.
+          dispatchCapabilityClientEvent({
+            packageId: "hierarchical-maps",
+            type: "spatial_context_refresh",
+            chatId: params.chatId,
+            data: null,
+          });
+          await qc.invalidateQueries({
+            queryKey: spatialContextKeys.detail(params.chatId),
+            exact: true,
+            refetchType: "active",
+          });
+        }
         if (stillOwnerAtCleanupStart) {
           useChatStore.getState().clearPerChatState(params.chatId);
           useChatStore.getState().setAbortController(params.chatId, null);
