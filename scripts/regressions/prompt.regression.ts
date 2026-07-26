@@ -539,7 +539,11 @@ import {
   stripSpeakerTagsExceptLastAssistant,
   type SimpleMessage,
 } from "../../packages/server/src/routes/generate/generate-route-utils.js";
-import { formatRoleplaySummaryChatLog } from "../../packages/server/src/services/generation/roleplay-summary-runtime.js";
+import {
+  appendContinuationMessageContent,
+  CONTINUE_ASSISTANT_MESSAGE_DIRECT_PROMPT,
+  formatRoleplaySummaryChatLog,
+} from "../../packages/server/src/services/generation/roleplay-summary-runtime.js";
 import { scopeIndividualGroupMessagesForTarget } from "../../packages/server/src/services/generation/prompt-message-scope.js";
 import { resolveGenerationPromptPresetChoices } from "../../packages/server/src/routes/generate/prompt-preset-selection.js";
 import {
@@ -692,6 +696,22 @@ const keywordOptions = {
 };
 
 const cases: RegressionCase[] = [
+  {
+    name: "/continue can append directly without inserting a newline",
+    run: () => {
+      assert.equal(
+        appendContinuationMessageContent("The experi", "ment continues.", false),
+        "The experiment continues.",
+      );
+      assert.equal(
+        appendContinuationMessageContent("The experiment", "\ncontinues.", false),
+        "The experimentcontinues.",
+      );
+      assert.equal(appendContinuationMessageContent("The experiment", "continues."), "The experiment\n\ncontinues.");
+      assert.match(CONTINUE_ASSISTANT_MESSAGE_DIRECT_PROMPT, /appended directly/i);
+      assert.match(CONTINUE_ASSISTANT_MESSAGE_DIRECT_PROMPT, /no newline or separator/i);
+    },
+  },
   {
     name: "Conversation smart sorting separates each character candidate without changing Roleplay formatting",
     run() {

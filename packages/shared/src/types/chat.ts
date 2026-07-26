@@ -830,6 +830,8 @@ export interface GenerateRequest {
   regenerateMessageId: string | null;
   /** If set, append the generated continuation to this assistant message */
   continueMessageId?: string | null;
+  /** Whether a continued response is separated from the existing message by a blank line. */
+  continueAddsNewline?: boolean;
   /** Override connection for this generation */
   connectionId: string | null;
   /** Background currently displayed on the active chat surface. */

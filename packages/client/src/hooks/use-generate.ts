@@ -340,11 +340,7 @@ function latestNewMessageByRole(
   );
 }
 
-function latestChangedAssistantMessage(
-  qc: QueryClient,
-  chatId: string,
-  snapshot: MessageSnapshot,
-): Message | null {
+function latestChangedAssistantMessage(qc: QueryClient, chatId: string, snapshot: MessageSnapshot): Message | null {
   if (!snapshot.cacheWasLoaded) return null;
   return latestAssistantMessage(
     getCachedMessages(qc, chatId).filter(
@@ -1219,7 +1215,10 @@ export function useGenerate() {
       const pendingAttachments = params.attachments ?? [];
 
       // Optimistically show the user message in the chat immediately
-      if ((params.userMessage || pendingAttachments.length > 0 || params.pendingSpatialTransition) && !params.impersonate) {
+      if (
+        (params.userMessage || pendingAttachments.length > 0 || params.pendingSpatialTransition) &&
+        !params.impersonate
+      ) {
         // Build persona snapshot for per-message persona tracking
         const cachedPersonas = qc.getQueryData<
           Array<{
@@ -1566,6 +1565,7 @@ export function useGenerate() {
           userActivity,
           debugMode,
           trimIncompleteModelOutput,
+          continueAddsNewline,
           musicPlayerEnabled,
           musicPlayerSource,
         } = useUIStore.getState();
@@ -1588,6 +1588,7 @@ export function useGenerate() {
             userTimeZone,
             debugMode,
             trimIncompleteModelOutput,
+            continueAddsNewline,
             musicPlayerEnabled,
             musicPlayerSource,
             streaming: transportStreaming,
@@ -2743,9 +2744,10 @@ export function useGenerate() {
           return abortController.signal.aborted ? receivedContent || spatialTransitionCommitted : true;
         }
         if (params.pendingSpatialTransition) {
-          const payload = error instanceof ApiError && error.payload && typeof error.payload === "object"
-            ? (error.payload as Record<string, unknown>)
-            : null;
+          const payload =
+            error instanceof ApiError && error.payload && typeof error.payload === "object"
+              ? (error.payload as Record<string, unknown>)
+              : null;
           const spatialErrorCode = typeof payload?.code === "string" ? payload.code : null;
           if (spatialErrorCode === "spatial_transition_already_applied") {
             spatialTransitionCommitted = true;
@@ -2753,8 +2755,7 @@ export function useGenerate() {
             try {
               const current = await api.get<SpatialContextResponse>(`/chats/${params.chatId}/spatial-context`);
               qc.setQueryData(spatialContextKeys.detail(params.chatId), current);
-              spatialTransitionCommitted =
-                current.currentLocationId === params.pendingSpatialTransition.destinationId;
+              spatialTransitionCommitted = current.currentLocationId === params.pendingSpatialTransition.destinationId;
             } catch {
               /* Preserve the pending command when current state cannot be confirmed. */
             }
