@@ -823,6 +823,7 @@ export function buildLorebookEntryCreateRow(
     generationTriggerFilters: [],
     additionalMatchingSources: [],
     position: firstNumber(data, ["position"]) ?? 0,
+    outletName: firstString(data, ["outletName", "outlet_name"]) ?? "",
     depth: firstNumber(data, ["depth"]) ?? 4,
     order: firstNumber(data, ["order"]) ?? defaultOrder,
     role: firstString(data, ["role"]) ?? "system",
@@ -2083,6 +2084,7 @@ export class MariDbService {
     changed = assignBooleanTextField(target, source, ["constant"], "constant") || changed;
     changed = assignNumberField(target, source, ["order"], "order") || changed;
     changed = assignNumberField(target, source, ["position"], "position") || changed;
+    changed = assignStringField(target, source, ["outletName", "outlet_name"], "outletName") || changed;
     changed = assignNumberField(target, source, ["depth"], "depth") || changed;
     changed = assignStringField(target, source, ["role"], "role") || changed;
     changed = assignStringField(target, source, ["group"], "group") || changed;
@@ -2275,6 +2277,7 @@ export class MariDbService {
           "constant",
           "order",
           "position",
+          "outletName",
           "depth",
           "role",
           "group",
@@ -2316,6 +2319,7 @@ export class MariDbService {
           "constant",
           "order",
           "position",
+          "outletName",
           "depth",
           "role",
           "group",
@@ -3761,6 +3765,7 @@ export class MariDbService {
           generationTriggerFilters: [],
           additionalMatchingSources: [],
           position: 0,
+          outletName: "",
           depth: 4,
           order: 100,
           role: "system",

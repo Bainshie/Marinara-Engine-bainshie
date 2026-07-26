@@ -51,6 +51,14 @@ const chatInputSource = readFileSync(
   new URL("../../packages/client/src/components/chat/ChatInput.tsx", import.meta.url),
   "utf8",
 );
+const chatMessageSource = readFileSync(
+  new URL("../../packages/client/src/components/chat/ChatMessage.tsx", import.meta.url),
+  "utf8",
+);
+const chatRoleplaySurfaceSource = readFileSync(
+  new URL("../../packages/client/src/components/chat/ChatRoleplaySurface.tsx", import.meta.url),
+  "utf8",
+);
 const conversationInputSource = readFileSync(
   new URL("../../packages/client/src/components/chat/ConversationInput.tsx", import.meta.url),
   "utf8",
@@ -232,6 +240,41 @@ assert.doesNotMatch(
   chatHandleInputSource,
   /requestAnimationFrame\(\(\) => \{[\s\S]*?resizeChatInputTextarea\(el\);/u,
   "Roleplay textarea resizing must not schedule a layout read for every ordinary keystroke",
+);
+assert.match(
+  chatInputSource,
+  /inputPresenceTimerRef\.current = setTimeout\(\(\) => \{[\s\S]*?setHasInput\(true\);[\s\S]*?\}, 150\);/u,
+  "Roleplay composer controls should update after a typing pause instead of rerendering on the first character",
+);
+assert.match(
+  chatStoreSource,
+  /currentInputPresenceTimer = setTimeout\(\(\) => \{[\s\S]*?\}, CURRENT_INPUT_PRESENCE_IDLE_MS\);/u,
+  "draft presence should update transcript controls only after the input idle boundary",
+);
+assert.match(
+  chatStoreSource,
+  /currentInputSnapshot = text;[\s\S]*?if \(get\(\)\.hasCurrentInput\) return;/u,
+  "ordinary draft characters should not notify mounted chat-store subscribers",
+);
+assert.match(
+  chatStoreSource,
+  /export function getCurrentInputSnapshot\(\): string/u,
+  "guided regeneration should read the exact draft without subscribing the UI to every character",
+);
+assert.match(
+  chatInputSource,
+  /setCurrentInput\(pendingCurrentInputRef\.current\);/u,
+  "Roleplay input should continue publishing the latest raw draft snapshot",
+);
+assert.doesNotMatch(
+  chatRoleplaySurfaceSource,
+  /hasDraftInput=\{hasDraftInput\}/u,
+  "Roleplay draft presence should not rerender every heavyweight transcript message",
+);
+assert.match(
+  chatMessageSource,
+  /const GuidedRegenerateActionBtn = memo[\s\S]*?state\.hasCurrentInput/u,
+  "only the guided Regenerate control should react to draft presence",
 );
 const conversationTextareaSource = conversationInputSource.match(/<textarea[\s\S]*?\/>/u)?.[0] ?? "";
 assert.doesNotMatch(

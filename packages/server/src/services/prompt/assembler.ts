@@ -18,7 +18,7 @@ import type {
 import { DEFAULT_GENERATION_PARAMS, generationParametersSchema, resolveMacros } from "@marinara-engine/shared";
 import { wrapContent, wrapGroup } from "./format-engine.js";
 import { sanitizePromptLeaf } from "./prompt-escaping.js";
-import { expandMarker, type MarkerContext } from "./marker-expander.js";
+import { ensureLorebookScan, expandMarker, type MarkerContext } from "./marker-expander.js";
 import { mergeAdjacentMessages, squashLeadingSystemMessages } from "./merger.js";
 import { injectAtDepth } from "../lorebook/prompt-injector.js";
 import type { LorebookScanResult } from "../lorebook/index.js";
@@ -377,6 +377,24 @@ export async function assemblePrompt(input: AssemblerInput): Promise<AssemblerOu
     hasDialogueExamplesMarker,
     macroCtx,
   };
+
+  // Outlet macros may appear before a lorebook marker, or in a preset without
+  // one. Pre-scan only when an enabled prompt section actually references an
+  // Outlet so the normal lazy lorebook path remains unchanged for other prompts.
+  const hasOutletMacro = sectionOrder.some((sectionId) => {
+    const section = sectionMap.get(sectionId);
+    if (!section || section.enabled !== "true" || !/\{\{\s*outlet\s*::/i.test(section.content)) return false;
+    if (!section.groupId) return true;
+    return groupMap.get(section.groupId)?.enabled !== "false";
+  });
+  if (hasOutletMacro) {
+    try {
+      await ensureLorebookScan(markerCtx);
+    } catch (err) {
+      macroCtx.outlets = {};
+      logger.warn(err, "[prompt] Outlet lorebook pre-scan failed");
+    }
+  }
 
   // ── Phase 1: Resolve sections in preset order ──
   // Separate ordered sections from depth-injected ones

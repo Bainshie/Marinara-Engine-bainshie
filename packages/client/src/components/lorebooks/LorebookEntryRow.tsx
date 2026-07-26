@@ -797,9 +797,10 @@ export function LorebookEntryRow({
                   patch({ position: n });
                 }}
                 options={[
-                  { value: "0", label: "Before chat" },
-                  { value: "1", label: "After chat" },
-                  { value: "2", label: "@ Depth" },
+                  { value: "0", label: localizeUi("ui.lorebooks.lorebookentryrow.beforeChat") },
+                  { value: "1", label: localizeUi("ui.lorebooks.lorebookentryrow.afterChat") },
+                  { value: "2", label: localizeUi("ui.lorebooks.lorebookentryrow.atDepth") },
+                  { value: "7", label: localizeUi("ui.lorebooks.lorebookentryrow.outlet") },
                 ]}
               />
               {showDepthInput && (
@@ -873,11 +874,12 @@ export function LorebookEntryRow({
             }}
             title={localizeUi("ui.lorebooks.lorebookentryrow.positionInThePromptBeforeChatAfterChatOr")}
             options={[
-              { value: "0", label: "↑Char" },
-              { value: "1", label: "↓Char" },
-              { value: "2", label: "@Depth" },
+              { value: "0", label: localizeUi("ui.lorebooks.lorebookentryrow.beforeCompact") },
+              { value: "1", label: localizeUi("ui.lorebooks.lorebookentryrow.afterCompact") },
+              { value: "2", label: localizeUi("ui.lorebooks.lorebookentryrow.depthCompact") },
+              { value: "7", label: localizeUi("ui.lorebooks.lorebookentryrow.outlet") },
             ]}
-            className="w-[4.35rem]"
+            className="w-[4.75rem]"
           />
           {showDepthInput && (
             <CompactNumber
@@ -971,6 +973,7 @@ export function LorebookEntryRow({
       {isExpanded && (
         <ExpandedDrawer
           entry={entry}
+          position={localPosition}
           lorebookId={lorebookId}
           characters={characters}
           characterTags={characterTags}
@@ -1193,6 +1196,7 @@ function buildEntrySavePayload(form: Partial<LorebookEntry>) {
     generationTriggerFilterMode: form.generationTriggerFilterMode,
     generationTriggerFilters: form.generationTriggerFilters,
     additionalMatchingSources: form.additionalMatchingSources,
+    outletName: form.outletName,
     role: form.role,
     sticky: form.sticky,
     cooldown: form.cooldown,
@@ -1277,6 +1281,7 @@ function FilterPills({
 
 function ExpandedDrawer({
   entry,
+  position,
   lorebookId,
   characters,
   characterTags,
@@ -1284,6 +1289,7 @@ function ExpandedDrawer({
   onUpdateEntry,
 }: {
   entry: LorebookEntry;
+  position: number;
   lorebookId: string;
   characters: Array<{ id: string; name: string; tags: string[] }>;
   characterTags: string[];
@@ -1582,6 +1588,25 @@ function ExpandedDrawer({
           </div>
         </div>
       </details>
+
+      {position === 7 && (
+        <FieldGroup
+          label={localizeUi("ui.lorebooks.expandeddrawer.outletName")}
+          icon={MapPin}
+          help={localizeUi("ui.lorebooks.expandeddrawer.outletNameHelp", { macro: "{{outlet::name}}" })}
+        >
+          <input
+            type="text"
+            value={form.outletName ?? ""}
+            onChange={(event) => update({ outletName: event.target.value })}
+            onBlur={flushAutosave}
+            maxLength={200}
+            className="mari-editor-field w-full px-2.5 py-2 text-xs"
+            placeholder={localizeUi("ui.lorebooks.expandeddrawer.outletNamePlaceholder")}
+            aria-label={localizeUi("ui.lorebooks.expandeddrawer.outletName")}
+          />
+        </FieldGroup>
+      )}
 
       {/* Content */}
       <FieldGroup

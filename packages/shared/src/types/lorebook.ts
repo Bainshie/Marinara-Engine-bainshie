@@ -173,8 +173,10 @@ export interface LorebookEntry {
   additionalMatchingSources: LorebookMatchingSource[];
 
   // ── Injection settings ──
-  /** 0 = before character, 1 = after character, 2 = inject at message depth */
+  /** 0 = before character, 1 = after character, 2 = inject at message depth, 7 = named Outlet */
   position: number;
+  /** Exact, case-sensitive name used by {{outlet::name}} when position is 7 */
+  outletName: string;
   /** Insertion depth in the message array */
   depth: number;
   /** Insertion priority (lower = earlier) */
