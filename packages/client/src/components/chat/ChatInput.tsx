@@ -1485,9 +1485,16 @@ export const ChatInput = memo(function ChatInput({
       }
     }
 
-    if (enterToSend && e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      handleSend();
+    if (e.key === "Enter") {
+      if (enterToSend && !e.shiftKey) {
+        e.preventDefault();
+        handleSend();
+      } else {
+        const el = textareaRef.current;
+        requestAnimationFrame(() => {
+          if (el && textareaRef.current === el) resizeChatInputTextarea(el);
+        });
+      }
     }
   };
 
