@@ -137,6 +137,10 @@ import {
   parseCustomAgentRepositoryArchive,
 } from "../../packages/server/src/services/agents/custom-agent-repositories.service.js";
 import { shouldAutomaticallyRetryAgentResult } from "../../packages/server/src/routes/generate/agent-result-capabilities.js";
+import {
+  formatLorebookWriteApprovalText,
+  parseLorebookWriteApprovalText,
+} from "../../packages/server/src/routes/generate/agent-write-approval.js";
 import { runImageGenerationRequest } from "../../packages/server/src/services/image/image-generation-queue.js";
 import {
   buildOpenRouterImagesRequest,
@@ -716,6 +720,48 @@ assert.equal(generatedLorebookEntry.lorebookId, "lorebook-generated");
 assert.equal(generatedLorebookEntry.content, "A city made from black glass.");
 assert.deepEqual(generatedLorebookEntry.keys, ["Glass City", "black glass"]);
 assert.deepEqual(generatedLorebookEntry.secondaryKeys, ["rain"]);
+
+// Issue #4135 — Markdown headings inside Lorebook Keeper content are content,
+// not approval-entry delimiters.
+{
+  const markdownContent = [
+    "# About Bob",
+    "## Personality",
+    "Bob likes to fish.",
+    "### Fishing Info",
+    "Bob hates to eat fish.",
+  ].join("\n");
+  const approvalText = formatLorebookWriteApprovalText([
+    {
+      name: "Bob",
+      keys: ["Bob"],
+      tag: "people",
+      content: markdownContent,
+    },
+  ]);
+  assert.deepEqual(parseLorebookWriteApprovalText(approvalText), [
+    {
+      action: "append",
+      name: "Bob",
+      keys: ["Bob"],
+      tag: "people",
+      content: markdownContent,
+    },
+  ]);
+  assert.deepEqual(
+    parseLorebookWriteApprovalText("### Legacy Entry\nKeys: legacy\nTag:\n\nLegacy approval text."),
+    [
+      {
+        action: "append",
+        name: "Legacy Entry",
+        keys: ["legacy"],
+        tag: "",
+        content: "Legacy approval text.",
+      },
+    ],
+    "Unmarked approval text created before the delimiter fix must remain editable",
+  );
+}
 
 const completeProfessorMariPersona = buildPersonaCreateRow(
   {
