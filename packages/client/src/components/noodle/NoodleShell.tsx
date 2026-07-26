@@ -1,6 +1,6 @@
 // ──────────────────────────────────────────────
 // Noodle: shared shell (left nav, mobile drawer, right rail slot, bottom nav)
-// Used by both the public NoodleHome timeline and the private NoodlerHome hub
+// Used by both the public NoodleHome timeline and the NoodlerHome hub
 // so every Noodle surface keeps the same primary navigation.
 // ──────────────────────────────────────────────
 import { AtSign, Bell, Home, MoreHorizontal, Pencil, Search, Settings2, User, X } from "lucide-react";

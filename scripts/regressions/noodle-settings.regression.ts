@@ -289,29 +289,29 @@ try {
     entityId: "access-creator",
     displayName: "Access Creator",
   });
-  const privateCreator = await firstNoodle.createPrivateAccount(creatorSource.id, {
+  const noodlerCreator = await firstNoodle.createNoodlerAccount(creatorSource.id, {
     displayName: "After Hours",
     handle: "after_hours",
     bio: "",
     stagePersonality: "Reserved",
     disclosureMode: "secret",
   });
-  assert.ok(privateCreator);
+  assert.ok(noodlerCreator);
   const viewer = await firstNoodle.upsertAccountFromProfile({
     kind: "persona",
     entityId: "access-viewer",
     displayName: "Access Viewer",
   });
-  const ppvPost = await firstNoodle.createPrivatePost({
-    authorAccountId: privateCreator.id,
+  const ppvPost = await firstNoodle.createNoodlerPost({
+    authorAccountId: noodlerCreator.id,
     content: "Locked content",
     access: "ppv",
     ppvPrice: 5,
   });
   assert.ok(ppvPost);
   const [firstSubscription, duplicateSubscription] = await Promise.all([
-    firstNoodle.subscribe(viewer.id, privateCreator.id),
-    firstNoodle.subscribe(viewer.id, privateCreator.id),
+    firstNoodle.subscribe(viewer.id, noodlerCreator.id),
+    firstNoodle.subscribe(viewer.id, noodlerCreator.id),
   ]);
   assert.equal(firstSubscription?.id, duplicateSubscription?.id);
   const [firstUnlock, duplicateUnlock] = await Promise.all([
@@ -319,35 +319,35 @@ try {
     firstNoodle.unlockPost(viewer.id, ppvPost.id),
   ]);
   assert.equal(firstUnlock?.id, duplicateUnlock?.id);
-  assert.equal(await firstNoodle.subscribe(creatorSource.id, privateCreator.id), null);
+  assert.equal(await firstNoodle.subscribe(creatorSource.id, noodlerCreator.id), null);
   const personaCreatorSource = await firstNoodle.upsertAccountFromProfile({
     kind: "persona",
     entityId: "access-persona-creator",
     displayName: "Persona Creator",
   });
-  const personaPrivateCreator = await firstNoodle.createPrivateAccount(personaCreatorSource.id, {
+  const personaNoodlerCreator = await firstNoodle.createNoodlerAccount(personaCreatorSource.id, {
     displayName: "Persona After Hours",
     handle: "persona_after_hours",
     bio: "",
     stagePersonality: "Reserved",
     disclosureMode: "secret",
   });
-  assert.ok(personaPrivateCreator);
-  const personaPpvPost = await firstNoodle.createPrivatePost({
-    authorAccountId: personaPrivateCreator!.id,
+  assert.ok(personaNoodlerCreator);
+  const personaPpvPost = await firstNoodle.createNoodlerPost({
+    authorAccountId: personaNoodlerCreator!.id,
     content: "Persona locked content",
     access: "ppv",
     ppvPrice: 5,
   });
   assert.ok(personaPpvPost);
-  assert.equal(await firstNoodle.subscribe(personaCreatorSource.id, personaPrivateCreator!.id), null);
+  assert.equal(await firstNoodle.subscribe(personaCreatorSource.id, personaNoodlerCreator!.id), null);
   assert.equal(await firstNoodle.unlockPost(personaCreatorSource.id, personaPpvPost!.id), null);
   assert.equal(await firstNoodle.unlockPost(viewer.id, "missing-post"), null);
-  assert.equal(await firstNoodle.updateAccount(privateCreator.id, { displayName: "Bypassed identity" }), null);
-  const deletedPrivateCreator = await firstNoodle.deletePrivateAccount(privateCreator.id);
-  assert.equal(deletedPrivateCreator?.id, privateCreator.id);
-  assert.equal(await firstNoodle.getPrivateAccountById(privateCreator.id), null);
-  assert.equal(await firstNoodle.getPrivatePostById(ppvPost.id), null);
+  assert.equal(await firstNoodle.updateAccount(noodlerCreator.id, { displayName: "Bypassed identity" }), null);
+  const deletedNoodlerCreator = await firstNoodle.deleteNoodlerAccount(noodlerCreator.id);
+  assert.equal(deletedNoodlerCreator?.id, noodlerCreator.id);
+  assert.equal(await firstNoodle.getNoodlerAccountById(noodlerCreator.id), null);
+  assert.equal(await firstNoodle.getNoodlerPostById(ppvPost.id), null);
   assert.equal((await firstNoodle.listSubscriptionsForViewer(viewer.id)).length, 0);
   assert.equal((await firstNoodle.listPostUnlocksForViewer(viewer.id)).length, 0);
   assert.ok(await firstNoodle.getAccountById(creatorSource.id));

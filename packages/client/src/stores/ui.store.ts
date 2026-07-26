@@ -2872,7 +2872,7 @@ export const useUIStore = create<UIState>()(
         noodleOpen: state.noodleOpen,
         noodleSelectedPersonaId: state.noodleSelectedPersonaId,
         noodleNavigation:
-          state.noodleNavigation.mode === "verification" ? { mode: "private", view: "hub" } : state.noodleNavigation,
+          state.noodleNavigation.mode === "verification" ? { mode: "noodler", view: "hub" } : state.noodleNavigation,
         characterLibraryOpen: state.characterLibraryOpen,
         cardLibraryKind: state.cardLibraryKind,
         agentCatalogOpen: state.agentCatalogOpen,
