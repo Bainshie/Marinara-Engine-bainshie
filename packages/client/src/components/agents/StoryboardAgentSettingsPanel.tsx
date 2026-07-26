@@ -329,6 +329,20 @@ export function StoryboardAgentSettingsPanel({
 
       <div className="grid gap-2 md:grid-cols-2">
         <ToggleRow
+          label={localizeUi("ui.chat.agentaddsetupfields.attachCardAppearance")}
+          description={localizeUi("ui.agents.agenteditor.addsOnlyMatchedVisibleNamesAsLinesLikeName")}
+          checked={settings.includeCharacterAppearance}
+          onChange={(checked) => update({ includeCharacterAppearance: checked })}
+        />
+        <ToggleRow
+          label={localizeUi("ui.chat.agentaddsetupfields.sendAvatarReferences")}
+          description={localizeUi(
+            "ui.agents.agenteditor.sendsReferencesOnlyForCharactersOrPersonaNamesMatched",
+          )}
+          checked={settings.useAvatarReferences}
+          onChange={(checked) => update({ useAvatarReferences: checked })}
+        />
+        <ToggleRow
           label={localizeUi("ui.agents.storyboard.useTemplate")}
           description={localizeUi("ui.agents.storyboard.useTemplateDescription")}
           checked={settings.usePromptTemplate}

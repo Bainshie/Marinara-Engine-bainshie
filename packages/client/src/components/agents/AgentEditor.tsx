@@ -425,6 +425,8 @@ function storyboardSettingsForStorage(settings: StoryboardAgentSettings): Record
     keyframeCount: settings.keyframeCount,
     animationDurationSeconds: settings.animationDurationSeconds,
     viewerDisplayMode: settings.viewerDisplayMode,
+    includeCharacterAppearance: settings.includeCharacterAppearance,
+    useAvatarReferences: settings.useAvatarReferences,
     useNovelAiCharacterPrompts: settings.useNovelAiCharacterPrompts,
     usePromptTemplate: settings.usePromptTemplate,
   };

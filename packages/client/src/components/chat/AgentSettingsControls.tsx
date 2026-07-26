@@ -357,3 +357,42 @@ export function AgentDefaultStatus({ overridden, onReset }: { overridden: boolea
     </div>
   );
 }
+
+export function AgentSettingsSegmentedControl<T extends string>({
+  value,
+  options,
+  onChange,
+  columns = 2,
+}: {
+  value: T;
+  options: Array<{ id: T; label: string; description?: string }>;
+  onChange: (value: T) => void;
+  columns?: 2 | 3;
+}) {
+  return (
+    <div
+      className={cn(
+        "grid gap-1 rounded-lg border border-[var(--border)] bg-[var(--background)]/75 p-1",
+        columns === 3 ? "grid-cols-3" : "grid-cols-2",
+      )}
+    >
+      {options.map((option) => (
+        <button
+          key={option.id}
+          type="button"
+          onClick={() => onChange(option.id)}
+          aria-pressed={value === option.id}
+          className={cn(
+            "rounded-md px-2.5 py-2 text-left transition-all",
+            value === option.id
+              ? "bg-[var(--primary)]/12 text-[var(--foreground)] ring-1 ring-[var(--primary)]/35"
+              : "text-[var(--muted-foreground)] hover:bg-[var(--accent)] hover:text-[var(--foreground)]",
+          )}
+        >
+          <span className="block text-[0.6875rem] font-semibold">{option.label}</span>
+          {option.description ? <span className="mt-0.5 block text-[0.625rem]">{option.description}</span> : null}
+        </button>
+      ))}
+    </div>
+  );
+}

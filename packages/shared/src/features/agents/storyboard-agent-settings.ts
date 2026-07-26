@@ -21,6 +21,8 @@ export interface StoryboardAgentSettings {
   keyframeCount: number;
   animationDurationSeconds: number;
   viewerDisplayMode: StoryboardViewerMode;
+  includeCharacterAppearance: boolean;
+  useAvatarReferences: boolean;
   useNovelAiCharacterPrompts: boolean;
   usePromptTemplate: boolean;
 }
@@ -96,6 +98,8 @@ export function normalizeStoryboardAgentSettings(value: unknown): StoryboardAgen
     keyframeCount: normalizeBoundedInteger(settings.keyframeCount, 3, 1, 6),
     animationDurationSeconds: normalizeBoundedInteger(settings.animationDurationSeconds, 6, 1, 15),
     viewerDisplayMode: settings.viewerDisplayMode === "background" ? "background" : "floating",
+    includeCharacterAppearance: settings.includeCharacterAppearance !== false,
+    useAvatarReferences: settings.useAvatarReferences !== false,
     useNovelAiCharacterPrompts: settings.useNovelAiCharacterPrompts !== false,
     usePromptTemplate: settings.usePromptTemplate !== false,
   };

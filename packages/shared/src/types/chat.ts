@@ -292,6 +292,16 @@ export interface ChatMetadata {
   gameImageIncludeCharacterAppearance?: boolean;
   /** Whether storyboard keyframes should use the selected provider-facing image prompt template. Defaults to true. */
   gameStoryboardUsePromptTemplate?: boolean;
+  /** Optional per-chat LLM connection override used only for Storyboard planning. */
+  gameStoryboardPromptConnectionId?: string | null;
+  /** Optional per-chat image generation connection override used by Storyboard keyframes. */
+  gameStoryboardImageConnectionId?: string | null;
+  /** Optional per-chat video generation connection override used by Storyboard animations. */
+  gameStoryboardVideoConnectionId?: string | null;
+  /** Whether Storyboard should append matched character-card appearance fields to final image prompts. */
+  gameStoryboardIncludeCharacterAppearance?: boolean;
+  /** Whether Storyboard should send matching character/persona avatar references to image providers. */
+  gameStoryboardUseAvatarReferences?: boolean;
   /** When false, Game Mode keeps manual Illustrator controls but stops automatic visual generations. */
   gameImageAutoGenerationEnabled?: boolean;
   /** When true, Game Mode asks the chat LLM to rewrite generated asset prompts before image generation. */

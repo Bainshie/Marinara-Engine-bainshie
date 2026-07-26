@@ -21,6 +21,7 @@ import {
   isPatternSafe,
   normalizeChatSummaryEntries,
   normalizeChatSummaryPromptSettings,
+  normalizeStoryboardAgentSettings,
   normalizeWorldCustomFields,
   LIMITS,
   resolveRegexPatternLiteralMacros,
@@ -2039,6 +2040,10 @@ const cases: RegressionCase[] = [
         new URL("../../packages/client/src/components/chat/ChatSettingsDrawer.tsx", import.meta.url),
         "utf8",
       );
+      const storyboardChatSettingsSource = readFileSync(
+        new URL("../../packages/client/src/components/chat/StoryboardChatSettingsPanel.tsx", import.meta.url),
+        "utf8",
+      );
       const setupSource = readFileSync(
         new URL("../../packages/client/src/components/game/GameSetupWizard.tsx", import.meta.url),
         "utf8",
@@ -2065,12 +2070,46 @@ const cases: RegressionCase[] = [
       assert.equal(listPromptOverrideKeys().includes("game.storyboardAnimationDirector"), false);
       assert.doesNotMatch(settingsSource, /game\.storyboardIllustrationDirector|game\.storyboardAnimationDirector/u);
       assert.doesNotMatch(drawerSource, /gameStoryboard/u);
+      assert.match(drawerSource, /lazy\(\(\) =>\s*import\("\.\/StoryboardChatSettingsPanel"\)/u);
+      assert.match(storyboardChatSettingsSource, /settings\.plannerTemplates\.filter/u);
+      assert.match(storyboardChatSettingsSource, /gameStoryboardIllustrationPromptTemplateId/u);
+      assert.match(storyboardChatSettingsSource, /gameStoryboardAnimationPromptTemplateId/u);
+      assert.match(storyboardChatSettingsSource, /gameStoryboardImagePromptTemplateId/u);
+      assert.match(storyboardChatSettingsSource, /gameStoryboardVideoPromptTemplateId/u);
       assert.doesNotMatch(setupSource, /setEnableStoryboard|setStoryboardKeyframeCount|gamePresentation/u);
       assert.match(editorSource, /StoryboardAgentSettingsPanel/u);
+      assert.match(editorSource, /includeCharacterAppearance:\s*settings\.includeCharacterAppearance/u);
+      assert.match(editorSource, /useAvatarReferences:\s*settings\.useAvatarReferences/u);
       assert.match(serviceSource, /ensureBuiltinConfig\(STORYBOARD_AGENT_ID\)/u);
+      assert.match(
+        serviceSource,
+        /meta\.gameStoryboardIncludeCharacterAppearance \?\? settings\.includeCharacterAppearance/u,
+      );
+      assert.match(serviceSource, /meta\.gameStoryboardUseAvatarReferences \?\? settings\.useAvatarReferences/u);
+      assert.match(serviceSource, /meta\.gameStoryboardPromptConnectionId \?\? config\.connectionId/u);
+      assert.match(serviceSource, /meta\.gameStoryboardImageConnectionId \?\? settings\.imageConnectionId/u);
+      assert.match(serviceSource, /meta\.gameStoryboardVideoConnectionId \?\? settings\.videoConnectionId/u);
       assert.match(routeSource, /Install the Storyboard Agent before generating Game storyboards/u);
       assert.match(routeSource, /storyboardAgentImageConnectionId/u);
       assert.match(routeSource, /storyboardAgentVideoConnectionId/u);
+      assert.match(routeSource, /meta\.storyboardAgentIncludeCharacterAppearance !== false/u);
+      assert.match(routeSource, /meta\.storyboardAgentUseAvatarReferences !== false/u);
+
+      assert.deepEqual(
+        {
+          includeCharacterAppearance: normalizeStoryboardAgentSettings({}).includeCharacterAppearance,
+          useAvatarReferences: normalizeStoryboardAgentSettings({}).useAvatarReferences,
+        },
+        { includeCharacterAppearance: true, useAvatarReferences: true },
+      );
+      assert.deepEqual(
+        {
+          includeCharacterAppearance: normalizeStoryboardAgentSettings({ includeCharacterAppearance: false })
+            .includeCharacterAppearance,
+          useAvatarReferences: normalizeStoryboardAgentSettings({ useAvatarReferences: false }).useAvatarReferences,
+        },
+        { includeCharacterAppearance: false, useAvatarReferences: false },
+      );
 
       const ctx = {
         sceneTitleLine: "Mira at the gate.",
@@ -2665,6 +2704,10 @@ const cases: RegressionCase[] = [
         new URL("../../packages/client/src/components/agents/StoryboardAgentSettingsPanel.tsx", import.meta.url),
         "utf8",
       );
+      const storyboardChatSettingsSource = readFileSync(
+        new URL("../../packages/client/src/components/chat/StoryboardChatSettingsPanel.tsx", import.meta.url),
+        "utf8",
+      );
       const gameSurfaceSource = readFileSync(
         new URL("../../packages/client/src/components/game/GameSurface.tsx", import.meta.url),
         "utf8",
@@ -2676,11 +2719,23 @@ const cases: RegressionCase[] = [
       assert.doesNotMatch(chatSettingsSource, /gameStoryboard/u);
       assert.match(storyboardSettingsSource, /settings\.usePromptTemplate/u);
       assert.match(storyboardSettingsSource, /update\(\{ usePromptTemplate: checked \}\)/u);
+      assert.match(storyboardSettingsSource, /settings\.includeCharacterAppearance/u);
+      assert.match(storyboardSettingsSource, /update\(\{ includeCharacterAppearance: checked \}\)/u);
+      assert.match(storyboardSettingsSource, /settings\.useAvatarReferences/u);
+      assert.match(storyboardSettingsSource, /update\(\{ useAvatarReferences: checked \}\)/u);
+      assert.match(storyboardChatSettingsSource, /gameStoryboardIncludeCharacterAppearance/u);
+      assert.match(storyboardChatSettingsSource, /gameStoryboardUseAvatarReferences/u);
+      assert.match(storyboardChatSettingsSource, /appearanceOverridden/u);
+      assert.match(storyboardChatSettingsSource, /avatarReferencesOverridden/u);
       assert.doesNotMatch(gameSurfaceSource, /useGamePromptTemplate/u);
       assert.match(gameRouteSource, /characterAppearanceContextBlock:\s*storyboardAppearanceContextBlock/u);
       assert.equal(gameRouteSource.match(/^\s+characterAppearanceContextBlock,\s*$/gmu)?.length, 2);
       assert.equal(gameRouteSource.match(/includeCharacterDescriptions:\s*true,/gu)?.length, 1);
       assert.equal(gameRouteSource.match(/includeCharacterDescriptions:\s*includeCharacterAppearance,/gu)?.length, 5);
+      assert.equal(gameRouteSource.match(/meta\.storyboardAgentIncludeCharacterAppearance !== false/gu)?.length, 1);
+      assert.equal(gameRouteSource.match(/meta\.storyboardAgentUseAvatarReferences !== false/gu)?.length, 1);
+      assert.equal(gameRouteSource.match(/meta\.gameImageIncludeCharacterAppearance !== false/gu)?.length, 2);
+      assert.equal(gameRouteSource.match(/meta\.gameImageUseAvatarReferences !== false/gu)?.length, 2);
       assert.doesNotMatch(
         gameRouteSource,
         /const storyboardAppearanceCharacterNames\s*=\s*includeCharacterAppearance/gu,

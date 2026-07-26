@@ -55,9 +55,12 @@ export async function applyStoryboardAgentSettings(
       ...meta,
       storyboardAgentInstalled: true,
       storyboardAgentActive: active,
-      storyboardAgentPromptConnectionId: config.connectionId,
-      storyboardAgentImageConnectionId: settings.imageConnectionId,
-      storyboardAgentVideoConnectionId: settings.videoConnectionId,
+      storyboardAgentPromptConnectionId: meta.gameStoryboardPromptConnectionId ?? config.connectionId,
+      storyboardAgentImageConnectionId: meta.gameStoryboardImageConnectionId ?? settings.imageConnectionId,
+      storyboardAgentVideoConnectionId: meta.gameStoryboardVideoConnectionId ?? settings.videoConnectionId,
+      storyboardAgentIncludeCharacterAppearance:
+        meta.gameStoryboardIncludeCharacterAppearance ?? settings.includeCharacterAppearance,
+      storyboardAgentUseAvatarReferences: meta.gameStoryboardUseAvatarReferences ?? settings.useAvatarReferences,
       gameStoryboardsEnabled: active ? true : meta.gameStoryboardsEnabled,
       gameStoryboardAutoIllustrationsEnabled: hasLegacyAutoMode
         ? meta.gameStoryboardAutoIllustrationsEnabled

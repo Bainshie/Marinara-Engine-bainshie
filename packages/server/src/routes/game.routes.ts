@@ -10722,7 +10722,7 @@ export async function gameRoutes(app: FastifyInstance) {
         setupConfig: setupCfg,
         latestState: fallbackState,
       });
-      const includeCharacterAppearance = meta.gameImageIncludeCharacterAppearance !== false;
+      const includeCharacterAppearance = meta.storyboardAgentIncludeCharacterAppearance !== false;
       const storyboardAppearanceCharacterNames = selectStoryboardAppearanceCharacterNames({
         sourceNarration,
         sections: sourceSections,
@@ -10877,7 +10877,7 @@ export async function gameRoutes(app: FastifyInstance) {
         typeof meta.gameImagePromptInstructions === "string"
           ? meta.gameImagePromptInstructions.trim().slice(0, 5000)
           : "";
-      const useAvatarReferences = meta.gameImageUseAvatarReferences !== false;
+      const useAvatarReferences = meta.storyboardAgentUseAvatarReferences !== false;
       const useStoryboardPromptTemplate = meta.gameStoryboardUsePromptTemplate !== false;
       const { charReferenceByName, charAvatarByName, charDescriptionByName } = storyboardCharacterContext;
       const storyboardPromptOverrideById = new Map(
