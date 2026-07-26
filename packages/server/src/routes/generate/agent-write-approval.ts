@@ -1,6 +1,8 @@
 import type { AgentWriteApprovalEnvelope, AgentWriteApprovalProposal } from "@marinara-engine/shared";
 import { mergeLorebookKeeperUpdateContent } from "./lorebook-keeper-utils.js";
 
+const LOREBOOK_APPROVAL_ENTRY_DELIMITER = "<!-- marinara:lorebook-entry:v1 -->";
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === "object" && !Array.isArray(value);
 }
@@ -87,6 +89,7 @@ export function formatLorebookWriteApprovalText(
         newFacts: update.newFacts,
       });
       return [
+        LOREBOOK_APPROVAL_ENTRY_DELIMITER,
         `### ${name}`,
         `Keys: ${keys.join(", ")}`,
         `Tag: ${tag}`,
@@ -101,7 +104,10 @@ export function parseLorebookWriteApprovalText(text: string): Array<Record<strin
   const trimmed = text.trim();
   if (!trimmed) return [];
 
-  const headingPattern = /^###\s+(.+)(?=\r?\nKeys:\s*.*\r?\nTag:\s*.*(?:\r?\n|$))/gm;
+  const hasExplicitDelimiters = trimmed.includes(LOREBOOK_APPROVAL_ENTRY_DELIMITER);
+  const headingPattern = hasExplicitDelimiters
+    ? /^<!-- marinara:lorebook-entry:v1 -->\r?\n###\s+(.+)$/gm
+    : /^###\s+(.+)(?=\r?\nKeys:\s*.*\r?\nTag:\s*.*(?:\r?\n|$))/gm;
   const headings = [...trimmed.matchAll(headingPattern)];
   if (headings.length === 0) {
     return [{ action: "append", name: "Approved Agent Lore", content: trimmed, keys: [], tag: "" }];

@@ -798,7 +798,9 @@ export async function charactersRoutes(app: FastifyInstance) {
   });
 
   app.post<{ Params: { id: string } }>("/:id/versions/reset", async (req, reply) => {
-    const reset = await storage.resetVersions(req.params.id);
+    const reset = await enqueueUpdate(characterUpdateQueues, req.params.id, () =>
+      storage.resetVersions(req.params.id),
+    );
     if (!reset) return reply.status(404).send({ error: "Character not found" });
     return reset;
   });
@@ -1745,7 +1747,9 @@ export async function charactersRoutes(app: FastifyInstance) {
   );
 
   app.post<{ Params: { id: string } }>("/personas/:id/versions/reset", async (req, reply) => {
-    const reset = await storage.resetPersonaVersions(req.params.id);
+    const reset = await enqueueUpdate(personaUpdateQueues, req.params.id, () =>
+      storage.resetPersonaVersions(req.params.id),
+    );
     if (!reset) return reply.status(404).send({ error: "Persona not found" });
     return reset;
   });

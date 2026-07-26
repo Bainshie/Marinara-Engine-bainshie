@@ -778,6 +778,9 @@ assert.deepEqual(generatedLorebookEntry.secondaryKeys, ["rain"]);
     "## Personality",
     "Bob likes to fish.",
     "### Fishing Info",
+    "Keys: fishing, river",
+    "Tag: hobby",
+    "These are literal lines in the entry content.",
     "Bob hates to eat fish.",
   ].join("\n");
   const approvalText = formatLorebookWriteApprovalText([
@@ -788,7 +791,10 @@ assert.deepEqual(generatedLorebookEntry.secondaryKeys, ["rain"]);
       content: markdownContent,
     },
   ]);
-  assert.match(approvalText, /^### Bob\r?\nKeys: Bob\r?\nTag: people/u);
+  assert.match(
+    approvalText,
+    /^<!-- marinara:lorebook-entry:v1 -->\r?\n### Bob\r?\nKeys: Bob\r?\nTag: people/u,
+  );
   assert.deepEqual(parseLorebookWriteApprovalText(approvalText), [
     {
       action: "append",
