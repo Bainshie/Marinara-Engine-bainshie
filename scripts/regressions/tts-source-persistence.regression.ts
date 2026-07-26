@@ -24,15 +24,41 @@ assert.deepEqual(
 );
 
 process.env.TTS_LOCAL_URLS_ENABLED = "true";
+const observedVoiceRequests: Array<{
+  apiKey: string | undefined;
+  pathname: string;
+  pageSize: string | null;
+}> = [];
+const unexpectedVoiceRequests: string[] = [];
 const elevenLabsMock = createServer((request, response) => {
   const url = new URL(request.url ?? "/", "http://localhost");
   const apiKey = request.headers["xi-api-key"];
+  observedVoiceRequests.push({
+    apiKey: typeof apiKey === "string" ? apiKey : undefined,
+    pathname: url.pathname,
+    pageSize: url.searchParams.get("page_size"),
+  });
+  if (
+    (apiKey !== "test-elevenlabs-key" && apiKey !== "compressed-error-key") ||
+    url.pathname !== "/v2/voices" ||
+    url.searchParams.get("page_size") !== "100" ||
+    (url.searchParams.has("next_page_token") && url.searchParams.get("next_page_token") !== "custom-page-2")
+  ) {
+    const detail = `Unexpected voice request: key=${String(apiKey)}, path=${url.pathname}, page_size=${String(url.searchParams.get("page_size"))}`;
+    unexpectedVoiceRequests.push(detail);
+    response.writeHead(500, { "Content-Type": "application/json" });
+    response.end(JSON.stringify({ detail }));
+    return;
+  }
   if (apiKey === "compressed-error-key") {
     const body = gzipSync(
       JSON.stringify({
         detail: {
           status: "invalid_api_key",
-          message: "The supplied ElevenLabs API key is invalid.",
+          message:
+            url.searchParams.get("voice_type") === "saved"
+              ? "Saved ElevenLabs voices are unavailable for this key."
+              : "The supplied ElevenLabs API key is invalid.",
         },
       }),
     );
@@ -45,9 +71,6 @@ const elevenLabsMock = createServer((request, response) => {
     return;
   }
 
-  assert.equal(apiKey, "test-elevenlabs-key");
-  assert.equal(url.pathname, "/v2/voices");
-  assert.equal(url.searchParams.get("page_size"), "100");
   if (url.searchParams.get("voice_type") === "saved") {
     response.writeHead(200, { "Content-Type": "application/json" });
     response.end(
@@ -73,7 +96,6 @@ const elevenLabsMock = createServer((request, response) => {
     );
     return;
   }
-  assert.equal(url.searchParams.get("next_page_token"), "custom-page-2");
   response.end(
     JSON.stringify({
       voices: [{ voice_id: "personal-second", name: "Personal Second", category: "generated" }],
@@ -93,10 +115,7 @@ try {
     paginatedVoices.map((voice) => voice.id),
     ["personal-first", "personal-second"],
   );
-  const allVoices = await fetchAllElevenLabsVoiceOptions(
-    `http://127.0.0.1:${address.port}`,
-    "test-elevenlabs-key",
-  );
+  const allVoices = await fetchAllElevenLabsVoiceOptions(`http://127.0.0.1:${address.port}`, "test-elevenlabs-key");
   assert.deepEqual(
     allVoices.map((voice) => voice.id),
     ["personal-first", "personal-second", "saved-custom"],
@@ -105,6 +124,19 @@ try {
     fetchElevenLabsVoiceOptions(`http://127.0.0.1:${address.port}`, "compressed-error-key"),
     /The supplied ElevenLabs API key is invalid\./,
   );
+  await assert.rejects(
+    fetchAllElevenLabsVoiceOptions(`http://127.0.0.1:${address.port}`, "compressed-error-key"),
+    (error) => {
+      assert.ok(error instanceof Error);
+      assert.match(error.message, /^ElevenLabs voice discovery failed:/);
+      assert.match(error.message, /The supplied ElevenLabs API key is invalid\./);
+      assert.match(error.message, /Saved ElevenLabs voices are unavailable for this key\./);
+      return true;
+    },
+  );
+  assert.ok(observedVoiceRequests.length > 0);
+  assert.ok(observedVoiceRequests.every(({ pathname, pageSize }) => pathname === "/v2/voices" && pageSize === "100"));
+  assert.deepEqual(unexpectedVoiceRequests, []);
 } finally {
   await new Promise<void>((resolve, reject) => {
     elevenLabsMock.close((error) => (error ? reject(error) : resolve()));

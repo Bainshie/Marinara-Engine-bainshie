@@ -726,7 +726,11 @@ export async function fetchAllElevenLabsVoiceOptions(baseUrl: string, apiKey: st
     const errors = results
       .filter((result): result is PromiseRejectedResult => result.status === "rejected")
       .map((result) => (result.reason instanceof Error ? result.reason.message : String(result.reason)));
-    throw new Error(errors[0] || "ElevenLabs voice discovery failed");
+    throw new Error(
+      errors.length > 0
+        ? `ElevenLabs voice discovery failed: ${errors.join("; ")}`
+        : "ElevenLabs voice discovery failed",
+    );
   }
   return mergeVoiceOptions(successfulResults.flatMap((result) => result.value));
 }

@@ -1,7 +1,7 @@
 // ──────────────────────────────────────────────
 // TTS Configuration Card (Connections Panel)
 // ──────────────────────────────────────────────
-import { useState, useEffect, useId, useLayoutEffect, useMemo, useRef } from "react";
+import { useCallback, useState, useEffect, useId, useLayoutEffect, useMemo, useRef } from "react";
 import { createPortal } from "react-dom";
 import {
   Volume2,
@@ -174,7 +174,17 @@ function getTtsRequestErrorMessage(error: unknown, fallback: string): string {
       error.payload && typeof error.payload === "object" && !Array.isArray(error.payload)
         ? (error.payload as Record<string, unknown>)
         : null;
-    const detail = typeof payload?.detail === "string" ? payload.detail.trim() : "";
+    const rawDetail = payload?.detail;
+    const nestedDetail =
+      rawDetail && typeof rawDetail === "object" && !Array.isArray(rawDetail)
+        ? (rawDetail as Record<string, unknown>)
+        : null;
+    const detail =
+      typeof rawDetail === "string"
+        ? rawDetail.trim()
+        : typeof nestedDetail?.message === "string"
+          ? nestedDetail.message.trim()
+          : "";
     return [error.message || fallback, detail].filter(Boolean).join(": ");
   }
   return error instanceof Error && error.message.trim() ? error.message : fallback;
@@ -406,6 +416,7 @@ function TtsSearchableSelect({
 }) {
   const rootRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
   const listboxId = useId();
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -417,20 +428,25 @@ function TtsSearchableSelect({
   const filteredOptions = normalizedSearch
     ? options.filter((option) => option.searchText.toLowerCase().includes(normalizedSearch))
     : options;
+  const closePanel = useCallback((restoreFocus = true) => {
+    setOpen(false);
+    setSearch("");
+    if (restoreFocus) {
+      triggerRef.current?.focus();
+    }
+  }, []);
 
   useEffect(() => {
     if (!open) return;
     const closeOnOutsidePointer = (event: PointerEvent) => {
       const target = event.target as Node;
       if (!rootRef.current?.contains(target) && !panelRef.current?.contains(target)) {
-        setOpen(false);
-        setSearch("");
+        closePanel(false);
       }
     };
     const closeOnEscape = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
-        setOpen(false);
-        setSearch("");
+        closePanel();
       }
     };
     document.addEventListener("pointerdown", closeOnOutsidePointer);
@@ -439,7 +455,7 @@ function TtsSearchableSelect({
       document.removeEventListener("pointerdown", closeOnOutsidePointer);
       document.removeEventListener("keydown", closeOnEscape);
     };
-  }, [open]);
+  }, [closePanel, open]);
 
   useLayoutEffect(() => {
     if (!open) {
@@ -475,14 +491,23 @@ function TtsSearchableSelect({
       setPosition({ left, top, width, maxHeight });
     };
 
+    let frame = 0;
+    const schedulePositionUpdate = () => {
+      if (frame) return;
+      frame = window.requestAnimationFrame(() => {
+        frame = 0;
+        updatePosition();
+      });
+    };
+
     updatePosition();
-    const frame = window.requestAnimationFrame(updatePosition);
-    window.addEventListener("resize", updatePosition);
-    window.addEventListener("scroll", updatePosition, true);
+    schedulePositionUpdate();
+    window.addEventListener("resize", schedulePositionUpdate);
+    window.addEventListener("scroll", schedulePositionUpdate, true);
     return () => {
-      window.cancelAnimationFrame(frame);
-      window.removeEventListener("resize", updatePosition);
-      window.removeEventListener("scroll", updatePosition, true);
+      if (frame) window.cancelAnimationFrame(frame);
+      window.removeEventListener("resize", schedulePositionUpdate);
+      window.removeEventListener("scroll", schedulePositionUpdate, true);
     };
   }, [compact, open]);
 
@@ -495,6 +520,7 @@ function TtsSearchableSelect({
   return (
     <div ref={rootRef} className="relative min-w-0 flex-1">
       <button
+        ref={triggerRef}
         type="button"
         aria-label={ariaLabel}
         aria-haspopup="listbox"
@@ -556,8 +582,7 @@ function TtsSearchableSelect({
                   aria-selected={!value}
                   onClick={() => {
                     onChange("");
-                    setOpen(false);
-                    setSearch("");
+                    closePanel();
                   }}
                   className={cn(
                     "flex w-full min-w-0 items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs hover:bg-[var(--secondary)]",
@@ -581,8 +606,7 @@ function TtsSearchableSelect({
                     title={option.label}
                     onClick={() => {
                       onChange(option.id);
-                      setOpen(false);
-                      setSearch("");
+                      closePanel();
                     }}
                     className={cn(
                       "flex w-full min-w-0 items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs hover:bg-[var(--secondary)] disabled:cursor-not-allowed disabled:opacity-40",
@@ -1694,7 +1718,7 @@ export function TTSConfigCard() {
                 )}
                 {voiceAssignments.map((assignment, index) => (
                   <div
-                    key={`${assignment.characterId || "character"}-${index}`}
+                    key={`voice-assignment-${index}`}
                     className="grid gap-2 sm:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)_auto]"
                   >
                     <CharacterSelect
