@@ -2052,6 +2052,10 @@ const cases: RegressionCase[] = [
         new URL("../../packages/client/src/components/agents/AgentEditor.tsx", import.meta.url),
         "utf8",
       );
+      const storyboardEditorSource = readFileSync(
+        new URL("../../packages/client/src/components/agents/StoryboardAgentSettingsPanel.tsx", import.meta.url),
+        "utf8",
+      );
       const serviceSource = readFileSync(
         new URL("../../packages/server/src/services/game/storyboard-agent-settings.ts", import.meta.url),
         "utf8",
@@ -2086,6 +2090,23 @@ const cases: RegressionCase[] = [
       assert.match(drawerSource, /<StoryboardChatSettingsPanel[\s\S]*?<\/Suspense>\s*<\/AgentSettingsCard>/u);
       assert.doesNotMatch(setupSource, /setEnableStoryboard|setStoryboardKeyframeCount|gamePresentation/u);
       assert.match(editorSource, /StoryboardAgentSettingsPanel/u);
+      assert.match(editorSource, /\{!isStoryboardAgent && \(\s*<FieldGroup[\s\S]*?agentBudget/u);
+      assert.doesNotMatch(
+        editorSource,
+        /\.\.\.\(localContextSize !== "" \? \{ contextSize: Number\(localContextSize\) \} : \{\}\)/u,
+      );
+      assert.doesNotMatch(
+        editorSource,
+        /\.\.\.\(localMaxTokens !== "" \? \{ maxTokens: clampAgentMaxTokens\(localMaxTokens\) \} : \{\}\)/u,
+      );
+      const defaultImagePromptIndex = storyboardEditorSource.indexOf("ui.agents.storyboard.defaultImagePrompt");
+      const firstTemplateEditorIndex = storyboardEditorSource.indexOf("<TemplateCollectionEditor");
+      assert.ok(defaultImagePromptIndex >= 0, "Storyboard editor should expose a default image prompt selector");
+      assert.ok(firstTemplateEditorIndex >= 0, "Storyboard editor should expose editable prompt templates");
+      assert.ok(
+        defaultImagePromptIndex < firstTemplateEditorIndex,
+        "Storyboard default prompt selectors should precede the editable template libraries",
+      );
       assert.match(editorSource, /includeCharacterAppearance:\s*settings\.includeCharacterAppearance/u);
       assert.match(editorSource, /useAvatarReferences:\s*settings\.useAvatarReferences/u);
       assert.match(serviceSource, /ensureBuiltinConfig\(STORYBOARD_AGENT_ID\)/u);

@@ -1064,8 +1064,8 @@ export function AgentEditor() {
           : {}),
         ...(mayIncludeTurnData && localIncludePreGenInjections ? { includePreGenInjections: true } : {}),
         ...(mayIncludeTurnData && localIncludeParallelResults ? { includeParallelResults: true } : {}),
-        ...(localContextSize !== "" ? { contextSize: Number(localContextSize) } : {}),
-        ...(localMaxTokens !== "" ? { maxTokens: clampAgentMaxTokens(localMaxTokens) } : {}),
+        ...(!isStoryboardAgent && localContextSize !== "" ? { contextSize: Number(localContextSize) } : {}),
+        ...(!isStoryboardAgent && localMaxTokens !== "" ? { maxTokens: clampAgentMaxTokens(localMaxTokens) } : {}),
         ...(!isDirectorAgent && localRunInterval !== "" ? { runInterval: Number(localRunInterval) } : {}),
         ...(!isDirectorAgent && localInjectAsSection ? { injectAsSection: true } : {}),
         ...(isMusicAgent
@@ -1256,8 +1256,8 @@ export function AgentEditor() {
       ...(activationKeywords.length > 0 ? { activationKeywords, activationScanDepth } : {}),
       ...(mayIncludeTurnData && localIncludePreGenInjections ? { includePreGenInjections: true } : {}),
       ...(mayIncludeTurnData && localIncludeParallelResults ? { includeParallelResults: true } : {}),
-      ...(localContextSize !== "" ? { contextSize: Number(localContextSize) } : {}),
-      ...(localMaxTokens !== "" ? { maxTokens: clampAgentMaxTokens(localMaxTokens) } : {}),
+      ...(!isStoryboardAgent && localContextSize !== "" ? { contextSize: Number(localContextSize) } : {}),
+      ...(!isStoryboardAgent && localMaxTokens !== "" ? { maxTokens: clampAgentMaxTokens(localMaxTokens) } : {}),
       ...(!isDirectorAgent && localRunInterval !== "" ? { runInterval: Number(localRunInterval) } : {}),
       ...(!isDirectorAgent && localInjectAsSection ? { injectAsSection: true } : {}),
       ...(exportingMusicAgent
@@ -2073,70 +2073,72 @@ export function AgentEditor() {
             </FieldGroup>
           )}
 
-          <FieldGroup
-            label={localizeUi("ui.agents.agenteditor.agentBudget")}
-            icon={<Clock size="0.875rem" className="text-[var(--primary)]" />}
-            help={localizeUi("ui.agents.agenteditor.controlsHowMuchRecentChatContextTheAgentReads")}
-          >
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div>
-                <label className="mb-1 block text-[0.6875rem] font-medium text-[var(--muted-foreground)]">
-                  {localizeUi("ui.agents.agenteditor.contextSize")}
-                </label>
-                <div className="flex items-center gap-3">
-                  <input
-                    type="number"
-                    min={1}
-                    max={200}
-                    value={localContextSize}
-                    onChange={(e) => {
-                      const v = e.target.value;
-                      setLocalContextSize(v === "" ? "" : Math.max(1, Math.min(200, parseInt(v) || 1)));
-                      markDirty();
-                    }}
-                    placeholder={String(DEFAULT_AGENT_CONTEXT_SIZE)}
-                    className="w-28 rounded-xl bg-[var(--secondary)] px-3 py-2.5 text-sm tabular-nums ring-1 ring-[var(--border)] placeholder:text-[var(--muted-foreground)] focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
-                  />
-                  <span className="text-[0.6875rem] text-[var(--muted-foreground)]">
-                    {localizeUi("ui.agents.agenteditor.messages")}
-                  </span>
+          {!isStoryboardAgent && (
+            <FieldGroup
+              label={localizeUi("ui.agents.agenteditor.agentBudget")}
+              icon={<Clock size="0.875rem" className="text-[var(--primary)]" />}
+              help={localizeUi("ui.agents.agenteditor.controlsHowMuchRecentChatContextTheAgentReads")}
+            >
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div>
+                  <label className="mb-1 block text-[0.6875rem] font-medium text-[var(--muted-foreground)]">
+                    {localizeUi("ui.agents.agenteditor.contextSize")}
+                  </label>
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="number"
+                      min={1}
+                      max={200}
+                      value={localContextSize}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        setLocalContextSize(v === "" ? "" : Math.max(1, Math.min(200, parseInt(v) || 1)));
+                        markDirty();
+                      }}
+                      placeholder={String(DEFAULT_AGENT_CONTEXT_SIZE)}
+                      className="w-28 rounded-xl bg-[var(--secondary)] px-3 py-2.5 text-sm tabular-nums ring-1 ring-[var(--border)] placeholder:text-[var(--muted-foreground)] focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
+                    />
+                    <span className="text-[0.6875rem] text-[var(--muted-foreground)]">
+                      {localizeUi("ui.agents.agenteditor.messages")}
+                    </span>
+                  </div>
+                </div>
+                <div>
+                  <label className="mb-1 block text-[0.6875rem] font-medium text-[var(--muted-foreground)]">
+                    {localizeUi("ui.agents.agenteditor.maxOutputTokens")}
+                  </label>
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="number"
+                      min={MIN_AGENT_MAX_TOKENS}
+                      value={localMaxTokens}
+                      onChange={(e) => {
+                        setLocalMaxTokens(normalizeAgentMaxTokensInput(e.target.value));
+                        markDirty();
+                      }}
+                      onBlur={() => {
+                        if (localMaxTokens !== "") {
+                          setLocalMaxTokens(clampAgentMaxTokens(localMaxTokens));
+                        }
+                      }}
+                      placeholder={String(DEFAULT_AGENT_MAX_TOKENS)}
+                      className="w-32 rounded-xl bg-[var(--secondary)] px-3 py-2.5 text-sm tabular-nums ring-1 ring-[var(--border)] placeholder:text-[var(--muted-foreground)] focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
+                    />
+                    <span className="text-[0.6875rem] text-[var(--muted-foreground)]">
+                      {localizeUi("ui.agents.agenteditor.tokens")}
+                    </span>
+                  </div>
                 </div>
               </div>
-              <div>
-                <label className="mb-1 block text-[0.6875rem] font-medium text-[var(--muted-foreground)]">
-                  {localizeUi("ui.agents.agenteditor.maxOutputTokens")}
-                </label>
-                <div className="flex items-center gap-3">
-                  <input
-                    type="number"
-                    min={MIN_AGENT_MAX_TOKENS}
-                    value={localMaxTokens}
-                    onChange={(e) => {
-                      setLocalMaxTokens(normalizeAgentMaxTokensInput(e.target.value));
-                      markDirty();
-                    }}
-                    onBlur={() => {
-                      if (localMaxTokens !== "") {
-                        setLocalMaxTokens(clampAgentMaxTokens(localMaxTokens));
-                      }
-                    }}
-                    placeholder={String(DEFAULT_AGENT_MAX_TOKENS)}
-                    className="w-32 rounded-xl bg-[var(--secondary)] px-3 py-2.5 text-sm tabular-nums ring-1 ring-[var(--border)] placeholder:text-[var(--muted-foreground)] focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
-                  />
-                  <span className="text-[0.6875rem] text-[var(--muted-foreground)]">
-                    {localizeUi("ui.agents.agenteditor.tokens")}
-                  </span>
-                </div>
-              </div>
-            </div>
-            <p className="mt-1 text-[0.625rem] text-[var(--muted-foreground)]">
-              {localizeUi("ui.agents.agenteditor.eachAgentOnlySeesItsOwnContextSizeWhen")}
-            </p>
-            <p className="mt-1 text-[0.625rem] text-[var(--muted-foreground)]">
-              {localizeUi("ui.agents.agenteditor.for8kLocalModelsTry")} {DEFAULT_AGENT_MAX_TOKENS.toLocaleString()}{" "}
-              {localizeUi("ui.agents.agenteditor.orLowerSoTheAgentPromptKeepsEnoughRoom")}
-            </p>
-          </FieldGroup>
+              <p className="mt-1 text-[0.625rem] text-[var(--muted-foreground)]">
+                {localizeUi("ui.agents.agenteditor.eachAgentOnlySeesItsOwnContextSizeWhen")}
+              </p>
+              <p className="mt-1 text-[0.625rem] text-[var(--muted-foreground)]">
+                {localizeUi("ui.agents.agenteditor.for8kLocalModelsTry")} {DEFAULT_AGENT_MAX_TOKENS.toLocaleString()}{" "}
+                {localizeUi("ui.agents.agenteditor.orLowerSoTheAgentPromptKeepsEnoughRoom")}
+              </p>
+            </FieldGroup>
+          )}
 
           {isProseGuardianAgent && (
             <FieldGroup

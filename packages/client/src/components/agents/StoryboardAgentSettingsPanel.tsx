@@ -336,9 +336,7 @@ export function StoryboardAgentSettingsPanel({
         />
         <ToggleRow
           label={localizeUi("ui.chat.agentaddsetupfields.sendAvatarReferences")}
-          description={localizeUi(
-            "ui.agents.agenteditor.sendsReferencesOnlyForCharactersOrPersonaNamesMatched",
-          )}
+          description={localizeUi("ui.agents.agenteditor.sendsReferencesOnlyForCharactersOrPersonaNamesMatched")}
           checked={settings.useAvatarReferences}
           onChange={(checked) => update({ useAvatarReferences: checked })}
         />
@@ -353,35 +351,6 @@ export function StoryboardAgentSettingsPanel({
           description={localizeUi("ui.agents.storyboard.useNovelAiCharactersDescription")}
           checked={settings.useNovelAiCharacterPrompts}
           onChange={(checked) => update({ useNovelAiCharacterPrompts: checked })}
-        />
-      </div>
-
-      <div className="grid gap-3 xl:grid-cols-2">
-        <TemplateCollectionEditor
-          title={localizeUi("ui.agents.storyboard.imagePrompts")}
-          description={localizeUi("ui.agents.storyboard.imagePromptsDescription")}
-          templates={settings.illustrationTemplates}
-          defaults={defaults.illustrationTemplates}
-          prefix="storyboard-image"
-          onChange={(templates) => {
-            const selected = templates.some((template) => template.id === settings.illustrationTemplateId)
-              ? settings.illustrationTemplateId
-              : (templates[0]?.id ?? null);
-            update({ illustrationTemplates: templates, illustrationTemplateId: selected });
-          }}
-        />
-        <TemplateCollectionEditor
-          title={localizeUi("ui.agents.storyboard.videoPrompts")}
-          description={localizeUi("ui.agents.storyboard.videoPromptsDescription")}
-          templates={settings.videoTemplates}
-          defaults={defaults.videoTemplates}
-          prefix="storyboard-video"
-          onChange={(templates) => {
-            const selected = templates.some((template) => template.id === settings.videoTemplateId)
-              ? settings.videoTemplateId
-              : (templates[0]?.id ?? null);
-            update({ videoTemplates: templates, videoTemplateId: selected });
-          }}
         />
       </div>
 
@@ -414,6 +383,35 @@ export function StoryboardAgentSettingsPanel({
             ))}
           </select>
         </label>
+      </div>
+
+      <div className="grid gap-3 xl:grid-cols-2">
+        <TemplateCollectionEditor
+          title={localizeUi("ui.agents.storyboard.imagePrompts")}
+          description={localizeUi("ui.agents.storyboard.imagePromptsDescription")}
+          templates={settings.illustrationTemplates}
+          defaults={defaults.illustrationTemplates}
+          prefix="storyboard-image"
+          onChange={(templates) => {
+            const selected = templates.some((template) => template.id === settings.illustrationTemplateId)
+              ? settings.illustrationTemplateId
+              : (templates[0]?.id ?? null);
+            update({ illustrationTemplates: templates, illustrationTemplateId: selected });
+          }}
+        />
+        <TemplateCollectionEditor
+          title={localizeUi("ui.agents.storyboard.videoPrompts")}
+          description={localizeUi("ui.agents.storyboard.videoPromptsDescription")}
+          templates={settings.videoTemplates}
+          defaults={defaults.videoTemplates}
+          prefix="storyboard-video"
+          onChange={(templates) => {
+            const selected = templates.some((template) => template.id === settings.videoTemplateId)
+              ? settings.videoTemplateId
+              : (templates[0]?.id ?? null);
+            update({ videoTemplates: templates, videoTemplateId: selected });
+          }}
+        />
       </div>
     </div>
   );
