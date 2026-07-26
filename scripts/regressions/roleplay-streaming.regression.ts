@@ -223,10 +223,15 @@ assert.match(
   /resizeTimerRef\.current = setTimeout\(\(\) => \{[\s\S]*?resizeChatInputTextarea\(el\);[\s\S]*?\}, 150\);/u,
   "Roleplay textarea measurement should wait for a typing pause instead of forcing layout on each keystroke",
 );
+assert.match(
+  chatInputSource,
+  /if \(e\.key === "Enter"\) \{[\s\S]*?requestAnimationFrame\(\(\) => \{[\s\S]*?resizeChatInputTextarea\(el\);/u,
+  "Roleplay line breaks should resize before paint so the existing draft does not briefly disappear",
+);
 assert.doesNotMatch(
   chatHandleInputSource,
   /requestAnimationFrame\(\(\) => \{[\s\S]*?resizeChatInputTextarea\(el\);/u,
-  "Roleplay textarea resizing must not force a scrollHeight layout read every animation frame",
+  "Roleplay textarea resizing must not schedule a layout read for every ordinary keystroke",
 );
 const conversationTextareaSource = conversationInputSource.match(/<textarea[\s\S]*?\/>/u)?.[0] ?? "";
 assert.doesNotMatch(
