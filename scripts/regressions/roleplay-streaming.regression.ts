@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
+  getRoleplayTypewriterRevealCharsPerSecond,
   getTypewriterRevealCharsPerSecond,
   isGenerationSendBlocked,
   isGenerationStartBlocked,
@@ -451,6 +452,63 @@ assert.equal(
   }),
   90,
   "a completed stream should drain at the user's selected speed",
+);
+
+assert.ok(
+  Math.abs(
+    getRoleplayTypewriterRevealCharsPerSecond({
+      selectedCharsPerSecond: 90,
+      pendingCharacters: 45,
+      previousCharsPerSecond: null,
+      elapsedMs: 16,
+      streamComplete: false,
+    }) - 50,
+  ) < 0.001,
+  "Roleplay should turn the first provider burst into a buffered reveal rate",
+);
+const roleplayAcceleratedRate = getRoleplayTypewriterRevealCharsPerSecond({
+  selectedCharsPerSecond: 90,
+  pendingCharacters: 90,
+  previousCharsPerSecond: 20,
+  elapsedMs: 16,
+  streamComplete: false,
+});
+assert.ok(
+  roleplayAcceleratedRate > 20 && roleplayAcceleratedRate < 23,
+  "Roleplay should ease into a faster reveal instead of copying a newly arrived provider burst",
+);
+const roleplayDeceleratedRate = getRoleplayTypewriterRevealCharsPerSecond({
+  selectedCharsPerSecond: 90,
+  pendingCharacters: 5,
+  previousCharsPerSecond: 60,
+  elapsedMs: 16,
+  streamComplete: false,
+});
+assert.ok(
+  roleplayDeceleratedRate > 52 && roleplayDeceleratedRate < 54,
+  "Roleplay should slow promptly as its buffered reserve shrinks",
+);
+const roleplayCompletionRate = getRoleplayTypewriterRevealCharsPerSecond({
+  selectedCharsPerSecond: 90,
+  pendingCharacters: 200,
+  previousCharsPerSecond: 30,
+  elapsedMs: 16,
+  streamComplete: true,
+});
+assert.ok(
+  roleplayCompletionRate > 31 && roleplayCompletionRate < 33,
+  "Roleplay completion should ease toward the selected speed instead of jumping to it",
+);
+assert.equal(
+  getRoleplayTypewriterRevealCharsPerSecond({
+    selectedCharsPerSecond: Infinity,
+    pendingCharacters: 200,
+    previousCharsPerSecond: 30,
+    elapsedMs: 16,
+    streamComplete: false,
+  }),
+  Infinity,
+  "the instant streaming-speed setting should still flush Roleplay immediately",
 );
 
 assert.equal(
