@@ -238,6 +238,7 @@ export function ChatSidebar() {
   // One interval for the whole list: a 60s-cadence clock so schedule/override-derived
   // status dots refresh when time alone changes them, without per-row timers.
   const presenceNow = usePresenceClock();
+  const chatListBackgrounds = useUIStore((s) => s.chatListBackgrounds);
   const hasAnyDetailOpen = useUIStore((s) => s.hasAnyDetailOpen);
   const editorDirty = useUIStore((s) => s.editorDirty);
   const closeAllDetails = useUIStore((s) => s.closeAllDetails);
@@ -900,13 +901,15 @@ export function ChatSidebar() {
             ? localizeUi("ui.layout.chatsidebar.unsentDraft")
             : null;
 
-    // Banner: the chat's own background image, bled across the row and heavily muted. Only
-    // on the active/hovered row — 40 at once is soup, and it doubles as the active cue.
+    // Banner: the chat's own background image, bled across the row and heavily muted.
     // Sits at -z-10 inside the row's own stacking context (see `isolate`), so the
     // unpositioned row content keeps painting above it.
+    // Asks for a 320px-wide copy: a full-size background decodes to megabytes of bitmap no
+    // matter how small it is painted, and on "always" every row pays that at once.
     // Deliberately no fallback to defaultRoleplayBackground (which ChatArea's restore effect
     // applies): that would paint one identical banner across every roleplay chat.
-    const bannerUrl = chatBackgroundMetadataToUrl(chat.metadata?.background);
+    const bannerUrl =
+      chatListBackgrounds === "off" ? null : chatBackgroundMetadataToUrl(chat.metadata?.background, 320);
 
     return (
       <div
@@ -998,12 +1001,21 @@ export function ChatSidebar() {
             aria-hidden
             className={cn(
               "pointer-events-none absolute inset-0 -z-10 opacity-0 transition-opacity duration-200",
-              isActive ? "opacity-100" : "group-hover:opacity-100",
+              // "hover" on a touch device means the active row only — no hover event ever fires.
+              chatListBackgrounds === "always" || isActive ? "opacity-100" : "group-hover:opacity-100",
             )}
           >
             {/* Muted twice over: the image is faint, and a scrim still sits on top. Keeping
                 the scrim means text contrast does not depend on how light the image is. */}
-            <img src={bannerUrl} alt="" className="h-full w-full object-cover opacity-[0.14] saturate-50" />
+            {/* Full-size chat background squeezed into a 40px row: keep the decode off the
+                main thread and let offscreen rows skip it entirely. */}
+            <img
+              src={bannerUrl}
+              alt=""
+              loading="lazy"
+              decoding="async"
+              className="h-full w-full object-cover opacity-[0.14] saturate-50"
+            />
             <span className="absolute inset-0 bg-gradient-to-r from-[var(--sidebar-background)]/80 to-[var(--sidebar-background)]/40" />
           </span>
         )}
@@ -1012,7 +1024,8 @@ export function ChatSidebar() {
         {(isActive || isGenerating) && (
           <span
             className={cn(
-              "mari-chrome-accent-progress mari-accent-animated absolute -left-0.5 top-1/2 h-5 w-1 -translate-y-1/2 rounded-full",
+              // left-0, not -left-0.5: the row now clips (overflow-hidden, for the banner).
+              "mari-chrome-accent-progress mari-accent-animated absolute left-0 top-1/2 h-5 w-1 -translate-y-1/2 rounded-full",
               isGenerating && "animate-pulse",
             )}
           />

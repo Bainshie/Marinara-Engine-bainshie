@@ -229,7 +229,7 @@ export function useChatMessages(chatId: string | null, pageSize: number = 0, ena
  */
 export function useChatMessagePeek(chatId: string | null, limit = 4, enabled = false) {
   return useQuery({
-    queryKey: chatKeys.messagePeek(chatId ?? ""),
+    queryKey: [...chatKeys.messagePeek(chatId ?? ""), limit],
     queryFn: ({ signal }) => api.get<Message[]>(`/chats/${chatId}/messages?limit=${limit}`, { signal }),
     enabled: !!chatId && enabled,
     staleTime: 15_000,
