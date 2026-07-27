@@ -9622,12 +9622,77 @@ test("mobile chat composer follows the visual viewport above the software keyboa
   }
 });
 
-test("kaomoji scrollbar presses stay inside the picker and use the theme accent", async ({ page }, testInfo) => {
-  test.skip(testInfo.project.name.includes("mobile"), "Native desktop scrollbar behavior is desktop-only.");
-
+test("kaomoji stays in Conversation and uses the configured chat accent", async ({ page }) => {
   const response = await page.request.post("/api/chats", {
     data: {
       name: "Kaomoji Scrollbar Smoke",
+      mode: "conversation",
+      characterIds: [],
+    },
+  });
+  expect(response.ok()).toBeTruthy();
+  const chat = (await response.json()) as { id: string };
+
+  try {
+    await page.addInitScript((chatId) => {
+      localStorage.setItem("marinara-active-chat-id", chatId);
+    }, chat.id);
+    await page.goto("/");
+
+    await page.evaluate(() => {
+      document.documentElement.style.setProperty("--marinara-chat-chrome-button-text-active", "rgb(20, 184, 166)");
+      document.documentElement.style.setProperty("--primary", "rgb(236, 72, 153)");
+    });
+    await page.getByRole("button", { name: /Emoji, GIFs/u }).click();
+    const emojiSearchInput = page.locator('input[placeholder="Search emojis..."]:visible');
+    const emojiSearchStyle = await emojiSearchInput.evaluate((input) => {
+      const style = getComputedStyle(input);
+      return {
+        backgroundColor: style.backgroundColor,
+        borderRadius: style.borderRadius,
+        fontSize: style.fontSize,
+        paddingBlock: `${style.paddingTop} ${style.paddingBottom}`,
+        paddingInline: `${style.paddingLeft} ${style.paddingRight}`,
+      };
+    });
+    await page.getByRole("button", { name: "Kaomoji" }).click();
+    const picker = page.getByRole("dialog", { name: "Kaomoji picker" });
+    await expect(picker).toBeVisible();
+
+    const [categoriesFit, resultsFit] = await Promise.all([
+      picker.locator("[data-kaomoji-categories]").evaluate((element) => element.scrollWidth <= element.clientWidth),
+      picker.locator("[data-kaomoji-results]").evaluate((element) => element.scrollWidth <= element.clientWidth),
+    ]);
+    expect(categoriesFit).toBe(true);
+    expect(resultsFit).toBe(true);
+
+    const searchIcon = picker.locator("svg").first();
+    const searchInput = picker.getByPlaceholder("Search kaomoji…");
+    const kaomojiSearchStyle = await searchInput.evaluate((input) => {
+      const inputStyle = getComputedStyle(input);
+      const shellStyle = getComputedStyle(input.parentElement!);
+      return {
+        backgroundColor: shellStyle.backgroundColor,
+        borderRadius: shellStyle.borderRadius,
+        fontSize: inputStyle.fontSize,
+        paddingBlock: `${shellStyle.paddingTop} ${shellStyle.paddingBottom}`,
+        paddingInline: `${shellStyle.paddingLeft} ${shellStyle.paddingRight}`,
+      };
+    });
+    expect(kaomojiSearchStyle).toEqual(emojiSearchStyle);
+    await expect(searchIcon).toHaveCSS("color", "rgb(20, 184, 166)");
+    await expect
+      .poll(() => searchInput.evaluate((input) => getComputedStyle(input, "::placeholder").color))
+      .toBe("rgb(20, 184, 166)");
+  } finally {
+    await page.request.delete(`/api/chats/${chat.id}`).catch(() => undefined);
+  }
+});
+
+test("Roleplay composer does not offer kaomoji", async ({ page }) => {
+  const response = await page.request.post("/api/chats", {
+    data: {
+      name: "Roleplay Without Kaomoji",
       mode: "roleplay",
       characterIds: [],
     },
@@ -9641,39 +9706,8 @@ test("kaomoji scrollbar presses stay inside the picker and use the theme accent"
     }, chat.id);
     await page.goto("/");
 
-    await page.getByRole("button", { name: "Kaomoji" }).click();
-    const picker = page.getByRole("dialog", { name: "Kaomoji picker" });
-    await expect(picker).toBeVisible();
-    const pickerBox = await picker.boundingBox();
-    expect(pickerBox).not.toBeNull();
-
-    await page.mouse.move(pickerBox!.x + pickerBox!.width - 2, pickerBox!.y + pickerBox!.height / 2);
-    await page.mouse.down();
-    await page.mouse.up();
-    await expect(picker).toBeVisible();
-
-    const [categoriesFit, resultsFit] = await Promise.all([
-      picker.locator("[data-kaomoji-categories]").evaluate((element) => element.scrollWidth <= element.clientWidth),
-      picker.locator("[data-kaomoji-results]").evaluate((element) => element.scrollWidth <= element.clientWidth),
-    ]);
-    expect(categoriesFit).toBe(true);
-    expect(resultsFit).toBe(true);
-
-    const searchIconUsesTheme = await picker
-      .locator("svg")
-      .first()
-      .evaluate((icon) => {
-        const iconColor = getComputedStyle(icon).color;
-        const themeColor = getComputedStyle(document.documentElement).getPropertyValue("--primary").trim();
-        if (!themeColor) return false;
-        const probe = document.createElement("span");
-        probe.style.color = themeColor;
-        document.body.appendChild(probe);
-        const resolvedThemeColor = getComputedStyle(probe).color;
-        probe.remove();
-        return iconColor === resolvedThemeColor;
-      });
-    expect(searchIconUsesTheme).toBe(true);
+    await expect(page.locator(".chat-input-container textarea:visible")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Kaomoji" })).toHaveCount(0);
   } finally {
     await page.request.delete(`/api/chats/${chat.id}`).catch(() => undefined);
   }
