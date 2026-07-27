@@ -79,7 +79,7 @@ try {
   const legacyManifest = capabilityPackageManifestSchema.parse(installedPackage("legacy", ["agent"]).manifest);
   assert.equal(legacyManifest.schemaVersion, 1, "Existing manifest v1 packages must remain readable");
   assert.equal(getCapabilityApiCompatibilityIssue(legacyManifest), null);
-  assert.deepEqual(supportedCapabilityApi, { major: 1, minor: 3 });
+  assert.deepEqual(supportedCapabilityApi, { major: 1, minor: 4 });
 
   const manifestV2 = capabilityPackageManifestSchema.parse({
     ...legacyManifest,
@@ -93,7 +93,7 @@ try {
   assert.equal(getCapabilityApiCompatibilityIssue(manifestV2), null);
   const currentManifestV2 = capabilityPackageManifestSchema.parse({
     ...manifestV2,
-    capabilityApi: { major: 1, minor: 3 },
+    capabilityApi: { major: 1, minor: 4 },
     contributions: { agentDetail: { agentIds: ["feature-agent"] } },
   });
   assert.equal(getCapabilityApiCompatibilityIssue(currentManifestV2), null);
@@ -115,15 +115,15 @@ try {
   });
   assert.match(
     getCapabilityApiCompatibilityIssue(unsupportedMajorManifest) ?? "",
-    /requires capability API 2\.0; this Engine supports 1\.3/,
+    /requires capability API 2\.0; this Engine supports 1\.4/,
   );
   const unsupportedMinorManifest = capabilityPackageManifestSchema.parse({
     ...manifestV2,
-    capabilityApi: { major: 1, minor: 4 },
+    capabilityApi: { major: 1, minor: 5 },
   });
   assert.match(
     getCapabilityApiCompatibilityIssue(unsupportedMinorManifest) ?? "",
-    /requires capability API 1\.4; this Engine supports 1\.3/,
+    /requires capability API 1\.5; this Engine supports 1\.4/,
   );
 
   const forwardCompatibleCatalog = capabilityCatalogSchema.parse({
@@ -137,7 +137,7 @@ try {
           name: "Hierarchical Maps",
           version: "1.1.1",
           engine: { min: "3.2.0", maxExclusive: "3.3.0" },
-          capabilityApi: { major: 1, minor: 3 },
+          capabilityApi: { major: 1, minor: 4 },
           contributions: {
             slots: ["chat-settings", "spatial-workspace", "chat-runtime", "game-world-map"],
             agentDetail: { agentIds: ["hierarchical-maps"] },
@@ -746,6 +746,45 @@ try {
     await import("../../packages/server/src/services/capability-packages/capability-resources.service.js");
   const persistence = createCapabilityPersistenceHost(db);
   const resources = createCapabilityResourceHost(db);
+  const createdDocument = await persistence.documents.create({
+    id: "maps-template-document",
+    packageId: "hierarchical-maps",
+    kind: "map-template",
+    name: "Test map",
+    description: "Reusable map fixture",
+    data: { locations: ["Town"] },
+    createdAt: "2026-07-26T00:00:00.000Z",
+    updatedAt: "2026-07-26T00:00:00.000Z",
+  });
+  assert.equal(createdDocument.revision, 1);
+  assert.deepEqual(createdDocument.data, { locations: ["Town"] });
+  assert.equal((await persistence.documents.list("hierarchical-maps", "map-template")).length, 1);
+  assert.equal(
+    await persistence.documents.update({
+      id: createdDocument.id,
+      packageId: createdDocument.packageId,
+      expectedRevision: 99,
+      name: "Stale map",
+      description: "",
+      data: {},
+      updatedAt: "2026-07-26T00:01:00.000Z",
+    }),
+    null,
+    "Package documents must reject stale updates",
+  );
+  const updatedDocument = await persistence.documents.update({
+    id: createdDocument.id,
+    packageId: createdDocument.packageId,
+    expectedRevision: createdDocument.revision,
+    name: "Updated map",
+    description: "Reusable map fixture",
+    data: { locations: ["Town", "Castle"] },
+    updatedAt: "2026-07-26T00:02:00.000Z",
+  });
+  assert.equal(updatedDocument?.revision, 2);
+  assert.deepEqual(updatedDocument?.data, { locations: ["Town", "Castle"] });
+  assert.equal(await persistence.documents.remove(createdDocument.packageId, createdDocument.id, 1), false);
+  assert.equal(await persistence.documents.remove(createdDocument.packageId, createdDocument.id, 2), true);
   const { createChatsStorage } = await import("../../packages/server/src/services/storage/chats.storage.js");
   const { createGameStateStorage } = await import("../../packages/server/src/services/storage/game-state.storage.js");
   const { createLorebooksStorage } = await import("../../packages/server/src/services/storage/lorebooks.storage.js");

@@ -91,7 +91,7 @@ const capabilityPackageManifestBaseSchema = z
   })
   .strict();
 
-export const supportedCapabilityApi = Object.freeze({ major: 1, minor: 3 } as const);
+export const supportedCapabilityApi = Object.freeze({ major: 1, minor: 4 } as const);
 
 const capabilityApiVersionSchema = z
   .object({
