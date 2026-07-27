@@ -134,6 +134,8 @@ const generateConversationSelfieSchema = z.object({
 const generateGalleryImageSchema = z.object({
   prompt: z.string().trim().min(1).max(7_000),
   title: z.string().trim().min(1).max(200).optional(),
+  promptOverride: z.string().trim().min(1).max(200_000).optional(),
+  negativePromptOverride: z.string().max(200_000).optional(),
   debugMode: z.boolean().optional().default(false),
 });
 
@@ -556,15 +558,18 @@ export async function galleryRoutes(app: FastifyInstance) {
 
   async function compileGalleryImageRequest(
     context: Awaited<ReturnType<typeof resolveGalleryImageGenerationContext>>,
-    input: { title?: string; prompt: string },
+    input: {
+      title?: string;
+      prompt: string;
+      promptOverride?: string;
+      negativePromptOverride?: string;
+    },
   ) {
     const compiled = await buildBackgroundProviderPrompt({
       chatId: context.chat.id,
       locationSlug: input.title?.trim() || "Gallery image",
       sceneDescription: input.prompt.trim(),
       genre: context.genre ?? undefined,
-      setting: context.setting ?? undefined,
-      worldOverview: context.worldOverview,
       artStyle: context.artStyle || undefined,
       imagePromptInstructions: context.imagePromptInstructions,
       imgModel: context.imageModel,
@@ -582,14 +587,20 @@ export async function galleryRoutes(app: FastifyInstance) {
       size: context.imageSettings.background,
       preserveFullBackgroundPrompt: true,
     });
+    const reviewed = resolveReviewedImagePromptSubmission({
+      generatedPrompt: compiled.prompt,
+      generatedNegativePrompt: compiled.negativePrompt,
+      promptOverride: input.promptOverride,
+      negativePromptOverride: input.negativePromptOverride,
+    });
     const size = resolveImagePromptReviewSize({
       connection: context.imageConnection,
-      prompt: compiled.prompt,
+      prompt: reviewed.prompt,
       width: context.imageSettings.background.width,
       height: context.imageSettings.background.height,
       imageDefaults: context.imageDefaults,
     });
-    return { ...compiled, ...size };
+    return { ...compiled, ...reviewed, ...size };
   }
 
   async function collectChatAssetParticipants(chat: { id: string; characterIds?: unknown; personaId?: string | null }) {
@@ -1378,7 +1389,7 @@ export async function galleryRoutes(app: FastifyInstance) {
           name: context.styleProfile.name,
         },
         campaign: {
-          included: Boolean(context.genre || context.setting || context.worldOverview || context.artStyle),
+          included: Boolean(context.genre || context.artStyle),
           artStyleIncluded: Boolean(context.artStyle),
         },
         chatSettings: {

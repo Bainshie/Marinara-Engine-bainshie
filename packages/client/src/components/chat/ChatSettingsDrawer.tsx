@@ -8049,6 +8049,8 @@ export function ChatSettingsDrawer({
                                           view="settings"
                                           capabilityProps={{
                                             chatId: chat.id,
+                                            chatName: chat.name,
+                                            chatMode,
                                             debugMode,
                                             enabledForChat: mapsPackageEnabledForChat,
                                             onEnabledForChatChange: async (enabled: boolean) => {
@@ -8307,6 +8309,8 @@ export function ChatSettingsDrawer({
                                               view="settings"
                                               capabilityProps={{
                                                 chatId: chat.id,
+                                                chatName: chat.name,
+                                                chatMode,
                                                 debugMode,
                                                 enabledForChat: mapsPackageEnabledForChat,
                                                 onEnabledForChatChange: async (enabled: boolean) => {

@@ -460,6 +460,7 @@ import {
   chatBackgroundTags,
   safeGeneratedAssetSlug,
 } from "../../packages/server/src/services/game/game-asset-generation.js";
+import { resolveReviewedImagePromptSubmission } from "../../packages/server/src/services/image/image-prompt-review.js";
 import {
   buildIllustratorBackgroundPlanUserPrompt,
   illustratorBackgroundGenerationEnabled,
@@ -4385,6 +4386,63 @@ Use HTML sparingly and diegetically. Do not replace normal prose/dialogue unless
       assert.match(compiled.prompt, /cinematic violet-gold anime illustration/);
       assert.match(compiled.prompt, /Use ornate brass machinery and deep blue reflections/);
       assert.match(compiled.negativePrompt, /watermark/);
+    },
+  },
+  {
+    name: "automatic map artwork respects campaign style review and keeps positive prose out of negatives",
+    async run() {
+      const campaignStyle = "luminous violet campaign brushwork";
+      const scenePrompt = "Wide establishing image of Moonwell Floor. A quiet tiled bath beneath blue crystals. No text.";
+      const compile = (useCampaignArtStyle: boolean) =>
+        buildBackgroundProviderPrompt({
+          chatId: "map-artwork-campaign-toggle-regression",
+          locationSlug: "Moonwell Floor",
+          sceneDescription: scenePrompt,
+          genre: "Fantasy dungeon crawler",
+          artStyle:
+            resolveGameSetupArtStylePrompt({
+              artStylePrompt: campaignStyle,
+              useCampaignArtStyle,
+            }) || undefined,
+          preserveFullBackgroundPrompt: true,
+          styleProfiles: createDefaultImageStyleProfileSettings(),
+          styleProfileId: "auto",
+          imgModel: "unused",
+          imgBaseUrl: "",
+          imgApiKey: "",
+        });
+
+      const withoutCampaignStyle = await compile(false);
+      const withCampaignStyle = await compile(true);
+      assert.doesNotMatch(withoutCampaignStyle.prompt, /luminous violet campaign brushwork/u);
+      assert.match(withCampaignStyle.prompt, /luminous violet campaign brushwork/u);
+      assert.doesNotMatch(withoutCampaignStyle.negativePrompt, /Style:|Fantasy dungeon crawler|quiet tiled bath/u);
+      assert.doesNotMatch(withCampaignStyle.negativePrompt, /Style:|luminous violet campaign brushwork|quiet tiled bath/u);
+
+      const reviewed = resolveReviewedImagePromptSubmission({
+        generatedPrompt: withCampaignStyle.prompt,
+        generatedNegativePrompt: withCampaignStyle.negativePrompt,
+        promptOverride: "exact edited positive",
+        negativePromptOverride: "exact edited negative",
+      });
+      assert.deepEqual(reviewed, {
+        prompt: "exact edited positive",
+        negativePrompt: "exact edited negative",
+      });
+
+      const galleryRouteSource = readFileSync(
+        new URL("../../packages/server/src/routes/gallery.routes.ts", import.meta.url),
+        "utf8",
+      );
+      const compilerStart = galleryRouteSource.indexOf("async function compileGalleryImageRequest");
+      const compilerEnd = galleryRouteSource.indexOf("async function collectChatAssetParticipants", compilerStart);
+      const compilerSource = galleryRouteSource.slice(compilerStart, compilerEnd);
+      assert.match(compilerSource, /genre: context\.genre/);
+      assert.match(compilerSource, /artStyle: context\.artStyle/);
+      assert.doesNotMatch(compilerSource, /setting: context\.setting|worldOverview: context\.worldOverview/);
+      assert.match(compilerSource, /resolveReviewedImagePromptSubmission/);
+      assert.match(compilerSource, /promptOverride: input\.promptOverride/);
+      assert.match(compilerSource, /negativePromptOverride: input\.negativePromptOverride/);
     },
   },
   {

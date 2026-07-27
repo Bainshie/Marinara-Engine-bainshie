@@ -936,7 +936,8 @@ function extractNegativeFragment(fragment: string): string | null {
   const clean = fragment.trim();
   const match = clean.match(/^(?:avoid|no|without|exclude|do not include|don't include)\s+(.+)/i);
   if (!match?.[1]) return null;
-  const negative = (splitPromptListItems(match[1])[0] ?? "")
+  const firstSentence = match[1].split(/[.!?]+(?:\s+|$)/u, 1)[0] ?? match[1];
+  const negative = (splitPromptListItems(firstSentence)[0] ?? "")
     .replace(/[.]+$/g, "")
     .replace(/^(?:any|all)\s+/i, "")
     .trim();

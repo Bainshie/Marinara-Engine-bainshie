@@ -91,6 +91,7 @@ interface GameSetupWizardProps {
     gameName?: string,
     mapPlan?:
       | { mode: "manual" }
+      | { mode: "template" }
       | {
           mode: "ai";
           size: SpatialMapDraftSize;
@@ -479,6 +480,7 @@ export function GameSetupWizard({
   const [adjustGameAssetsOpen, setAdjustGameAssetsOpen] = useState(false);
   const [draftSpatialMap, setDraftSpatialMap] = useState(false);
   const [manualSpatialMap, setManualSpatialMap] = useState(false);
+  const [templateSpatialMap, setTemplateSpatialMap] = useState(false);
   const [spatialMapDraftSize, setSpatialMapDraftSize] = useState<SpatialMapDraftSize>("medium");
   const [spatialMapGroundingMode, setSpatialMapGroundingMode] = useState<SpatialMapGroundingMode>("setup");
   const [spatialMapInstructions, setSpatialMapInstructions] = useState("");
@@ -965,6 +967,8 @@ export function GameSetupWizard({
         hierarchicalMapsInstalled &&
           (config.gameWorldMapMode === "hierarchical" || Boolean(importedSpatialMapInstructions)),
       );
+      setManualSpatialMap(false);
+      setTemplateSpatialMap(false);
       setSpatialMapDraftSize("medium");
       setSpatialMapGroundingMode("setup");
       setSpatialMapInstructions(importedSpatialMapInstructions);
@@ -1029,7 +1033,7 @@ export function GameSetupWizard({
             ? spatialMapInstructions.trim() || undefined
             : undefined,
         gameWorldMapMode:
-          enableAgents && hierarchicalMapsInstalled && (draftSpatialMap || manualSpatialMap)
+          enableAgents && hierarchicalMapsInstalled && (draftSpatialMap || manualSpatialMap || templateSpatialMap)
             ? "hierarchical"
             : "standard",
         rating,
@@ -1102,6 +1106,8 @@ export function GameSetupWizard({
           }
         : enableAgents && hierarchicalMapsInstalled && manualSpatialMap
           ? { mode: "manual" as const }
+        : enableAgents && hierarchicalMapsInstalled && templateSpatialMap
+          ? { mode: "template" as const }
         : undefined,
     );
   };
@@ -2400,6 +2406,7 @@ export function GameSetupWizard({
                 onClick={() => {
                   setDraftSpatialMap((enabled) => !enabled);
                   setManualSpatialMap(false);
+                  setTemplateSpatialMap(false);
                 }}
                 className={cn(
                   "flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2.5 text-left transition-all",
@@ -2440,6 +2447,7 @@ export function GameSetupWizard({
                   onClick={() => {
                     setManualSpatialMap((enabled) => !enabled);
                     setDraftSpatialMap(false);
+                    setTemplateSpatialMap(false);
                   }}
                   className={cn(
                     "mt-2 flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2.5 text-left transition-all",
@@ -2473,6 +2481,51 @@ export function GameSetupWizard({
                       className={cn(
                         "block h-4 w-4 rounded-full bg-white transition-transform",
                         manualSpatialMap && "translate-x-3.5",
+                      )}
+                    />
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  aria-pressed={templateSpatialMap}
+                  onClick={() => {
+                    setTemplateSpatialMap((enabled) => !enabled);
+                    setDraftSpatialMap(false);
+                    setManualSpatialMap(false);
+                  }}
+                  className={cn(
+                    "mt-2 flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2.5 text-left transition-all",
+                    templateSpatialMap
+                      ? "bg-[var(--primary)]/10 ring-1 ring-[var(--primary)]/30"
+                      : "bg-[var(--secondary)] ring-1 ring-transparent hover:ring-[var(--border)]",
+                  )}
+                >
+                  <span className="flex min-w-0 flex-1 items-center gap-2.5">
+                    <FolderOpen
+                      size={14}
+                      className={templateSpatialMap ? "text-[var(--primary)]" : "text-[var(--muted-foreground)]"}
+                    />
+                    <span className="min-w-0">
+                      <span className="block text-xs font-medium text-[var(--foreground)]">
+                        {localizeUi("ui.game.gamesetupwizard.useATemplate")}
+                      </span>
+                      <span className="block text-[0.575rem] leading-relaxed text-[var(--muted-foreground)]">
+                        {localizeUi("ui.game.gamesetupwizard.chooseASavedMapTemplateAfterSetupThenReview")}
+                      </span>
+                    </span>
+                  </span>
+                  <span
+                    aria-hidden="true"
+                    className={cn(
+                      "h-5 w-9 shrink-0 rounded-full p-0.5 transition-colors",
+                      templateSpatialMap ? "bg-[var(--primary)]" : "bg-[var(--muted-foreground)]/50",
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        "block h-4 w-4 rounded-full bg-white transition-transform",
+                        templateSpatialMap && "translate-x-3.5",
                       )}
                     />
                   </span>

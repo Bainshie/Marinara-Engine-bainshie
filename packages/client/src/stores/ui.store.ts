@@ -93,8 +93,9 @@ export interface SummaryPopoverSettings {
 }
 export interface PendingSpatialMapDraftReview {
   chatId: string;
-  result: GenerateSpatialMapDraftResponse;
+  result?: GenerateSpatialMapDraftResponse;
   source: "game_setup";
+  mode?: "ai" | "template";
 }
 
 export interface GameSetupLearnedOptions {

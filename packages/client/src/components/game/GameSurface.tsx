@@ -6340,6 +6340,7 @@ function GameSurfaceComponent({
   const startSessionResetRef = useRef(startSession.reset);
   const pendingSetupMapPlanRef = useRef<
     | { mode: "manual" }
+    | { mode: "template" }
     | {
         mode: "ai";
         size: SpatialMapDraftSize;
@@ -6373,6 +6374,16 @@ function GameSurfaceComponent({
       if (plan.mode === "manual") {
         useGameModeStore.getState().setSetupActive(false);
         useUIStore.getState().openSpatialMapDetail(chatId);
+        return;
+      }
+      if (plan.mode === "template") {
+        useGameModeStore.getState().setSetupActive(false);
+        useUIStore.getState().openSpatialMapDraftReview({
+          chatId,
+          source: "game_setup",
+          mode: "template",
+        });
+        toast.info(localizeUi("ui.game.gamesurfacecomponent.chooseAMapTemplateThenReviewItBeforeSaving"));
         return;
       }
 

@@ -1419,6 +1419,8 @@ export function AppShell() {
           view="workspace"
           capabilityProps={{
             chatId: spatialMapDetailChatId,
+            chatName: activeChat?.id === spatialMapDetailChatId ? activeChat.name : null,
+            chatMode: activeChat?.id === spatialMapDetailChatId ? activeChat.mode : null,
             debugMode,
             pendingDraftReview: pendingSpatialMapDraftReview,
             confirmAction: showConfirmDialog,
