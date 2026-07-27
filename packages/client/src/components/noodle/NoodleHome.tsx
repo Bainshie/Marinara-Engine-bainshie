@@ -653,7 +653,7 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
   const [imageUrlDraft, setImageUrlDraft] = useState("");
   const [imageGenerationPromptDraft, setImageGenerationPromptDraft] = useState("");
   const [pollEditorValue, setPollEditorValue] = useState<NoodlePollInput | null>(null);
-  const [privateGenerationGuidanceDraft, setPrivateGenerationGuidanceDraft] = useState("");
+  const [noodlerGenerationGuidanceDraft, setNoodlerGenerationGuidanceDraft] = useState("");
   const [scheduleManagerOpen, setScheduleManagerOpen] = useState(false);
   const [draftPoll, setDraftPoll] = useState<NoodlePollInput | null>(null);
   const postImageEditor = useNoodlePostImageEditor(async (post) => {
@@ -766,8 +766,8 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
   );
   const noodleCustomEmojiMap = useNoodleCustomEmojiMap(viewedProfileAccount);
   const viewingOwnProfile = Boolean(personaAccount && viewedProfileAccount?.id === personaAccount.id);
-  const linkedPublicAccountIds = useMemo(
-    () => new Set((noodlerAccountsQuery.data ?? []).flatMap((profile) => profile.publicAccountId ?? [])),
+  const linkedNoodleAccountIds = useMemo(
+    () => new Set((noodlerAccountsQuery.data ?? []).flatMap((profile) => profile.noodleAccountId ?? [])),
     [noodlerAccountsQuery.data],
   );
   const canCreateStageProfileFromViewed = Boolean(
@@ -775,7 +775,7 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
       viewedProfileAccount &&
       (viewedProfileAccount.kind === "persona" || viewedProfileAccount.kind === "character") &&
       noodlerAccountsQuery.isSuccess &&
-      !linkedPublicAccountIds.has(viewedProfileAccount.id),
+      !linkedNoodleAccountIds.has(viewedProfileAccount.id),
   );
   const canEditViewedProfile = Boolean(
     viewingOwnProfile || (viewedProfileAccount?.kind === "character" && viewedProfileAccount.invited),
@@ -858,8 +858,8 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
   }, [settings?.imageGenerationPrompt]);
 
   useEffect(() => {
-    setPrivateGenerationGuidanceDraft(settings?.privateGenerationGuidance ?? "");
-  }, [settings?.privateGenerationGuidance]);
+    setNoodlerGenerationGuidanceDraft(settings?.noodlerGenerationGuidance ?? "");
+  }, [settings?.noodlerGenerationGuidance]);
 
   useEffect(() => {
     if (!noodlePromptEditorOpen) setNoodlePromptDraft(noodlePromptText);
@@ -2335,7 +2335,7 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
   };
 
   const openNoodler = () => {
-    onNavigate(settings?.enableNoodler ? { mode: "private", view: "hub" } : { mode: "verification" });
+    onNavigate(settings?.enableNoodler ? { mode: "noodler", view: "hub" } : { mode: "verification" });
     setAccountSwitcherOpen(false);
     setMobileDrawerOpen(false);
     setActiveComposerTool(null);
@@ -3156,12 +3156,12 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
 
           <Section
             title={localizeUi("ui.noodle.noodlehome.noodlerAccess")}
-            help={localizeUi("ui.noodle.noodlehome.keepsPrivateCreatorAccountsIsolatedFromThePublicNoodle")}
+            help={localizeUi("ui.noodle.noodlehome.keepsNoodlerCreatorAccountsIsolatedFromThePublicNoodle")}
           >
             <div className="space-y-3">
               <ToggleSetting
                 label={localizeUi("ui.noodle.noodlehome.enableNoodler")}
-                help={localizeUi("ui.noodle.noodlehome.optInToPrivateCreatorAccountsTurningThisOff")}
+                help={localizeUi("ui.noodle.noodlehome.optInToNoodlerCreatorAccountsTurningThisOff")}
                 checked={settings.enableNoodler}
                 disabled={updateSettings.isPending}
                 onChange={(checked) => {
@@ -3179,7 +3179,7 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
                   >{localizeUi("ui.noodle.noodlehome.openNoodler")}</button>
                   <button
                     type="button"
-                    onClick={() => onNavigate({ mode: "private", view: "profiles" })}
+                    onClick={() => onNavigate({ mode: "noodler", view: "profiles" })}
                     className="flex min-h-10 w-full items-center justify-center gap-2 rounded-md border border-[var(--noodle-accent)]/40 bg-[var(--noodle-accent)]/10 px-3 text-xs font-semibold text-[var(--noodle-accent)] transition-colors hover:bg-[var(--noodle-accent)]/15"
                   >
                     <Settings2 size={15} />{localizeUi("ui.noodle.noodlehome.manageStageProfiles")}</button>
@@ -3196,13 +3196,13 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
             >
               <div className="space-y-4">
                 <label className="block space-y-1.5">
-                  <FieldLabel help={localizeUi("ui.noodle.noodlehome.prependedToEveryNoodlerPrivatePostGenerationUseIt")}>{localizeUi("ui.noodle.noodlehome.generationGuidance")}</FieldLabel>
+                  <FieldLabel help={localizeUi("ui.noodle.noodlehome.prependedToEveryNoodlerPostGenerationUseIt")}>{localizeUi("ui.noodle.noodlehome.generationGuidance")}</FieldLabel>
                   <textarea
-                    value={privateGenerationGuidanceDraft}
-                    onChange={(event) => setPrivateGenerationGuidanceDraft(event.target.value)}
+                    value={noodlerGenerationGuidanceDraft}
+                    onChange={(event) => setNoodlerGenerationGuidanceDraft(event.target.value)}
                     onBlur={() => {
-                      if (privateGenerationGuidanceDraft !== settings.privateGenerationGuidance) {
-                        saveSettings({ privateGenerationGuidance: privateGenerationGuidanceDraft });
+                      if (noodlerGenerationGuidanceDraft !== settings.noodlerGenerationGuidance) {
+                        saveSettings({ noodlerGenerationGuidance: noodlerGenerationGuidanceDraft });
                       }
                     }}
                     className={textareaClass}
@@ -3717,7 +3717,7 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
       personaAccount={personaAccount}
       sortedPersonaAccounts={sortedPersonaAccounts}
       visiblePersonaAccounts={visiblePersonaAccounts}
-      linkedPublicAccountIds={linkedPublicAccountIds}
+      linkedNoodleAccountIds={linkedNoodleAccountIds}
       onLoadMorePersonaAccounts={() => setPersonaAccountLimit((current) => current + NOODLE_PERSONA_SWITCHER_PAGE_SIZE)}
       onSwitchPersona={switchPersona}
       accountSwitcherOpen={accountSwitcherOpen}
@@ -4115,9 +4115,9 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
                         type="button"
                         onClick={() =>
                           onNavigate({
-                            mode: "private",
+                            mode: "noodler",
                             view: "create-profile",
-                            publicAccountId: viewedProfileAccount.id,
+                            noodleAccountId: viewedProfileAccount.id,
                           })
                         }
                         className="h-9 rounded-full border border-[var(--noodle-divider)] px-4 text-xs font-semibold text-[var(--foreground)] transition-colors hover:bg-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]"
