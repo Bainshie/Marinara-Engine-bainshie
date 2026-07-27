@@ -303,6 +303,16 @@ assert.match(
   /\[data-chat-mode="roleplay"\] \.mari-chat-input-textarea \{\s+contain: paint;/u,
   "Roleplay textarea paint should stay isolated from the live scene behind it",
 );
+assert.match(
+  globalStylesSource,
+  /@supports \(-moz-appearance: none\)[\s\S]*?\[data-chat-mode="roleplay"\] \.marinara-chat-input-shell \{[\s\S]*?backdrop-filter: none !important;/u,
+  "Firefox should not repaint the Roleplay scene through a blurred composer while typing",
+);
+assert.match(
+  globalStylesSource,
+  /@supports \(-moz-appearance: none\)[\s\S]*?\[data-chat-mode="roleplay"\] \.marinara-chat-input-shell \{[\s\S]*?linear-gradient\(var\(--card\), var\(--card\)\),[\s\S]*?var\(--background\) !important;/u,
+  "Firefox should use an opaque Roleplay composer surface after disabling backdrop blur",
+);
 assert.doesNotMatch(
   chatInputSource,
   /inputPresenceTimerRef/u,
