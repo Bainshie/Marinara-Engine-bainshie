@@ -89,6 +89,11 @@ export async function registerCapabilityPrivilegedRoutes(
   if (duplicate) {
     throw new Error(`Capability package ${installed.id} registered duplicate route ${duplicate.key}`);
   }
+  if (app.server.listening && prepared.some((definition) => !definition.existing)) {
+    throw new Error(
+      `Capability package ${installed.id} must be restarted before new privileged routes can be activated`,
+    );
+  }
 
   const ownedSlots: RouteSlot[] = [];
   const previousSlots = new Map<RouteSlot, Pick<RouteSlot, "active" | "handler">>();

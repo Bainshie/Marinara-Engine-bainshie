@@ -8638,6 +8638,55 @@ export function ChatSettingsDrawer({
                                     </div>
                                   );
                                 }
+                                if (agent.id === "long-term-memory" && ltmPackage) {
+                                  return (
+                                    <div key={agent.id} data-chat-agent-entry={agent.id} className="space-y-1.5">
+                                      <AgentSettingsCard
+                                        icon={<Brain size="0.75rem" className="mt-0.5 text-[var(--primary)]" />}
+                                        title={agent.name}
+                                        description={agent.description}
+                                      >
+                                        <CapabilityElement
+                                          packageId={ltmPackage.id}
+                                          view="settings"
+                                          capabilityProps={{
+                                            chatId: chat.id,
+                                            enabledForChat:
+                                              metadata.enableAgents === true &&
+                                              activeAgentIds.includes(ltmPackage.id),
+                                            chatSettings: {
+                                              longTermMemoryRecallStyle: metadata.longTermMemoryRecallStyle,
+                                              longTermMemoryBudgetTokens: metadata.longTermMemoryBudgetTokens,
+                                              longTermMemoryMaxChunks: metadata.longTermMemoryMaxChunks,
+                                            },
+                                            onEnabledForChatChange: async (enabled: boolean) => {
+                                              const current = readLatestActiveAgentIds();
+                                              await updateMeta.mutateAsync({
+                                                id: chat.id,
+                                                ...(enabled ? { enableAgents: true } : {}),
+                                                activeAgentIds: enabled
+                                                  ? Array.from(new Set([...current, ltmPackage.id]))
+                                                  : current.filter((id) => id !== ltmPackage.id),
+                                              });
+                                            },
+                                            onChatSettingsChange: async (patch: Record<string, unknown>) => {
+                                              await updateMeta.mutateAsync({ id: chat.id, ...patch });
+                                            },
+                                            onOpenAgentSettings: () => {
+                                              void requestClose().then((closed) => {
+                                                if (closed) {
+                                                  useUIStore.getState().openAgentDetail("long-term-memory");
+                                                }
+                                              });
+                                            },
+                                            onDirtyChange: setEditorDirty,
+                                          }}
+                                          className="block overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--background)]/45"
+                                        />
+                                      </AgentSettingsCard>
+                                    </div>
+                                  );
+                                }
                                 return (
                                   <div key={agent.id} data-chat-agent-entry={agent.id} className="space-y-1.5">
                                     <button

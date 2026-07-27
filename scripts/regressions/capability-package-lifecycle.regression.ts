@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 
+const repositoryRoot = join(dirname(fileURLToPath(import.meta.url)), "../..");
 const dataDir = mkdtempSync(join(tmpdir(), "marinara-capability-lifecycle-"));
 process.env.DATA_DIR = dataDir;
 
@@ -195,6 +197,18 @@ try {
     "Non-release builds must fall back to the legacy catalog instead of requesting a nonexistent lane",
   );
   assert.equal(getCapabilityPackageInstallIssue(legacyManifest), null);
+  const routeManifestWithoutRestart = capabilityPackageManifestSchema.parse({
+    ...legacyManifest,
+    id: "hot-route-package",
+    name: "Hot Route Package",
+    permissions: ["routes"],
+    restartRequired: false,
+  });
+  assert.match(
+    getCapabilityPackageInstallIssue(routeManifestWithoutRestart) ?? "",
+    /privileged routes must require a restart/u,
+    "Packages that add Fastify routes must not claim they can activate after startup",
+  );
 
   const { createCapabilityEmbeddingHost } =
     await import("../../packages/server/src/services/capability-packages/capability-embedding.service.js");
@@ -209,7 +223,9 @@ try {
   const { registerCapabilityPrivilegedRoutes } =
     await import("../../packages/server/src/services/capability-packages/capability-route-registration.service.js");
   let registeredRoutes = 0;
+  const routeServer = { listening: false };
   const routeApp = {
+    server: routeServer,
     hasRoute: () => false,
     route: () => {
       registeredRoutes++;
@@ -239,6 +255,70 @@ try {
     /duplicate route GET \/api\/long-term-memory\/status/u,
   );
   assert.equal(registeredRoutes, 0, "Invalid capability routes must not mutate Fastify");
+  const deactivateInitialRoutes = await registerCapabilityPrivilegedRoutes(
+    routeApp,
+    routePackage as Parameters<typeof registerCapabilityPrivilegedRoutes>[1],
+    async (routes) => routes.get("/status", async () => ({ version: 1 })),
+    { prefix: "/api/long-term-memory" },
+  );
+  assert.equal(registeredRoutes, 1, "Capability routes must register normally before Fastify starts");
+  routeServer.listening = true;
+  const deactivateReactivatedRoutes = await registerCapabilityPrivilegedRoutes(
+    routeApp,
+    routePackage as Parameters<typeof registerCapabilityPrivilegedRoutes>[1],
+    async (routes) => routes.get("/status", async () => ({ version: 2 })),
+    { prefix: "/api/long-term-memory" },
+  );
+  assert.equal(registeredRoutes, 1, "Existing route slots must reactivate without mutating a listening Fastify app");
+  await assert.rejects(
+    registerCapabilityPrivilegedRoutes(
+      routeApp,
+      routePackage as Parameters<typeof registerCapabilityPrivilegedRoutes>[1],
+      async (routes) => routes.get("/new-status", async () => ({ ok: true })),
+      { prefix: "/api/long-term-memory" },
+    ),
+    /must be restarted before new privileged routes can be activated/u,
+  );
+  assert.equal(registeredRoutes, 1, "Post-start activation must not register a previously unseen Fastify route");
+  deactivateReactivatedRoutes();
+  deactivateInitialRoutes();
+
+  const { withLongTermMemoryRuntimeTimeout } =
+    await import("../../packages/server/src/services/generation/long-term-memory-runtime.js");
+  const timeoutStartedAt = Date.now();
+  await assert.rejects(
+    withLongTermMemoryRuntimeTimeout(20, async () => new Promise<never>(() => {})),
+    /timed out after 20 ms/u,
+  );
+  assert.ok(Date.now() - timeoutStartedAt < 1_000, "Long-term memory capability calls must have a total-duration cap");
+
+  const capabilityLanguageModelSource = readFileSync(
+    join(
+      repositoryRoot,
+      "packages/server/src/services/capability-packages/capability-language-model.service.ts",
+    ),
+    "utf8",
+  );
+  assert.match(
+    capabilityLanguageModelSource,
+    /reasoningEffort:\s*options\.reasoningEffort,/u,
+    "Capability model calls must preserve an explicit reasoning effort of none",
+  );
+  assert.doesNotMatch(
+    capabilityLanguageModelSource,
+    /options\.reasoningEffort\s*===\s*"none"\s*\?\s*undefined/u,
+    "Capability model calls must not discard an explicit reasoning disable request",
+  );
+
+  const chatSettingsSource = readFileSync(
+    join(repositoryRoot, "packages/client/src/components/chat/ChatSettingsDrawer.tsx"),
+    "utf8",
+  );
+  assert.match(
+    chatSettingsSource,
+    /gameAgentPool\.map\(\(agent\)[\s\S]{0,7000}agent\.id === "long-term-memory" && ltmPackage[\s\S]{0,2500}<CapabilityElement/u,
+    "Game chat settings must render the Long-Term Memory package controls",
+  );
   const serverlessTurnGameManifest = capabilityPackageManifestSchema.parse({
     ...legacyManifest,
     id: "serverless-turn-game",

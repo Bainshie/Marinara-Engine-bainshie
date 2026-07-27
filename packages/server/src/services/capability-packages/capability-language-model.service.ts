@@ -35,7 +35,7 @@ export function createCapabilityLanguageModelHost(db: DB): CapabilityLanguageMod
           temperature: options.temperature,
           maxTokens: options.maxTokens,
           debugMode: options.debugMode,
-          reasoningEffort: options.reasoningEffort === "none" ? undefined : options.reasoningEffort,
+          reasoningEffort: options.reasoningEffort,
           verbosity: options.verbosity,
           signal: options.signal,
           responseFormat: options.responseFormat ? { ...options.responseFormat } : undefined,
