@@ -72,7 +72,7 @@ import {
 } from "@marinara-engine/shared";
 import { resolveLiveConversationStatus } from "../../lib/conversation-presence-status";
 import { useUIStore } from "../../stores/ui.store";
-import { useAgentStore } from "../../stores/agent.store";
+import { useAgentStore, EMPTY_AGENT_TYPES } from "../../stores/agent.store";
 import { illustratorRetryTargetsForFailures } from "../../lib/agent-failures";
 import { cn, parseAvatarCropJson } from "../../lib/utils";
 import { Modal } from "../ui/Modal";
@@ -765,7 +765,7 @@ export function ChatArea() {
   const setActiveChatId = useChatStore((s) => s.setActiveChatId);
   const pendingNewChatMode = useChatStore((s) => s.pendingNewChatMode);
   const failedAgentTypes = useAgentStore((s) =>
-    activeChatId && s.failedAgentChatId && s.failedAgentChatId !== activeChatId ? [] : s.failedAgentTypes,
+    activeChatId && s.failedAgentChatId && s.failedAgentChatId !== activeChatId ? EMPTY_AGENT_TYPES : s.failedAgentTypes,
   );
   const agentProcessing = useAgentStore((s) =>
     activeChatId ? s.processingChatIds.includes(activeChatId) : s.isProcessing,
