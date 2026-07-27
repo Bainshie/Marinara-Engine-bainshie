@@ -2066,6 +2066,27 @@ const cases: RegressionCase[] = [
     },
   },
   {
+    name: "regex editor examples use direct-entry escaping that works in Live Test",
+    run() {
+      const locale = JSON.parse(
+        readFileSync(
+          new URL("../../packages/client/src/localization/locales/en.json", import.meta.url),
+          "utf8",
+        ),
+      ) as Record<string, string>;
+      const editorSource = readFileSync(
+        new URL("../../packages/client/src/components/agents/RegexScriptEditor.tsx", import.meta.url),
+        "utf8",
+      );
+      const oocPattern = locale["ui.agents.regexscripteditor.ooc"];
+
+      assert.equal(oocPattern, String.raw`\(OOC:.*?\)`);
+      assert.equal(applyRegexReplacement("(OOC: Hey.)", new RegExp(oocPattern!, "gi"), ""), "");
+      assert.ok(editorSource.includes(String.raw`{"\\(OOC:.*?\\)"}`));
+      assert.ok(!editorSource.includes(String.raw`{"\\\\(OOC:.*?\\\\)"}`));
+    },
+  },
+  {
     name: "provider concurrency failures remain visible in generation and agent messages",
     run() {
       const providerMessage = "Provider concurrency limit exceeded for this account";
