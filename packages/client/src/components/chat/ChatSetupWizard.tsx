@@ -2254,19 +2254,22 @@ function RoleplaySetupWizard({ chat, onFinish }: ChatSetupWizardProps) {
             className={WIZARD_INPUT_CLASS}
           />
         </div>
-        <select
-          value={chat.connectionId ?? ""}
-          onChange={(e) => setConnection(e.target.value || null)}
-          className={WIZARD_INPUT_CLASS}
-        >
-          <option value="">{localizeUi("ui.game.gamesurfacecomponent.none")}</option>
-          <option value="random">{localizeUi("ui.game.gamesurfacecomponent.random")}</option>
-          {connectionOptions.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.name}
-            </option>
-          ))}
-        </select>
+        <div className="space-y-1.5">
+          <label className={WIZARD_FIELD_LABEL}>{localizeUi("ui.chat.conversationquicksetup.connection")}</label>
+          <select
+            value={chat.connectionId ?? ""}
+            onChange={(e) => setConnection(e.target.value || null)}
+            className={WIZARD_INPUT_CLASS}
+          >
+            <option value="">{localizeUi("ui.game.gamesurfacecomponent.none")}</option>
+            <option value="random">{localizeUi("ui.game.gamesurfacecomponent.random")}</option>
+            {connectionOptions.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+        </div>
         {connectionOptions.length === 0 && (
           <button
             onClick={() => {
