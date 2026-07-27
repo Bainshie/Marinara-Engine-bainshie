@@ -454,6 +454,7 @@ import {
   migrateLegacyDefaultConversationPromptLead,
 } from "../../packages/server/src/db/default-conversation-prompt-migration.js";
 import {
+  buildBackgroundProviderPrompt,
   buildNpcPortraitProviderPrompt,
   buildSceneIllustrationProviderPrompt,
   chatBackgroundTags,
@@ -4355,6 +4356,35 @@ Use HTML sparingly and diegetically. Do not replace normal prose/dialogue unless
       assert.deepEqual(compile(false, true), baseline);
       assert.deepEqual(compile(true, false), baseline);
       assert.deepEqual(compile(true, true), baseline);
+    },
+  },
+  {
+    name: "reviewed map backgrounds preserve location detail with Engine campaign styling",
+    async run() {
+      const sceneDetail =
+        "Wide establishing image of Sunken Observatory. Ancient brass instruments rise above a flooded stone chamber.";
+      const compiled = await buildBackgroundProviderPrompt({
+        chatId: "map-artwork-preview-regression",
+        locationSlug: "Sunken Observatory",
+        sceneDescription: sceneDetail,
+        genre: "Anime JRPG dungeon crawler",
+        setting: "A gothic guild city above luminous crystal dungeons",
+        worldOverview: "Adult adventurers explore dangerous ruins beneath the city.",
+        artStyle: "cinematic violet-gold anime illustration",
+        imagePromptInstructions: "Use ornate brass machinery and deep blue reflections.",
+        preserveFullBackgroundPrompt: true,
+        styleProfiles: createDefaultImageStyleProfileSettings(),
+        styleProfileId: "auto",
+        imgModel: "unused",
+        imgBaseUrl: "",
+        imgApiKey: "",
+      });
+
+      assert.match(compiled.prompt, /Sunken Observatory/);
+      assert.match(compiled.prompt, /Ancient brass instruments rise above a flooded stone chamber/);
+      assert.match(compiled.prompt, /cinematic violet-gold anime illustration/);
+      assert.match(compiled.prompt, /Use ornate brass machinery and deep blue reflections/);
+      assert.match(compiled.negativePrompt, /watermark/);
     },
   },
   {

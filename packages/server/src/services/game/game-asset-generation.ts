@@ -589,7 +589,11 @@ function compileGameImagePrompt(
   req: Pick<
     NpcPortraitRequest | BackgroundGenRequest | SceneIllustrationGenRequest,
     "styleProfiles" | "styleProfileId" | "imgDefaults" | "artStyle"
-  > & { appearance?: string | null; preserveFullScenePrompt?: boolean },
+  > & {
+    appearance?: string | null;
+    preserveFullBackgroundPrompt?: boolean;
+    preserveFullScenePrompt?: boolean;
+  },
   kind: "portrait" | "background" | "illustration",
   prompt: string,
   maxLength: number,
@@ -651,7 +655,9 @@ function compileGameImagePrompt(
     styleProfileId: req.styleProfileId,
     imageDefaults: req.imgDefaults,
     generatedStyle: req.artStyle,
-    applyPromptModeToSourcePrompt: kind === "background" || (kind === "illustration" && !req.preserveFullScenePrompt),
+    applyPromptModeToSourcePrompt:
+      (kind === "background" && !req.preserveFullBackgroundPrompt) ||
+      (kind === "illustration" && !req.preserveFullScenePrompt),
   });
   return {
     prompt: prependCanonicalAppearanceIfMissing(
@@ -819,6 +825,8 @@ export interface BackgroundGenRequest {
   worldOverview?: string | null;
   /** Unified art style prompt for visual consistency. */
   artStyle?: string;
+  /** Chat-level image instructions appended after the Maps or background scene prompt. */
+  imagePromptInstructions?: string | null;
   /** Connection credentials. */
   imgSource?: string | null;
   imgModel: string;
@@ -839,6 +847,8 @@ export interface BackgroundGenRequest {
   size?: ImageGenerationSize;
   promptOverride?: string;
   negativePromptOverride?: string;
+  /** Preserve the complete background prompt instead of distilling it into tagged source cues. */
+  preserveFullBackgroundPrompt?: boolean;
   /** When true, overwrite an existing generated background for this slug instead of reusing it. */
   force?: boolean;
   /** Optional request-scoped abort signal. */
@@ -913,9 +923,15 @@ async function buildBackgroundRawPrompt(req: BackgroundGenRequest): Promise<stri
     sceneDescription: groundedSceneDescription,
     styleLine: styleHint ? `Style: ${styleHint}.` : "",
   };
-  return req.promptOverridesStorage
+  const rawPrompt = req.promptOverridesStorage
     ? await loadPrompt(req.promptOverridesStorage, GAME_BACKGROUND, backgroundVars)
     : GAME_BACKGROUND.defaultBuilder(backgroundVars);
+  const imagePromptInstructionsLine = req.imagePromptInstructions?.trim()
+    ? `User image instructions: ${req.imagePromptInstructions.trim().replace(/\s+/g, " ").slice(0, 5000)}`
+    : "";
+  return imagePromptInstructionsLine && !rawPrompt.includes(imagePromptInstructionsLine)
+    ? `${rawPrompt}\n${imagePromptInstructionsLine}`
+    : rawPrompt;
 }
 
 function buildBackgroundWorldContext(req: BackgroundGenRequest): string {
@@ -979,9 +995,16 @@ export async function buildBackgroundProviderPrompt(req: BackgroundGenRequest): 
       req.currentTimeOfDay ? `Time of day: ${req.currentTimeOfDay}` : "",
       req.worldOverview ? `World overview: ${req.worldOverview}` : "",
       req.artStyle ? `Art style: ${req.artStyle}` : "",
+      req.imagePromptInstructions ? `User image instructions: ${req.imagePromptInstructions}` : "",
     ],
   });
-  return compileGameImagePrompt(req, "background", prompt, 1000, GAME_BACKGROUND_NEGATIVE_PROMPT);
+  return compileGameImagePrompt(
+    req,
+    "background",
+    prompt,
+    req.preserveFullBackgroundPrompt ? 7000 : 1000,
+    GAME_BACKGROUND_NEGATIVE_PROMPT,
+  );
 }
 
 export async function buildBackgroundImagePrompt(req: BackgroundGenRequest): Promise<string> {
