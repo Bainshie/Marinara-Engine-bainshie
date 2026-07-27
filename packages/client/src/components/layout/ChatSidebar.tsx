@@ -44,6 +44,7 @@ import { useChatStore } from "../../stores/chat.store";
 import { confirmNonEmptyFolderDelete, showConfirmDialog } from "../../lib/app-dialogs";
 import { useUIStore, type UserStatus } from "../../stores/ui.store";
 import { cn, getAvatarCropStyle, type AvatarCropValue } from "../../lib/utils";
+import { chatBackgroundMetadataToUrl } from "../../lib/backgrounds";
 import { useState, useCallback, useMemo, useRef, useEffect } from "react";
 import { usePresenceClock } from "../../hooks/use-presence-clock";
 import { toast } from "sonner";
@@ -877,11 +878,13 @@ export function ChatSidebar() {
           ? localizeUi("ui.layout.chatsidebar.unsentDraft")
           : null;
 
-    // Discord-style banner: the chat's first character avatar bled across the row, behind a
-    // scrim. Only on the active/hovered row — 40 at once is soup, and it doubles as the
-    // active cue. Sits at -z-10 inside the row's own stacking context (see `isolate`), so
-    // the unpositioned row content keeps painting above it.
-    const bannerAvatar = charIds.map((id) => charLookup.get(id)).find((entry) => entry?.avatarUrl);
+    // Banner: the chat's own background image, bled across the row and heavily muted. Only
+    // on the active/hovered row — 40 at once is soup, and it doubles as the active cue.
+    // Sits at -z-10 inside the row's own stacking context (see `isolate`), so the
+    // unpositioned row content keeps painting above it.
+    // Deliberately no fallback to defaultRoleplayBackground (which ChatArea's restore effect
+    // applies): that would paint one identical banner across every roleplay chat.
+    const bannerUrl = chatBackgroundMetadataToUrl(chat.metadata?.background);
 
     return (
       <div
@@ -967,8 +970,8 @@ export function ChatSidebar() {
           <GripVertical size="0.8125rem" />
         </button>
 
-        {/* Avatar banner — active/hovered only, behind everything */}
-        {bannerAvatar?.avatarUrl && (
+        {/* Chat background banner — active/hovered only, behind everything */}
+        {bannerUrl && (
           <span
             aria-hidden
             className={cn(
@@ -976,14 +979,10 @@ export function ChatSidebar() {
               isActive ? "opacity-100" : "group-hover:opacity-100",
             )}
           >
-            <img
-              src={bannerAvatar.avatarUrl}
-              alt=""
-              className="h-full w-full object-cover"
-              style={getAvatarCropStyle(bannerAvatar.avatarCrop)}
-            />
-            {/* Opaque scrim, not image opacity — light avatars would otherwise kill text contrast */}
-            <span className="absolute inset-0 bg-gradient-to-r from-[var(--sidebar-background)] from-30% via-[var(--sidebar-background)]/85 to-[var(--sidebar-background)]/60" />
+            {/* Muted twice over: the image is faint, and a scrim still sits on top. Keeping
+                the scrim means text contrast does not depend on how light the image is. */}
+            <img src={bannerUrl} alt="" className="h-full w-full object-cover opacity-[0.14] saturate-50" />
+            <span className="absolute inset-0 bg-gradient-to-r from-[var(--sidebar-background)]/80 to-[var(--sidebar-background)]/40" />
           </span>
         )}
 
