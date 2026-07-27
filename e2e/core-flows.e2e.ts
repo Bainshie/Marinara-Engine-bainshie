@@ -9706,6 +9706,7 @@ test("Roleplay composer does not offer kaomoji", async ({ page }) => {
     }, chat.id);
     await page.goto("/");
 
+    await expect(page.locator(".chat-input-container textarea:visible")).toBeVisible();
     await expect(page.getByRole("button", { name: "Kaomoji" })).toHaveCount(0);
   } finally {
     await page.request.delete(`/api/chats/${chat.id}`).catch(() => undefined);
