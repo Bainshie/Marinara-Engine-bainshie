@@ -3280,7 +3280,8 @@ strong {
   .mari-sidebar-header,
   .mari-sidebar-footer,
   .mari-right-panel,
-  .mari-right-panel-header {
+  .mari-right-panel-header,
+  [data-chat-mode="roleplay"] .marinara-chat-input-shell {
     backdrop-filter: none !important;
   }
 
@@ -3289,6 +3290,12 @@ strong {
   .mari-sidebar-footer,
   .mari-right-panel-header {
     background: var(--card) !important;
+  }
+
+  [data-chat-mode="roleplay"] .marinara-chat-input-shell {
+    background:
+      linear-gradient(var(--card), var(--card)),
+      var(--background) !important;
   }
 
   .mari-sidebar,
