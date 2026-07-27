@@ -1823,25 +1823,27 @@ async function spotifyPlay(
       });
     }
     if (repeatTrackList && current?.repeatState !== "context") {
-      repeat = await applySpotifyRepeatAfterPlay(creds.accessToken, "context", current?.deviceId ?? playDeviceId, 3);
-      current = await verifyOrNudgeSpotifyPlayback({
-        accessToken: creds.accessToken,
-        body,
-        initialDeviceId: current?.deviceId ?? playDeviceId,
-        targetDeviceId,
-        targetDeviceName,
-        expectedTrackUri: firstUri,
-        expectedUris: playbackUris,
-        requireFirstUri: true,
-      });
+      for (const delay of SPOTIFY_REPEAT_RETRY_DELAYS_MS) {
+        if (delay > 0) await wait(delay);
+        repeat = await applySpotifyRepeatAfterPlay(
+          creds.accessToken,
+          "context",
+          current?.deviceId ?? playDeviceId,
+        );
+        const repeatSnapshot = await fetchSpotifyPlaybackSnapshot(creds.accessToken);
+        if (repeatSnapshot) current = repeatSnapshot;
+        if (spotifyPlaybackMatches(current, playbackUris, true) && current?.repeatState === "context") break;
+      }
     }
-    if (!spotifyPlaybackMatches(current, playbackUris, requireFirstUriMatch)) {
+    const repeatModeVerified = !repeatTrackList || current?.repeatState === "context";
+    if (!repeatModeVerified || !spotifyPlaybackMatches(current, playbackUris, requireFirstUriMatch)) {
       logger.warn(
-        "[spotify] Playback accepted but verification failed device=%s isPlaying=%s currentUri=%s expected=%s",
+        "[spotify] Playback accepted but verification failed device=%s isPlaying=%s currentUri=%s expected=%s repeat=%s",
         current?.deviceName ?? targetDeviceName ?? "unknown",
         current?.isPlaying === true ? "true" : "false",
         current?.trackUri ?? "none",
         playbackUris[0] ?? firstUri,
+        current?.repeatState ?? "unknown",
       );
       const queuedAfterStart = await queueSpotifyTracks(
         creds.accessToken,

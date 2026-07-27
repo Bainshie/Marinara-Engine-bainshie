@@ -1496,6 +1496,78 @@ const cases: RegressionCase[] = [
     },
   },
   {
+    name: "Spotify does not report a repeated Music DJ selection before context repeat is confirmed",
+    async run() {
+      const originalFetch = globalThis.fetch;
+      const selectedUris = [
+        "spotify:track:EEEEEEEEEEEEEEEEEEEEEE",
+        "spotify:track:FFFFFFFFFFFFFFFFFFFFFF",
+      ];
+      let activeUri = "spotify:track:ZZZZZZZZZZZZZZZZZZZZZZ";
+      let repeatRequests = 0;
+
+      globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+        const url = new URL(typeof input === "string" || input instanceof URL ? input : input.url);
+        const method = init?.method ?? "GET";
+        if (url.pathname === "/v1/me/player" && method === "GET") {
+          return new Response(
+            JSON.stringify({
+              is_playing: true,
+              repeat_state: "off",
+              item: { uri: activeUri },
+              device: { id: "regression-device", name: "Regression device", type: "computer" },
+            }),
+            { status: 200, headers: { "Content-Type": "application/json" } },
+          );
+        }
+        if (url.pathname === "/v1/me/player/play" && method === "PUT") {
+          const body = JSON.parse(String(init?.body ?? "{}")) as { uris?: string[] };
+          activeUri = body.uris?.[0] ?? activeUri;
+          return new Response(null, { status: 204 });
+        }
+        if (url.pathname === "/v1/me/player/repeat" && method === "PUT") {
+          repeatRequests++;
+          return new Response(null, { status: 204 });
+        }
+        throw new Error(`Unexpected Spotify regression request: ${method} ${url.pathname}`);
+      }) as typeof fetch;
+
+      try {
+        const results = await executeToolCalls(
+          [
+            {
+              id: "call_spotify_repeat_unconfirmed",
+              type: "function",
+              function: {
+                name: "spotify_play",
+                arguments: JSON.stringify({ uris: selectedUris, reason: "Unconfirmed repeat regression" }),
+              },
+            },
+          ],
+          {
+            spotify: { accessToken: "regression-token" },
+            spotifyRepeatAfterPlay: "context",
+          },
+        );
+
+        assert.equal(results[0]?.success, true);
+        const payload = JSON.parse(results[0]!.result) as {
+          applied?: boolean;
+          playbackPending?: boolean;
+          verification?: string;
+          repeatState?: string;
+        };
+        assert.equal(repeatRequests, 4, "Spotify repeat should be retried while playback reports it as off");
+        assert.equal(payload.applied, true);
+        assert.equal(payload.playbackPending, true);
+        assert.equal(payload.verification, "pending");
+        assert.equal(payload.repeatState, "off");
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+    },
+  },
+  {
     name: "npc default TTS voice pools work for non-ElevenLabs providers",
     run() {
       const baseConfig: Parameters<typeof resolveTTSVoiceForSpeaker>[0] = {
