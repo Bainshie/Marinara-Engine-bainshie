@@ -524,6 +524,8 @@
   "settings.application.docsLanguage.fallbackNote": "Guides not yet translated show in English.",
   "settings.application.docsLanguage.fix": "Fix documentation",
   "settings.application.docsLanguage.fixed": "Documentation reset to English.",
+  "settings.application.docsLanguage.fixedCleaned": "Documentation cleaned up — leftover language packs removed.",
+  "settings.application.docsLanguage.fixedReinstalled": "Documentation pack re-downloaded and verified.",
   "settings.application.docsLanguage.fixing": "Checking…",
   "settings.application.docsLanguage.fixNeeded": "Your selected documentation language isn't available right now. Fix resets the guides to English.",
   "settings.application.docsLanguage.healthy": "Documentation is healthy — nothing to fix.",

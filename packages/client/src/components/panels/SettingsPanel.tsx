@@ -2837,11 +2837,16 @@ function DocsLanguageSetting() {
     try {
       const result = await fixDocsLanguage.mutateAsync();
       setPickedLanguage(null);
-      toast.success(
-        result.repaired
-          ? localizeUi("settings.application.docsLanguage.fixed")
-          : localizeUi("settings.application.docsLanguage.healthy"),
-      );
+      // Say what the fix actually did: re-downloaded the pack, reset to
+      // English, or just swept leftovers — the outcomes are very different.
+      const message = !result.repaired
+        ? "settings.application.docsLanguage.healthy"
+        : result.actions.includes("reinstalled-pack")
+          ? "settings.application.docsLanguage.fixedReinstalled"
+          : result.actions.some((action) => action.startsWith("reset"))
+            ? "settings.application.docsLanguage.fixed"
+            : "settings.application.docsLanguage.fixedCleaned";
+      toast.success(localizeUi(message));
     } catch (err) {
       toast.error(err instanceof Error ? err.message : String(err));
     }
