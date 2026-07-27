@@ -378,30 +378,13 @@ export async function assemblePrompt(input: AssemblerInput): Promise<AssemblerOu
     macroCtx,
   };
 
-  // Outlet macros may appear before a lorebook marker, or in a preset without
-  // one. Pre-scan only when an enabled prompt section actually references an
-  // Outlet so the normal lazy lorebook path remains unchanged for other prompts.
-  const hasOutletMacro = sectionOrder.some((sectionId) => {
-    const section = sectionMap.get(sectionId);
-    if (!section || section.enabled !== "true" || !/\{\{\s*outlet\s*::/i.test(section.content)) return false;
-    if (!section.groupId) return true;
-    return groupMap.get(section.groupId)?.enabled !== "false";
-  });
-  if (hasOutletMacro) {
-    try {
-      await ensureLorebookScan(markerCtx);
-    } catch (err) {
-      macroCtx.outlets = {};
-      logger.warn(err, "[prompt] Outlet lorebook pre-scan failed");
-    }
-  }
-
   // ── Phase 1: Resolve sections in preset order ──
   // Separate ordered sections from depth-injected ones
   const orderedSections: ResolvedSection[] = [];
   const depthSections: ResolvedSection[] = [];
   let lorebookDepthEntriesCount = 0;
   let hasChatSummaryMarker = false;
+  let outletScanAttempted = false;
   const runtimeAgentTypesUsed = new Set<string>();
 
   for (const sectionId of sectionOrder) {
@@ -416,6 +399,20 @@ export async function assemblePrompt(input: AssemblerInput): Promise<AssemblerOu
     if (section.groupId) {
       const group = groupMap.get(section.groupId);
       if (group && group.enabled !== "true") continue;
+    }
+
+    // Outlet macros can appear before a lorebook marker, or without one. Scan
+    // immediately before the first eligible Outlet-bearing section so excluded
+    // impersonation sections and disabled groups cannot consume lorebook timing
+    // state or move scan side effects ahead of earlier prompt sections.
+    if (!outletScanAttempted && /\{\{\s*outlet\s*::/i.test(section.content)) {
+      outletScanAttempted = true;
+      try {
+        await ensureLorebookScan(markerCtx);
+      } catch (err) {
+        macroCtx.outlets = {};
+        logger.warn(err, "[prompt] Outlet lorebook scan failed");
+      }
     }
 
     // Track whether a chat_summary marker is present in the preset

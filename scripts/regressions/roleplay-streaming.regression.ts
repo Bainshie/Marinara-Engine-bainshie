@@ -263,8 +263,8 @@ assert.match(
 );
 assert.match(
   chatInputSource,
-  /setCurrentInput\(pendingCurrentInputRef\.current\);/u,
-  "Roleplay input should continue publishing the latest raw draft snapshot",
+  /if \(chatState\.activeChatId === chatId\) \{[\s\S]*?chatState\.setCurrentInput\(pendingCurrentInputRef\.current\);/u,
+  "Roleplay input should publish its final raw draft snapshot only while its chat remains active",
 );
 assert.doesNotMatch(
   chatRoleplaySurfaceSource,

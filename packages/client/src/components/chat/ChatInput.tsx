@@ -525,7 +525,10 @@ export const ChatInput = memo(function ChatInput({
       if (currentInputFrameRef.current !== null) {
         cancelAnimationFrame(currentInputFrameRef.current);
         currentInputFrameRef.current = null;
-        useChatStore.getState().setCurrentInput(pendingCurrentInputRef.current);
+        const chatState = useChatStore.getState();
+        if (chatState.activeChatId === chatId) {
+          chatState.setCurrentInput(pendingCurrentInputRef.current);
+        }
       }
       // Flush draft synchronously
       if (chatId && textarea) {

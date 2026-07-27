@@ -1860,7 +1860,9 @@ export function resolveMacros(template: string, ctx: MacroContext, options: Reso
     const match = body.match(/^outlet::([\s\S]*)$/i);
     if (!match) return undefined;
     const name = (match[1] ?? "").trim();
-    return name ? (ctx.outlets?.[name] ?? "") : "";
+    return name && ctx.outlets && Object.prototype.hasOwnProperty.call(ctx.outlets, name)
+      ? ctx.outlets[name]!
+      : "";
   });
 
   if (options.trimResult !== false) {

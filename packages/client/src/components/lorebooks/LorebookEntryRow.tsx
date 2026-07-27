@@ -250,6 +250,8 @@ export function LorebookEntryRow({
   const rowRef = useRef<HTMLDivElement>(null);
   const statusButtonRef = useRef<HTMLButtonElement>(null);
   const statusMenuRef = useRef<HTMLDivElement>(null);
+  const upstreamOutletNameRef = useRef(entry.outletName);
+  const pendingOutletNameRef = useRef(entry.outletName);
 
   // Re-sync local state when the upstream entry changes (e.g. after refetch)
   // so we don't show stale values, but avoid clobbering an in-flight edit.
@@ -257,6 +259,11 @@ export function LorebookEntryRow({
   useEffect(() => {
     if (lastSyncedRef.current === entry) return;
     lastSyncedRef.current = entry;
+    const previousOutletName = upstreamOutletNameRef.current;
+    upstreamOutletNameRef.current = entry.outletName;
+    if (pendingOutletNameRef.current === previousOutletName) {
+      pendingOutletNameRef.current = entry.outletName;
+    }
     setLocalEnabled(entry.enabled);
     setLocalStatus(deriveStatus(entry));
     setLocalPosition(entry.position);
@@ -437,6 +444,9 @@ export function LorebookEntryRow({
   );
 
   const duplicateDisabled = duplicateEntry.isPending || updateEntry.isPending;
+  const handleOutletNameDraftChange = useCallback((outletName: string) => {
+    pendingOutletNameRef.current = outletName;
+  }, []);
 
   const handleDuplicate = useCallback(
     (e: ReactMouseEvent) => {
@@ -458,6 +468,7 @@ export function LorebookEntryRow({
           order: localOrder,
           probability: localProbability === 100 ? null : localProbability,
           useRegex: localUseRegex,
+          outletName: pendingOutletNameRef.current,
         },
       });
     },
@@ -792,7 +803,7 @@ export function LorebookEntryRow({
                 label={localizeUi("ui.lorebooks.lorebookentryrow.position")}
                 value={String(localPosition)}
                 onChange={(v) => {
-                  const n = Number(v);
+                  const n = Number(v) as LorebookEntry["position"];
                   setLocalPosition(n);
                   patch({ position: n });
                 }}
@@ -868,7 +879,7 @@ export function LorebookEntryRow({
           <CompactSelect
             value={String(localPosition)}
             onChange={(v) => {
-              const n = Number(v);
+              const n = Number(v) as LorebookEntry["position"];
               setLocalPosition(n);
               patch({ position: n });
             }}
@@ -979,6 +990,7 @@ export function LorebookEntryRow({
           characterTags={characterTags}
           compact={compact}
           onUpdateEntry={onUpdateEntry}
+          onOutletNameDraftChange={handleOutletNameDraftChange}
         />
       )}
     </div>
@@ -1287,6 +1299,7 @@ function ExpandedDrawer({
   characterTags,
   compact,
   onUpdateEntry,
+  onOutletNameDraftChange,
 }: {
   entry: LorebookEntry;
   position: number;
@@ -1295,6 +1308,7 @@ function ExpandedDrawer({
   characterTags: string[];
   compact: boolean;
   onUpdateEntry?: LorebookEntryUpdateHandler;
+  onOutletNameDraftChange: (outletName: string) => void;
 }) {
   const { t: localizeUi } = useUiTranslation();
   const { mutate: mutateEntry, mutateAsync: mutateEntryAsync } = useUpdateLorebookEntry();
@@ -1598,7 +1612,10 @@ function ExpandedDrawer({
           <input
             type="text"
             value={form.outletName ?? ""}
-            onChange={(event) => update({ outletName: event.target.value })}
+            onChange={(event) => {
+              onOutletNameDraftChange(event.target.value);
+              update({ outletName: event.target.value });
+            }}
             onBlur={flushAutosave}
             maxLength={200}
             className="mari-editor-field w-full px-2.5 py-2 text-xs"

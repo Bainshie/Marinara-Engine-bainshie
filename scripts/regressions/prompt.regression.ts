@@ -1483,6 +1483,16 @@ const cases: RegressionCase[] = [
         "",
       );
       assert.equal(
+        resolveMacros("{{outlet::toString}}", {
+          user: "Mari",
+          char: "Dottore",
+          characters: ["Dottore"],
+          variables: {},
+          outlets: processed.outlets,
+        }),
+        "",
+      );
+      assert.equal(
         resolveMacros("{{outlet::nested}}", {
           user: "Mari",
           char: "Dottore",
