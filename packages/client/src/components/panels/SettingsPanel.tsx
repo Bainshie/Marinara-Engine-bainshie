@@ -4,6 +4,7 @@
 import {
   TRACKER_DATA_PANEL_SECTIONS,
   TRACKER_PANEL_DEFAULT_BACKGROUND_COLOR,
+  QUICK_REPLIES_SETTINGS_CONTROL_ID,
   useUIStore,
   getDefaultAppAccentColor,
   getDefaultAppBackgroundColor,
@@ -1136,7 +1137,7 @@ const SETTINGS_SEARCHABLE_CONTROLS: readonly SettingsSearchableControlMeta[] = [
     kind: "Input",
   },
   {
-    id: "quick-replies",
+    id: QUICK_REPLIES_SETTINGS_CONTROL_ID,
     sectionId: "input-editing",
     label: "Quick replies",
     description: "Show alternate draft actions beside Send.",
@@ -2345,6 +2346,8 @@ export function SettingsPanel() {
   const localize = useLocalizedUiText();
   const rawSettingsTab = useUIStore((s) => s.settingsTab);
   const setSettingsTab = useUIStore((s) => s.setSettingsTab);
+  const settingsTargetControlId = useUIStore((s) => s.settingsTargetControlId);
+  const setSettingsTargetControlId = useUIStore((s) => s.setSettingsTargetControlId);
   const settingsTab = normalizeSettingsTab(rawSettingsTab);
   const [settingsSearch, setSettingsSearch] = useState("");
   const [quickAccessOpen, setQuickAccessOpen] = useState(false);
@@ -2400,6 +2403,16 @@ export function SettingsPanel() {
     },
     [setSettingsTab],
   );
+
+  useEffect(() => {
+    if (!settingsTargetControlId) return;
+    const control = SETTINGS_SEARCHABLE_CONTROLS.find((entry) => entry.id === settingsTargetControlId);
+    const section = control ? SETTINGS_SECTION_BY_ID.get(control.sectionId) : null;
+    if (control && section) {
+      jumpToSearchResult({ type: "control", control, section });
+    }
+    setSettingsTargetControlId(null);
+  }, [jumpToSearchResult, setSettingsTargetControlId, settingsTargetControlId]);
 
   return (
     <div className="mari-settings-panel-chrome flex h-full flex-col overflow-hidden">
@@ -2602,7 +2615,7 @@ function QuickRepliesSetting() {
 
   return (
     <div
-      id={getSettingsControlAnchorId("quick-replies")}
+      id={getSettingsControlAnchorId(QUICK_REPLIES_SETTINGS_CONTROL_ID)}
       className={cn(
         "scroll-mt-3 overflow-hidden rounded-xl border transition-colors",
         showQuickRepliesMenu

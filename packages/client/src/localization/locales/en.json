@@ -3352,6 +3352,7 @@
   "ui.chatSettings.impersonatesection.emptyUseChatBuiltInDefault": "Empty = use chat/built-in default",
   "ui.chatSettings.impersonatesection.enableQuickSendInSettingsGeneralInputEditingQuick": "Enable Quick Send in Settings > General > Input & Editing > Quick replies.",
   "ui.chatSettings.impersonatesection.globalSettingsAppliedToEveryImpersonateGenerationAcrossAll": "Global settings applied to every /impersonate generation across all chats.",
+  "ui.chatSettings.impersonatesection.openSettings": "Open settings",
   "ui.chatSettings.impersonatesection.optionalGlobalInstructionSentToTheModelWhenYou": "Optional global instruction sent to the model when you /impersonate. Leave empty to use the chat-specific prompt, or the built-in default if that chat has none. Macros like {{user}}, {{persona_description}} and {{impersonate_direction}} are replaced before sending.",
   "ui.chatSettings.impersonatesection.skipAgents": "Skip agents",
   "ui.chatSettings.impersonatesection.suppressTrackersRoutersAndOtherAgentWork": "Suppress trackers, routers, and other agent work.",
