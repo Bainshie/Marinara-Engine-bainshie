@@ -17,6 +17,7 @@ import {
   X,
 } from "lucide-react";
 import { toast } from "sonner";
+import { BACKGROUND_THUMBNAIL_WIDTH } from "@marinara-engine/shared";
 import { api } from "../../../lib/api-client";
 import { cn } from "../../../lib/utils";
 import {
@@ -467,7 +468,7 @@ export function BackgroundPicker({
               hundreds of MB of bitmap. The server falls back to the original when it
               cannot resize (animated GIF, no native sharp). */}
           <img
-            src={`${background.url}?w=320`}
+            src={`${background.url}?w=${BACKGROUND_THUMBNAIL_WIDTH}`}
             alt=""
             className="h-full w-full object-cover"
             loading="lazy"

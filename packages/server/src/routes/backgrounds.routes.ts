@@ -29,7 +29,7 @@ import { resolveConnectionImageDefaults } from "../services/image/image-generati
 import { loadImageGenerationUserSettings } from "../services/image/image-generation-settings.js";
 import { resolveImagePromptReviewSize } from "../services/image/image-prompt-review.js";
 import { resolveImageConnectionFallback } from "../services/generation/media-connection-fallback.js";
-import { resolveGameSetupArtStylePrompt } from "@marinara-engine/shared";
+import { BACKGROUND_THUMBNAIL_WIDTH, resolveGameSetupArtStylePrompt } from "@marinara-engine/shared";
 
 const BG_DIR = join(DATA_DIR, "backgrounds");
 // Sibling of BG_DIR, not inside it: the library listing and folder organization walk BG_DIR.
@@ -49,7 +49,7 @@ function ensureDir() {
  * purpose: the sidebar row banner and the settings picker tile both fit inside 320px even at
  * 3x, so they share a single cached file. Add a width here when something needs a bigger one.
  */
-const THUMB_WIDTHS = new Set([320]);
+const THUMB_WIDTHS = new Set([BACKGROUND_THUMBNAIL_WIDTH]);
 
 /**
  * Downscaled copy of a background, cached on disk. Returns null whenever the original
@@ -70,7 +70,18 @@ async function resolveThumbPath(filePath: string, filename: string, width: numbe
     const sharp = await getSharp();
     const buffer = await sharp(filePath).resize({ width, withoutEnlargement: true }).webp({ quality: 72 }).toBuffer();
     if (!existsSync(THUMB_DIR)) mkdirSync(THUMB_DIR, { recursive: true });
-    await writeFile(thumbPath, buffer);
+    const temporaryPath = `${thumbPath}.${process.pid}.${randomUUID()}.tmp`;
+    try {
+      await writeFile(temporaryPath, buffer);
+      try {
+        renameSync(temporaryPath, thumbPath);
+      } catch (error) {
+        // On Windows, a concurrent winner may make rename fail because the target now exists.
+        if (!existsSync(thumbPath)) throw error;
+      }
+    } finally {
+      if (existsSync(temporaryPath)) unlinkSync(temporaryPath);
+    }
     return thumbPath;
   } catch (error) {
     logger.warn(error instanceof Error ? error : new Error(String(error)), "Background thumbnail failed for %s", filename);
