@@ -243,8 +243,13 @@ assert.doesNotMatch(
 );
 assert.match(
   chatInputSource,
-  /inputPresenceTimerRef\.current = setTimeout\(\(\) => \{[\s\S]*?setHasInput\(true\);[\s\S]*?\}, 150\);/u,
-  "Roleplay composer controls should update after a typing pause instead of rerendering on the first character",
+  /setHasInput\(\(current\) => \(current === nextHasInput \? current : nextHasInput\)\);/u,
+  "Roleplay composer presence should change only when the draft crosses the empty boundary",
+);
+assert.doesNotMatch(
+  chatInputSource,
+  /inputPresenceTimerRef/u,
+  "Roleplay typing should not create and cancel a redundant presence timer on every keystroke",
 );
 assert.match(
   chatStoreSource,
