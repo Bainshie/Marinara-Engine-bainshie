@@ -106,6 +106,16 @@ assert.match(
   "Echo Chamber should persist a completed resize against the active chat",
 );
 assert.match(
+  echoChamberPanelSource,
+  /onPointerCancel=\{handleResizeCancel\}/u,
+  "a canceled Echo Chamber resize should use its rollback path",
+);
+assert.doesNotMatch(
+  echoChamberPanelSource,
+  /onPointerCancel=\{handleResizeEnd\}/u,
+  "pointer cancellation must not persist an incomplete Echo Chamber resize",
+);
+assert.match(
   uiStoreSource,
   /echoChamberSizeByChatId: state\.echoChamberSizeByChatId/u,
   "per-chat Echo Chamber dimensions should survive UI-store rehydration",

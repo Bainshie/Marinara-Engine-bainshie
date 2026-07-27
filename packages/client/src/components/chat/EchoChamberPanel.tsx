@@ -407,6 +407,21 @@ export function EchoChamberPanel({ hiddenOnMobile = false }: EchoChamberPanelPro
     [commitPanelSize],
   );
 
+  const handleResizeCancel = useCallback(
+    (event: ReactPointerEvent<HTMLButtonElement>) => {
+      const start = resizeRef.current;
+      resizeRef.current = null;
+      pendingPanelSizeRef.current = null;
+      if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+        event.currentTarget.releasePointerCapture(event.pointerId);
+      }
+      if (start) {
+        setPanelSize(clampPanelSize(start.width, start.height));
+      }
+    },
+    [clampPanelSize],
+  );
+
   const handleResizeKeyDown = useCallback(
     (event: ReactKeyboardEvent<HTMLButtonElement>) => {
       if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)) return;
@@ -668,7 +683,7 @@ export function EchoChamberPanel({ hiddenOnMobile = false }: EchoChamberPanelPro
         onPointerDown={handleResizeStart}
         onPointerMove={handleResizeMove}
         onPointerUp={handleResizeEnd}
-        onPointerCancel={handleResizeEnd}
+        onPointerCancel={handleResizeCancel}
         onKeyDown={handleResizeKeyDown}
       >
         <span

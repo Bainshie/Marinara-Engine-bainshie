@@ -1798,15 +1798,16 @@ async function spotifyPlay(
     if (!play.ok) return { error: play.error };
     if (singleTrackUri) await wait(SPOTIFY_PLAYBACK_SETTLE_MS);
     let repeat = await applySpotifyRepeatAfterPlay(creds.accessToken, effectiveRepeatAfterPlay, playDeviceId);
+    const requireFirstUriMatch = singleTrackUri || (allTrackUris && uris.length > 1);
     let current = await verifyOrNudgeSpotifyPlayback({
       accessToken: creds.accessToken,
       body,
       initialDeviceId: playDeviceId,
       targetDeviceId,
       targetDeviceName,
-      expectedTrackUri: singleTrackUri || (allTrackUris && uris.length > 1) ? firstUri : undefined,
+      expectedTrackUri: requireFirstUriMatch ? firstUri : undefined,
       expectedUris: playbackUris,
-      requireFirstUri: singleTrackUri || (allTrackUris && uris.length > 1),
+      requireFirstUri: requireFirstUriMatch,
     });
     if (singleTrackUri && effectiveRepeatAfterPlay === "track" && current?.repeatState !== "track") {
       repeat = await applySpotifyRepeatAfterPlay(creds.accessToken, "track", current?.deviceId ?? playDeviceId, 3);
@@ -1834,7 +1835,7 @@ async function spotifyPlay(
         requireFirstUri: true,
       });
     }
-    if (!spotifyPlaybackMatches(current, playbackUris, singleTrackUri || (allTrackUris && uris.length > 1))) {
+    if (!spotifyPlaybackMatches(current, playbackUris, requireFirstUriMatch)) {
       logger.warn(
         "[spotify] Playback accepted but verification failed device=%s isPlaying=%s currentUri=%s expected=%s",
         current?.deviceName ?? targetDeviceName ?? "unknown",
