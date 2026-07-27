@@ -1970,7 +1970,7 @@ export const ChatInput = memo(function ChatInput({
         {/* Text input */}
         <textarea
           ref={textareaRef}
-          onChange={handleInput}
+          onInput={handleInput}
           onKeyDown={handleKeyDown}
           onPaste={handlePaste}
           onFocus={() => {

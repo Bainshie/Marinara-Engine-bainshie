@@ -221,6 +221,16 @@ const chatHandleInputSource =
     /const handleInput = \(event\?: FormEvent<HTMLTextAreaElement>\) => \{[\s\S]*?\n  \};\n\n  \/\/ Dismiss feedback/u,
   )?.[0] ?? "";
 assert.match(chatTextareaSource, /disabled=\{!activeChatId\}/u);
+assert.match(
+  chatTextareaSource,
+  /onInput=\{handleInput\}/u,
+  "Roleplay should use the direct input event path used by Conversation",
+);
+assert.doesNotMatch(
+  chatTextareaSource,
+  /onChange=\{handleInput\}/u,
+  "Roleplay typing should not route through React's normalized change event",
+);
 assert.doesNotMatch(
   chatTextareaSource,
   /disabled=\{[^}]*isInputBusy/u,
