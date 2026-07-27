@@ -556,6 +556,7 @@ import {
   scopeLorebookScanResultToCharacterContext,
 } from "../../packages/server/src/services/lorebook/index.js";
 import { scanForActivatedEntries } from "../../packages/server/src/services/lorebook/keyword-scanner.js";
+import { processActivatedEntries } from "../../packages/server/src/services/lorebook/prompt-injector.js";
 import { parseAssistantWorkspaceAction } from "../../packages/server/src/services/professor-mari/workspace-agent.service.js";
 import { fitMessagesForModelAccess } from "../../packages/server/src/services/generation/model-access-policy.js";
 import {
@@ -1412,6 +1413,67 @@ const cases: RegressionCase[] = [
       });
 
       assert.equal(resolved, "regenerate | 12 minutes | Europe/Warsaw | Continue the experiment.");
+    },
+  },
+  {
+    name: "lorebook Outlets collect only named position-7 entries and resolve case-sensitively",
+    run() {
+      const activated = [
+        { entry: { position: 0, outletName: "", order: 0, content: "Automatic before" } },
+        { entry: { position: 2, outletName: "", order: 1, depth: 3, role: "system", content: "Depth entry" } },
+        { entry: { position: 7, outletName: "rules", order: 20, content: "Second rule" } },
+        { entry: { position: 7, outletName: "rules", order: 10, content: "First rule" } },
+        { entry: { position: 7, outletName: "Rules", order: 30, content: "Different case" } },
+        { entry: { position: 7, outletName: "", order: 40, content: "Unnamed Outlet" } },
+      ] as any;
+
+      const processed = processActivatedEntries(activated);
+      assert.equal(processed.worldInfoBefore, "Automatic before");
+      assert.deepEqual(processed.depthEntries.map((entry) => entry.content), ["Depth entry"]);
+      assert.deepEqual(processed.outlets, {
+        rules: "First rule\nSecond rule",
+        Rules: "Different case",
+      });
+      assert.equal(
+        resolveMacros("Before\n{{outlet:: rules }}\nAfter", {
+          user: "Mari",
+          char: "Dottore",
+          characters: ["Dottore"],
+          variables: {},
+          outlets: processed.outlets,
+        }),
+        "Before\nFirst rule\nSecond rule\nAfter",
+      );
+      assert.equal(
+        resolveMacros("{{outlet::RULES}}", {
+          user: "Mari",
+          char: "Dottore",
+          characters: ["Dottore"],
+          variables: {},
+          outlets: processed.outlets,
+        }),
+        "",
+      );
+      assert.equal(
+        resolveMacros("{{outlet::toString}}", {
+          user: "Mari",
+          char: "Dottore",
+          characters: ["Dottore"],
+          variables: {},
+          outlets: processed.outlets,
+        }),
+        "",
+      );
+      assert.equal(
+        resolveMacros("{{outlet::nested}}", {
+          user: "Mari",
+          char: "Dottore",
+          characters: ["Dottore"],
+          variables: {},
+          outlets: { nested: "{{outlet::rules}}" },
+        }),
+        "{{outlet::rules}}",
+      );
     },
   },
   {

@@ -22,6 +22,7 @@ import {
   buildQuestJournalData,
   isAgentAvailableInChatMode,
   isAgentConfigDeleted,
+  isExternallyImportedAgent,
   normalizeAgentPromptTemplateSelectionMap,
   normalizeManualTrackerAgentTypes,
   normalizeThinkingTagPairs,
@@ -81,6 +82,7 @@ import { createCustomStickersStorage } from "../services/storage/custom-stickers
 import { createCharacterGalleryStorage } from "../services/storage/character-gallery.storage.js";
 import { createPersonaGalleryStorage } from "../services/storage/persona-gallery.storage.js";
 import { createAppSettingsStorage } from "../services/storage/app-settings.storage.js";
+import { getCustomAgentImportPolicy } from "../services/agents/custom-agent-import-policy.service.js";
 import { buildLorebookSemanticEmbeddingsById, warmLorebookEntryEmbeddings } from "../services/lorebook/embeddings.js";
 import { applyRegexScriptsToPromptMessages } from "../services/regex/regex-application.js";
 import {
@@ -1589,8 +1591,13 @@ export async function generateRoutes(app: FastifyInstance) {
         )
           .filter((agentId) => isAgentAvailableInChatMode(chatMode, agentId))
           .filter((agentId) => !(gameSpotifyMusicEnabled && agentId === "spotify"));
+        const customAgentImportsEnabled = (await getCustomAgentImportPolicy(app.db)).enabled;
         const configuredPromptAgents =
-          chatEnableAgents && rawChatActiveAgentIds.length > 0 ? await agentsStore.list() : [];
+          chatEnableAgents && rawChatActiveAgentIds.length > 0
+            ? (await agentsStore.list()).filter(
+                (agent) => !isExternallyImportedAgent(agent.type, agent.settings) || customAgentImportsEnabled,
+              )
+            : [];
         const deletedBuiltInAgentTypes = new Set(
           configuredPromptAgents
             .filter((agent) => BUILT_IN_AGENTS.some((builtIn) => builtIn.id === agent.type))
@@ -7116,9 +7123,9 @@ export async function generateRoutes(app: FastifyInstance) {
           // Sort so game_state_update (world-state) is processed before dependent types
           // (character_tracker_update, persona_stats_update) that merge into the snapshot.
           const RESULT_ORDER: Record<string, number> = { game_state_update: 0 };
-          const sortedResults = [...postResults].sort(
-            (a, b) => (RESULT_ORDER[a.type] ?? 1) - (RESULT_ORDER[b.type] ?? 1),
-          );
+          const sortedResults = postResults
+            .filter((result) => customAgentCanEmitResult(result, resolvedAgents, builtInAgentTypes))
+            .sort((a, b) => (RESULT_ORDER[a.type] ?? 1) - (RESULT_ORDER[b.type] ?? 1));
           const messageId = (lastSavedMsg as any)?.id ?? "";
           // Determine swipe index for this generation so ALL tracker agents target the
           // same (messageId, swipeIndex) snapshot that the world-state agent creates.
