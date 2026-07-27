@@ -219,6 +219,13 @@ export function ChatSidebar() {
   const setActiveChatId = useChatStore((s) => s.setActiveChatId);
   const unreadCounts = useChatStore((s) => s.unreadCounts);
   const hydrateUnread = useChatStore((s) => s.hydrateUnread);
+  // Liveness signals for the rows. All three are already maintained per-chat by the store,
+  // so a backgrounded chat can show what it is doing without any extra fetching.
+  // `inputDrafts` writes are debounced (ConversationInput handleInput), so subscribing to
+  // the whole Map does not re-render the list on every keystroke.
+  const streamingChatId = useChatStore((s) => s.streamingChatId);
+  const perChatTyping = useChatStore((s) => s.perChatTyping);
+  const inputDrafts = useChatStore((s) => s.inputDrafts);
   // One interval for the whole list: a 60s-cadence clock so schedule/override-derived
   // status dots refresh when time alone changes them, without per-row timers.
   const presenceNow = usePresenceClock();
@@ -851,6 +858,27 @@ export function ChatSidebar() {
       charLookup,
       presenceNow,
     );
+
+    // ── Row liveness ──
+    // Exactly one subtitle, so rows never change height as these states come and go.
+    // Precedence: typing > generating > draft.
+    const isGenerating = streamingChatId === chat.id;
+    const typingCharacter = perChatTyping.get(chat.id);
+    const hasDraft = !isActive && Boolean(inputDrafts.get(chat.id)?.trim());
+    const subtitle = typingCharacter
+      ? localizeUi("ui.layout.chatsidebar.value1IsTyping", { value1: typingCharacter })
+      : isGenerating
+        ? localizeUi("ui.layout.chatsidebar.generating")
+        : hasDraft
+          ? localizeUi("ui.layout.chatsidebar.unsentDraft")
+          : null;
+
+    // Discord-style banner: the chat's first character avatar bled across the row, behind a
+    // scrim. Only on the active/hovered row — 40 at once is soup, and it doubles as the
+    // active cue. Sits at -z-10 inside the row's own stacking context (see `isolate`), so
+    // the unpositioned row content keeps painting above it.
+    const bannerAvatar = charIds.map((id) => charLookup.get(id)).find((entry) => entry?.avatarUrl);
+
     return (
       <div
         role="button"
@@ -899,7 +927,7 @@ export function ChatSidebar() {
           if (window.innerWidth < 768) setSidebarOpen(false);
         }}
         className={cn(
-          "group relative flex w-full touch-pan-y items-center gap-2.5 rounded-lg px-3 py-2.5 text-left transition-all duration-150",
+          "group relative isolate flex w-full touch-pan-y items-center gap-2.5 overflow-hidden rounded-lg px-3 py-2.5 text-left transition-all duration-150",
           multiSelectMode && isSelected
             ? "mari-chrome-accent-surface mari-accent-animated"
             : isActive
@@ -935,9 +963,34 @@ export function ChatSidebar() {
           <GripVertical size="0.8125rem" />
         </button>
 
-        {/* Active indicator */}
-        {isActive && (
-          <span className="mari-chrome-accent-progress mari-accent-animated absolute -left-0.5 top-1/2 h-5 w-1 -translate-y-1/2 rounded-full" />
+        {/* Avatar banner — active/hovered only, behind everything */}
+        {bannerAvatar?.avatarUrl && (
+          <span
+            aria-hidden
+            className={cn(
+              "pointer-events-none absolute inset-0 -z-10 opacity-0 transition-opacity duration-200",
+              isActive ? "opacity-100" : "group-hover:opacity-100",
+            )}
+          >
+            <img
+              src={bannerAvatar.avatarUrl}
+              alt=""
+              className="h-full w-full object-cover"
+              style={getAvatarCropStyle(bannerAvatar.avatarCrop)}
+            />
+            {/* Opaque scrim, not image opacity — light avatars would otherwise kill text contrast */}
+            <span className="absolute inset-0 bg-gradient-to-r from-[var(--sidebar-background)] from-30% via-[var(--sidebar-background)]/85 to-[var(--sidebar-background)]/60" />
+          </span>
+        )}
+
+        {/* Active / generating indicator */}
+        {(isActive || isGenerating) && (
+          <span
+            className={cn(
+              "mari-chrome-accent-progress mari-accent-animated absolute -left-0.5 top-1/2 h-5 w-1 -translate-y-1/2 rounded-full",
+              isGenerating && "animate-pulse",
+            )}
+          />
         )}
 
         {/* Chat avatar(s) or mode icon fallback — with unread badge overlay */}
@@ -1074,6 +1127,11 @@ export function ChatSidebar() {
           >
             {chat.name}
           </span>
+          {subtitle && (
+            <span className="mari-chrome-accent-text-muted block truncate text-[0.6875rem] leading-tight">
+              {subtitle}
+            </span>
+          )}
         </div>
 
         {/* Branch count badge */}
