@@ -22,6 +22,7 @@ This file is the release-notes source of truth for Marinara Engine. Reuse these 
 
 ### Fixed
 
+- Made `CHAT_GENERATION_TIMEOUT_MS` govern the time-to-first-byte budget for background generation as well, so a slow local model no longer fails the Noodle timeline refresh with `HeadersTimeoutError` / "fetch failed" after a fixed five minutes. The default stays at five minutes; raise the variable to give slow local models more room (#4174).
 - Documented the **Documentation Language** control in the settings overview guide (in English, Spanish, and German), and made the **Fix documentation** toast report what actually happened — pack re-downloaded, guides reset to English, or leftovers cleaned up — instead of always claiming a reset (#4158).
 
 - Rendered indented code fences correctly in the shared markdown renderer: a fence nested inside a list item (as in several developer guides) previously never closed and showed its ` ``` ` markers as literal text in the docs viewer, and list-nested code no longer renders or copies phantom leading spaces (#4100).
