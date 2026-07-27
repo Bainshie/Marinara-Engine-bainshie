@@ -537,10 +537,17 @@ export function ChatSidebar() {
   // Uses a structured ref so each concern (tab, folder, scroll) resolves
   // independently — folder expansion retries when folders load late, and
   // scroll waits until both tab and folder are settled.
-  const syncRef = useRef<{ chatId: string | null; tabSynced: boolean; folderSynced: boolean }>({
+  const syncRef = useRef<{
+    chatId: string | null;
+    tabSynced: boolean;
+    folderSynced: boolean;
+    /** Folder we already asked to expand — the mutation is in flight, don't ask again. */
+    expandRequestedFolderId: string | null;
+  }>({
     chatId: null,
     tabSynced: false,
     folderSynced: false,
+    expandRequestedFolderId: null,
   });
   // When true the next sync skips clearing the search query — set by
   // the sidebar's own click handler so clicking a search result doesn't
@@ -560,6 +567,7 @@ export function ChatSidebar() {
       s.chatId = activeChatId;
       s.tabSynced = false;
       s.folderSynced = false;
+      s.expandRequestedFolderId = null;
     }
 
     // 1. Tab sync — once per chat switch
@@ -590,7 +598,13 @@ export function ChatSidebar() {
       } else if (folders) {
         const folder = folders.find((f) => f.id === chat.folderId);
         if (folder?.collapsed) {
-          updateFolderMut.mutate({ id: folder.id, collapsed: false });
+          // Once per folder: this effect re-runs on every render (the mutation object
+          // identity changes), and mutating re-renders — firing again here is an
+          // infinite update loop (React #185) until the folders query comes back.
+          if (s.expandRequestedFolderId !== folder.id) {
+            s.expandRequestedFolderId = folder.id;
+            updateFolderMut.mutate({ id: folder.id, collapsed: false });
+          }
           // folderSynced stays false — re-runs after query invalidation
         } else {
           s.folderSynced = true;
@@ -608,7 +622,8 @@ export function ChatSidebar() {
       }, 200);
       return () => clearTimeout(timer);
     }
-  }, [activeChatId, chats, folders, updateFolderMut]);
+    // `updateFolderMut.mutate` is stable; the mutation object itself is not.
+  }, [activeChatId, chats, folders, updateFolderMut.mutate]);
 
   const handleNewChat = useCallback(
     (mode: ChatMode) => {
