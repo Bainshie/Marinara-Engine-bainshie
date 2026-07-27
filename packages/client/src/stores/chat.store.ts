@@ -134,6 +134,13 @@ function abortGenerationForChat(chatId: string, controller?: AbortController) {
 
 const notificationAutoDismissTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
+/**
+ * Chats whose unread state came from the server's persisted autonomous-unread list. Only these
+ * may be pruned when the server stops reporting them — live notifications raised by a finished
+ * generation are client-only and were being wiped by the next chat-list refetch.
+ */
+let serverHydratedUnreadChatIds = new Set<string>();
+
 function clearNotificationTimer(chatId: string) {
   const timer = notificationAutoDismissTimers.get(chatId);
   if (!timer) return;
@@ -816,17 +823,21 @@ export const useChatStore = create<ChatState>()(
         }
 
         if (known) {
+          // Prune a chat that is gone, or one the server used to report and no longer does.
+          // Never prune a client-only entry: those come from a generation that just finished
+          // in a background chat and the server list knows nothing about them.
+          const isStale = (chatId: string) =>
+            !known.has(chatId) || (serverHydratedUnreadChatIds.has(chatId) && !serverChatIds.has(chatId));
           for (const chatId of Array.from(unreadCounts.keys())) {
-            if (!known.has(chatId) || !serverChatIds.has(chatId)) {
-              unreadCounts.delete(chatId);
-            }
+            if (isStale(chatId)) unreadCounts.delete(chatId);
           }
           for (const chatId of Array.from(chatNotifications.keys())) {
-            if (!known.has(chatId) || !serverChatIds.has(chatId)) {
+            if (isStale(chatId)) {
               clearNotificationTimer(chatId);
               chatNotifications.delete(chatId);
             }
           }
+          serverHydratedUnreadChatIds = serverChatIds;
         }
 
         return { unreadCounts, chatNotifications };
@@ -949,6 +960,7 @@ export const useChatStore = create<ChatState>()(
       }),
 
     reset: () => {
+      serverHydratedUnreadChatIds = new Set();
       const { abortControllers } = useChatStore.getState();
       for (const [chatId, controller] of abortControllers) {
         abortGenerationForChat(chatId, controller);
