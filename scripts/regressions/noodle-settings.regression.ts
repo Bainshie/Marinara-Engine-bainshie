@@ -6,6 +6,7 @@ import type { DB } from "../../packages/server/src/db/connection.js";
 import { eq } from "../../packages/server/src/db/file-query.js";
 import { createFileNativeDB } from "../../packages/server/src/db/file-backed-store.js";
 import { noodleAccounts } from "../../packages/server/src/db/schema/noodle.js";
+import { createAppSettingsStorage } from "../../packages/server/src/services/storage/app-settings.storage.js";
 import {
   DEFAULT_NOODLE_SETTINGS,
   noodleAccountSettingsPatchSchema,
@@ -78,6 +79,12 @@ assert.equal(salvaged.generationConnectionId, "conn-1");
 assert.equal(salvaged.refreshesPerDay, 6);
 assert.equal(salvaged.autoPostingDefaultIntensity, DEFAULT_NOODLE_SETTINGS.autoPostingDefaultIntensity);
 
+// The pre-rename guidance key must still be read (rename must not reset customized text).
+assert.equal(
+  normalizeNoodleSettings({ privateGenerationGuidance: "custom guidance" }).noodlerGenerationGuidance,
+  "custom guidance",
+);
+
 const storageDir = mkdtempSync(join(tmpdir(), "marinara-noodle-settings-"));
 process.env.FILE_STORAGE_DIR = storageDir;
 
@@ -94,6 +101,14 @@ try {
   assert.equal(updated.allowRandomUsers, true);
   assert.equal(updated.includeCharacterSchedules, true);
   assert.equal(updated.maxGeneratedPostsPerRefresh, 11);
+  // Legacy read → current write → downgrade read. Saving any setting must keep the old
+  // guidance key mirrored, or a rollback to a pre-rename build loses the customized text.
+  await firstNoodle.updateSettings({ noodlerGenerationGuidance: "custom guidance" });
+  const persistedSettings = JSON.parse(
+    (await createAppSettingsStorage(firstDb as unknown as DB).get("noodle.settings")) ?? "{}",
+  ) as Record<string, unknown>;
+  assert.equal(persistedSettings.noodlerGenerationGuidance, "custom guidance");
+  assert.equal(persistedSettings.privateGenerationGuidance, "custom guidance");
   const concurrentAccount = await firstNoodle.upsertAccountFromProfile({
     kind: "persona",
     entityId: "concurrent-settings",

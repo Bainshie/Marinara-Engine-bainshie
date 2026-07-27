@@ -910,7 +910,13 @@ export function createNoodleStorage(db: DB) {
     async updateSettings(input: NoodleSettingsUpdateInput): Promise<NoodleSettings> {
       const current = await this.getSettings();
       const next = normalizeNoodleSettings({ ...current, ...input });
-      await settingsStore.set(NOODLE_SETTINGS_KEY, JSON.stringify(next));
+      // Write-only rollback mirror: a pre-rename build reads only the old key, so dropping it
+      // here would silently reset a customized guidance string on downgrade. Drop once no
+      // supported version reads `privateGenerationGuidance`.
+      await settingsStore.set(
+        NOODLE_SETTINGS_KEY,
+        JSON.stringify({ ...next, privateGenerationGuidance: next.noodlerGenerationGuidance }),
+      );
       const currentSchedule = await this.getRefreshSchedule();
       const reconciled = reconcileNoodleRefreshSchedule(currentSchedule, next.refreshesPerDay, new Date());
       await this.saveRefreshSchedule(clearNoodleRefreshFailure(reconciled));

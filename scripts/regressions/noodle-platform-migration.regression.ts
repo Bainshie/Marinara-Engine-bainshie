@@ -85,6 +85,35 @@ try {
   assert.equal(stageProfile?.id, "acct-noodler");
   assert.equal(stageProfile?.platform, "noodler");
   assert.equal(stageProfile?.noodleAccountId, "acct-noodle");
+
+  // Restore path: the backup importer inserts snapshot rows directly, bypassing the loader
+  // migration. Without migrating there, a restored pre-rename NoodleR account picks up the
+  // `platform: "noodle"` column default and lands on the Noodle timeline.
+  const { noodleAccounts } = await import("../../packages/server/src/db/schema/noodle.js");
+  const importedLegacyRow = {
+    id: "acct-imported",
+    kind: "persona",
+    entityId: "p2",
+    handle: "imported_handle",
+    displayName: "Imported Stage",
+    bio: "",
+    invited: "false",
+    settings: "{}",
+    visibility: "private",
+    publicAccountId: null,
+    createdAt: "2026-07-02T00:00:00.000Z",
+    updatedAt: "2026-07-02T00:00:00.000Z",
+  };
+  await db
+    .insert(noodleAccounts)
+    .values(migrateLegacyNoodleAccountRow(importedLegacyRow) as never)
+    .onConflictDoUpdate({
+      target: noodleAccounts.id,
+      set: migrateLegacyNoodleAccountRow(importedLegacyRow) as never,
+    });
+  const idsAfterImport = (await noodle.listAccounts()).map((account) => account.id);
+  assert.deepEqual(idsAfterImport, ["acct-noodle"]);
+  assert.equal((await noodle.getNoodlerAccountById("acct-imported"))?.platform, "noodler");
 } finally {
   await closeStore?.();
   rmSync(storageDir, { recursive: true, force: true });

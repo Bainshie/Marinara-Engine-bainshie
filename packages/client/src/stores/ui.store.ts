@@ -2271,7 +2271,7 @@ export const useUIStore = create<UIState>()(
     }),
     {
       name: "marinara-engine-ui",
-      version: 85,
+      version: 86,
       // Debounce localStorage writes to avoid sync I/O on every state change
       storage: createJSONStorage(() => {
         let timer: ReturnType<typeof setTimeout> | null = null;
@@ -2845,11 +2845,25 @@ export const useUIStore = create<UIState>()(
           if (persisted.imageGameWidth === undefined) persisted.imageGameWidth = 1280;
           if (persisted.imageGameHeight === undefined) persisted.imageGameHeight = 720;
         }
-        // v84 → v85: navigation mode "private" became "noodler". A user who was in the NoodleR
-        // hub at upgrade time rehydrates the old mode, which no longer matches the union — it
-        // falls through to NoodleHome carrying view "hub" and breaks the Noodle screen.
-        if (version <= 84 && persisted.noodleNavigation?.mode === "private") {
-          persisted.noodleNavigation = { mode: "noodler", view: "hub" };
+        // v85 → v86: navigation mode "private" became "noodler". A user who was on a NoodleR
+        // screen at upgrade time rehydrates the old mode, which no longer matches the union —
+        // it falls through to NoodleHome and breaks the Noodle screen. Every old variant has a
+        // structurally equivalent renamed state, so translate rather than reset to the hub.
+        if (version <= 85 && persisted.noodleNavigation?.mode === "private") {
+          const nav = persisted.noodleNavigation;
+          if (nav.view === "profiles") {
+            persisted.noodleNavigation = { mode: "noodler", view: "profiles" };
+          } else if (nav.view === "profile" && typeof nav.accountId === "string") {
+            persisted.noodleNavigation = { mode: "noodler", view: "profile", accountId: nav.accountId };
+          } else if (nav.view === "create-profile" && typeof nav.publicAccountId === "string") {
+            persisted.noodleNavigation = {
+              mode: "noodler",
+              view: "create-profile",
+              noodleAccountId: nav.publicAccountId,
+            };
+          } else {
+            persisted.noodleNavigation = { mode: "noodler", view: "hub" };
+          }
         }
         // v84 -> v85: keep the historical blank-line behavior for /continue by default.
         if (version <= 84 && persisted.continueAddsNewline === undefined) {
