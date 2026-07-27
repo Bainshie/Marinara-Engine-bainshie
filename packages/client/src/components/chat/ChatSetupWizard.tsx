@@ -1,7 +1,7 @@
 // ──────────────────────────────────────────────
 // Chat Setup Wizard — step-by-step new chat configuration
 // ──────────────────────────────────────────────
-import { useState, useMemo, useCallback, useEffect, useRef } from "react";
+import { useState, useMemo, useCallback, useEffect, useId, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 import {
@@ -1626,6 +1626,7 @@ function ConversationQuickSetup({ chat, onFinish }: ChatSetupWizardProps) {
 function RoleplaySetupWizard({ chat, onFinish }: ChatSetupWizardProps) {
   const { t: localizeUi } = useUiTranslation();
   const STEPS = ROLEPLAY_STEPS;
+  const roleplayConnectionSelectId = useId();
 
   const [step, setStep] = useState(0);
   const currentStep = STEPS[step]!;
@@ -2255,8 +2256,11 @@ function RoleplaySetupWizard({ chat, onFinish }: ChatSetupWizardProps) {
           />
         </div>
         <div className="space-y-1.5">
-          <label className={WIZARD_FIELD_LABEL}>{localizeUi("ui.chat.conversationquicksetup.connection")}</label>
+          <label htmlFor={roleplayConnectionSelectId} className={WIZARD_FIELD_LABEL}>
+            {localizeUi("ui.chat.conversationquicksetup.connection")}
+          </label>
           <select
+            id={roleplayConnectionSelectId}
             value={chat.connectionId ?? ""}
             onChange={(e) => setConnection(e.target.value || null)}
             className={WIZARD_INPUT_CLASS}
