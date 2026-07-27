@@ -241,6 +241,7 @@ export const ChatInput = memo(function ChatInput({
   const inputBarRef = useRef<HTMLDivElement>(null);
   const focusAfterMobileRestoreRef = useRef(false);
   const draftTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const inputPresenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const resizeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const currentInputFrameRef = useRef<number | null>(null);
   const pendingCurrentInputRef = useRef("");
@@ -380,7 +381,16 @@ export const ChatInput = memo(function ChatInput({
   const syncInputState = useCallback(
     (value: string) => {
       const nextHasInput = value.trim().length > 0;
-      setHasInput((current) => (current === nextHasInput ? current : nextHasInput));
+      if (inputPresenceTimerRef.current) clearTimeout(inputPresenceTimerRef.current);
+      if (nextHasInput) {
+        inputPresenceTimerRef.current = setTimeout(() => {
+          inputPresenceTimerRef.current = null;
+          setHasInput(true);
+        }, 150);
+      } else {
+        inputPresenceTimerRef.current = null;
+        setHasInput(false);
+      }
       pendingCurrentInputRef.current = value;
       if (typeof window === "undefined" || typeof window.requestAnimationFrame !== "function") {
         setCurrentInput(value);
@@ -510,11 +520,15 @@ export const ChatInput = memo(function ChatInput({
     return () => {
       // Cancel pending debounce timers
       if (draftTimerRef.current) clearTimeout(draftTimerRef.current);
+      if (inputPresenceTimerRef.current) clearTimeout(inputPresenceTimerRef.current);
       if (resizeTimerRef.current) clearTimeout(resizeTimerRef.current);
       if (currentInputFrameRef.current !== null) {
         cancelAnimationFrame(currentInputFrameRef.current);
         currentInputFrameRef.current = null;
-        useChatStore.getState().setCurrentInput(pendingCurrentInputRef.current);
+        const chatState = useChatStore.getState();
+        if (chatState.activeChatId === chatId) {
+          chatState.setCurrentInput(pendingCurrentInputRef.current);
+        }
       }
       // Flush draft synchronously
       if (chatId && textarea) {

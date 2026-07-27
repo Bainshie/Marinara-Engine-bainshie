@@ -362,9 +362,11 @@ async function expandPersona(_config: MarkerConfig, ctx: MarkerContext): Promise
 
 // ── Lorebook / World Info ──────────────────────
 
-async function expandLorebook(config: MarkerConfig, ctx: MarkerContext): Promise<ExpandedMarker> {
-  if (ctx.disableLorebooks === true) return { content: "" };
-
+export async function ensureLorebookScan(ctx: MarkerContext): Promise<LorebookScanResult | null> {
+  if (ctx.disableLorebooks === true) {
+    ctx.macroCtx.outlets = {};
+    return null;
+  }
   const result =
     ctx.lorebookScanResult ??
     (ctx.lorebookScanResult = await processLorebooks(
@@ -391,6 +393,8 @@ async function expandLorebook(config: MarkerConfig, ctx: MarkerContext): Promise
       },
     ));
 
+  ctx.macroCtx.outlets = result.outlets;
+
   if (ctx.lorebookScanResultApplied !== true) {
     ctx.lorebookScanResultApplied = true;
 
@@ -416,6 +420,13 @@ async function expandLorebook(config: MarkerConfig, ctx: MarkerContext): Promise
       }
     }
   }
+
+  return result;
+}
+
+async function expandLorebook(config: MarkerConfig, ctx: MarkerContext): Promise<ExpandedMarker> {
+  const result = await ensureLorebookScan(ctx);
+  if (!result) return { content: "" };
 
   switch (config.type) {
     case "world_info_before":

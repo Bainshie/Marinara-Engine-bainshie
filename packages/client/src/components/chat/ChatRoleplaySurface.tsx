@@ -1258,9 +1258,10 @@ export function ChatRoleplaySurface({
   const { t: localizeUi } = useUiTranslation();
   const { t } = useTranslation();
   useRenderTimer("rp-surface"); // [#3104 diagnostic]
+  const isMobileToolbarViewport = useIsMobileToolbarViewport();
   const isStreamCommitted = useChatStore((s) => s.committedStreamChatIds.has(activeChatId));
   const streamedMessageId = useChatStore((s) => s.streamedMessageIds.get(activeChatId) ?? null);
-  const hasDraftInput = useChatStore((s) => s.currentInput.trim().length > 0);
+  const hasMobileDraftInput = useChatStore((s) => isMobileToolbarViewport && s.hasCurrentInput);
   const hasLiveStream = isStreaming && !isStreamCommitted;
   const linkedChatName = chat?.connectedChatId
     ? getConnectedChatDisplayName(allChats?.find((c) => c.id === chat.connectedChatId))
@@ -1279,12 +1280,11 @@ export function ChatRoleplaySurface({
   const [chromeHeights, setChromeHeights] = useState({ top: 0, bottom: 0 });
   const [mobileHistoryComposerCollapsed, setMobileHistoryComposerCollapsed] = useState(false);
   const [authorNotesOpenOwner, setAuthorNotesOpenOwner] = useState<"expanded" | "compact" | null>(null);
-  const isMobileToolbarViewport = useIsMobileToolbarViewport();
   const compactToolbarOwnsAuthorNotes = centerCompact || isMobileToolbarViewport;
   const expandedAuthorNotesOpen = authorNotesOpenOwner === "expanded";
   const compactAuthorNotesOpen = authorNotesOpenOwner === "compact";
   const keyboardOpen = useChatKeyboardOpen();
-  const shouldKeepMobileComposerOpen = keyboardOpen || hasLiveStream || hasDraftInput || isFetchingNextPage;
+  const shouldKeepMobileComposerOpen = keyboardOpen || hasLiveStream || hasMobileDraftInput || isFetchingNextPage;
 
   useEffect(() => {
     if (shouldKeepMobileComposerOpen) setMobileHistoryComposerCollapsed(false);
@@ -1925,7 +1925,6 @@ export function ChatRoleplaySurface({
                           characterMap={characterMap}
                           personaInfo={personaInfo}
                           chatMode={chatMode}
-                          hasDraftInput={hasDraftInput}
                           messageDepth={messageDepth}
                           messageIndex={messageOrderIndex + 1}
                           messageOrderIndex={messageOrderIndex}
@@ -1955,7 +1954,6 @@ export function ChatRoleplaySurface({
                           characterMap={characterMap}
                           personaInfo={personaInfo}
                           chatMode={chatMode}
-                          hasDraftInput={hasDraftInput}
                           messageDepth={messageDepth}
                           messageIndex={messageOrderIndex + 1}
                           messageOrderIndex={messageOrderIndex}
