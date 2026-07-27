@@ -619,6 +619,8 @@ interface UIState {
   convertLatexSymbols: boolean;
   /** When true, model responses are trimmed back to the last complete sentence before saving. */
   trimIncompleteModelOutput: boolean;
+  /** When true, /continue separates appended text with a blank line. */
+  continueAddsNewline: boolean;
   /** When true, chat inputs show a microphone button for browser speech-to-text dictation. */
   speechToTextEnabled: boolean;
   /** User-set TTS line playback volume (0-100). */
@@ -919,6 +921,7 @@ interface UIState {
   setQuoteFormat: (v: QuoteFormat) => void;
   setConvertLatexSymbols: (v: boolean) => void;
   setTrimIncompleteModelOutput: (v: boolean) => void;
+  setContinueAddsNewline: (v: boolean) => void;
   setSpeechToTextEnabled: (v: boolean) => void;
   setTTSLineVolume: (v: number) => void;
   setChibiProfessorMariEnabled: (v: boolean) => void;
@@ -1118,6 +1121,7 @@ export function pickSyncedSettings(state: UIState) {
     quoteFormat: state.quoteFormat,
     convertLatexSymbols: state.convertLatexSymbols,
     trimIncompleteModelOutput: state.trimIncompleteModelOutput,
+    continueAddsNewline: state.continueAddsNewline,
     speechToTextEnabled: state.speechToTextEnabled,
     ttsLineVolume: state.ttsLineVolume,
     chibiProfessorMariEnabled: state.chibiProfessorMariEnabled,
@@ -1310,6 +1314,7 @@ export const useUIStore = create<UIState>()(
       quoteFormat: "straight" as QuoteFormat,
       convertLatexSymbols: true,
       trimIncompleteModelOutput: false,
+      continueAddsNewline: true,
       speechToTextEnabled: false,
       ttsLineVolume: 50,
       chibiProfessorMariEnabled: true,
@@ -2045,16 +2050,17 @@ export const useUIStore = create<UIState>()(
       setShowQuickReplyImpersonate: (v) => set({ showQuickReplyImpersonate: v }),
       addCustomQuickReply: (label, content) =>
         set((state) => ({
-          customQuickReplies: [
-            ...state.customQuickReplies,
-            { id: generateClientId(), label: label.trim(), content },
-          ],
+          customQuickReplies: [...state.customQuickReplies, { id: generateClientId(), label: label.trim(), content }],
         })),
       updateCustomQuickReply: (id, patch) =>
         set((state) => ({
           customQuickReplies: state.customQuickReplies.map((entry) =>
             entry.id === id
-              ? { ...entry, ...(patch.label !== undefined ? { label: patch.label } : {}), ...(patch.content !== undefined ? { content: patch.content } : {}) }
+              ? {
+                  ...entry,
+                  ...(patch.label !== undefined ? { label: patch.label } : {}),
+                  ...(patch.content !== undefined ? { content: patch.content } : {}),
+                }
               : entry,
           ),
         })),
@@ -2071,6 +2077,7 @@ export const useUIStore = create<UIState>()(
       setQuoteFormat: (v) => set({ quoteFormat: normalizeQuoteFormat(v) }),
       setConvertLatexSymbols: (v) => set({ convertLatexSymbols: v }),
       setTrimIncompleteModelOutput: (v) => set({ trimIncompleteModelOutput: v }),
+      setContinueAddsNewline: (v) => set({ continueAddsNewline: v }),
       setSpeechToTextEnabled: (v) => set({ speechToTextEnabled: v }),
       setTTSLineVolume: (v) => set({ ttsLineVolume: Math.max(0, Math.min(100, Math.round(v))) }),
       setChibiProfessorMariEnabled: (v) => set({ chibiProfessorMariEnabled: v }),
@@ -2264,7 +2271,7 @@ export const useUIStore = create<UIState>()(
     }),
     {
       name: "marinara-engine-ui",
-      version: 84,
+      version: 86,
       // Debounce localStorage writes to avoid sync I/O on every state change
       storage: createJSONStorage(() => {
         let timer: ReturnType<typeof setTimeout> | null = null;
@@ -2838,6 +2845,30 @@ export const useUIStore = create<UIState>()(
           if (persisted.imageGameWidth === undefined) persisted.imageGameWidth = 1280;
           if (persisted.imageGameHeight === undefined) persisted.imageGameHeight = 720;
         }
+        // v85 → v86: navigation mode "private" became "noodler". A user who was on a NoodleR
+        // screen at upgrade time rehydrates the old mode, which no longer matches the union —
+        // it falls through to NoodleHome and breaks the Noodle screen. Every old variant has a
+        // structurally equivalent renamed state, so translate rather than reset to the hub.
+        if (version <= 85 && persisted.noodleNavigation?.mode === "private") {
+          const nav = persisted.noodleNavigation;
+          if (nav.view === "profiles") {
+            persisted.noodleNavigation = { mode: "noodler", view: "profiles" };
+          } else if (nav.view === "profile" && typeof nav.accountId === "string") {
+            persisted.noodleNavigation = { mode: "noodler", view: "profile", accountId: nav.accountId };
+          } else if (nav.view === "create-profile" && typeof nav.publicAccountId === "string") {
+            persisted.noodleNavigation = {
+              mode: "noodler",
+              view: "create-profile",
+              noodleAccountId: nav.publicAccountId,
+            };
+          } else {
+            persisted.noodleNavigation = { mode: "noodler", view: "hub" };
+          }
+        }
+        // v84 -> v85: keep the historical blank-line behavior for /continue by default.
+        if (version <= 84 && persisted.continueAddsNewline === undefined) {
+          persisted.continueAddsNewline = true;
+        }
         persisted.appAccentRgbMode = persisted.appAccentRgbMode === true;
         persisted.customCursorEnabled = persisted.customCursorEnabled !== false;
         persisted.professorMariSuggestionsEnabled = persisted.professorMariSuggestionsEnabled !== false;
@@ -2872,7 +2903,7 @@ export const useUIStore = create<UIState>()(
         noodleOpen: state.noodleOpen,
         noodleSelectedPersonaId: state.noodleSelectedPersonaId,
         noodleNavigation:
-          state.noodleNavigation.mode === "verification" ? { mode: "private", view: "hub" } : state.noodleNavigation,
+          state.noodleNavigation.mode === "verification" ? { mode: "noodler", view: "hub" } : state.noodleNavigation,
         characterLibraryOpen: state.characterLibraryOpen,
         cardLibraryKind: state.cardLibraryKind,
         agentCatalogOpen: state.agentCatalogOpen,
@@ -2959,6 +2990,7 @@ export const useUIStore = create<UIState>()(
         quoteFormat: state.quoteFormat,
         convertLatexSymbols: state.convertLatexSymbols,
         trimIncompleteModelOutput: state.trimIncompleteModelOutput,
+        continueAddsNewline: state.continueAddsNewline,
         speechToTextEnabled: state.speechToTextEnabled,
         ttsLineVolume: state.ttsLineVolume,
         chibiProfessorMariEnabled: state.chibiProfessorMariEnabled,

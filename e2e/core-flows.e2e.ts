@@ -398,10 +398,35 @@ test("Chat Settings adds a formatted greeting after the setup wizard is skipped"
       useChatStore.getState().setShouldOpenSettings(true);
     });
     await expect(page.getByRole("heading", { name: "New Roleplay", exact: true })).toBeVisible();
+    const setupWizard = page.locator('[data-component="ChatSetupWizard"]');
+    const profileShortcut = setupWizard.getByRole("button", { name: "Use a Profile", exact: true });
+    await expect(profileShortcut).toHaveAttribute(
+      "title",
+      "Apply a saved settings profile and pick a persona plus characters in one step",
+    );
+    await profileShortcut.click();
+    await expect(setupWizard.getByRole("heading", { name: "Use a Profile", exact: true })).toBeVisible();
+    await expect(
+      setupWizard.getByText(
+        "Pick a saved settings profile, your persona, and any characters in one compact setup pass.",
+        { exact: true },
+      ),
+    ).toBeVisible();
+    await expect(setupWizard.getByLabel("Profile", { exact: true })).toBeVisible();
+    await setupWizard.getByRole("button", { name: "Back", exact: true }).click();
     await page.getByRole("button", { name: "Skip", exact: true }).click();
 
     const drawer = page.locator(".mari-chat-settings-drawer");
     await expect(drawer).toBeVisible();
+    const settingsProfileSelect = drawer.getByLabel("Profile", { exact: true });
+    await expect(settingsProfileSelect).toHaveAttribute("title", "Apply a settings profile to this chat");
+    await expect(settingsProfileSelect.locator("option:checked")).toHaveText("Custom settings profile");
+    await expect(drawer.getByTitle("Cannot save into the Default profile")).toBeDisabled();
+    await expect(drawer.getByTitle("Cannot rename the Default profile")).toBeDisabled();
+    await expect(drawer.getByTitle("Save current chat settings as a new profile")).toBeEnabled();
+    await expect(drawer.getByTitle("Import settings profile (.json)")).toBeEnabled();
+    await expect(drawer.getByTitle("Export settings profile (.json)")).toBeEnabled();
+    await expect(drawer.getByTitle("Cannot delete the Default profile")).toBeDisabled();
     await expect(
       drawer.locator('[data-chat-settings-section="roleplay-persona"] [role="button"]').first().locator("svg").first(),
     ).toHaveClass(/lucide-venetian-mask/u);
@@ -465,6 +490,130 @@ test("Chat Settings adds a formatted greeting after the setup wizard is skipped"
       request.delete(`/api/chats/${chat.id}`),
       request.delete(`/api/characters/${character.id}`),
     ]);
+  }
+});
+
+test("settings profile exports use the new identity and legacy exports still import", async ({ request }, testInfo) => {
+  test.skip(!testInfo.project.name.includes("desktop"), "Settings profile transfer contract is covered once.");
+
+  const suffix = Date.now().toString(36);
+  const createdIds = new Set<string>();
+  const profileResponse = await request.post("/api/chat-presets", {
+    data: {
+      name: `Profile Transfer ${suffix}`,
+      mode: "roleplay",
+      settings: {},
+    },
+  });
+  expect(profileResponse.ok()).toBeTruthy();
+  const profile = (await profileResponse.json()) as { id: string };
+  createdIds.add(profile.id);
+
+  try {
+    const exportResponse = await request.get(`/api/chat-presets/${profile.id}/export`);
+    expect(exportResponse.ok()).toBeTruthy();
+    expect(exportResponse.headers()["content-disposition"]).toContain(".marinara-settings-profile.json");
+    const envelope = (await exportResponse.json()) as {
+      type: string;
+      version: number;
+      exportedAt: string;
+      data: { name: string; mode: string; settings: Record<string, unknown> };
+    };
+    expect(envelope.type).toBe("marinara_chat_settings_profile");
+
+    const currentImportResponse = await request.post("/api/chat-presets/import", {
+      data: {
+        ...envelope,
+        data: { ...envelope.data, name: `Current Profile Import ${suffix}` },
+      },
+    });
+    expect(currentImportResponse.ok()).toBeTruthy();
+    const currentImport = (await currentImportResponse.json()) as { id: string };
+    createdIds.add(currentImport.id);
+
+    const legacyImportResponse = await request.post("/api/chat-presets/import", {
+      data: {
+        ...envelope,
+        type: "marinara_chat_preset",
+        data: { ...envelope.data, name: `Legacy Profile Import ${suffix}` },
+      },
+    });
+    expect(legacyImportResponse.ok()).toBeTruthy();
+    const legacyImport = (await legacyImportResponse.json()) as { id: string };
+    createdIds.add(legacyImport.id);
+
+    const invalidSettingsResponse = await request.post("/api/chat-presets/import", {
+      data: {
+        ...envelope,
+        data: {
+          ...envelope.data,
+          name: `Invalid Settings Profile ${suffix}`,
+          settings: { connectionId: 42 },
+        },
+      },
+    });
+    expect(invalidSettingsResponse.status()).toBe(400);
+    expect(await invalidSettingsResponse.json()).toEqual({ error: "Invalid settings profile settings" });
+
+    const invalidImportResponse = await request.post("/api/chat-presets/import", {
+      data: { type: "unknown", data: envelope.data },
+    });
+    expect(invalidImportResponse.status()).toBe(400);
+    expect(await invalidImportResponse.json()).toEqual({ error: "Invalid settings profile file" });
+
+    const profileListResponse = await request.get("/api/chat-presets?mode=roleplay");
+    expect(profileListResponse.ok()).toBeTruthy();
+    const profiles = (await profileListResponse.json()) as Array<{
+      id: string;
+      name: string;
+      isDefault: boolean;
+      isActive: boolean;
+    }>;
+    const defaultProfile = profiles.find((candidate) => candidate.isDefault);
+    expect(defaultProfile).toBeTruthy();
+    if (!defaultProfile) throw new Error("Expected the built-in Default settings profile");
+
+    const renameDefaultResponse = await request.patch(`/api/chat-presets/${defaultProfile.id}`, {
+      data: { name: `Renamed Default ${suffix}` },
+    });
+    expect(renameDefaultResponse.status()).toBe(400);
+    expect(await renameDefaultResponse.json()).toEqual({ error: "Cannot rename the Default settings profile" });
+    const defaultAfterRenameResponse = await request.get(`/api/chat-presets/${defaultProfile.id}`);
+    expect(defaultAfterRenameResponse.ok()).toBeTruthy();
+    expect((await defaultAfterRenameResponse.json()) as { name: string }).toMatchObject({ name: defaultProfile.name });
+
+    const [activateCurrentResponse, activateLegacyResponse] = await Promise.all([
+      request.post(`/api/chat-presets/${currentImport.id}/set-active`),
+      request.post(`/api/chat-presets/${legacyImport.id}/set-active`),
+    ]);
+    expect(activateCurrentResponse.ok()).toBeTruthy();
+    expect(activateLegacyResponse.ok()).toBeTruthy();
+    const activeListResponse = await request.get("/api/chat-presets?mode=roleplay");
+    expect(activeListResponse.ok()).toBeTruthy();
+    const activeProfiles = (await activeListResponse.json()) as Array<{ isActive: boolean }>;
+    expect(activeProfiles.filter((candidate) => candidate.isActive)).toHaveLength(1);
+
+    const raceProfileResponse = await request.post("/api/chat-presets", {
+      data: {
+        name: `Activation Removal Race ${suffix}`,
+        mode: "roleplay",
+        settings: {},
+      },
+    });
+    expect(raceProfileResponse.ok()).toBeTruthy();
+    const raceProfile = (await raceProfileResponse.json()) as { id: string };
+    const [raceActivationResponse, raceRemovalResponse] = await Promise.all([
+      request.post(`/api/chat-presets/${raceProfile.id}/set-active`),
+      request.delete(`/api/chat-presets/${raceProfile.id}`),
+    ]);
+    expect([200, 404]).toContain(raceActivationResponse.status());
+    expect(raceRemovalResponse.status()).toBe(204);
+    const postRaceListResponse = await request.get("/api/chat-presets?mode=roleplay");
+    expect(postRaceListResponse.ok()).toBeTruthy();
+    const postRaceProfiles = (await postRaceListResponse.json()) as Array<{ isActive: boolean }>;
+    expect(postRaceProfiles.filter((candidate) => candidate.isActive)).toHaveLength(1);
+  } finally {
+    await Promise.allSettled([...createdIds].map((id) => request.delete(`/api/chat-presets/${id}`)));
   }
 });
 
@@ -832,8 +981,9 @@ test("bulk chat deletion uses the shared primary accent control", async ({ page 
   test.skip(testInfo.project.name.includes("mobile"), "Desktop chat-sidebar selection chrome is covered here.");
 
   const accentColor = "rgb(20, 184, 166)";
+  const chatNames = ["Bulk Delete Chroma One", "Bulk Delete Chroma Two"];
   const chatResponses = await Promise.all(
-    ["Bulk Delete Chroma One", "Bulk Delete Chroma Two"].map((name) =>
+    chatNames.map((name) =>
       page.request.post("/api/chats", {
         data: { name, mode: "roleplay", characterIds: [] },
       }),
@@ -864,6 +1014,15 @@ test("bulk chat deletion uses the shared primary accent control", async ({ page 
 
     const sidebar = page.locator('[data-component="ChatSidebar"]');
     await expect(sidebar).toBeVisible();
+    const firstChatRow = sidebar.locator(`[data-chat-id="${chats[0]!.id}"]`);
+    await firstChatRow.hover();
+    await firstChatRow.getByRole("button", { name: `Delete ${chatNames[0]}`, exact: true }).click();
+    const namedDeleteDialog = page.getByRole("dialog", { name: "Delete Chat" });
+    await expect(namedDeleteDialog).toContainText(
+      `Are you sure you want to delete ${chatNames[0]}? This cannot be undone.`,
+    );
+    await namedDeleteDialog.getByRole("button", { name: "Cancel", exact: true }).click();
+
     await sidebar.getByRole("button", { name: "Select chats" }).click();
     for (const chat of chats) {
       await sidebar.locator(`[data-chat-id="${chat.id}"]`).click();
@@ -988,7 +1147,7 @@ test("modal backdrops ignore drag releases but still close on a fresh outside cl
   await expect(dialog).toHaveCount(0);
 });
 
-test("connection model fetch errors inherit the configured chroma text color", async ({ page }, testInfo) => {
+test("connection model fetch errors inherit the configured editor accent", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name.includes("mobile"), "Desktop connection editor chrome is covered here.");
 
   const connectionResponse = await page.request.post("/api/connections", {
@@ -1000,18 +1159,40 @@ test("connection model fetch errors inherit the configured chroma text color", a
   expect(connectionResponse.ok()).toBeTruthy();
   const connection = (await connectionResponse.json()) as { id: string };
   const networkError = "NetworkError when attempting to fetch resource.";
+  const internalServerError = "Internal Server Error";
+  const accentColor = "rgb(20, 184, 166)";
+  let fetchCount = 0;
 
   try {
     await page.route(`**/api/connections/${connection.id}/models`, async (route) => {
+      const message = fetchCount === 0 ? networkError : internalServerError;
+      fetchCount += 1;
       await route.fulfill({
         status: 502,
         contentType: "application/json",
-        body: JSON.stringify({ error: { message: networkError } }),
+        body: JSON.stringify({ error: { message } }),
       });
     });
     await page.goto("/");
+    await page.evaluate(async (accent) => {
+      const { useUIStore } = (await import("/src/stores/ui.store.ts")) as {
+        useUIStore: {
+          getState: () => {
+            setAppAccentColor: (color: string) => void;
+          };
+        };
+      };
+      useUIStore.getState().setAppAccentColor(accent);
+    }, "#14b8a6");
+    await expect
+      .poll(() =>
+        page.evaluate(() =>
+          getComputedStyle(document.documentElement).getPropertyValue("--marinara-app-accent-static").trim(),
+        ),
+      )
+      .toBe("#14b8a6");
     await page.evaluate(() => {
-      document.documentElement.style.setProperty("--marinara-chat-chrome-panel-text", "rgb(12, 34, 56)");
+      document.documentElement.style.setProperty("--marinara-chat-chrome-panel-text", "rgb(236, 72, 153)");
       document.documentElement.style.setProperty("--destructive", "rgb(255, 0, 0)");
     });
 
@@ -1029,9 +1210,14 @@ test("connection model fetch errors inherit the configured chroma text color", a
 
     const errorText = editor.getByText(networkError, { exact: true });
     await expect(errorText).toBeVisible();
-    await expect(errorText).toHaveClass(/mari-chrome-text/u);
-    await expect(errorText).toHaveCSS("color", "rgb(12, 34, 56)");
+    await expect(errorText).toHaveCSS("color", accentColor);
     expect(await errorText.getAttribute("class")).not.toMatch(/destructive|pink|red|rose/iu);
+
+    await editor.getByRole("button", { name: "Fetch Models from API" }).click();
+    const internalErrorText = editor.getByText(internalServerError, { exact: true });
+    await expect(internalErrorText).toBeVisible();
+    await expect(internalErrorText).toHaveCSS("color", accentColor);
+    expect(await internalErrorText.getAttribute("class")).not.toMatch(/destructive|pink|red|rose/iu);
   } finally {
     await page.request.delete(`/api/connections/${connection.id}`).catch(() => undefined);
   }
@@ -1363,9 +1549,7 @@ test("Character Chat actions reuse mode selection and seed the chosen setup wiza
     expect(folderRowBox).not.toBeNull();
     expect(folderActionsBox).not.toBeNull();
     expect(folderActionBoxes.every((box) => box !== null)).toBeTruthy();
-    expect(folderActionsBox!.x + folderActionsBox!.width).toBeLessThanOrEqual(
-      folderRowBox!.x + folderRowBox!.width,
-    );
+    expect(folderActionsBox!.x + folderActionsBox!.width).toBeLessThanOrEqual(folderRowBox!.x + folderRowBox!.width);
     const folderActionYPositions = folderActionBoxes.map((box) => box!.y);
     expect(Math.max(...folderActionYPositions) - Math.min(...folderActionYPositions)).toBeLessThan(0.1);
     expect(folderActionBoxes.map((box) => box!.x)).toEqual(
@@ -1541,9 +1725,11 @@ test("Character and Persona avatar actions stay separated and visually balanced"
     await expect(uploadButton).toHaveClass(/mari-chrome-control--small/);
     await expect(metadataGenerateButton).toHaveClass(/mari-chrome-control--small/);
     const fullImageButton = editor.getByRole("button", { name: "Full image", exact: true });
-    const resetCropButton = editor.getByRole("button", { name: "Reset", exact: true });
+    const resetCropButton = editor.getByTitle("Reset to centered max-square crop");
+    const resetVersionButton = editor.getByTitle("Reset card versioning");
     await expect(fullImageButton).toHaveClass(/mari-editor-action/u);
     await expect(resetCropButton).toHaveClass(/mari-editor-action/u);
+    await expect(resetVersionButton).toHaveClass(/mari-editor-action/u);
     await expect(editor.getByText(/^\d+ saved$/u).first()).toHaveClass(/mari-editor-chip--accent/u);
 
     const touchHoverActive = await metadataGenerateButton.evaluate((element) => element.matches(":hover"));
@@ -2575,6 +2761,150 @@ test("Personal Extensions default to the Professor Mari-only locked workflow", a
   expect(warningColors.warning).toBe(warningColors.accent);
 });
 
+test(
+  "external Agent imports require the Danger Zone gate and explicit capabilities",
+  async ({ page, request }, testInfo) => {
+    test.skip(
+      testInfo.project.name !== "mobile-chromium",
+      "This stateful import-policy flow runs once against the shared test server",
+    );
+
+    const disabledPolicy = await request.patch("/api/agents/import-policy", { data: { enabled: false } });
+    expect(disabledPolicy.ok()).toBeTruthy();
+
+    const testSuffix = Date.now().toString(36);
+    const localAgentName = `Locally Authored Agent ${testSuffix}`;
+    const importedAgentName = `Permission Review Agent ${testSuffix}`;
+    let localAgentId: string | undefined;
+    let importedAgentId: string | undefined;
+    try {
+      const localAgentResponse = await request.post("/api/agents", {
+        data: {
+          type: `e2e-local-agent-${testSuffix}`,
+          name: localAgentName,
+          description: "Must remain creatable while external imports are locked.",
+          phase: "parallel",
+          connectionId: null,
+          imagePath: null,
+          promptTemplate: "Return a short note.",
+          settings: { resultType: "context_injection", customCapabilities: {} },
+        },
+      });
+      expect(localAgentResponse.ok()).toBeTruthy();
+      const localAgent = (await localAgentResponse.json()) as { id: string };
+      localAgentId = localAgent.id;
+
+      const blockedImport = await request.post("/api/agents/import", {
+        data: {
+          agent: {
+            type: "untrusted-haptic",
+            name: "Blocked External Agent",
+            description: "",
+            phase: "post_processing",
+            connectionId: null,
+            imagePath: null,
+            resultType: "haptic_command",
+            promptTemplate: "Return a haptic command.",
+            settings: { customCapabilities: { control_haptics: true } },
+          },
+          source: "file",
+          approvedCapabilities: ["control_haptics"],
+          acknowledgePermissions: true,
+        },
+      });
+      expect(blockedImport.status()).toBe(403);
+
+      await page.goto("/");
+      await page.locator('[data-tour="panel-agents"]').click();
+      const disabledHelp = 'Enable "Allow custom Agent imports" in Advanced Settings → Danger Zone first.';
+      const lockedImportButton = page.getByTitle(disabledHelp).first();
+      await expect(lockedImportButton).toHaveAttribute("aria-disabled", "true");
+      await lockedImportButton.dispatchEvent("click");
+      await expect(page.getByText(disabledHelp, { exact: true }).last()).toBeVisible();
+
+      await page.locator('[data-tour="panel-settings"]').click();
+      await page.getByRole("tab", { name: "Advanced" }).click();
+      const agentImportToggle = page.getByLabel("Allow custom Agent imports");
+      const extensionImportToggle = page.getByLabel("Allow third-party extension imports");
+      await expect(agentImportToggle).toBeEnabled();
+      await expect(agentImportToggle).not.toBeChecked();
+      expect(
+        await agentImportToggle.evaluate((toggle) => {
+          const extensionLabel = [...document.querySelectorAll("label")].find(
+            (label) => label.textContent?.trim() === "Allow third-party extension imports",
+          );
+          const extension =
+            extensionLabel instanceof HTMLLabelElement
+              ? document.getElementById(extensionLabel.htmlFor)
+              : null;
+          return Boolean(
+            extension && (toggle.compareDocumentPosition(extension) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0,
+          );
+        }),
+      ).toBe(true);
+
+      const enabledPolicy = await request.patch("/api/agents/import-policy", { data: { enabled: true } });
+      expect(enabledPolicy.ok()).toBeTruthy();
+      await page.reload();
+      await page.locator('[data-tour="panel-agents"]').click();
+      await expect(page.getByTitle("Import agents")).toHaveAttribute("aria-disabled", "false");
+
+      const packageInput = page.locator('input[type="file"][accept*="application/json"]');
+      await packageInput.setInputFiles({
+        name: "permission-review-agent.json",
+        mimeType: "application/json",
+        buffer: Buffer.from(
+          JSON.stringify({
+            type: "untrusted-haptic",
+            name: importedAgentName,
+            description: "Requests haptic control.",
+            phase: "post_processing",
+            resultType: "haptic_command",
+            promptTemplate: "Return a haptic command.",
+            settings: { customCapabilities: { control_haptics: true } },
+          }),
+        ),
+      });
+
+      await expect(page.getByRole("dialog", { name: "Review Agent Import Permissions" })).toBeVisible();
+      const hapticPermission = page.getByLabel("Control haptic devices");
+      await expect(hapticPermission).not.toBeChecked();
+      await hapticPermission.check();
+      await expect(hapticPermission).toBeChecked();
+      await page.getByRole("button", { name: "Approve Permissions and Import" }).click();
+      await expect(page.getByRole("dialog", { name: "Review Agent Import Permissions" })).toHaveCount(0);
+
+      const agentsResponse = await request.get("/api/agents");
+      expect(agentsResponse.ok()).toBeTruthy();
+      const agents = (await agentsResponse.json()) as Array<{ id: string; name: string; settings: string }>;
+      const importedAgent = agents.find((agent) => agent.name === importedAgentName);
+      expect(importedAgent).toBeTruthy();
+      importedAgentId = importedAgent?.id;
+      const importedSettings = JSON.parse(importedAgent!.settings) as Record<string, unknown>;
+      expect(importedSettings.customAgentImportSource).toBe("file");
+      expect(importedSettings.customAgentPermissionsExplicit).toBe(true);
+      expect(importedSettings.customCapabilities).toEqual({ control_haptics: true });
+    } finally {
+      try {
+        if (!localAgentId || !importedAgentId) {
+          const cleanupAgentsResponse = await request.get("/api/agents").catch(() => null);
+          if (cleanupAgentsResponse?.ok()) {
+            const cleanupAgents = (await cleanupAgentsResponse.json()) as Array<{ id: string; name: string }>;
+            localAgentId ??= cleanupAgents.find((agent) => agent.name === localAgentName)?.id;
+            importedAgentId ??= cleanupAgents.find((agent) => agent.name === importedAgentName)?.id;
+          }
+        }
+        await Promise.all([
+          localAgentId ? request.delete(`/api/agents/${localAgentId}`).catch(() => undefined) : Promise.resolve(),
+          importedAgentId ? request.delete(`/api/agents/${importedAgentId}`).catch(() => undefined) : Promise.resolve(),
+        ]);
+      } finally {
+        await request.patch("/api/agents/import-policy", { data: { enabled: false } });
+      }
+    }
+  },
+);
+
 test("Roleplay Active Context shows rich lorebook activation provenance", async ({ page, request }, testInfo) => {
   const lorebookId = "roleplay-active-context-smoke-lorebook";
   const chatResponse = await request.post("/api/chats", {
@@ -2866,8 +3196,16 @@ test("roleplay quick preset editor uses chat settings spacing and surfaces", asy
     await drawer.getByText("Prompt Preset", { exact: true }).click();
 
     const quickEditor = drawer.locator(".mari-quick-preset-editor");
+    const quickEditorDisclosure = drawer.locator("[data-prompt-preset-quick-editor-disclosure]");
+    const quickEditorToggle = quickEditorDisclosure.locator(":scope > button");
+    await expect(quickEditor).toBeHidden();
+    await expect(quickEditorToggle).toContainText("Edit preset");
+    await expect(quickEditorToggle).toHaveAttribute("aria-expanded", "false");
+
+    await quickEditorToggle.click();
     await expect(quickEditor).toBeVisible();
-    await expect(drawer.getByText("Preset sections", { exact: true })).toBeVisible();
+    await expect(quickEditorToggle).toHaveAttribute("aria-expanded", "true");
+    await expect(quickEditorToggle).toContainText("Collapse preset editor");
     await expect(drawer.locator('[data-prompt-preset-chevron="select"]')).toBeVisible();
 
     const toolbar = quickEditor.locator(".mari-editor-toolbar");
@@ -2896,6 +3234,26 @@ test("roleplay quick preset editor uses chat settings spacing and surfaces", asy
         }),
       )
       .toBe(true);
+
+    await drawer.getByRole("button", { name: "Close chat settings", exact: true }).click();
+    await expect(drawer).toHaveCount(0);
+    await page.getByRole("button", { name: "Chat Settings", exact: true }).filter({ visible: true }).click();
+    await expect(drawer).toBeVisible();
+    await expect(quickEditor).toBeVisible();
+    await expect(quickEditorToggle).toHaveAttribute("aria-expanded", "true");
+    await expect(quickEditorToggle).toContainText("Collapse preset editor");
+
+    await quickEditorToggle.click();
+    await expect(quickEditor).toBeHidden();
+    await expect(quickEditorToggle).toHaveAttribute("aria-expanded", "false");
+    await expect(quickEditorToggle).toContainText("Edit preset");
+
+    await drawer.getByRole("button", { name: "Close chat settings", exact: true }).click();
+    await expect(drawer).toHaveCount(0);
+    await page.getByRole("button", { name: "Chat Settings", exact: true }).filter({ visible: true }).click();
+    await expect(drawer).toBeVisible();
+    await expect(quickEditor).toBeHidden();
+    await expect(quickEditorToggle).toHaveAttribute("aria-expanded", "false");
   } finally {
     await Promise.all([request.delete(`/api/chats/${chat.id}`), request.delete(`/api/prompts/${preset.id}`)]);
   }
@@ -2975,7 +3333,12 @@ test("mobile roleplay quick preset editor keeps marker and metadata controls com
     await drawer.getByText("Prompt Preset", { exact: true }).click();
 
     const quickEditor = drawer.locator(".mari-quick-preset-editor");
+    const quickEditorToggle = drawer.locator("[data-prompt-preset-quick-editor-disclosure]").locator(":scope > button");
+    await expect(quickEditor).toBeHidden();
+    await expect(quickEditorToggle).toHaveAttribute("aria-expanded", "false");
+    await quickEditorToggle.click();
     await expect(quickEditor).toBeVisible();
+    await expect(quickEditorToggle).toHaveAttribute("aria-expanded", "true");
     const markerSection = quickEditor.locator('[data-preset-marker-section="true"]');
     const regularSection = quickEditor.locator('[data-touch-reorder-item="preset-section"]').filter({
       hasText: "Regular Section",
@@ -3855,6 +4218,170 @@ test("PocketTTS discovers server voices and uses its speech endpoint", async ({ 
   }
 });
 
+test("ElevenLabs keeps models visible and exposes scrollable account voices in every assignment mode", async ({
+  page,
+}, testInfo) => {
+  test.skip(!testInfo.project.name.includes("desktop"), "ElevenLabs settings are covered on desktop.");
+
+  let voiceFetchCount = 0;
+  let saveCount = 0;
+  const config = {
+    enabled: true,
+    source: "elevenlabs",
+    baseUrl: "https://api.elevenlabs.io",
+    apiKey: "••••••",
+    voice: "voice-01",
+    model: "eleven_multilingual_v2",
+    speed: 1,
+    elevenLabsStability: 0.5,
+    elevenLabsLanguageCode: "",
+    elevenLabsGameSoundEffects: false,
+    elevenLabsGameMusic: false,
+    voiceMode: "single",
+    voiceAssignments: [],
+    narratorVoiceEnabled: false,
+    narratorVoice: "",
+    npcDefaultVoicesEnabled: false,
+    npcDefaultMaleVoices: [],
+    npcDefaultFemaleVoices: [],
+    autoplayRP: false,
+    autoplayConvo: false,
+    autoplayGame: false,
+    progressivePlayback: false,
+    dialogueOnly: false,
+    dialoguePauseMs: 1000,
+    audioFormat: "mp3",
+    callAudioEnabled: false,
+    callSttConnectionId: "",
+    callSttModel: "",
+    callAudioInputMode: "local_whisper",
+    callVideoInputEnabled: false,
+    callCharacterVideoEnabled: false,
+    callAutomaticVideoClipsEnabled: false,
+    callCustomVideoClipsEnabled: false,
+    callSoundboardEnabled: true,
+    sourceProfiles: {},
+  };
+  const voiceOptions = Array.from({ length: 48 }, (_, index) => {
+    const suffix = String(index + 1).padStart(2, "0");
+    return {
+      id: `voice-${suffix}`,
+      name: `Custom Voice ${suffix}`,
+      description: `Uploaded account voice ${suffix}`,
+      previewUrl: null,
+      category: "personal",
+      labels: { accent: index % 2 === 0 ? "Polish" : "English" },
+    };
+  });
+  const characterName = `ElevenLabs Voice Picker Character ${Date.now()}`;
+  const characterResponse = await page.request.post("/api/characters", {
+    data: { data: { name: characterName } },
+  });
+  expect(characterResponse.ok()).toBeTruthy();
+  const character = (await characterResponse.json()) as { id: string };
+
+  try {
+    await page.route("**/api/tts/config", async (route) => {
+      if (route.request().method() === "PUT") {
+        Object.assign(config, route.request().postDataJSON());
+        saveCount += 1;
+        await route.fulfill({ status: 204 });
+        return;
+      }
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(config) });
+    });
+    await page.route("**/api/tts/voices", async (route) => {
+      voiceFetchCount += 1;
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          voices: voiceOptions.map((voice) => voice.id),
+          voiceOptions,
+          fromProvider: true,
+          source: "elevenlabs",
+        }),
+      });
+    });
+    await page.route("**/api/tts/models", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          models: [
+            { id: "eleven_multilingual_v2", name: "Eleven Multilingual v2" },
+            { id: "eleven_v3", name: "Eleven v3" },
+            { id: "eleven_flash_v2_5", name: "Eleven Flash v2.5" },
+          ],
+          fromProvider: true,
+          source: "elevenlabs",
+        }),
+      });
+    });
+
+    await page.goto("/");
+    await page.locator('[data-tour="panel-connections"]').click();
+    const rightPanel = page.locator('[data-component="RightPanel"]');
+    const ttsLabel = rightPanel.getByText("Text to Speech", { exact: true });
+    const ttsCard = ttsLabel.locator("xpath=../../..");
+    await ttsCard.getByTitle("Expand").click();
+
+    const modelSelect = ttsCard.getByRole("combobox", { name: "Model" });
+    await expect(modelSelect.locator("option")).toHaveCount(3);
+    await expect(modelSelect.locator('option[value="eleven_v3"]')).toHaveText("Eleven v3 (eleven_v3)");
+
+    const allCharactersVoicePicker = ttsCard.getByRole("button", { name: "All Characters Voice" });
+    await allCharactersVoicePicker.click();
+    const voiceList = page.getByTestId("tts-voice-options");
+    await expect(voiceList.getByRole("option")).toHaveCount(49);
+    await expect(voiceList.getByText("Custom Voice 48 (voice-48)", { exact: true })).toBeAttached();
+    await expect(voiceList).toHaveCSS("overflow-y", "scroll");
+    expect(
+      await voiceList.evaluate((element) => ({
+        scrollable: element.scrollHeight > element.clientHeight,
+        gutter: getComputedStyle(element).scrollbarGutter,
+      })),
+    ).toEqual({ scrollable: true, gutter: "stable" });
+
+    await page.keyboard.press("Escape");
+    await expect(allCharactersVoicePicker).toBeFocused();
+    await ttsCard.getByRole("combobox", { name: "Voice Option" }).selectOption("per-character");
+    const refreshButton = ttsCard.getByRole("button", { name: "Refresh", exact: true });
+    await expect(refreshButton).toBeVisible();
+    await ttsCard.getByRole("button", { name: "Add character voice" }).click();
+
+    const characterPicker = ttsCard.getByRole("button", { name: "Select character" });
+    await characterPicker.click();
+    const characterList = page.getByTestId("tts-character-options");
+    await expect(characterList).toBeVisible();
+    await expect(characterList).toHaveCSS("overflow-y", "scroll");
+    await expect(characterList.locator("xpath=../..")).toHaveCSS("position", "fixed");
+    await characterList.getByRole("option", { name: characterName, exact: true }).click();
+    await expect(characterPicker).toBeFocused();
+    await characterPicker.click();
+    await page.keyboard.press("Escape");
+    await expect(characterPicker).toBeFocused();
+
+    const characterVoicePicker = ttsCard.getByRole("button", { name: /^Voice for / });
+    const characterVoiceTriggerBox = await characterVoicePicker.boundingBox();
+    await characterVoicePicker.click();
+    const characterVoiceList = page.getByTestId("tts-voice-options");
+    const characterVoiceMenuBox = await characterVoiceList.locator("xpath=../..").boundingBox();
+    expect(characterVoiceTriggerBox).not.toBeNull();
+    expect(characterVoiceMenuBox).not.toBeNull();
+    expect(characterVoiceMenuBox!.width).toBeGreaterThan(characterVoiceTriggerBox!.width + 40);
+    await page.keyboard.press("Escape");
+    await expect(characterVoicePicker).toBeFocused();
+
+    const fetchesBeforeRefresh = voiceFetchCount;
+    await refreshButton.click();
+    await expect.poll(() => saveCount).toBeGreaterThan(0);
+    await expect.poll(() => voiceFetchCount).toBeGreaterThan(fetchesBeforeRefresh);
+  } finally {
+    await page.request.delete(`/api/characters/${character.id}`).catch(() => undefined);
+  }
+});
+
 test("failed Game Lorebook Keeper run exposes a retry action", async ({ page }, testInfo) => {
   test.skip(!testInfo.project.name.includes("desktop"), "Game session recovery regression is covered on desktop.");
 
@@ -4095,11 +4622,7 @@ test("Backup & Export identifies the automatic backup location", async ({ page }
   await page.goto("/");
   await page.locator('[data-tour="panel-settings"]').click();
   await page.getByPlaceholder("Search settings").fill("automatic backups");
-  await page
-    .locator(".mari-settings-search-header button")
-    .filter({ hasText: "Automatic backups" })
-    .first()
-    .click();
+  await page.locator(".mari-settings-search-header button").filter({ hasText: "Automatic backups" }).first().click();
 
   const backupSection = page.locator("#settings-section-backup-export");
   await expect(backupSection).toBeVisible();
@@ -5597,7 +6120,7 @@ test("Conversation setup commands follow the installed agent library", async ({ 
   });
 
   const openAutomationStep = async () => {
-    const newConversationButton = page.getByLabel("New Conversation");
+    const newConversationButton = page.getByLabel("New Conversation", { exact: true });
     if (!(await newConversationButton.isVisible())) {
       await page.locator('[data-tour="sidebar-toggle"]').click();
     }
@@ -6945,10 +7468,9 @@ test("selected Lorebook entries mirror safe edits and choose a move destination 
     await page.getByText(name, { exact: true }).click();
     await page.getByRole("button", { name: /^Entries/ }).click();
     await expect(
-      page.getByText(
-        "Use the Select button above to enter batch editing mode and edit multiple entries at once.",
-        { exact: true },
-      ),
+      page.getByText("Use the Select button above to enter batch editing mode and edit multiple entries at once.", {
+        exact: true,
+      }),
     ).toBeVisible();
     await page.getByTitle("Select entries for batch editing, copying, moving, or deletion").click();
     await page.getByRole("button", { name: "Select all", exact: true }).click();
@@ -8754,7 +9276,7 @@ test("chat mode tabs and new-chat actions stay reachable", async ({ page }) => {
 
   for (const mode of modes) {
     await page.locator(`[data-tour="${mode.tour}"]`).click();
-    await expect(page.getByLabel(mode.label)).toBeVisible();
+    await expect(page.getByLabel(mode.label, { exact: true })).toBeVisible();
   }
 
   expect(errors).toEqual([]);
@@ -8976,13 +9498,15 @@ test("mobile chat composer follows the visual viewport above the software keyboa
     const textarea = composer.locator("textarea:visible");
     const transcript = page.locator(".mari-messages-scroll:visible").first();
     await expect(transcript).toBeVisible();
+    await expect(page.getByText(/^Keyboard viewport history line 18\./)).toBeVisible();
+    await expect
+      .poll(() => transcript.evaluate((element) => element.scrollHeight - element.clientHeight))
+      .toBeGreaterThan(400);
     await transcript.evaluate((element) => {
       element.scrollTop = element.scrollHeight;
     });
     await expect
-      .poll(() =>
-        transcript.evaluate((element) => element.scrollHeight - element.scrollTop - element.clientHeight),
-      )
+      .poll(() => transcript.evaluate((element) => element.scrollHeight - element.scrollTop - element.clientHeight))
       .toBeLessThanOrEqual(2);
     await expect(textarea).toBeVisible();
     await textarea.focus();
@@ -9012,16 +9536,22 @@ test("mobile chat composer follows the visual viewport above the software keyboa
     expect(composerBox!.y).toBeGreaterThanOrEqual(72);
     expect(composerBox!.y + composerBox!.height).toBeLessThanOrEqual(432);
     await expect
-      .poll(() =>
-        transcript.evaluate((element) => element.scrollHeight - element.scrollTop - element.clientHeight),
-      )
+      .poll(() => transcript.evaluate((element) => element.scrollHeight - element.scrollTop - element.clientHeight))
       .toBeLessThanOrEqual(2);
+
+    await transcript.evaluate((element) => {
+      element.scrollTop = Math.max(0, element.scrollTop - 320);
+    });
+    await expect
+      .poll(() => transcript.evaluate((element) => element.scrollHeight - element.scrollTop - element.clientHeight))
+      .toBeGreaterThan(180);
+    await expect(textarea).toBeVisible();
   } finally {
     await page.request.delete(`/api/chats/${chat.id}`).catch(() => undefined);
   }
 });
 
-test("kaomoji scrollbar presses stay inside the picker and use chat chroma", async ({ page }, testInfo) => {
+test("kaomoji scrollbar presses stay inside the picker and use the theme accent", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name.includes("mobile"), "Native desktop scrollbar behavior is desktop-only.");
 
   const response = await page.request.post("/api/chats", {
@@ -9046,34 +9576,33 @@ test("kaomoji scrollbar presses stay inside the picker and use chat chroma", asy
     const pickerBox = await picker.boundingBox();
     expect(pickerBox).not.toBeNull();
 
-    await page.evaluate(({ x, y }) => {
-      document.documentElement.dispatchEvent(
-        new MouseEvent("mousedown", {
-          bubbles: true,
-          clientX: x,
-          clientY: y,
-        }),
-      );
-    }, {
-      x: pickerBox!.x + pickerBox!.width - 1,
-      y: pickerBox!.y + pickerBox!.height / 2,
-    });
+    await page.mouse.move(pickerBox!.x + pickerBox!.width - 2, pickerBox!.y + pickerBox!.height / 2);
+    await page.mouse.down();
+    await page.mouse.up();
     await expect(picker).toBeVisible();
 
-    const searchIconUsesChroma = await picker.locator("svg").first().evaluate((icon) => {
-      const iconColor = getComputedStyle(icon).color;
-      const chromaColor = getComputedStyle(document.documentElement)
-        .getPropertyValue("--marinara-chat-chrome-button-text-active")
-        .trim();
-      if (!chromaColor) return false;
-      const probe = document.createElement("span");
-      probe.style.color = chromaColor;
-      document.body.appendChild(probe);
-      const resolvedChromaColor = getComputedStyle(probe).color;
-      probe.remove();
-      return iconColor === resolvedChromaColor;
-    });
-    expect(searchIconUsesChroma).toBe(true);
+    const [categoriesFit, resultsFit] = await Promise.all([
+      picker.locator("[data-kaomoji-categories]").evaluate((element) => element.scrollWidth <= element.clientWidth),
+      picker.locator("[data-kaomoji-results]").evaluate((element) => element.scrollWidth <= element.clientWidth),
+    ]);
+    expect(categoriesFit).toBe(true);
+    expect(resultsFit).toBe(true);
+
+    const searchIconUsesTheme = await picker
+      .locator("svg")
+      .first()
+      .evaluate((icon) => {
+        const iconColor = getComputedStyle(icon).color;
+        const themeColor = getComputedStyle(document.documentElement).getPropertyValue("--primary").trim();
+        if (!themeColor) return false;
+        const probe = document.createElement("span");
+        probe.style.color = themeColor;
+        document.body.appendChild(probe);
+        const resolvedThemeColor = getComputedStyle(probe).color;
+        probe.remove();
+        return iconColor === resolvedThemeColor;
+      });
+    expect(searchIconUsesTheme).toBe(true);
   } finally {
     await page.request.delete(`/api/chats/${chat.id}`).catch(() => undefined);
   }

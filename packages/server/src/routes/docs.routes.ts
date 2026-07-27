@@ -34,7 +34,11 @@ import {
 
 const DOCS_DIR = resolve(getMonorepoRoot(), "docs");
 
-/** Translated doc trees live at docs/i18n/<code>/, mirroring the English folder/file names 1:1 */
+/**
+ * Historical name of the in-repo translation root. Downloaded packs now live
+ * under DATA_DIR/doc-packs/<code>; this stays excluded from the English walk so
+ * a stray docs/i18n folder from an old checkout can never leak into the index.
+ */
 const I18N_DIRNAME = "i18n";
 
 /** Internal artifact folders (plus the translation root) excluded from the English doc walk */
@@ -139,6 +143,7 @@ const DOC_ORDER: Record<string, string[]> = {
     "guided-and-impersonate.md",
     "peek-prompt.md",
     "chat-settings.md",
+    "settings-profiles.md",
     "slash-commands.md",
     "group-chats.md",
     "connected-chats.md",
@@ -177,7 +182,6 @@ const DOC_ORDER: Record<string, string[]> = {
     "macros.md",
     "conditional-prompts.md",
     "generation-parameters.md",
-    "chat-settings-presets.md",
     "prompt-overrides.md",
   ],
   noodle: ["overview.md", "settings.md"],

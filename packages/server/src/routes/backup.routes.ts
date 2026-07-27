@@ -14,6 +14,7 @@ import { createHash } from "crypto";
 import { inflateRawSync } from "zlib";
 import AdmZip from "adm-zip";
 import { FILE_BACKED_TABLES } from "../db/file-backed-store.js";
+import { migrateLegacyNoodleAccountRow } from "../db/noodle-platform-migration.js";
 import { getFileTableConfig, isFileTable, type AnyFileTable } from "../db/file-schema.js";
 import * as schema from "../db/schema/index.js";
 import { createCharactersStorage } from "../services/storage/characters.storage.js";
@@ -296,6 +297,7 @@ function stSelectiveLogic(value: unknown): number {
 
 function stPosition(value: unknown): number {
   const position = Number(value ?? 0);
+  if (position === 7) return 7;
   if (position === 2) return 4;
   if (position === 1) return 1;
   return 0;
@@ -320,6 +322,7 @@ function buildCompatibleLorebookExport(lb: Record<string, any>) {
       selectiveLogic: stSelectiveLogic(entry.selectiveLogic),
       order: Number(entry.order ?? 100),
       position: stPosition(entry.position),
+      outletName: String(entry.outletName ?? ""),
       depth: Number(entry.depth ?? 4),
       probability: entry.probability ?? null,
       scanDepth: entry.scanDepth ?? null,
@@ -861,6 +864,10 @@ async function importProfileStorageSnapshot(
           emit("tables", `Importing ${tableName.replace(/_/g, " ")}`);
           for (const row of rows) {
             let cleanRow = { ...row };
+            // A pre-rename snapshot carries `visibility`/`publicAccountId`. Inserting it raw
+            // lets the column default fill `platform: "noodle"`, putting a restored NoodleR
+            // account and its posts on the Noodle timeline.
+            if (tableName === "noodle_accounts") cleanRow = migrateLegacyNoodleAccountRow(cleanRow);
             if (tableName === "api_connections") cleanRow.apiKeyEncrypted = "";
             if (tableName === "installed_extensions") cleanRow = quarantineProfilePersonalExtensionRow(cleanRow);
             const insert = tx.insert(table as any).values(cleanRow as any) as any;

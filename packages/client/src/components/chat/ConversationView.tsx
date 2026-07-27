@@ -53,7 +53,10 @@ import { useInstalledCapabilityPackages } from "../../hooks/use-capability-packa
 import { CapabilityElement } from "../capabilities/CapabilityElement";
 import { TURN_GAME_BOT_REQUEST_EVENT } from "../../lib/capability-turn-game-events";
 import { useGenerate } from "../../hooks/use-generate";
-import { useKeepLatestChatMessageVisible } from "../../hooks/use-visual-viewport-chat-bottom";
+import {
+  useChatKeyboardOpen,
+  useKeepLatestChatMessageVisible,
+} from "../../hooks/use-visual-viewport-chat-bottom";
 
 const ConversationAutonomousEffects = lazy(async () => {
   const module = await import("./ConversationAutonomousEffects");
@@ -347,7 +350,7 @@ export function ConversationView({
   const typingCharacterName = useChatStore((s) => s.typingCharacterName);
   const delayedCharacterInfo = useChatStore((s) => s.delayedCharacterInfo);
   const conversationMessageStyle = useUIStore((s) => s.conversationMessageStyle);
-  const hasDraftInput = useChatStore((s) => s.currentInput.trim().length > 0);
+  const hasDraftInput = useChatStore((s) => s.hasCurrentInput);
   const isGroupConversation = chatCharIds.length > 1;
   const liveTypingName = useMemo(() => {
     if (isGroupConversation) return "Multiple people";
@@ -522,7 +525,8 @@ export function ConversationView({
   const userScrolledAtRef = useRef(0);
   const openedAtBottomChatIdRef = useRef<string | null>(null);
   const streamScrollFrameRef = useRef(0);
-  const shouldKeepMobileComposerOpen = hasLiveStream || hasDraftInput || isFetchingNextPage;
+  const keyboardOpen = useChatKeyboardOpen();
+  const shouldKeepMobileComposerOpen = keyboardOpen || hasLiveStream || hasDraftInput || isFetchingNextPage;
 
   const scrollToMessagesBottom = useCallback((behavior: ScrollBehavior = "smooth") => {
     const el = scrollRef.current;
