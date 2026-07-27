@@ -44,10 +44,14 @@ import { useChatStore } from "../../stores/chat.store";
 import { confirmNonEmptyFolderDelete, showConfirmDialog } from "../../lib/app-dialogs";
 import { useUIStore, type UserStatus } from "../../stores/ui.store";
 import { cn, getAvatarCropStyle, type AvatarCropValue } from "../../lib/utils";
+import { chatBackgroundMetadataToUrl } from "../../lib/backgrounds";
+import { formatRelativeContact } from "../../lib/relative-time";
+import { ChatRowPeek } from "./ChatRowPeek";
 import { useState, useCallback, useMemo, useRef, useEffect } from "react";
 import { usePresenceClock } from "../../hooks/use-presence-clock";
 import { toast } from "sonner";
 import {
+  BACKGROUND_THUMBNAIL_WIDTH,
   includesTextForMatch,
   normalizeTextForMatch,
   type Chat,
@@ -219,9 +223,23 @@ export function ChatSidebar() {
   const setActiveChatId = useChatStore((s) => s.setActiveChatId);
   const unreadCounts = useChatStore((s) => s.unreadCounts);
   const hydrateUnread = useChatStore((s) => s.hydrateUnread);
+  // Liveness signals for the rows. All three are already maintained per-chat by the store,
+  // so a backgrounded chat can show what it is doing without any extra fetching.
+  // `inputDrafts` writes are debounced (ConversationInput handleInput), so subscribing to
+  // the whole Map does not re-render the list on every keystroke.
+  // Not `streamingChatId` — that one is recomputed for the newly active chat on every
+  // switch (chat.store setActiveChatId), so it goes null the moment you navigate away from
+  // a generating chat. `abortControllers` is the per-chat truth and is what that same code
+  // reads to decide whether a generation is live.
+  const abortControllers = useChatStore((s) => s.abortControllers);
+  const perChatTyping = useChatStore((s) => s.perChatTyping);
+  const inputDrafts = useChatStore((s) => s.inputDrafts);
+  const chatNotifications = useChatStore((s) => s.chatNotifications);
+  const chatListRef = useRef<HTMLDivElement>(null);
   // One interval for the whole list: a 60s-cadence clock so schedule/override-derived
   // status dots refresh when time alone changes them, without per-row timers.
   const presenceNow = usePresenceClock();
+  const chatListBackgrounds = useUIStore((s) => s.chatListBackgrounds);
   const hasAnyDetailOpen = useUIStore((s) => s.hasAnyDetailOpen);
   const editorDirty = useUIStore((s) => s.editorDirty);
   const closeAllDetails = useUIStore((s) => s.closeAllDetails);
@@ -851,6 +869,51 @@ export function ChatSidebar() {
       charLookup,
       presenceNow,
     );
+
+    // ── Row liveness ──
+    // Exactly one subtitle, so rows never change height as these states come and go.
+    // Precedence: typing > generating > notification > draft.
+    // Reuses the list's existing 60s clock, so these tick without per-row timers.
+    // Conversation chats only — roleplay/game rows are already busy enough.
+    const relativeTime =
+      chat.mode === "conversation" && chat.lastMessageAt
+        ? formatRelativeContact(chat.lastMessageAt, presenceNow.getTime())
+        : null;
+
+    const isGenerating = abortControllers.has(chat.id);
+    const typingCharacter = perChatTyping.get(chat.id);
+    const hasDraft = !isActive && Boolean(inputDrafts.get(chat.id)?.trim());
+    // Enrichment only: notifications auto-dismiss on a timer while the unread count badge
+    // persists, so the badge stays the durable signal and this just names who/what.
+    const notification = isActive ? undefined : chatNotifications.get(chat.id);
+    const notificationLabel = !notification
+      ? null
+      : notification.kind === "call"
+        ? notification.reason?.trim() ||
+          localizeUi("ui.layout.chatsidebar.incomingCallFromValue1", { value1: notification.characterName })
+        : localizeUi("ui.layout.chatsidebar.value1Replied", { value1: notification.characterName });
+    const subtitle = typingCharacter
+      ? localizeUi("ui.layout.chatsidebar.value1IsTyping", { value1: typingCharacter })
+      : isGenerating
+        ? localizeUi("ui.layout.chatsidebar.generating")
+        : notificationLabel
+          ? notificationLabel
+          : hasDraft
+            ? localizeUi("ui.layout.chatsidebar.unsentDraft")
+            : null;
+
+    // Banner: the chat's own background image, bled across the row and heavily muted.
+    // Sits at -z-10 inside the row's own stacking context (see `isolate`), so the
+    // unpositioned row content keeps painting above it.
+    // Asks for a 320px-wide copy: a full-size background decodes to megabytes of bitmap no
+    // matter how small it is painted, and on "always" every row pays that at once.
+    // Deliberately no fallback to defaultRoleplayBackground (which ChatArea's restore effect
+    // applies): that would paint one identical banner across every roleplay chat.
+    const bannerUrl =
+      chatListBackgrounds === "off"
+        ? null
+        : chatBackgroundMetadataToUrl(chat.metadata?.background, BACKGROUND_THUMBNAIL_WIDTH);
+
     return (
       <div
         role="button"
@@ -899,7 +962,7 @@ export function ChatSidebar() {
           if (window.innerWidth < 768) setSidebarOpen(false);
         }}
         className={cn(
-          "group relative flex w-full touch-pan-y items-center gap-2.5 rounded-lg px-3 py-2.5 text-left transition-all duration-150",
+          "group relative isolate flex w-full touch-pan-y items-center gap-2.5 overflow-hidden rounded-lg px-3 py-2.5 text-left transition-all duration-150",
           multiSelectMode && isSelected
             ? "mari-chrome-accent-surface mari-accent-animated"
             : isActive
@@ -935,9 +998,40 @@ export function ChatSidebar() {
           <GripVertical size="0.8125rem" />
         </button>
 
-        {/* Active indicator */}
-        {isActive && (
-          <span className="mari-chrome-accent-progress mari-accent-animated absolute -left-0.5 top-1/2 h-5 w-1 -translate-y-1/2 rounded-full" />
+        {/* Chat background banner — active/hovered only, behind everything */}
+        {bannerUrl && (
+          <span
+            aria-hidden
+            className={cn(
+              "pointer-events-none absolute inset-0 -z-10 opacity-0 transition-opacity duration-200",
+              // "hover" on a touch device means the active row only — no hover event ever fires.
+              chatListBackgrounds === "always" || isActive ? "opacity-100" : "group-hover:opacity-100",
+            )}
+          >
+            {/* Muted twice over: the image is faint, and a scrim still sits on top. Keeping
+                the scrim means text contrast does not depend on how light the image is. */}
+            {/* Full-size chat background squeezed into a 40px row: keep the decode off the
+                main thread and let offscreen rows skip it entirely. */}
+            <img
+              src={bannerUrl}
+              alt=""
+              loading="lazy"
+              decoding="async"
+              className="h-full w-full object-cover opacity-[0.14] saturate-50"
+            />
+            <span className="absolute inset-0 bg-gradient-to-r from-[var(--sidebar-background)]/80 to-[var(--sidebar-background)]/40" />
+          </span>
+        )}
+
+        {/* Active / generating indicator */}
+        {(isActive || isGenerating) && (
+          <span
+            className={cn(
+              // left-0, not -left-0.5: the row now clips (overflow-hidden, for the banner).
+              "mari-chrome-accent-progress mari-accent-animated absolute left-0 top-1/2 h-5 w-1 -translate-y-1/2 rounded-full",
+              isGenerating && "animate-pulse",
+            )}
+          />
         )}
 
         {/* Chat avatar(s) or mode icon fallback — with unread badge overlay */}
@@ -1074,7 +1168,17 @@ export function ChatSidebar() {
           >
             {chat.name}
           </span>
+          {subtitle && (
+            <span className="mari-chrome-accent-text-muted block truncate text-[0.6875rem] leading-tight">
+              {subtitle}
+            </span>
+          )}
         </div>
+
+        {/* Last-activity time — conversation chats only */}
+        {relativeTime && (
+          <span className="mari-chrome-accent-text-muted shrink-0 text-[0.625rem] tabular-nums">{relativeTime}</span>
+        )}
 
         {/* Branch count badge */}
         {branchCount > 1 && (
@@ -1318,6 +1422,7 @@ export function ChatSidebar() {
 
       {/* Chat list */}
       <div
+        ref={chatListRef}
         data-chat-root-drop-zone
         className={cn(
           "flex-1 overflow-y-auto px-2 pb-1 pt-0 transition-colors",
@@ -1356,6 +1461,7 @@ export function ChatSidebar() {
           setIsRootDropTarget(false);
         }}
       >
+        <ChatRowPeek containerRef={chatListRef} activeChatId={activeChatId} disabled={multiSelectMode} />
         {isLoading && (
           <div className="flex flex-col gap-2 px-2 py-4">
             {[1, 2, 3].map((i) => (

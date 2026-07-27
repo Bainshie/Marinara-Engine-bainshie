@@ -17,6 +17,7 @@ import {
   X,
 } from "lucide-react";
 import { toast } from "sonner";
+import { BACKGROUND_THUMBNAIL_WIDTH } from "@marinara-engine/shared";
 import { api } from "../../../lib/api-client";
 import { cn } from "../../../lib/utils";
 import {
@@ -463,7 +464,16 @@ export function BackgroundPicker({
           aria-label={isSelected ?localizeUi("ui.panels.backgroundpicker.removeValue1FromThisChat", { value1: title }) :localizeUi("ui.panels.backgroundpicker.useValue1ForThisChat", { value1: title })}
           aria-pressed={isSelected}
         >
-          <img src={background.url} alt="" className="h-full w-full object-cover" loading="lazy" />
+          {/* Thumbnail, not the original: a grid of full-size backgrounds decodes to
+              hundreds of MB of bitmap. The server falls back to the original when it
+              cannot resize (animated GIF, no native sharp). */}
+          <img
+            src={`${background.url}?w=${BACKGROUND_THUMBNAIL_WIDTH}`}
+            alt=""
+            className="h-full w-full object-cover"
+            loading="lazy"
+            decoding="async"
+          />
           {isSelected && (
             <span className="absolute inset-0 flex items-center justify-center bg-black/30">
               <Check size="0.875rem" className="text-white" />

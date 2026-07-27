@@ -40,6 +40,26 @@ import {
 import type { AgentCallDebugEvent, AgentContext } from "../../packages/shared/src/types/agent.js";
 import { CSRF_HEADER, CSRF_HEADER_VALUE } from "../../packages/shared/src/constants/security.js";
 
+function extractCssBlock(source: string, prelude: string): string {
+  const preludeIndex = source.indexOf(prelude);
+  assert.notEqual(preludeIndex, -1, `Expected CSS prelude: ${prelude}`);
+
+  const openingBraceIndex = source.indexOf("{", preludeIndex + prelude.length);
+  assert.notEqual(openingBraceIndex, -1, `Expected CSS block for: ${prelude}`);
+
+  let depth = 0;
+  for (let index = openingBraceIndex; index < source.length; index += 1) {
+    if (source[index] === "{") {
+      depth += 1;
+    } else if (source[index] === "}") {
+      depth -= 1;
+      if (depth === 0) return source.slice(openingBraceIndex + 1, index);
+    }
+  }
+
+  assert.fail(`Unclosed CSS block for: ${prelude}`);
+}
+
 const retryAgentRouteSource = readFileSync(
   new URL("../../packages/server/src/routes/generate/retry-agents-route.ts", import.meta.url),
   "utf8",
@@ -72,6 +92,7 @@ const globalStylesSource = readFileSync(
   new URL("../../packages/client/src/styles/globals.css", import.meta.url),
   "utf8",
 );
+const firefoxSupportsSource = extractCssBlock(globalStylesSource, "@supports (-moz-appearance: none)");
 const conversationInputSource = readFileSync(
   new URL("../../packages/client/src/components/chat/ConversationInput.tsx", import.meta.url),
   "utf8",
@@ -343,6 +364,16 @@ assert.match(
   globalStylesSource,
   /\[data-chat-mode="roleplay"\] \.mari-chat-input-textarea \{\s+contain: paint;/u,
   "Roleplay textarea paint should stay isolated from the live scene behind it",
+);
+assert.match(
+  firefoxSupportsSource,
+  /(?:^|\})[^{}]*\[data-chat-mode="roleplay"\] \.marinara-chat-input-shell\s*\{[^{}]*backdrop-filter:\s*none !important;[^{}]*\}/u,
+  "Firefox should not repaint the Roleplay scene through a blurred composer while typing",
+);
+assert.match(
+  firefoxSupportsSource,
+  /(?:^|\})\s*\[data-chat-mode="roleplay"\] \.marinara-chat-input-shell\s*\{[^{}]*background:\s*linear-gradient\(var\(--card\), var\(--card\)\),\s*var\(--background\) !important;[^{}]*\}/u,
+  "Firefox should use an opaque Roleplay composer surface after disabling backdrop blur",
 );
 assert.doesNotMatch(
   chatInputSource,

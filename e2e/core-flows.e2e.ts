@@ -617,6 +617,74 @@ test("settings profile exports use the new identity and legacy exports still imp
   }
 });
 
+test("settings profiles cannot carry Hierarchical Maps state into another chat", async ({ request }, testInfo) => {
+  test.skip(!testInfo.project.name.includes("desktop"), "Settings profile map isolation is covered once.");
+
+  const suffix = Date.now().toString(36);
+  let profileId = "";
+  let chatId = "";
+  const profileResponse = await request.post("/api/chat-presets", {
+    data: {
+      name: `Map Isolation ${suffix}`,
+      mode: "roleplay",
+      settings: {
+        metadata: {
+          enableAgents: true,
+          activeAgentIds: ["hierarchical-maps"],
+          spatialContext: { locations: [{ id: "falmart", name: "Falmart" }] },
+          spatialContextHierarchyProfile: { name: "Inherited map hierarchy" },
+          spatialMapGenerationPreferences: { activeOptionId: "inherited-map-option" },
+        },
+      },
+    },
+  });
+  expect(profileResponse.ok(), await profileResponse.text()).toBeTruthy();
+  const profile = (await profileResponse.json()) as {
+    id: string;
+    settings: { metadata?: Record<string, unknown> };
+  };
+  profileId = profile.id;
+
+  try {
+    expect(profile.settings.metadata).toMatchObject({
+      enableAgents: true,
+      activeAgentIds: ["hierarchical-maps"],
+    });
+    expect(profile.settings.metadata).not.toHaveProperty("spatialContext");
+    expect(profile.settings.metadata).not.toHaveProperty("spatialContextHierarchyProfile");
+    expect(profile.settings.metadata).not.toHaveProperty("spatialMapGenerationPreferences");
+
+    const chatResponse = await request.post("/api/chats", {
+      data: {
+        name: `Fresh RP without inherited map ${suffix}`,
+        mode: "roleplay",
+        characterIds: [],
+      },
+    });
+    expect(chatResponse.ok(), await chatResponse.text()).toBeTruthy();
+    const chat = (await chatResponse.json()) as { id: string };
+    chatId = chat.id;
+
+    const applyResponse = await request.post(`/api/chat-presets/${profile.id}/apply/${chat.id}`);
+    expect(applyResponse.ok(), await applyResponse.text()).toBeTruthy();
+    const appliedChatResponse = await request.get(`/api/chats/${chat.id}`);
+    expect(appliedChatResponse.ok(), await appliedChatResponse.text()).toBeTruthy();
+    const appliedChat = (await appliedChatResponse.json()) as { metadata?: Record<string, unknown> };
+    expect(appliedChat.metadata).toMatchObject({
+      enableAgents: true,
+      activeAgentIds: ["hierarchical-maps"],
+    });
+    expect(appliedChat.metadata).not.toHaveProperty("spatialContext");
+    expect(appliedChat.metadata).not.toHaveProperty("spatialContextHierarchyProfile");
+    expect(appliedChat.metadata).not.toHaveProperty("spatialMapGenerationPreferences");
+  } finally {
+    await Promise.allSettled([
+      chatId ? request.delete(`/api/chats/${chatId}`) : Promise.resolve(),
+      profileId ? request.delete(`/api/chat-presets/${profileId}`) : Promise.resolve(),
+    ]);
+  }
+});
+
 test("Author's Notes keeps its expand and full macro guide inside the field", async ({ page, request }, testInfo) => {
   test.skip(!testInfo.project.name.includes("desktop"), "Author's Notes field chrome is covered on desktop.");
 

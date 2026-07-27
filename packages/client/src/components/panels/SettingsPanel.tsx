@@ -13,6 +13,7 @@ import {
   type ConversationAvatarShape,
   type ConversationMessageStyle,
   type GameDialogueDisplayMode,
+  type ChatListBackgroundMode,
   type RoleplayAvatarStyle,
   type TrackerDataPanelSection,
   type TrackerPanelSizeProfile,
@@ -1087,6 +1088,14 @@ const SETTINGS_SEARCHABLE_CONTROLS: readonly SettingsSearchableControlMeta[] = [
     kind: "Slider",
   },
   {
+    id: "chat-list-backgrounds",
+    sectionId: "chat-backgrounds",
+    label: "Chat list backgrounds",
+    description: "Show each chat's background as a banner behind its row in the chat list.",
+    aliases: ["sidebar", "chat list", "banner", "background", "row"],
+    kind: "Button group",
+  },
+  {
     id: "game-dialogue-display",
     sectionId: "game-presentation",
     label: "Game Dialogue Display",
@@ -1477,6 +1486,20 @@ const ROLEPLAY_AVATAR_STYLE_OPTIONS: Array<{ id: RoleplayAvatarStyle; label: str
     label: "Glued Side Panel",
     desc: "A taller portrait strip fused into the message bubble.",
   },
+];
+
+const CHAT_LIST_BACKGROUND_OPTIONS: Array<{ id: ChatListBackgroundMode; label: string; desc: string }> = [
+  {
+    id: "hover",
+    label: "Active & Hovered",
+    desc: "Banner on the chat you are in and the one under the pointer. On touch devices, the active chat only.",
+  },
+  {
+    id: "always",
+    label: "Every Row",
+    desc: "Banner behind every chat in the list. Loads one downscaled image per chat.",
+  },
+  { id: "off", label: "Off", desc: "No banners. Chat rows keep the plain sidebar background." },
 ];
 
 const GAME_DIALOGUE_DISPLAY_OPTIONS: Array<{ id: GameDialogueDisplayMode; label: string; desc: string }> = [
@@ -4118,6 +4141,8 @@ function AppearanceSettings() {
   const setRoleplaySpriteScale = useUIStore((s) => s.setRoleplaySpriteScale);
   const gameDialogueDisplayMode = useUIStore((s) => s.gameDialogueDisplayMode);
   const setGameDialogueDisplayMode = useUIStore((s) => s.setGameDialogueDisplayMode);
+  const chatListBackgrounds = useUIStore((s) => s.chatListBackgrounds);
+  const setChatListBackgrounds = useUIStore((s) => s.setChatListBackgrounds);
   const gameTextEffectsEnabled = useUIStore((s) => s.gameTextEffectsEnabled);
   const setGameTextEffectsEnabled = useUIStore((s) => s.setGameTextEffectsEnabled);
   const gameAvatarScale = useUIStore((s) => s.gameAvatarScale);
@@ -5162,6 +5187,33 @@ function AppearanceSettings() {
                 </span>
               </div>
             </label>
+            <div className="flex flex-col gap-2">
+              <span className="inline-flex items-center gap-1 text-[0.6875rem] font-medium">
+                {localizeUi("ui.panels.appearancesettings.chatListBackgrounds")}
+                <HelpTooltip text={localizeUi("ui.panels.appearancesettings.showsEachChatsOwnBackgroundAsAMutedBanner")} />
+              </span>
+              <div
+                id={getSettingsControlAnchorId("chat-list-backgrounds")}
+                className="grid scroll-mt-3 grid-cols-1 gap-2 sm:grid-cols-3"
+              >
+                {CHAT_LIST_BACKGROUND_OPTIONS.map((opt) => (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    onClick={() => setChatListBackgrounds(opt.id)}
+                    className={cn(
+                      "flex flex-col items-start gap-1 rounded-lg border p-3 text-left text-xs transition-all",
+                      chatListBackgrounds === opt.id
+                        ? "border-[var(--primary)] bg-[var(--primary)]/10 ring-1 ring-[var(--primary)]"
+                        : "border-[var(--border)] hover:border-[var(--primary)]/40",
+                    )}
+                  >
+                    <span className="font-semibold">{opt.label}</span>
+                    <span className="text-[0.625rem] leading-tight text-[var(--muted-foreground)]">{opt.desc}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
             <BackgroundPicker
               selected={chatBackground}
               onSelect={setChatBackground}
