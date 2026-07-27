@@ -5070,6 +5070,10 @@ strong {
 /* ─────────────────────────────────────────────
    21. PERFORMANCE — GPU COMPOSITING HINTS
    ───────────────────────────────────────────── */
+[data-chat-mode="roleplay"] .mari-chat-input-textarea {
+  contain: paint;
+}
+
 .rpg-sprite-container img,
 .rpg-avatar-glow img,
 .rpg-avatar-panel img,
