@@ -116,25 +116,37 @@ export function ChatRowPeek({ containerRef, activeChatId, disabled }: ChatRowPee
       data-chat-floating-panel
       role="tooltip"
       className={cn(
-        "pointer-events-none fixed z-50 w-72 rounded-lg border border-[var(--border)] bg-[var(--popover)] p-2.5 shadow-lg",
-        pos.ready ? "opacity-100" : "opacity-0",
+        "pointer-events-none fixed z-50 w-72 rounded-xl border border-[var(--border)] bg-[var(--popover)]/95 p-3 shadow-xl backdrop-blur-sm",
+        pos.ready ? "animate-fade-in-up opacity-100" : "opacity-0",
       )}
       style={{ top: pos.top, left: pos.left }}
     >
       {isLoading ? (
         <p className="text-[0.6875rem] text-[var(--muted-foreground)]">{localizeUi("ui.layout.chatsidebar.loading")}</p>
       ) : messages?.length ? (
-        <div className="flex flex-col gap-1.5">
+        <div className="flex flex-col gap-2">
           {messages.map((message) => (
-            <div key={message.id} className="text-[0.6875rem] leading-snug">
-              <span className="mari-chrome-accent-text-muted font-medium">
-                {message.role === "user"
-                  ? localizeUi("ui.layout.chatsidebar.peekYou")
-                  : localizeUi("ui.layout.chatsidebar.peekReply")}
-              </span>{" "}
-              {/* Raw content in a clamped box — the house pattern; there is no
-                  strip-markdown helper and pre-truncating in JS would cut mid-syntax. */}
-              <span className="line-clamp-2 text-[var(--foreground)] opacity-80">{message.content}</span>
+            <div key={message.id} className="flex gap-2 text-[0.6875rem] leading-snug">
+              {/* Speaker rail: a tinted bar reads faster down a stack than a repeated word,
+                  and keeps the message text on one flush left edge. */}
+              <span
+                aria-hidden
+                className={cn(
+                  "mt-0.5 w-0.5 shrink-0 rounded-full",
+                  message.role === "user" ? "bg-[var(--muted-foreground)]/40" : "bg-[var(--primary)]/60",
+                )}
+              />
+              <div className="min-w-0">
+                <span className="mari-chrome-accent-text-muted text-[0.625rem] font-medium uppercase tracking-wide">
+                  {message.role === "user"
+                    ? localizeUi("ui.layout.chatsidebar.peekYou")
+                    : localizeUi("ui.layout.chatsidebar.peekReply")}
+                </span>
+                {/* Raw content in a clamped box — the house pattern; there is no
+                    strip-markdown helper and pre-truncating in JS would cut mid-syntax.
+                    Must be a block for line-clamp to apply. */}
+                <p className="line-clamp-2 break-words text-[var(--foreground)] opacity-80">{message.content}</p>
+              </div>
             </div>
           ))}
         </div>

@@ -5187,33 +5187,22 @@ function AppearanceSettings() {
                 </span>
               </div>
             </label>
-            <div className="flex flex-col gap-2">
-              <span className="inline-flex items-center gap-1 text-[0.6875rem] font-medium">
+            <label className="flex items-center gap-2">
+              <span className="inline-flex shrink-0 items-center gap-1 text-[0.6875rem] font-medium">
                 {localizeUi("ui.panels.appearancesettings.chatListBackgrounds")}
                 <HelpTooltip text={localizeUi("ui.panels.appearancesettings.showsEachChatsOwnBackgroundAsAMutedBanner")} />
               </span>
-              <div
+              <select
                 id={getSettingsControlAnchorId("chat-list-backgrounds")}
-                className="grid scroll-mt-3 grid-cols-1 gap-2 sm:grid-cols-3"
+                value={chatListBackgrounds}
+                onChange={(e) => setChatListBackgrounds(e.target.value as ChatListBackgroundMode)}
+                className="h-7 min-w-0 flex-1 scroll-mt-3 rounded-md border border-[var(--border)] bg-[var(--secondary)] px-2 text-xs"
               >
                 {CHAT_LIST_BACKGROUND_OPTIONS.map((opt) => (
-                  <button
-                    key={opt.id}
-                    type="button"
-                    onClick={() => setChatListBackgrounds(opt.id)}
-                    className={cn(
-                      "flex flex-col items-start gap-1 rounded-lg border p-3 text-left text-xs transition-all",
-                      chatListBackgrounds === opt.id
-                        ? "border-[var(--primary)] bg-[var(--primary)]/10 ring-1 ring-[var(--primary)]"
-                        : "border-[var(--border)] hover:border-[var(--primary)]/40",
-                    )}
-                  >
-                    <span className="font-semibold">{opt.label}</span>
-                    <span className="text-[0.625rem] leading-tight text-[var(--muted-foreground)]">{opt.desc}</span>
-                  </button>
+                  <option key={opt.id} value={opt.id}>{opt.label}</option>
                 ))}
-              </div>
-            </div>
+              </select>
+            </label>
             <BackgroundPicker
               selected={chatBackground}
               onSelect={setChatBackground}
