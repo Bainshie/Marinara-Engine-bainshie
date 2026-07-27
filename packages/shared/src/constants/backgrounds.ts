@@ -1,1 +1,0 @@
-export const BACKGROUND_THUMBNAIL_WIDTH = 320;
