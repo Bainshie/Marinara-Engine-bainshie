@@ -223,7 +223,11 @@ export function ChatSidebar() {
   // so a backgrounded chat can show what it is doing without any extra fetching.
   // `inputDrafts` writes are debounced (ConversationInput handleInput), so subscribing to
   // the whole Map does not re-render the list on every keystroke.
-  const streamingChatId = useChatStore((s) => s.streamingChatId);
+  // Not `streamingChatId` — that one is recomputed for the newly active chat on every
+  // switch (chat.store setActiveChatId), so it goes null the moment you navigate away from
+  // a generating chat. `abortControllers` is the per-chat truth and is what that same code
+  // reads to decide whether a generation is live.
+  const abortControllers = useChatStore((s) => s.abortControllers);
   const perChatTyping = useChatStore((s) => s.perChatTyping);
   const inputDrafts = useChatStore((s) => s.inputDrafts);
   // One interval for the whole list: a 60s-cadence clock so schedule/override-derived
@@ -862,7 +866,7 @@ export function ChatSidebar() {
     // ── Row liveness ──
     // Exactly one subtitle, so rows never change height as these states come and go.
     // Precedence: typing > generating > draft.
-    const isGenerating = streamingChatId === chat.id;
+    const isGenerating = abortControllers.has(chat.id);
     const typingCharacter = perChatTyping.get(chat.id);
     const hasDraft = !isActive && Boolean(inputDrafts.get(chat.id)?.trim());
     const subtitle = typingCharacter
