@@ -1050,6 +1050,13 @@ export function ChatSettingsDrawer({
     openRightPanel("agents");
     openAgentCatalog();
   }, [onClose, openAgentCatalog, openRightPanel]);
+  const openLorebookFromSettings = useCallback(
+    (lorebookId: string) => {
+      onClose();
+      openLorebookDetail(lorebookId);
+    },
+    [onClose, openLorebookDetail],
+  );
   const inactiveCharacterIds = useMemo<string[]>(
     () =>
       Array.isArray(metadata.inactiveCharacterIds)
@@ -8066,7 +8073,7 @@ export function ChatSettingsDrawer({
                                             },
                                             confirmAction: showConfirmDialog,
                                             onDirtyChange: setEditorDirty,
-                                            onOpenLorebook: openLorebookDetail,
+                                            onOpenLorebook: openLorebookFromSettings,
                                           }}
                                           className="block overflow-hidden rounded-lg"
                                         />
@@ -8326,7 +8333,7 @@ export function ChatSettingsDrawer({
                                                 },
                                                 confirmAction: showConfirmDialog,
                                                 onDirtyChange: setEditorDirty,
-                                                onOpenLorebook: openLorebookDetail,
+                                                onOpenLorebook: openLorebookFromSettings,
                                               }}
                                               className="mt-2 block overflow-hidden rounded-lg"
                                             />
