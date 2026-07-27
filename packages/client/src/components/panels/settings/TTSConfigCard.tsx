@@ -1,7 +1,8 @@
 // ──────────────────────────────────────────────
 // TTS Configuration Card (Connections Panel)
 // ──────────────────────────────────────────────
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useCallback, useState, useEffect, useId, useLayoutEffect, useMemo, useRef } from "react";
+import { createPortal } from "react-dom";
 import {
   Volume2,
   Key,
@@ -17,6 +18,7 @@ import {
   X,
   Download,
   Search,
+  UserRound,
 } from "lucide-react";
 import { cn } from "../../../lib/utils";
 import { toast } from "sonner";
@@ -50,6 +52,7 @@ import {
 import { HelpTooltip } from "../../ui/HelpTooltip";
 import { SettingsCheckbox, SettingsSwitch } from "./SettingControls";
 import { useTranslation as useUiTranslation } from "react-i18next";
+import { ApiError } from "../../../lib/api-client";
 
 // ── Sub-components ───────────────────────────────
 
@@ -164,6 +167,28 @@ type VoiceOption = {
   category?: string | null;
   labels?: Record<string, string | number | boolean | null> | null;
 };
+
+function getTtsRequestErrorMessage(error: unknown, fallback: string): string {
+  if (error instanceof ApiError) {
+    const payload =
+      error.payload && typeof error.payload === "object" && !Array.isArray(error.payload)
+        ? (error.payload as Record<string, unknown>)
+        : null;
+    const rawDetail = payload?.detail;
+    const nestedDetail =
+      rawDetail && typeof rawDetail === "object" && !Array.isArray(rawDetail)
+        ? (rawDetail as Record<string, unknown>)
+        : null;
+    const detail =
+      typeof rawDetail === "string"
+        ? rawDetail.trim()
+        : typeof nestedDetail?.message === "string"
+          ? nestedDetail.message.trim()
+          : "";
+    return [error.message || fallback, detail].filter(Boolean).join(": ");
+  }
+  return error instanceof Error && error.message.trim() ? error.message : fallback;
+}
 
 function addSavedVoiceOption(options: VoiceOption[], voiceId: string): VoiceOption[] {
   const id = voiceId.trim();
@@ -357,6 +382,256 @@ function TtsDropdownIcon({ compact = false }: { compact?: boolean }) {
   );
 }
 
+type TtsSearchableSelectOption = {
+  id: string;
+  label: string;
+  searchText: string;
+  disabled?: boolean;
+};
+
+function TtsSearchableSelect({
+  value,
+  options,
+  disabled,
+  placeholder,
+  ariaLabel,
+  searchPlaceholder,
+  emptyText,
+  optionKind,
+  testId,
+  compact = false,
+  onChange,
+}: {
+  value: string;
+  options: TtsSearchableSelectOption[];
+  disabled: boolean;
+  placeholder: string;
+  ariaLabel: string;
+  searchPlaceholder: string;
+  emptyText: string;
+  optionKind: "character" | "voice";
+  testId: string;
+  compact?: boolean;
+  onChange: (value: string) => void;
+}) {
+  const rootRef = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const listboxId = useId();
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const [position, setPosition] = useState<{ left: number; top: number; width: number; maxHeight: number } | null>(
+    null,
+  );
+  const selected = options.find((option) => option.id === value);
+  const normalizedSearch = search.trim().toLowerCase();
+  const filteredOptions = normalizedSearch
+    ? options.filter((option) => option.searchText.toLowerCase().includes(normalizedSearch))
+    : options;
+  const closePanel = useCallback((restoreFocus = true) => {
+    setOpen(false);
+    setSearch("");
+    if (restoreFocus) {
+      triggerRef.current?.focus();
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!open) return;
+    const closeOnOutsidePointer = (event: PointerEvent) => {
+      const target = event.target as Node;
+      if (!rootRef.current?.contains(target) && !panelRef.current?.contains(target)) {
+        closePanel(false);
+      }
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        closePanel();
+      }
+    };
+    document.addEventListener("pointerdown", closeOnOutsidePointer);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("pointerdown", closeOnOutsidePointer);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [closePanel, open]);
+
+  useLayoutEffect(() => {
+    if (!open) {
+      setPosition(null);
+      return;
+    }
+
+    const updatePosition = () => {
+      const trigger = rootRef.current;
+      if (!trigger) return;
+      const triggerRect = trigger.getBoundingClientRect();
+      const viewportPadding = 12;
+      const gap = 6;
+      const preferredWidth = compact ? 352 : 384;
+      const width = Math.min(
+        Math.max(triggerRect.width, preferredWidth),
+        Math.max(0, window.innerWidth - viewportPadding * 2),
+      );
+      const left = Math.min(
+        Math.max(triggerRect.left, viewportPadding),
+        Math.max(viewportPadding, window.innerWidth - width - viewportPadding),
+      );
+      const availableBelow = window.innerHeight - triggerRect.bottom - viewportPadding - gap;
+      const availableAbove = triggerRect.top - viewportPadding - gap;
+      const desiredHeight = Math.min(panelRef.current?.offsetHeight ?? 320, 320);
+      const openAbove = availableBelow < Math.min(220, desiredHeight) && availableAbove > availableBelow;
+      const maxHeight = Math.max(160, Math.min(320, openAbove ? availableAbove : availableBelow));
+      const panelHeight = Math.min(panelRef.current?.offsetHeight ?? desiredHeight, maxHeight);
+      const top = openAbove
+        ? Math.max(viewportPadding, triggerRect.top - panelHeight - gap)
+        : Math.min(triggerRect.bottom + gap, window.innerHeight - panelHeight - viewportPadding);
+
+      setPosition({ left, top, width, maxHeight });
+    };
+
+    let frame = 0;
+    const schedulePositionUpdate = () => {
+      if (frame) return;
+      frame = window.requestAnimationFrame(() => {
+        frame = 0;
+        updatePosition();
+      });
+    };
+
+    updatePosition();
+    schedulePositionUpdate();
+    window.addEventListener("resize", schedulePositionUpdate);
+    window.addEventListener("scroll", schedulePositionUpdate, true);
+    return () => {
+      if (frame) window.cancelAnimationFrame(frame);
+      window.removeEventListener("resize", schedulePositionUpdate);
+      window.removeEventListener("scroll", schedulePositionUpdate, true);
+    };
+  }, [compact, open]);
+
+  useEffect(() => {
+    if (!disabled) return;
+    setOpen(false);
+    setSearch("");
+  }, [disabled]);
+
+  return (
+    <div ref={rootRef} className="relative min-w-0 flex-1">
+      <button
+        ref={triggerRef}
+        type="button"
+        aria-label={ariaLabel}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-controls={open ? listboxId : undefined}
+        disabled={disabled}
+        onClick={() => setOpen((current) => !current)}
+        className={cn(
+          INPUT_CLS,
+          "relative flex min-w-0 cursor-pointer items-center pr-10 text-left disabled:cursor-not-allowed disabled:opacity-50",
+          compact && "py-2 text-xs",
+        )}
+      >
+        <span className={cn("truncate", !value && "text-[var(--muted-foreground)]")}>
+          {(selected?.label ?? value) || placeholder}
+        </span>
+        <TtsDropdownIcon compact={compact} />
+      </button>
+      {open &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <div
+            ref={panelRef}
+            className="fixed z-[10001] flex overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--background)] p-1.5 shadow-2xl shadow-black/40"
+            style={{
+              left: position?.left ?? -9999,
+              top: position?.top ?? -9999,
+              width: position?.width ?? 0,
+              maxHeight: position?.maxHeight ?? 320,
+              opacity: position ? 1 : 0,
+            }}
+          >
+            <div className="flex min-h-0 w-full flex-col">
+              {options.length > 8 && (
+                <label className="relative mb-1.5 block shrink-0">
+                  <Search
+                    size="0.75rem"
+                    className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[var(--primary)]"
+                  />
+                  <input
+                    autoFocus
+                    value={search}
+                    onChange={(event) => setSearch(event.target.value)}
+                    placeholder={searchPlaceholder}
+                    className={cn(INPUT_CLS, "py-2 pl-8 text-xs")}
+                  />
+                </label>
+              )}
+              <div
+                id={listboxId}
+                role="listbox"
+                aria-label={ariaLabel}
+                data-testid={testId}
+                className="min-h-0 overflow-x-hidden overflow-y-scroll pr-1 [scrollbar-color:var(--primary)_var(--secondary)] [scrollbar-gutter:stable] [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[var(--primary)] [&::-webkit-scrollbar-track]:bg-[var(--secondary)] [&::-webkit-scrollbar]:w-2"
+              >
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected={!value}
+                  onClick={() => {
+                    onChange("");
+                    closePanel();
+                  }}
+                  className={cn(
+                    "flex w-full min-w-0 items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs hover:bg-[var(--secondary)]",
+                    !value && "bg-[var(--primary)]/10 text-[var(--primary)]",
+                  )}
+                >
+                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-[var(--secondary)] text-[var(--primary)]">
+                    {optionKind === "character" ? <UserRound size="0.75rem" /> : <Volume2 size="0.75rem" />}
+                  </span>
+                  <span className="min-w-0 flex-1 truncate">{placeholder}</span>
+                  {!value && <Check size="0.75rem" className="shrink-0" />}
+                </button>
+                {filteredOptions.map((option) => (
+                  <button
+                    key={option.id}
+                    type="button"
+                    role="option"
+                    aria-selected={option.id === value}
+                    aria-disabled={option.disabled || undefined}
+                    disabled={option.disabled}
+                    title={option.label}
+                    onClick={() => {
+                      onChange(option.id);
+                      closePanel();
+                    }}
+                    className={cn(
+                      "flex w-full min-w-0 items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs hover:bg-[var(--secondary)] disabled:cursor-not-allowed disabled:opacity-40",
+                      option.id === value && "bg-[var(--primary)]/10 text-[var(--primary)]",
+                    )}
+                  >
+                    <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-[var(--secondary)] text-[var(--primary)]">
+                      {optionKind === "character" ? <UserRound size="0.75rem" /> : <Volume2 size="0.75rem" />}
+                    </span>
+                    <span className="min-w-0 flex-1 truncate">{option.label}</span>
+                    {option.id === value && <Check size="0.75rem" className="shrink-0" />}
+                  </button>
+                ))}
+                {filteredOptions.length === 0 && (
+                  <p className="px-2.5 py-3 text-center text-xs text-[var(--muted-foreground)]">{emptyText}</p>
+                )}
+              </div>
+            </div>
+          </div>,
+          document.body,
+        )}
+    </div>
+  );
+}
+
 function VoiceSelect({
   value,
   options,
@@ -375,133 +650,58 @@ function VoiceSelect({
   onChange: (value: string) => void;
 }) {
   const { t: localizeUi } = useUiTranslation();
-  const rootRef = useRef<HTMLDivElement>(null);
-  const [open, setOpen] = useState(false);
-  const [search, setSearch] = useState("");
-  const selected = options.find((option) => option.id === value);
-  const normalizedSearch = search.trim().toLowerCase();
-  const filteredOptions = normalizedSearch
-    ? options.filter((option) => readVoiceMetadata(option).toLowerCase().includes(normalizedSearch))
-    : options;
-
-  useEffect(() => {
-    if (!open) return;
-    const closeOnOutsidePointer = (event: PointerEvent) => {
-      if (!rootRef.current?.contains(event.target as Node)) {
-        setOpen(false);
-        setSearch("");
-      }
-    };
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setOpen(false);
-        setSearch("");
-      }
-    };
-    document.addEventListener("pointerdown", closeOnOutsidePointer);
-    document.addEventListener("keydown", closeOnEscape);
-    return () => {
-      document.removeEventListener("pointerdown", closeOnOutsidePointer);
-      document.removeEventListener("keydown", closeOnEscape);
-    };
-  }, [open]);
-
-  useEffect(() => {
-    if (!disabled) return;
-    setOpen(false);
-    setSearch("");
-  }, [disabled]);
-
   return (
-    <div ref={rootRef} className="relative min-w-0 flex-1">
-      <button
-        type="button"
-        aria-label={ariaLabel}
-        aria-haspopup="listbox"
-        aria-expanded={open}
-        disabled={disabled}
-        onClick={() => setOpen((current) => !current)}
-        className={cn(
-          INPUT_CLS,
-          "relative flex min-w-0 cursor-pointer items-center pr-10 text-left disabled:cursor-not-allowed disabled:opacity-50",
-          compact && "py-2 text-xs",
-        )}
-      >
-        <span className={cn("truncate", !value && "text-[var(--muted-foreground)]")}>
-          {selected ? formatVoiceOptionLabel(selected) : value || placeholder}
-        </span>
-        <TtsDropdownIcon compact={compact} />
-      </button>
-      {open && (
-        <div className="absolute left-0 right-0 top-[calc(100%+0.375rem)] z-50 overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--background)] p-1.5 shadow-2xl shadow-black/40">
-          {options.length > 8 && (
-            <label className="relative mb-1.5 block">
-              <Search
-                size="0.75rem"
-                className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[var(--primary)]"
-              />
-              <input
-                autoFocus
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                placeholder={localizeUi("ui.panels.ttsconfigcard.searchVoices")}
-                className={cn(INPUT_CLS, "py-2 pl-8 text-xs")}
-              />
-            </label>
-          )}
-          <div
-            role="listbox"
-            aria-label={ariaLabel}
-            data-testid="tts-voice-options"
-            className="max-h-56 overflow-x-hidden overflow-y-scroll pr-1 [scrollbar-color:var(--primary)_var(--secondary)] [scrollbar-gutter:stable] [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[var(--primary)] [&::-webkit-scrollbar-track]:bg-[var(--secondary)] [&::-webkit-scrollbar]:w-2"
-          >
-            <button
-              type="button"
-              role="option"
-              aria-selected={!value}
-              onClick={() => {
-                onChange("");
-                setOpen(false);
-                setSearch("");
-              }}
-              className={cn(
-                "flex w-full min-w-0 items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs hover:bg-[var(--secondary)]",
-                !value && "bg-[var(--primary)]/10 text-[var(--primary)]",
-              )}
-            >
-              <span className="min-w-0 flex-1 truncate">{placeholder}</span>
-              {!value && <Check size="0.75rem" className="shrink-0" />}
-            </button>
-            {filteredOptions.map((option) => (
-              <button
-                key={option.id}
-                type="button"
-                role="option"
-                aria-selected={option.id === value}
-                title={formatVoiceOptionLabel(option)}
-                onClick={() => {
-                  onChange(option.id);
-                  setOpen(false);
-                  setSearch("");
-                }}
-                className={cn(
-                  "flex w-full min-w-0 items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs hover:bg-[var(--secondary)]",
-                  option.id === value && "bg-[var(--primary)]/10 text-[var(--primary)]",
-                )}
-              >
-                <span className="min-w-0 flex-1 truncate">{formatVoiceOptionLabel(option)}</span>
-                {option.id === value && <Check size="0.75rem" className="shrink-0" />}
-              </button>
-            ))}
-            {filteredOptions.length === 0 && (
-              <p className="px-2.5 py-3 text-center text-xs text-[var(--muted-foreground)]">
-                {localizeUi("ui.panels.ttsconfigcard.noMatchingVoices")}
-              </p>
-            )}
-          </div>
-        </div>
-      )}
-    </div>
+    <TtsSearchableSelect
+      value={value}
+      options={options.map((option) => ({
+        id: option.id,
+        label: formatVoiceOptionLabel(option),
+        searchText: readVoiceMetadata(option),
+      }))}
+      disabled={disabled}
+      placeholder={placeholder}
+      ariaLabel={ariaLabel}
+      searchPlaceholder={localizeUi("ui.panels.ttsconfigcard.searchVoices")}
+      emptyText={localizeUi("ui.panels.ttsconfigcard.noMatchingVoices")}
+      optionKind="voice"
+      testId="tts-voice-options"
+      compact={compact}
+      onChange={onChange}
+    />
+  );
+}
+
+function CharacterSelect({
+  value,
+  options,
+  assignedCharacterIds,
+  onChange,
+}: {
+  value: string;
+  options: CharacterOption[];
+  assignedCharacterIds: Set<string>;
+  onChange: (value: string) => void;
+}) {
+  const { t: localizeUi } = useUiTranslation();
+  return (
+    <TtsSearchableSelect
+      value={value}
+      options={options.map((option) => ({
+        id: option.id,
+        label: option.label,
+        searchText: `${option.name} ${option.label}`,
+        disabled: assignedCharacterIds.has(option.id) && option.id !== value,
+      }))}
+      disabled={options.length === 0}
+      placeholder={localizeUi("ui.panels.ttsconfigcard.selectCharacter")}
+      ariaLabel={localizeUi("ui.panels.ttsconfigcard.selectCharacter")}
+      searchPlaceholder={localizeUi("ui.panels.ttsconfigcard.searchCharacters")}
+      emptyText={localizeUi("ui.panels.ttsconfigcard.noMatchingCharacters")}
+      optionKind="character"
+      testId="tts-character-options"
+      compact
+      onChange={onChange}
+    />
   );
 }
 
@@ -666,6 +866,7 @@ export function TTSConfigCard() {
     isFetching: fetchingVoices,
     refetch: refetchVoices,
     isError: voicesError,
+    error: voicesRequestError,
   } = useTTSVoices(
     savedSource,
     savedConfig?.baseUrl ?? TTS_SOURCE_DEFAULTS[savedSource].baseUrl,
@@ -938,9 +1139,11 @@ export function TTSConfigCard() {
           ? localizeUi("ui.panels.ttsconfigcard.elevenlabsVoicesAndModelsRefreshed")
           : localizeUi("ui.panels.ttsconfigcard.voicesRefreshed"),
       );
-    } catch {
+    } catch (error) {
       setSaveStatus("error");
-      toast.error(localizeUi("ui.panels.ttsconfigcard.couldNotRefreshVoices"));
+      toast.error(
+        getTtsRequestErrorMessage(error, localizeUi("ui.panels.ttsconfigcard.couldNotRefreshVoices")),
+      );
     }
   };
 
@@ -971,6 +1174,12 @@ export function TTSConfigCard() {
     voiceAssignments,
   ]);
   const voicesFromProvider = voicesData?.fromProvider ?? false;
+  const voicesErrorMessage = voicesError
+    ? getTtsRequestErrorMessage(
+        voicesRequestError,
+        localizeUi("ui.panels.ttsconfigcard.couldNotRefreshVoices"),
+      )
+    : null;
   const modelOptions = useMemo(() => {
     const providerModels = modelsData?.source === "elevenlabs" ? modelsData.models : [];
     const choices = providerModels.length > 0 ? providerModels : ELEVENLABS_TTS_MODELS.map((id) => ({ id, name: id }));
@@ -1509,25 +1718,15 @@ export function TTSConfigCard() {
                 )}
                 {voiceAssignments.map((assignment, index) => (
                   <div
-                    key={`${assignment.characterId || "character"}-${index}`}
+                    key={`voice-assignment-${index}`}
                     className="grid gap-2 sm:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)_auto]"
                   >
-                    <select
+                    <CharacterSelect
                       value={assignment.characterId}
-                      onChange={(e) => handleVoiceAssignmentCharacterChange(index, e.target.value)}
-                      className={cn(INPUT_CLS, "cursor-pointer appearance-none py-2 text-xs")}
-                    >
-                      <option value="">{localizeUi("ui.panels.ttsconfigcard.selectCharacter")}</option>
-                      {characterOptions.map((option) => (
-                        <option
-                          key={option.id}
-                          value={option.id}
-                          disabled={assignedCharacterIds.has(option.id) && option.id !== assignment.characterId}
-                        >
-                          {option.label}
-                        </option>
-                      ))}
-                    </select>
+                      options={characterOptions}
+                      assignedCharacterIds={assignedCharacterIds}
+                      onChange={(characterId) => handleVoiceAssignmentCharacterChange(index, characterId)}
+                    />
                     <VoiceSelect
                       value={assignment.voice}
                       onChange={(nextVoice) => handleVoiceAssignmentVoiceChange(index, nextVoice)}
@@ -1569,7 +1768,7 @@ export function TTSConfigCard() {
 
           {voicesError && (
             <p className="rounded-lg border border-[var(--destructive)]/20 bg-[var(--destructive)]/10 px-2.5 py-2 text-[0.6875rem] leading-relaxed text-[var(--destructive)]">
-              {localizeUi("ui.panels.ttsconfigcard.couldNotRefreshVoices")}
+              {voicesErrorMessage}
             </p>
           )}
 

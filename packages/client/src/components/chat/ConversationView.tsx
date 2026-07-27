@@ -350,7 +350,7 @@ export function ConversationView({
   const typingCharacterName = useChatStore((s) => s.typingCharacterName);
   const delayedCharacterInfo = useChatStore((s) => s.delayedCharacterInfo);
   const conversationMessageStyle = useUIStore((s) => s.conversationMessageStyle);
-  const hasDraftInput = useChatStore((s) => s.currentInput.trim().length > 0);
+  const hasDraftInput = useChatStore((s) => s.hasCurrentInput);
   const isGroupConversation = chatCharIds.length > 1;
   const liveTypingName = useMemo(() => {
     if (isGroupConversation) return "Multiple people";
