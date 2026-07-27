@@ -83,6 +83,10 @@ import {
   NOODLE_PERSONA_IDENTITY_INSTRUCTION,
 } from "../../packages/server/src/services/noodle/noodle-prompt.js";
 import { buildPartyRecruitCardPrompt } from "../../packages/server/src/services/game/gm-prompts.js";
+import {
+  normalizeCyoaChoiceOutput,
+  normalizeCyoaDialogueQuotes,
+} from "../../packages/server/src/services/agents/cyoa-choice-normalization.js";
 
 const personaA = {
   id: "noodle-account-a",
@@ -728,6 +732,65 @@ const keywordOptions = {
 };
 
 const cases: RegressionCase[] = [
+  {
+    name: "CYOA accepts escaped double quotes and normalizes single-quoted dialogue",
+    async run() {
+      assert.equal(
+        normalizeCyoaDialogueQuotes(`'Hold still,' I whisper. I can't leave the captain's key behind.`),
+        `"Hold still," I whisper. I can't leave the captain's key behind.`,
+      );
+      assert.equal(
+        normalizeCyoaDialogueQuotes(`I answer, "Already correct."`),
+        `I answer, "Already correct."`,
+        "double quotes decoded from valid JSON should remain unchanged",
+      );
+      assert.equal(
+        normalizeCyoaDialogueQuotes(`I can't abandon James' coat.`),
+        `I can't abandon James' coat.`,
+        "contractions and possessives are apostrophes, not dialogue delimiters",
+      );
+      assert.deepEqual(
+        normalizeCyoaChoiceOutput({
+          choices: [
+            { label: "Reassure her", text: `'You're safe,' I promise.` },
+            { label: "Ask directly", text: `I ask, "What happened?"` },
+          ],
+        }),
+        {
+          choices: [
+            { label: "Reassure her", text: `"You're safe," I promise.` },
+            { label: "Ask directly", text: `I ask, "What happened?"` },
+          ],
+        },
+      );
+
+      const providerResponse = JSON.stringify({
+        choices: [
+          { label: "Reassure her", text: `'You're safe,' I promise.` },
+          { label: "Ask directly", text: `I ask, "What happened?"` },
+        ],
+      });
+      const { provider } = makeCapturingProvider(providerResponse);
+      const result = await executeAgent(
+        makeRegressionAgentConfig({
+          id: "builtin:cyoa",
+          type: "cyoa",
+          name: "CYOA Choices",
+          promptTemplate: "Return CYOA choices.",
+        }) as any,
+        makeRegressionAgentContext(),
+        provider as any,
+        "regression-model",
+      );
+
+      assert.equal(result.success, true);
+      assert.deepEqual(
+        result.data,
+        normalizeCyoaChoiceOutput(JSON.parse(providerResponse)),
+        "the shared agent-result boundary should normalize CYOA output before persistence and display",
+      );
+    },
+  },
   {
     name: "/continue can append directly without inserting a newline",
     run: () => {
