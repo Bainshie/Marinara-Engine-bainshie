@@ -49,9 +49,10 @@ export const DEFAULT_GENERATION_PARAMS: GenerationParameters = {
   singleUserMessage: false,
 };
 
-/** Maximum file sizes for uploads. */
+/** Maximum file sizes for uploads and imported assets. */
 export const MAX_FILE_SIZES = {
   AVATAR: 10 * 1024 * 1024, // 10 MB
+  CHARACTER_CARD: 32 * 1024 * 1024, // 32 MB
   BACKGROUND: 20 * 1024 * 1024, // 20 MB
   SPRITE: 10 * 1024 * 1024, // 10 MB
   CHARACTER_JSON: 5 * 1024 * 1024, // 5 MB

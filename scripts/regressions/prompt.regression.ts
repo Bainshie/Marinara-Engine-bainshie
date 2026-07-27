@@ -531,6 +531,7 @@ import {
   buildRuntimeAgentSectionEligibleTypesForTest,
   clearUnusedRuntimeAgentSectionsForTest,
   makeRuntimeAgentSectionTokens,
+  splitRuntimeHandledAgentInjectionsForTest,
 } from "../../packages/server/src/services/generation/runtime-agent-sections.js";
 import {
   getTextRewritePendingState,
@@ -552,6 +553,7 @@ import {
   appendSeparateAgentInjectionMessage,
   collectLatestTrackerCharacterHistory,
   computeSummaryHideIds,
+  formatSeparateAgentInjection,
   getMessageHiddenFromAICharacterIds,
   injectIntoOutputFormatOrLastUser,
   isMessageHiddenFromAIForCharacter,
@@ -2061,6 +2063,27 @@ const cases: RegressionCase[] = [
       assert.equal(applyRegexReplacement("x", /x/, String.raw`C:\Users\bob`), String.raw`C:\Users\bob`);
       assert.equal(applyRegexReplacement("bob", /(\w+)/, String.raw`\U$1\E`), "BOB");
       assert.equal(applyRegexReplacement("bob", /(\w+)/, String.raw`\u$1`), "Bob");
+    },
+  },
+  {
+    name: "regex editor examples use direct-entry escaping that works in Live Test",
+    run() {
+      const locale = JSON.parse(
+        readFileSync(
+          new URL("../../packages/client/src/localization/locales/en.json", import.meta.url),
+          "utf8",
+        ),
+      ) as Record<string, string>;
+      const editorSource = readFileSync(
+        new URL("../../packages/client/src/components/agents/RegexScriptEditor.tsx", import.meta.url),
+        "utf8",
+      );
+      const oocPattern = locale["ui.agents.regexscripteditor.ooc"];
+
+      assert.equal(oocPattern, String.raw`\(OOC:.*?\)`);
+      assert.equal(applyRegexReplacement("(OOC: Hey.)", new RegExp(oocPattern!, "gi"), ""), "");
+      assert.ok(editorSource.includes(String.raw`{"\\(OOC:.*?\\)"}`));
+      assert.ok(!editorSource.includes(String.raw`{"\\\\(OOC:.*?\\\\)"}`));
     },
   },
   {
@@ -5811,6 +5834,40 @@ Use HTML sparingly and diegetically. Do not replace normal prose/dialogue unless
       clearUnusedRuntimeAgentSectionsForTest(messages, [["knowledge-router", tokens]]);
 
       assert.equal(messages.length, 0);
+    },
+  },
+  {
+    name: "assembled presets own unmatched runtime agent placement",
+    run() {
+      const tokens = makeRuntimeAgentSectionTokens("long-term-memory", "placement");
+      const markerMessages = [{ content: tokens.placeholder }];
+      const marked = splitRuntimeHandledAgentInjectionsForTest(
+        markerMessages,
+        new Map([["long-term-memory", tokens]]),
+        [{ agentType: "long-term-memory", text: "MEMORY" }],
+        { omitUnmatched: true },
+      );
+      assert.deepEqual(marked.fallbackInjections, []);
+      assert.deepEqual(marked.omittedInjections, []);
+      assert.equal(markerMessages[0]?.content, "MEMORY");
+
+      const omitted = splitRuntimeHandledAgentInjectionsForTest(
+        [{ content: "preset" }],
+        new Map([["long-term-memory", tokens]]),
+        [{ agentType: "long-term-memory", text: "MEMORY" }],
+        { omitUnmatched: true },
+      );
+      assert.equal(omitted.omittedInjections.length, 1);
+      assert.equal(
+        formatSeparateAgentInjection("long-term-memory", "MEMORY", "xml"),
+        "<long_term_memory>\nMEMORY\n</long_term_memory>",
+      );
+
+      const fallback = splitRuntimeHandledAgentInjectionsForTest([{ content: "conversation" }], new Map(), [
+        { agentType: "long-term-memory", text: "MEMORY" },
+      ]);
+      assert.equal(fallback.fallbackInjections.length, 1);
+      assert.deepEqual(fallback.omittedInjections, []);
     },
   },
   {

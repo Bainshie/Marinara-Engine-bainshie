@@ -15,7 +15,7 @@ import type {
   NoodleAutoPostingIntensity,
   NoodleAutoPostRescheduleInput,
   NoodleBootstrap,
-  NoodleBulkPrivateAccountCreateInput,
+  NoodleBulkNoodlerAccountCreateInput,
   NoodleCreateInteractionInput,
   NoodleCreatePostInput,
   NoodleInteraction,
@@ -23,15 +23,15 @@ import type {
   NoodlePost,
   NoodlePostImageCrop,
   NoodlePostUpdateInput,
-  NoodlePrivatePostCreateInput,
-  NoodlePrivatePostUpdateInput,
+  NoodlerPostCreateInput,
+  NoodlerPostUpdateInput,
   NoodleRemoveInteractionInput,
   NoodleRescheduleRefreshInput,
   NoodleRefreshSchedulerStatus,
   NoodleSettings,
   NoodleSettingsUpdateInput,
   NoodleStageProfileInput,
-  NoodlePrivateGenerationRequest,
+  NoodlerGenerationRequest,
   NoodleStageProfileDraftRequest,
   NoodlerManagedPost,
   NoodlerRefreshNowOutcome,
@@ -53,15 +53,15 @@ export type NoodleRefreshResult = {
 export const noodleKeys = {
   all: ["noodle"] as const,
   bootstrap: () => [...noodleKeys.all, "bootstrap"] as const,
-  privateRoot: () => [...noodleKeys.all, "private"] as const,
-  privateAccounts: () => [...noodleKeys.privateRoot(), "accounts"] as const,
-  privateEligibleAccountsRoot: () => [...noodleKeys.privateRoot(), "eligible"] as const,
-  privateEligibleAccounts: (search: string, kind: string) =>
-    [...noodleKeys.privateEligibleAccountsRoot(), search, kind] as const,
-  privatePosts: (accountId: string) => [...noodleKeys.privateRoot(), "posts", accountId] as const,
-  privateSubscribers: (accountId: string) => [...noodleKeys.privateRoot(), "subscribers", accountId] as const,
-  privateViewers: () => [...noodleKeys.privateRoot(), "viewers"] as const,
-  viewer: (personaId: string) => [...noodleKeys.privateViewers(), personaId] as const,
+  noodlerRoot: () => [...noodleKeys.all, "noodler"] as const,
+  noodlerAccounts: () => [...noodleKeys.noodlerRoot(), "accounts"] as const,
+  noodlerEligibleAccountsRoot: () => [...noodleKeys.noodlerRoot(), "eligible"] as const,
+  noodlerEligibleAccounts: (search: string, kind: string) =>
+    [...noodleKeys.noodlerEligibleAccountsRoot(), search, kind] as const,
+  noodlerPosts: (accountId: string) => [...noodleKeys.noodlerRoot(), "posts", accountId] as const,
+  noodlerSubscribers: (accountId: string) => [...noodleKeys.noodlerRoot(), "subscribers", accountId] as const,
+  noodlerViewers: () => [...noodleKeys.noodlerRoot(), "viewers"] as const,
+  viewer: (personaId: string) => [...noodleKeys.noodlerViewers(), personaId] as const,
 };
 
 function preservePollVotes(current: NoodleBootstrap | undefined, next: NoodleBootstrap): NoodleBootstrap {
@@ -85,7 +85,7 @@ export function useNoodle(enabled = true) {
 
 export function useNoodlerAccounts(enabled = true) {
   return useQuery({
-    queryKey: noodleKeys.privateAccounts(),
+    queryKey: noodleKeys.noodlerAccounts(),
     queryFn: () => api.get<NoodlerManagedStageProfile[]>("/noodle/noodler/accounts"),
     enabled,
     staleTime: 10_000,
@@ -99,7 +99,7 @@ export function useNoodlerAccounts(enabled = true) {
 export function useNoodlerEligibleAccounts(search: string, kind: "all" | "character" | "persona", enabled = true) {
   const normalizedSearch = search.trim();
   return useInfiniteQuery({
-    queryKey: noodleKeys.privateEligibleAccounts(normalizedSearch, kind),
+    queryKey: noodleKeys.noodlerEligibleAccounts(normalizedSearch, kind),
     initialPageParam: 0,
     queryFn: ({ pageParam }) =>
       api.get<{ items: NoodleAccount[]; limit: number; offset: number; hasMore: boolean }>(
@@ -113,7 +113,7 @@ export function useNoodlerEligibleAccounts(search: string, kind: "all" | "charac
 
 export function useNoodlerPosts(accountId: string | null) {
   return useQuery({
-    queryKey: noodleKeys.privatePosts(accountId ?? "none"),
+    queryKey: noodleKeys.noodlerPosts(accountId ?? "none"),
     queryFn: () => api.get<NoodlerManagedPost[]>(`/noodle/noodler/accounts/${encodeURIComponent(accountId!)}/posts`),
     enabled: Boolean(accountId),
     staleTime: 10_000,
@@ -125,7 +125,7 @@ export function useNoodlerPosts(accountId: string | null) {
 
 export function useNoodlerSubscribers(accountId: string | null) {
   return useQuery({
-    queryKey: noodleKeys.privateSubscribers(accountId ?? "none"),
+    queryKey: noodleKeys.noodlerSubscribers(accountId ?? "none"),
     queryFn: () =>
       api.get<NoodlerSubscriber[]>(`/noodle/noodler/accounts/${encodeURIComponent(accountId!)}/subscribers`),
     enabled: Boolean(accountId),
@@ -137,20 +137,20 @@ export function useCreateNoodlerStageProfile() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({
-      publicAccountId,
+      noodleAccountId,
       stageProfile,
     }: {
-      publicAccountId: string;
+      noodleAccountId: string;
       stageProfile: NoodleStageProfileInput;
     }) =>
-      api.post<NoodlerStageProfile>(`/noodle/accounts/${encodeURIComponent(publicAccountId)}/private`, {
+      api.post<NoodlerStageProfile>(`/noodle/accounts/${encodeURIComponent(noodleAccountId)}/noodler`, {
         stageProfile,
       }),
     onSuccess: () =>
       Promise.all([
-        qc.invalidateQueries({ queryKey: noodleKeys.privateAccounts() }),
-        qc.invalidateQueries({ queryKey: noodleKeys.privateEligibleAccountsRoot() }),
-        qc.invalidateQueries({ queryKey: noodleKeys.privateViewers() }),
+        qc.invalidateQueries({ queryKey: noodleKeys.noodlerAccounts() }),
+        qc.invalidateQueries({ queryKey: noodleKeys.noodlerEligibleAccountsRoot() }),
+        qc.invalidateQueries({ queryKey: noodleKeys.noodlerViewers() }),
       ]),
   });
 }
@@ -159,7 +159,7 @@ export function useBulkCreateNoodlerStageProfiles() {
   const qc = useQueryClient();
   const { t: localizeUi } = useUiTranslation();
   return useMutation({
-    mutationFn: (input: NoodleBulkPrivateAccountCreateInput) =>
+    mutationFn: (input: NoodleBulkNoodlerAccountCreateInput) =>
       api.post<{ created: NoodlerManagedStageProfile[]; skipped: string[]; failed?: string[] }>(
         "/noodle/noodler/accounts/bulk",
         input,
@@ -173,9 +173,9 @@ export function useBulkCreateNoodlerStageProfiles() {
         toast.success(localizeUi("ui.noodle.noodlerbulkcreatepanel.createdValue1SkippedValue2", counts));
       }
       return Promise.all([
-        qc.invalidateQueries({ queryKey: noodleKeys.privateAccounts() }),
-        qc.invalidateQueries({ queryKey: noodleKeys.privateEligibleAccountsRoot() }),
-        qc.invalidateQueries({ queryKey: noodleKeys.privateViewers() }),
+        qc.invalidateQueries({ queryKey: noodleKeys.noodlerAccounts() }),
+        qc.invalidateQueries({ queryKey: noodleKeys.noodlerEligibleAccountsRoot() }),
+        qc.invalidateQueries({ queryKey: noodleKeys.noodlerViewers() }),
       ]);
     },
   });
@@ -188,8 +188,8 @@ export function useUpdateNoodlerStageProfile() {
       api.put<NoodlerStageProfile>(`/noodle/noodler/accounts/${encodeURIComponent(accountId)}/stage-profile`, input),
     onSuccess: () =>
       Promise.all([
-        qc.invalidateQueries({ queryKey: noodleKeys.privateAccounts() }),
-        qc.invalidateQueries({ queryKey: noodleKeys.privateViewers() }),
+        qc.invalidateQueries({ queryKey: noodleKeys.noodlerAccounts() }),
+        qc.invalidateQueries({ queryKey: noodleKeys.noodlerViewers() }),
       ]),
   });
 }
@@ -200,11 +200,11 @@ export function useDeleteNoodlerStageProfile() {
     mutationFn: (accountId: string) =>
       api.delete<NoodleAccount>(`/noodle/noodler/accounts/${encodeURIComponent(accountId)}`),
     onSuccess: (_account, accountId) => {
-      qc.removeQueries({ queryKey: noodleKeys.privatePosts(accountId) });
+      qc.removeQueries({ queryKey: noodleKeys.noodlerPosts(accountId) });
       return Promise.all([
-        qc.invalidateQueries({ queryKey: noodleKeys.privateAccounts() }),
-        qc.invalidateQueries({ queryKey: noodleKeys.privateEligibleAccountsRoot() }),
-        qc.invalidateQueries({ queryKey: noodleKeys.privateViewers() }),
+        qc.invalidateQueries({ queryKey: noodleKeys.noodlerAccounts() }),
+        qc.invalidateQueries({ queryKey: noodleKeys.noodlerEligibleAccountsRoot() }),
+        qc.invalidateQueries({ queryKey: noodleKeys.noodlerViewers() }),
       ]);
     },
   });
@@ -225,7 +225,7 @@ export function useGenerateNoodlerStageProfileDraft() {
   });
 }
 
-export type GeneratedPrivateNoodlePost = NoodlerManagedPost & {
+export type GeneratedNoodlerNoodlePost = NoodlerManagedPost & {
   imagePromptReview?: ImagePromptReviewItem;
 };
 
@@ -234,11 +234,11 @@ export type NoodlerPostDraftImage = {
   crop: NoodlePostImageCrop | null;
 };
 
-type NoodlerCreatePostRequest = Omit<NoodlePrivatePostCreateInput, "uploadedImageUrl" | "imageCrop"> & {
+type NoodlerCreatePostRequest = Omit<NoodlerPostCreateInput, "uploadedImageUrl" | "imageCrop"> & {
   image?: NoodlerPostDraftImage | null;
 };
 
-type NoodlerGeneratePostRequest = Omit<NoodlePrivateGenerationRequest, "uploadedImageUrl" | "imageCrop"> & {
+type NoodlerGeneratePostRequest = Omit<NoodlerGenerationRequest, "uploadedImageUrl" | "imageCrop"> & {
   image?: NoodlerPostDraftImage | null;
 };
 
@@ -258,11 +258,11 @@ function postNoodlerRequestWithImage<T>(
   return api.post<T>(path, { ...payload, uploadedImageUrl: image.source });
 }
 
-export function useGeneratePrivateNoodlePost() {
+export function useGenerateNoodlerNoodlePost() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ image, ...input }: NoodlerGeneratePostRequest) =>
-      postNoodlerRequestWithImage<GeneratedPrivateNoodlePost>(
+      postNoodlerRequestWithImage<GeneratedNoodlerNoodlePost>(
         "/noodle/refresh",
         {
           ...input,
@@ -273,8 +273,8 @@ export function useGeneratePrivateNoodlePost() {
       ),
     onSuccess: (_post, input) =>
       Promise.all([
-        qc.invalidateQueries({ queryKey: noodleKeys.privatePosts(input.targetAccountId) }),
-        qc.invalidateQueries({ queryKey: noodleKeys.privateViewers() }),
+        qc.invalidateQueries({ queryKey: noodleKeys.noodlerPosts(input.targetAccountId) }),
+        qc.invalidateQueries({ queryKey: noodleKeys.noodlerViewers() }),
       ]),
   });
 }
@@ -289,8 +289,8 @@ export function useConfirmNoodlerImagePrompts() {
       }),
     onSuccess: (_result, input) =>
       Promise.all([
-        qc.invalidateQueries({ queryKey: noodleKeys.privatePosts(input.targetAccountId) }),
-        qc.invalidateQueries({ queryKey: noodleKeys.privateViewers() }),
+        qc.invalidateQueries({ queryKey: noodleKeys.noodlerPosts(input.targetAccountId) }),
+        qc.invalidateQueries({ queryKey: noodleKeys.noodlerViewers() }),
       ]),
   });
 }
@@ -302,8 +302,8 @@ export function useCreateNoodlerPost() {
       postNoodlerRequestWithImage<NoodlerManagedPost>("/noodle/noodler/posts", input, image),
     onSuccess: (_post, input) =>
       Promise.all([
-        qc.invalidateQueries({ queryKey: noodleKeys.privatePosts(input.targetAccountId) }),
-        qc.invalidateQueries({ queryKey: noodleKeys.privateViewers() }),
+        qc.invalidateQueries({ queryKey: noodleKeys.noodlerPosts(input.targetAccountId) }),
+        qc.invalidateQueries({ queryKey: noodleKeys.noodlerViewers() }),
       ]),
   });
 }
@@ -369,7 +369,7 @@ export function useToggleNoodlerSubscription() {
       // Cancel any in-flight viewer poll first, or it can land after us and restore the stale scope.
       await qc.cancelQueries({ queryKey: noodleKeys.viewer(input.personaId) });
       qc.setQueryData(noodleKeys.viewer(input.personaId), scope);
-      return qc.invalidateQueries({ queryKey: noodleKeys.privateSubscribers(input.creatorAccountId) });
+      return qc.invalidateQueries({ queryKey: noodleKeys.noodlerSubscribers(input.creatorAccountId) });
     },
   });
 }
@@ -417,12 +417,12 @@ export function useUpdateNoodlerPost() {
       id,
       accountId: _accountId,
       ...input
-    }: { id: string; accountId: string } & NoodlePrivatePostUpdateInput) =>
+    }: { id: string; accountId: string } & NoodlerPostUpdateInput) =>
       api.patch<NoodlerManagedPost>(`/noodle/noodler/posts/${encodeURIComponent(id)}`, input),
     onSuccess: (_post, input) => {
       return Promise.all([
-        qc.invalidateQueries({ queryKey: noodleKeys.privatePosts(input.accountId) }),
-        qc.invalidateQueries({ queryKey: noodleKeys.privateViewers() }),
+        qc.invalidateQueries({ queryKey: noodleKeys.noodlerPosts(input.accountId) }),
+        qc.invalidateQueries({ queryKey: noodleKeys.noodlerViewers() }),
       ]);
     },
   });
@@ -442,7 +442,7 @@ export function useReplaceNoodlerPostImage() {
       accountId: string;
       file: File;
       crop: NoodlePostImageCrop;
-    } & Omit<NoodlePrivatePostUpdateInput, "imageCrop" | "removeImage">) => {
+    } & Omit<NoodlerPostUpdateInput, "imageCrop" | "removeImage">) => {
       const form = new FormData();
       form.append("payload", JSON.stringify({ ...input, imageCrop: crop }));
       form.append("file", file);
@@ -450,8 +450,8 @@ export function useReplaceNoodlerPostImage() {
     },
     onSuccess: (_post, input) =>
       Promise.all([
-        qc.invalidateQueries({ queryKey: noodleKeys.privatePosts(input.accountId) }),
-        qc.invalidateQueries({ queryKey: noodleKeys.privateViewers() }),
+        qc.invalidateQueries({ queryKey: noodleKeys.noodlerPosts(input.accountId) }),
+        qc.invalidateQueries({ queryKey: noodleKeys.noodlerViewers() }),
       ]),
   });
 }
@@ -463,8 +463,8 @@ export function useDeleteNoodlerPost() {
       api.delete<NoodlerManagedPost>(`/noodle/noodler/posts/${encodeURIComponent(id)}`),
     onSuccess: (_post, input) => {
       return Promise.all([
-        qc.invalidateQueries({ queryKey: noodleKeys.privatePosts(input.accountId) }),
-        qc.invalidateQueries({ queryKey: noodleKeys.privateViewers() }),
+        qc.invalidateQueries({ queryKey: noodleKeys.noodlerPosts(input.accountId) }),
+        qc.invalidateQueries({ queryKey: noodleKeys.noodlerViewers() }),
       ]);
     },
   });
@@ -487,8 +487,8 @@ export function useUpdateNoodlerAccess() {
       } satisfies NoodleAccountSettingsPatchInput),
     onSuccess: () => {
       return Promise.all([
-        qc.invalidateQueries({ queryKey: noodleKeys.privateAccounts() }),
-        qc.invalidateQueries({ queryKey: noodleKeys.privateViewers() }),
+        qc.invalidateQueries({ queryKey: noodleKeys.noodlerAccounts() }),
+        qc.invalidateQueries({ queryKey: noodleKeys.noodlerViewers() }),
       ]);
     },
   });
@@ -510,8 +510,8 @@ export function useUpdateNoodlerAutoPosting() {
         subtree: "scheduler",
         patch: { autoPosting },
       } satisfies NoodleAccountSettingsPatchInput),
-    // Auto-post state lives only under privateAccounts(); the /noodle bootstrap has none of it.
-    onSuccess: () => qc.invalidateQueries({ queryKey: noodleKeys.privateAccounts() }),
+    // Auto-post state lives only under noodlerAccounts(); the /noodle bootstrap has none of it.
+    onSuccess: () => qc.invalidateQueries({ queryKey: noodleKeys.noodlerAccounts() }),
   });
 }
 
@@ -520,7 +520,7 @@ export function useRescheduleNoodlerAutoPost() {
   return useMutation({
     mutationFn: ({ accountId, ...input }: { accountId: string } & NoodleAutoPostRescheduleInput) =>
       api.put<NoodleAccount>(`/noodle/noodler/accounts/${encodeURIComponent(accountId)}/auto-post/schedule`, input),
-    onSuccess: () => qc.invalidateQueries({ queryKey: noodleKeys.privateAccounts() }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: noodleKeys.noodlerAccounts() }),
   });
 }
 
@@ -531,8 +531,8 @@ export function useRunNoodlerAutoPostNow() {
       api.post<NoodlerManagedPost>(`/noodle/noodler/accounts/${encodeURIComponent(accountId)}/auto-post/run-now`),
     onSuccess: (_post, accountId) =>
       Promise.all([
-        qc.invalidateQueries({ queryKey: noodleKeys.privatePosts(accountId) }),
-        qc.invalidateQueries({ queryKey: noodleKeys.privateViewers() }),
+        qc.invalidateQueries({ queryKey: noodleKeys.noodlerPosts(accountId) }),
+        qc.invalidateQueries({ queryKey: noodleKeys.noodlerViewers() }),
       ]),
   });
 }
@@ -543,9 +543,9 @@ export function useRefreshAllNoodlerCreatorsNow() {
     mutationFn: () => api.post<{ outcomes: NoodlerRefreshNowOutcome[] }>("/noodle/noodler/auto-post/refresh-now"),
     onSuccess: () =>
       Promise.all([
-        qc.invalidateQueries({ queryKey: noodleKeys.privateAccounts() }),
-        qc.invalidateQueries({ queryKey: [...noodleKeys.privateRoot(), "posts"] }),
-        qc.invalidateQueries({ queryKey: noodleKeys.privateViewers() }),
+        qc.invalidateQueries({ queryKey: noodleKeys.noodlerAccounts() }),
+        qc.invalidateQueries({ queryKey: [...noodleKeys.noodlerRoot(), "posts"] }),
+        qc.invalidateQueries({ queryKey: noodleKeys.noodlerViewers() }),
       ]),
   });
 }
