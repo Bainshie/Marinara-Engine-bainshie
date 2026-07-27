@@ -4451,7 +4451,7 @@ Use HTML sparingly and diegetically. Do not replace normal prose/dialogue unless
     },
   },
   {
-    name: "automatic map artwork respects campaign style review and keeps positive prose out of negatives",
+    name: "automatic map artwork uses the global Maps template and keeps positive prose out of negatives",
     async run() {
       const campaignStyle = "luminous violet campaign brushwork";
       const scenePrompt = "Wide establishing image of Moonwell Floor. A quiet tiled bath beneath blue crystals. No text.";
@@ -4460,12 +4460,20 @@ Use HTML sparingly and diegetically. Do not replace normal prose/dialogue unless
           chatId: "map-artwork-campaign-toggle-regression",
           locationSlug: "Moonwell Floor",
           sceneDescription: scenePrompt,
-          genre: "Fantasy dungeon crawler",
-          artStyle:
-            resolveGameSetupArtStylePrompt({
+          mapsArtworkContext: {
+            locationName: "Moonwell Floor",
+            locationDescription: "A quiet tiled bath beneath blue crystals.",
+            locationType: "Floor",
+            parentLocationName: "Ascendant Spire",
+            parentLocationDescription: "A colossal shifting dungeon tower.",
+            locationPath: "Asterreach > Ascendant Spire > Moonwell Floor",
+            genre: "Fantasy dungeon crawler",
+            campaignArtStyle: resolveGameSetupArtStylePrompt({
               artStylePrompt: campaignStyle,
               useCampaignArtStyle,
-            }) || undefined,
+            }),
+            imageInstructions: "Use blue crystal reflections.",
+          },
           preserveFullBackgroundPrompt: true,
           styleProfiles: createDefaultImageStyleProfileSettings(),
           styleProfileId: "auto",
@@ -4478,8 +4486,55 @@ Use HTML sparingly and diegetically. Do not replace normal prose/dialogue unless
       const withCampaignStyle = await compile(true);
       assert.doesNotMatch(withoutCampaignStyle.prompt, /luminous violet campaign brushwork/u);
       assert.match(withCampaignStyle.prompt, /luminous violet campaign brushwork/u);
+      assert.match(withCampaignStyle.prompt, /Fantasy dungeon crawler/u);
+      assert.match(withCampaignStyle.prompt, /Use blue crystal reflections/u);
       assert.doesNotMatch(withoutCampaignStyle.negativePrompt, /Style:|Fantasy dungeon crawler|quiet tiled bath/u);
       assert.doesNotMatch(withCampaignStyle.negativePrompt, /Style:|luminous violet campaign brushwork|quiet tiled bath/u);
+
+      const promptOverridesStorage = {
+        get: async (key: string) =>
+          key === "maps.locationArtwork"
+            ? {
+                key,
+                template: "${locationName}. ${locationDescription} Location type: ${locationType}.",
+                enabled: true,
+                updatedAt: "2026-07-26T00:00:00.000Z",
+              }
+            : null,
+        list: async () => [],
+        upsert: async () => {
+          throw new Error("Unexpected prompt override write");
+        },
+        remove: async () => {
+          throw new Error("Unexpected prompt override removal");
+        },
+      } as unknown as PromptOverridesStorage;
+      const customized = await buildBackgroundProviderPrompt({
+        chatId: "map-artwork-global-template-regression",
+        locationSlug: "Moonwell Floor",
+        sceneDescription: scenePrompt,
+        mapsArtworkContext: {
+          locationName: "Moonwell Floor",
+          locationDescription: "A quiet tiled bath beneath blue crystals.",
+          locationType: "Floor",
+          parentLocationName: "Ascendant Spire",
+          parentLocationDescription: "A colossal shifting dungeon tower.",
+          locationPath: "Asterreach > Ascendant Spire > Moonwell Floor",
+          genre: "Fantasy dungeon crawler",
+          campaignArtStyle: campaignStyle,
+          imageInstructions: "Use blue crystal reflections.",
+        },
+        promptOverridesStorage,
+        preserveFullBackgroundPrompt: true,
+        styleProfiles: createDefaultImageStyleProfileSettings(),
+        styleProfileId: "auto",
+        imgModel: "unused",
+        imgBaseUrl: "",
+        imgApiKey: "",
+      });
+      assert.match(customized.prompt, /Moonwell Floor/u);
+      assert.match(customized.prompt, /Location type: Floor/u);
+      assert.doesNotMatch(customized.prompt, /Fantasy dungeon crawler|luminous violet campaign brushwork|blue crystal reflections/u);
 
       const reviewed = resolveReviewedImagePromptSubmission({
         generatedPrompt: withCampaignStyle.prompt,
@@ -4499,12 +4554,14 @@ Use HTML sparingly and diegetically. Do not replace normal prose/dialogue unless
       const compilerStart = galleryRouteSource.indexOf("async function compileGalleryImageRequest");
       const compilerEnd = galleryRouteSource.indexOf("async function collectChatAssetParticipants", compilerStart);
       const compilerSource = galleryRouteSource.slice(compilerStart, compilerEnd);
+      assert.match(compilerSource, /mapsArtworkContext:/);
       assert.match(compilerSource, /genre: context\.genre/);
-      assert.match(compilerSource, /artStyle: context\.artStyle/);
+      assert.match(compilerSource, /campaignArtStyle: context\.artStyle/);
       assert.doesNotMatch(compilerSource, /setting: context\.setting|worldOverview: context\.worldOverview/);
       assert.match(compilerSource, /resolveReviewedImagePromptSubmission/);
       assert.match(compilerSource, /promptOverride: input\.promptOverride/);
       assert.match(compilerSource, /negativePromptOverride: input\.negativePromptOverride/);
+      assert.equal(listPromptOverrideKeys().includes("maps.locationArtwork"), true);
     },
   },
   {

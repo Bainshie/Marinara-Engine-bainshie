@@ -15,7 +15,13 @@ import { DATA_DIR } from "../../utils/data-dir.js";
 import { generateImage, type ImageGenRequest, type ImageGenResult } from "../image/image-generation.js";
 import { buildAssetManifest, GAME_ASSETS_DIR } from "./asset-manifest.service.js";
 import type { PromptOverridesStorage } from "../storage/prompt-overrides.storage.js";
-import { loadPrompt, GAME_NPC_PORTRAIT, GAME_BACKGROUND, GAME_SCENE_ILLUSTRATION } from "../prompt-overrides/index.js";
+import {
+  loadPrompt,
+  GAME_NPC_PORTRAIT,
+  GAME_BACKGROUND,
+  MAPS_LOCATION_ARTWORK,
+  GAME_SCENE_ILLUSTRATION,
+} from "../prompt-overrides/index.js";
 import {
   inferImageSource,
   type ImageGenerationDefaultsProfile,
@@ -827,6 +833,8 @@ export interface BackgroundGenRequest {
   artStyle?: string;
   /** Chat-level image instructions appended after the Maps or background scene prompt. */
   imagePromptInstructions?: string | null;
+  /** Structured context for the dedicated global Maps location-artwork prompt override. */
+  mapsArtworkContext?: MapsLocationArtworkContext;
   /** Connection credentials. */
   imgSource?: string | null;
   imgModel: string;
@@ -853,6 +861,18 @@ export interface BackgroundGenRequest {
   force?: boolean;
   /** Optional request-scoped abort signal. */
   signal?: AbortSignal;
+}
+
+export interface MapsLocationArtworkContext {
+  locationName: string;
+  locationDescription: string;
+  locationType: string;
+  parentLocationName: string;
+  parentLocationDescription: string;
+  locationPath: string;
+  genre: string;
+  campaignArtStyle: string;
+  imageInstructions: string;
 }
 
 export interface ChatBackgroundGenRequest extends BackgroundGenRequest {
@@ -916,6 +936,27 @@ export interface SceneIllustrationGenRequest {
 }
 
 async function buildBackgroundRawPrompt(req: BackgroundGenRequest): Promise<string> {
+  if (req.mapsArtworkContext) {
+    const context = req.mapsArtworkContext;
+    const sentence = (value: string) => {
+      const clean = value.trim();
+      return !clean || /[.!?]$/u.test(clean) ? clean : `${clean}.`;
+    };
+    const variables = {
+      ...context,
+      locationPrompt: req.sceneDescription.trim(),
+      genreLine: sentence(context.genre),
+      campaignArtStyleLine: context.campaignArtStyle.trim()
+        ? `Campaign art style: ${sentence(context.campaignArtStyle)}`
+        : "",
+      imageInstructionsLine: context.imageInstructions.trim()
+        ? `User image instructions: ${context.imageInstructions.trim()}`
+        : "",
+    };
+    return req.promptOverridesStorage
+      ? await loadPrompt(req.promptOverridesStorage, MAPS_LOCATION_ARTWORK, variables)
+      : MAPS_LOCATION_ARTWORK.defaultBuilder(variables);
+  }
   const styleHint = [req.artStyle, req.genre, req.setting].filter(Boolean).join(", ");
   const worldContext = buildBackgroundWorldContext(req);
   const groundedSceneDescription = [worldContext, req.sceneDescription].filter(Boolean).join(". ");
@@ -999,7 +1040,7 @@ export async function buildBackgroundProviderPrompt(req: BackgroundGenRequest): 
     ],
   });
   return compileGameImagePrompt(
-    req,
+    req.mapsArtworkContext ? { ...req, artStyle: undefined } : req,
     "background",
     prompt,
     req.preserveFullBackgroundPrompt ? 7000 : 1000,

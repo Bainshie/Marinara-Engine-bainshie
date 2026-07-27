@@ -107,6 +107,120 @@ export const GAME_BACKGROUND: PromptOverrideKeyDef<GameBackgroundCtx> = {
   },
 };
 
+// ── Hierarchical Maps location artwork ──
+
+export interface MapsLocationArtworkCtx extends Record<string, string | number | undefined> {
+  locationName: string;
+  locationDescription: string;
+  locationType: string;
+  parentLocationName: string;
+  parentLocationDescription: string;
+  locationPath: string;
+  locationPrompt: string;
+  genre: string;
+  genreLine: string;
+  campaignArtStyle: string;
+  campaignArtStyleLine: string;
+  imageInstructions: string;
+  imageInstructionsLine: string;
+}
+
+export const MAPS_LOCATION_ARTWORK: PromptOverrideKeyDef<MapsLocationArtworkCtx> = {
+  key: "maps.locationArtwork",
+  label: "Maps location artwork",
+  description:
+    "Automatic Hierarchical Maps location and child-map artwork. Engine style profiles and global positive/negative image settings are applied after this template.",
+  variables: [
+    { name: "locationName", description: "The location name.", example: "Moonwell Floor" },
+    {
+      name: "locationDescription",
+      description: "The location's public description from Hierarchical Maps.",
+      example: "A quiet tiled bath beneath blue crystals.",
+    },
+    { name: "locationType", description: "The configured Maps hierarchy type.", example: "Floor" },
+    {
+      name: "parentLocationName",
+      description: "The direct parent location name, or empty for a root location.",
+      example: "Ascendant Spire",
+    },
+    {
+      name: "parentLocationDescription",
+      description: "The direct parent's public description, or empty for a root location.",
+      example: "A colossal shifting dungeon tower.",
+    },
+    {
+      name: "locationPath",
+      description: "The full Maps breadcrumb from root to this location.",
+      example: "Asterreach > Ascendant Spire > Moonwell Floor",
+    },
+    {
+      name: "locationPrompt",
+      description: "The complete fallback prompt prepared by Hierarchical Maps for this location.",
+      example:
+        "Wide establishing image of Moonwell Floor. A quiet tiled bath beneath blue crystals. Show the environment, architecture, lighting, palette, and stable landmarks clearly. No text.",
+    },
+    {
+      name: "genre",
+      description: "The raw Game genre text, or empty outside Game mode.",
+      example: "Fantasy, Anime JRPG dungeon crawler",
+    },
+    {
+      name: "genreLine",
+      description: "The Game genre with terminal punctuation, or empty outside Game mode.",
+      example: "Fantasy, Anime JRPG dungeon crawler.",
+    },
+    {
+      name: "campaignArtStyle",
+      description: "The raw campaign art style when Use campaign art style is on, otherwise empty.",
+      example: "Luminous violet anime fantasy illustration",
+    },
+    {
+      name: "campaignArtStyleLine",
+      description: "A formatted campaign art-style line when enabled, otherwise empty.",
+      example: "Campaign art style: Luminous violet anime fantasy illustration.",
+    },
+    {
+      name: "imageInstructions",
+      description: "The raw saved image instructions from Chat Settings, or empty.",
+      example: "Use ornate brass machinery and deep blue reflections.",
+    },
+    {
+      name: "imageInstructionsLine",
+      description: "A formatted Chat Settings image-instructions line, or empty.",
+      example: "User image instructions: Use ornate brass machinery and deep blue reflections.",
+    },
+  ],
+  defaultBuilder: (ctx) =>
+    [
+      ctx.genreLine,
+      ctx.campaignArtStyleLine,
+      ctx.imageInstructionsLine,
+      ctx.locationPrompt,
+      "SD/Illustrious tags: scenery, environment, wide shot, landscape, full-frame background, background-only location art.",
+      "Wide-angle landscape, detailed environment, readable spatial layout, single full-frame background, no foreground characters, no main characters, no named characters, no posed character focus.",
+      "Small distant crowds, shopkeepers, silhouettes, or background figures are allowed only when they make the location feel lived-in.",
+      "No text, no UI, no panels, no collage, game background art, high quality.",
+    ]
+      .filter(Boolean)
+      .join(" "),
+  exampleContext: {
+    locationName: "Moonwell Floor",
+    locationDescription: "A quiet tiled bath beneath blue crystals.",
+    locationType: "Floor",
+    parentLocationName: "Ascendant Spire",
+    parentLocationDescription: "A colossal shifting dungeon tower.",
+    locationPath: "Asterreach > Ascendant Spire > Moonwell Floor",
+    locationPrompt:
+      "Wide establishing image of Moonwell Floor. A quiet tiled bath beneath blue crystals. Show the environment, architecture, lighting, palette, and stable landmarks clearly. No text.",
+    genre: "Fantasy, Anime JRPG dungeon crawler",
+    genreLine: "Fantasy, Anime JRPG dungeon crawler.",
+    campaignArtStyle: "Luminous violet anime fantasy illustration",
+    campaignArtStyleLine: "Campaign art style: Luminous violet anime fantasy illustration.",
+    imageInstructions: "Use ornate brass machinery and deep blue reflections.",
+    imageInstructionsLine: "User image instructions: Use ornate brass machinery and deep blue reflections.",
+  },
+};
+
 // ── Scene illustration (VN POV CG) ──
 //
 // Most lines are conditional on whether characters/references/art-style

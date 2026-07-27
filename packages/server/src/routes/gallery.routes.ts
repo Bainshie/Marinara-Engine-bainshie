@@ -131,9 +131,21 @@ const generateConversationSelfieSchema = z.object({
   debugMode: z.boolean().optional().default(false),
 });
 
+const mapsArtworkContextSchema = z
+  .object({
+    locationName: z.string().trim().max(200),
+    locationDescription: z.string().trim().max(7_000),
+    locationType: z.string().trim().max(120),
+    parentLocationName: z.string().trim().max(200),
+    parentLocationDescription: z.string().trim().max(7_000),
+    locationPath: z.string().trim().max(2_000),
+  })
+  .strict();
+
 const generateGalleryImageSchema = z.object({
   prompt: z.string().trim().min(1).max(7_000),
   title: z.string().trim().min(1).max(200).optional(),
+  mapsArtworkContext: mapsArtworkContextSchema.optional(),
   promptOverride: z.string().trim().min(1).max(200_000).optional(),
   negativePromptOverride: z.string().max(200_000).optional(),
   debugMode: z.boolean().optional().default(false),
@@ -146,6 +158,7 @@ const previewGalleryImagesSchema = z.object({
         id: z.string().trim().min(1).max(200),
         title: z.string().trim().min(1).max(200),
         prompt: z.string().trim().min(1).max(7_000),
+        mapsArtworkContext: mapsArtworkContextSchema.optional(),
       }),
     )
     .min(1)
@@ -561,6 +574,7 @@ export async function galleryRoutes(app: FastifyInstance) {
     input: {
       title?: string;
       prompt: string;
+      mapsArtworkContext?: z.infer<typeof mapsArtworkContextSchema>;
       promptOverride?: string;
       negativePromptOverride?: string;
     },
@@ -569,9 +583,18 @@ export async function galleryRoutes(app: FastifyInstance) {
       chatId: context.chat.id,
       locationSlug: input.title?.trim() || "Gallery image",
       sceneDescription: input.prompt.trim(),
-      genre: context.genre ?? undefined,
-      artStyle: context.artStyle || undefined,
-      imagePromptInstructions: context.imagePromptInstructions,
+      mapsArtworkContext: {
+        locationName: input.mapsArtworkContext?.locationName || input.title?.trim() || "Gallery image",
+        locationDescription: input.mapsArtworkContext?.locationDescription || input.prompt.trim(),
+        locationType: input.mapsArtworkContext?.locationType || "Location",
+        parentLocationName: input.mapsArtworkContext?.parentLocationName || "",
+        parentLocationDescription: input.mapsArtworkContext?.parentLocationDescription || "",
+        locationPath:
+          input.mapsArtworkContext?.locationPath || input.mapsArtworkContext?.locationName || input.title?.trim() || "",
+        genre: context.genre ?? "",
+        campaignArtStyle: context.artStyle,
+        imageInstructions: context.imagePromptInstructions ?? "",
+      },
       imgModel: context.imageModel,
       imgBaseUrl: context.imageBaseUrl,
       imgApiKey: context.imageConnection.apiKey || "",
@@ -1389,7 +1412,7 @@ export async function galleryRoutes(app: FastifyInstance) {
           name: context.styleProfile.name,
         },
         campaign: {
-          included: Boolean(context.genre || context.artStyle),
+          included: Boolean(context.artStyle),
           artStyleIncluded: Boolean(context.artStyle),
         },
         chatSettings: {
