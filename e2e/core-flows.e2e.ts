@@ -1223,6 +1223,77 @@ test("connection model fetch errors inherit the configured editor accent", async
   }
 });
 
+test("connection test-message errors inherit the configured editor accent", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name.includes("mobile"), "Desktop connection editor chrome is covered here.");
+
+  const connectionResponse = await page.request.post("/api/connections", {
+    data: {
+      name: "Connection Message Error Chroma",
+      provider: "custom",
+      baseUrl: "https://example.invalid",
+      model: "accent-test-model",
+    },
+  });
+  expect(connectionResponse.ok()).toBeTruthy();
+  const connection = (await connectionResponse.json()) as { id: string };
+  const internalServerError = "Internal Server Error";
+  const accentColor = "rgb(20, 184, 166)";
+
+  try {
+    await page.route(`**/api/connections/${connection.id}/test-message`, async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          success: false,
+          response: "",
+          latencyMs: 1,
+          error: internalServerError,
+        }),
+      });
+    });
+    await page.goto("/");
+    await page.evaluate(async (accent) => {
+      const { useUIStore } = (await import("/src/stores/ui.store.ts")) as {
+        useUIStore: {
+          getState: () => {
+            setAppAccentColor: (color: string) => void;
+          };
+        };
+      };
+      useUIStore.getState().setAppAccentColor(accent);
+    }, "#14b8a6");
+    await expect
+      .poll(() =>
+        page.evaluate(() =>
+          getComputedStyle(document.documentElement).getPropertyValue("--marinara-app-accent-static").trim(),
+        ),
+      )
+      .toBe("#14b8a6");
+    await page.evaluate(() => {
+      document.documentElement.style.setProperty("--destructive", "rgb(255, 0, 0)");
+    });
+
+    await page.locator('[data-tour="panel-connections"]').click();
+    const rightPanel = page.locator('[data-component="RightPanelDesktop"]');
+    await rightPanel
+      .getByText("Connection Message Error Chroma", { exact: true })
+      .first()
+      .evaluate((element) => (element as HTMLElement).click());
+
+    const editor = page.locator(".mari-editor-shell");
+    await expect(editor).toBeVisible();
+    await editor.getByRole("button", { name: "Send Test Message" }).click();
+
+    const errorText = editor.getByText(internalServerError, { exact: true });
+    await expect(errorText).toBeVisible();
+    await expect(errorText).toHaveCSS("color", accentColor);
+    expect(await errorText.getAttribute("class")).not.toMatch(/destructive|pink|red|rose/iu);
+  } finally {
+    await page.request.delete(`/api/connections/${connection.id}`).catch(() => undefined);
+  }
+});
+
 test("Connection Discard uses the configured editor accent", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name.includes("mobile"), "Desktop connection editor guard chrome is covered here.");
 

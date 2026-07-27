@@ -1082,7 +1082,7 @@
   "ui.agents.regexscripteditor.deleteRegexScript_d694998": "정규식 스크립트 삭제",
   "ui.agents.regexscripteditor.deleteThisRegexScriptThisCannotBeUndone": "이 정규식 스크립트를 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.",
   "ui.agents.regexscripteditor.depthRange": "깊이 범위",
-  "ui.agents.regexscripteditor.eG": "예: \\\\*([^*]+)\\\\*",
+  "ui.agents.regexscripteditor.eG": "예: \\*([^*]+)\\*",
   "ui.agents.regexscripteditor.eG1OrLeaveEmptyToRemove": "예: $1. 삭제하려면 비워 두세요",
   "ui.agents.regexscripteditor.empty": "→ (비어 있음)",
   "ui.agents.regexscripteditor.examples": "예시:",
