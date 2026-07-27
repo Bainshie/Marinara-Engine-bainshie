@@ -1284,6 +1284,155 @@ const cases: RegressionCase[] = [
     },
   },
   {
+    name: "Spotify repeats a Music DJ track selection as one context",
+    async run() {
+      const originalFetch = globalThis.fetch;
+      const selectedUris = [
+        "spotify:track:AAAAAAAAAAAAAAAAAAAAAA",
+        "spotify:track:BBBBBBBBBBBBBBBBBBBBBB",
+        "spotify:track:CCCCCCCCCCCCCCCCCCCCCC",
+      ];
+      const playbackBodies: Array<{ uris?: string[]; position_ms?: number }> = [];
+      const queuedUris: string[] = [];
+      const repeatStates: string[] = [];
+      let activeUri = "spotify:track:ZZZZZZZZZZZZZZZZZZZZZZ";
+      let repeatState = "track";
+
+      globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+        const url = new URL(typeof input === "string" || input instanceof URL ? input : input.url);
+        const method = init?.method ?? "GET";
+        if (url.pathname === "/v1/me/player" && method === "GET") {
+          return new Response(
+            JSON.stringify({
+              is_playing: true,
+              repeat_state: repeatState,
+              item: { uri: activeUri },
+              device: { id: "regression-device", name: "Regression device", type: "computer" },
+            }),
+            { status: 200, headers: { "Content-Type": "application/json" } },
+          );
+        }
+        if (url.pathname === "/v1/me/player/play" && method === "PUT") {
+          const body = JSON.parse(String(init?.body ?? "{}")) as { uris?: string[]; position_ms?: number };
+          playbackBodies.push(body);
+          activeUri = body.uris?.[0] ?? activeUri;
+          return new Response(null, { status: 204 });
+        }
+        if (url.pathname === "/v1/me/player/repeat" && method === "PUT") {
+          repeatState = url.searchParams.get("state") ?? "off";
+          repeatStates.push(repeatState);
+          return new Response(null, { status: 204 });
+        }
+        if (url.pathname === "/v1/me/player/queue" && method === "POST") {
+          queuedUris.push(url.searchParams.get("uri") ?? "");
+          return new Response(null, { status: 204 });
+        }
+        throw new Error(`Unexpected Spotify regression request: ${method} ${url.pathname}`);
+      }) as typeof fetch;
+
+      try {
+        const results = await executeToolCalls(
+          [
+            {
+              id: "call_spotify_repeat_context",
+              type: "function",
+              function: {
+                name: "spotify_play",
+                arguments: JSON.stringify({ uris: selectedUris, reason: "Regression selection" }),
+              },
+            },
+          ],
+          {
+            spotify: { accessToken: "regression-token" },
+            spotifyRepeatAfterPlay: "track",
+          },
+        );
+
+        assert.equal(results[0]?.success, true);
+        const payload = JSON.parse(results[0]!.result) as {
+          repeat?: string;
+          repeatState?: string;
+          queued?: number;
+        };
+        assert.deepEqual(playbackBodies[0]?.uris, selectedUris);
+        assert.deepEqual(queuedUris, [], "repeatable Music DJ selections must not use Spotify's disposable queue");
+        assert.equal(repeatStates.at(-1), "context");
+        assert.equal(payload.repeat, "context");
+        assert.equal(payload.repeatState, "context");
+        assert.equal(payload.queued, selectedUris.length);
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+    },
+  },
+  {
+    name: "Spotify keeps repeat-track for a single Music DJ song",
+    async run() {
+      const originalFetch = globalThis.fetch;
+      const selectedUri = "spotify:track:DDDDDDDDDDDDDDDDDDDDDD";
+      const playbackBodies: Array<{ uris?: string[] }> = [];
+      const repeatStates: string[] = [];
+      let activeUri = "spotify:track:ZZZZZZZZZZZZZZZZZZZZZZ";
+      let repeatState = "track";
+
+      globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+        const url = new URL(typeof input === "string" || input instanceof URL ? input : input.url);
+        const method = init?.method ?? "GET";
+        if (url.pathname === "/v1/me/player" && method === "GET") {
+          return new Response(
+            JSON.stringify({
+              is_playing: true,
+              repeat_state: repeatState,
+              item: { uri: activeUri },
+              device: { id: "regression-device", name: "Regression device", type: "computer" },
+            }),
+            { status: 200, headers: { "Content-Type": "application/json" } },
+          );
+        }
+        if (url.pathname === "/v1/me/player/play" && method === "PUT") {
+          const body = JSON.parse(String(init?.body ?? "{}")) as { uris?: string[] };
+          playbackBodies.push(body);
+          activeUri = body.uris?.[0] ?? activeUri;
+          return new Response(null, { status: 204 });
+        }
+        if (url.pathname === "/v1/me/player/repeat" && method === "PUT") {
+          repeatState = url.searchParams.get("state") ?? "off";
+          repeatStates.push(repeatState);
+          return new Response(null, { status: 204 });
+        }
+        throw new Error(`Unexpected Spotify regression request: ${method} ${url.pathname}`);
+      }) as typeof fetch;
+
+      try {
+        const results = await executeToolCalls(
+          [
+            {
+              id: "call_spotify_repeat_track",
+              type: "function",
+              function: {
+                name: "spotify_play",
+                arguments: JSON.stringify({ uri: selectedUri, reason: "Regression single" }),
+              },
+            },
+          ],
+          {
+            spotify: { accessToken: "regression-token" },
+            spotifyRepeatAfterPlay: "track",
+          },
+        );
+
+        assert.equal(results[0]?.success, true);
+        const payload = JSON.parse(results[0]!.result) as { repeat?: string; repeatState?: string };
+        assert.deepEqual(playbackBodies[0]?.uris, [selectedUri]);
+        assert.deepEqual(repeatStates, ["off", "track"]);
+        assert.equal(payload.repeat, "track");
+        assert.equal(payload.repeatState, "track");
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+    },
+  },
+  {
     name: "npc default TTS voice pools work for non-ElevenLabs providers",
     run() {
       const baseConfig: Parameters<typeof resolveTTSVoiceForSpeaker>[0] = {

@@ -59,6 +59,18 @@ const chatRoleplaySurfaceSource = readFileSync(
   new URL("../../packages/client/src/components/chat/ChatRoleplaySurface.tsx", import.meta.url),
   "utf8",
 );
+const echoChamberPanelSource = readFileSync(
+  new URL("../../packages/client/src/components/chat/EchoChamberPanel.tsx", import.meta.url),
+  "utf8",
+);
+const uiStoreSource = readFileSync(
+  new URL("../../packages/client/src/stores/ui.store.ts", import.meta.url),
+  "utf8",
+);
+const globalStylesSource = readFileSync(
+  new URL("../../packages/client/src/styles/globals.css", import.meta.url),
+  "utf8",
+);
 const conversationInputSource = readFileSync(
   new URL("../../packages/client/src/components/chat/ConversationInput.tsx", import.meta.url),
   "utf8",
@@ -82,6 +94,21 @@ const chatStoreSource = readFileSync(
 const summaryPopoverSource = readFileSync(
   new URL("../../packages/client/src/components/chat/SummaryPopover.tsx", import.meta.url),
   "utf8",
+);
+assert.match(
+  echoChamberPanelSource,
+  /activeChatId \? \(s\.echoChamberSizeByChatId\[activeChatId\] \?\? null\) : null/u,
+  "Echo Chamber should restore the dimensions remembered for the active chat",
+);
+assert.match(
+  echoChamberPanelSource,
+  /if \(activeChatId\) setEchoChamberSizeForChat\(activeChatId, nextSize\);/u,
+  "Echo Chamber should persist a completed resize against the active chat",
+);
+assert.match(
+  uiStoreSource,
+  /echoChamberSizeByChatId: state\.echoChamberSizeByChatId/u,
+  "per-chat Echo Chamber dimensions should survive UI-store rehydration",
 );
 assert.match(
   summaryPopoverSource,
@@ -255,6 +282,16 @@ assert.match(
   chatInputSource,
   /setHasInput\(\(current\) => \(current === nextHasInput \? current : nextHasInput\)\);/u,
   "Roleplay composer presence should change only when the draft crosses the empty boundary",
+);
+assert.match(
+  chatMessageSource,
+  /const isGuided = useChatStore\(\(state\) => guideGenerations && state\.hasCurrentInput\);/u,
+  "Roleplay message actions should not subscribe to draft presence when guided regeneration is disabled",
+);
+assert.match(
+  globalStylesSource,
+  /\[data-chat-mode="roleplay"\] \.mari-chat-input-textarea \{\s+contain: paint;/u,
+  "Roleplay textarea paint should stay isolated from the live scene behind it",
 );
 assert.doesNotMatch(
   chatInputSource,

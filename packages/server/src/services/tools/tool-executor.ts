@@ -1709,7 +1709,15 @@ async function spotifyPlay(
     // If it's a single playlist URI, use context_uri
     const firstUri = uris[0]!;
     const singleTrackUri = uris.length === 1 && firstUri.startsWith("spotify:track:");
+    const allTrackUris = uris.every((uri) => uri.startsWith("spotify:track:"));
     const beforePlayback = await fetchSpotifyPlaybackSnapshot(creds.accessToken);
+    const repeatTrackList =
+      allTrackUris &&
+      uris.length > 1 &&
+      (repeatAfterPlay === "track" ||
+        repeatAfterPlay === "context" ||
+        (repeatAfterPlay === undefined && beforePlayback?.repeatState === "context"));
+    const effectiveRepeatAfterPlay = repeatTrackList ? "context" : repeatAfterPlay;
     const fallbackDevice = beforePlayback?.deviceId ? null : await findActiveSpotifyPlaybackDevice(creds.accessToken);
     const targetDeviceId = beforePlayback?.deviceId ?? fallbackDevice?.deviceId ?? null;
     const targetDeviceName = beforePlayback?.deviceName ?? fallbackDevice?.deviceName ?? null;
@@ -1728,7 +1736,7 @@ async function spotifyPlay(
       await primeSpotifyPlaybackDevice(creds.accessToken, playDeviceId, targetDeviceName);
     }
 
-    if (singleTrackUri && repeatAfterPlay === "track") {
+    if (singleTrackUri && effectiveRepeatAfterPlay === "track") {
       await applySpotifyRepeatAfterPlay(creds.accessToken, "off", playDeviceId);
     }
 
@@ -1736,7 +1744,7 @@ async function spotifyPlay(
       const body: SpotifyPlayRequestBody = { context_uri: firstUri };
       const play = await requestSpotifyPlayback(creds.accessToken, playDeviceId, body);
       if (!play.ok) return { error: play.error };
-      const repeat = await applySpotifyRepeatAfterPlay(creds.accessToken, repeatAfterPlay, playDeviceId);
+      const repeat = await applySpotifyRepeatAfterPlay(creds.accessToken, effectiveRepeatAfterPlay, playDeviceId);
       const current = await verifyOrNudgeSpotifyPlayback({
         accessToken: creds.accessToken,
         body,
@@ -1778,17 +1786,18 @@ async function spotifyPlay(
       };
     }
 
-    // For track queues, start the first track first, then add the rest with
-    // Spotify's queue endpoint. Sending 3-5 URIs directly to /play is valid,
-    // but Spotify Connect can accept it without reliably starting playback.
-    const allTrackUris = uris.every((uri) => uri.startsWith("spotify:track:"));
-    const playbackUris = allTrackUris && uris.length > 1 ? [firstUri] : uris;
-    const queuedTrackUris = allTrackUris && uris.length > 1 ? uris.slice(1) : [];
+    // A repeatable selection must be sent as one playback context. Spotify's
+    // queue endpoint is one-way: after its appended tracks drain, repeat-track
+    // can only loop the final item. For non-repeating selections, retain the
+    // more reliable first-track + queue path and let verification nudge playback.
+    const splitIntoDisposableQueue = allTrackUris && uris.length > 1 && !repeatTrackList;
+    const playbackUris = splitIntoDisposableQueue ? [firstUri] : uris;
+    const queuedTrackUris = splitIntoDisposableQueue ? uris.slice(1) : [];
     const body: SpotifyPlayRequestBody = { uris: playbackUris, position_ms: 0 };
     const play = await requestSpotifyPlayback(creds.accessToken, playDeviceId, body);
     if (!play.ok) return { error: play.error };
     if (singleTrackUri) await wait(SPOTIFY_PLAYBACK_SETTLE_MS);
-    let repeat = await applySpotifyRepeatAfterPlay(creds.accessToken, repeatAfterPlay, playDeviceId);
+    let repeat = await applySpotifyRepeatAfterPlay(creds.accessToken, effectiveRepeatAfterPlay, playDeviceId);
     let current = await verifyOrNudgeSpotifyPlayback({
       accessToken: creds.accessToken,
       body,
@@ -1799,8 +1808,21 @@ async function spotifyPlay(
       expectedUris: playbackUris,
       requireFirstUri: singleTrackUri || (allTrackUris && uris.length > 1),
     });
-    if (singleTrackUri && repeatAfterPlay === "track" && current?.repeatState !== "track") {
+    if (singleTrackUri && effectiveRepeatAfterPlay === "track" && current?.repeatState !== "track") {
       repeat = await applySpotifyRepeatAfterPlay(creds.accessToken, "track", current?.deviceId ?? playDeviceId, 3);
+      current = await verifyOrNudgeSpotifyPlayback({
+        accessToken: creds.accessToken,
+        body,
+        initialDeviceId: current?.deviceId ?? playDeviceId,
+        targetDeviceId,
+        targetDeviceName,
+        expectedTrackUri: firstUri,
+        expectedUris: playbackUris,
+        requireFirstUri: true,
+      });
+    }
+    if (repeatTrackList && current?.repeatState !== "context") {
+      repeat = await applySpotifyRepeatAfterPlay(creds.accessToken, "context", current?.deviceId ?? playDeviceId, 3);
       current = await verifyOrNudgeSpotifyPlayback({
         accessToken: creds.accessToken,
         body,
