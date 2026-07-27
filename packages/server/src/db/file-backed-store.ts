@@ -1292,7 +1292,8 @@ class FileTableStore {
       this.tables.set(table, normalized);
       counts[table] = normalized.length;
       if (migrate && source.some((row) => row.platform === undefined)) {
-        // Persist the renamed keys so the legacy shape is dropped on the next flush.
+        // Persist the renamed keys on the next flush, alongside the `visibility` /
+        // `publicAccountId` rollback mirrors the migration deliberately retains.
         this.dirtyTables.add(table);
         this.dirty = true;
       }

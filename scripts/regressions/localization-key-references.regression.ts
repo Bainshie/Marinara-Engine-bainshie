@@ -19,6 +19,11 @@ const en = JSON.parse(readFileSync(join(repoRoot, "packages/client/src/localizat
   unknown
 >;
 
+// i18next resolves a plural call to suffixed catalog entries, so the base key itself is
+// never present. Treat any key with a plural family as resolved.
+const PLURAL_SUFFIX = /_(zero|one|two|few|many|other)$/;
+const pluralBases = new Set(Object.keys(en).flatMap((key) => (PLURAL_SUFFIX.test(key) ? [key.replace(PLURAL_SUFFIX, "")] : [])));
+
 const files = execFileSync("git", ["ls-files", "packages/client/src"], { cwd: repoRoot, encoding: "utf8" })
   .split("\n")
   .filter((f) => f.endsWith(".ts") || f.endsWith(".tsx"));
@@ -33,7 +38,7 @@ for (const file of files) {
   }
   for (const match of source.matchAll(/localizeUi\(\s*"([^"]+)"/g)) {
     const key = match[1];
-    if (!(key in en)) missing.set(key, `${key}  (${file})`);
+    if (!(key in en) && !pluralBases.has(key)) missing.set(key, `${key}  (${file})`);
   }
 }
 
@@ -42,37 +47,8 @@ for (const file of files) {
 // than counted so that fixing one key and breaking another cannot cancel out.
 // Shrink this list when you fix one; never grow it.
 const KNOWN_MISSING = new Set([
-  "ui.agents.customagentrepositoriesmodal.repositoryAgentsWillBeImported",
-  "ui.characters.lorebooktab.reimportedEmbeddedLorebookEntries",
-  "ui.characters.lorebooktab.importedEmbeddedLorebookEntries",
-  "chat.branches.importedMessages",
-  "chat.branches.switchCount",
-  "chat.branches.deleteAllConfirmation",
-  "chat.activeContext.skippedEntries",
-  "chat.activeContext.activeEntries",
-  "chat.summary.source.lastMessages",
-  "chat.summary.source.selectedMessages",
-  "chat.summary.headerActive",
-  "chat.summary.automatic.updateInterval",
-  "chat.summary.template.tokenEstimate",
+  // Genuinely dangling: no such key and no plural family in en.json.
   "ui.game.gamecharactersheet.regenerating",
-  "ui.game.gamewidgetsetupeditor.importedWidgets",
-  "ui.lorebooks.lorebookeditor.enabledEntriesWouldActivate",
-  "ui.lorebooks.vectorizesection.reVectorizeAllEntriesWithConnection",
-  "ui.lorebooks.lorebookfolderrow.entriesInThisFolder",
-  "ui.modals.stbulkimportmodal.builtInPresetsDetectedAndUnchecked",
-  "ui.modals.stbulkimportmodal.selectedItems",
-  "ui.modals.stbulkimportmodal.importedCharacters",
-  "ui.modals.stbulkimportmodal.importedChats",
-  "ui.modals.stbulkimportmodal.importedGroupChats",
-  "ui.modals.stbulkimportmodal.importedPresets",
-  "ui.modals.stbulkimportmodal.importedLorebooks",
-  "ui.modals.stbulkimportmodal.importedBackgrounds",
-  "ui.modals.stbulkimportmodal.importedPersonas",
-  "ui.modals.stbulkimportmodal.importWarnings",
-  "ui.panels.importbutton.embeddedLorebookImportPrompt",
-  "ui.panels.advancedsettings.deleteSelectedDataCategories",
-  "ui.panels.extensionsettings.invalidExtensionEntriesSkipped",
 ]);
 
 const unexpected = [...missing].filter(([key]) => !KNOWN_MISSING.has(key)).map(([, display]) => display);

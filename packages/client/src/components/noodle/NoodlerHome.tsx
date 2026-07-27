@@ -3887,7 +3887,7 @@ function NoodlerFrame({
         <p className="min-w-0 flex-1 truncate text-sm font-semibold">{title}</p>
         {action ?? (
           <span className="rounded-full bg-[var(--noodle-accent)]/10 px-2.5 py-1 text-[0.65rem] font-bold text-[var(--noodle-accent)]">
-            {localizeUi("ui.noodle.noodlerframe.private")}
+            {localizeUi("ui.noodle.noodlerframe.noodler")}
           </span>
         )}
       </header>
