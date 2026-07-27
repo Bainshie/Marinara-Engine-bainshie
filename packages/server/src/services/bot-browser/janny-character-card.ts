@@ -79,7 +79,7 @@ export async function fetchJannyCharacterCard(
     headers: { Accept: "image/png,application/octet-stream;q=0.9" },
     signal: options.signal,
     policy: { allowedProtocols: ["https:"], maxRedirects: 3 },
-    maxResponseBytes: MAX_FILE_SIZES.AVATAR,
+    maxResponseBytes: MAX_FILE_SIZES.CHARACTER_CARD,
   });
   if (!cardResponse.ok) {
     throw new Error(`JannyAI character-card download failed (${cardResponse.status})`);

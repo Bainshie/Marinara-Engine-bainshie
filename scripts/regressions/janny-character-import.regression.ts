@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { fetchJannyCharacterCard } from "../../packages/server/src/services/bot-browser/janny-character-card.js";
 import { parsePngCharacterCard } from "../../packages/client/src/lib/png-parser.js";
 import { readCharacterCardDetailFields } from "../../packages/client/src/lib/character-import.js";
+import { MAX_FILE_SIZES } from "../../packages/shared/src/constants/defaults.js";
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 
@@ -80,6 +81,8 @@ assert.deepEqual((requests[0]?.options.policy as { allowedHostnames?: string[] }
 ]);
 assert.equal(requests[1]?.url, "https://cards.janny.example/complete-card.png");
 assert.deepEqual((requests[1]?.options.policy as { allowedProtocols?: string[] }).allowedProtocols, ["https:"]);
+assert.equal(requests[1]?.options.maxResponseBytes, MAX_FILE_SIZES.CHARACTER_CARD);
+assert.ok(MAX_FILE_SIZES.CHARACTER_CARD > MAX_FILE_SIZES.AVATAR);
 
 const parsed = await parsePngCharacterCard(
   new File([new Uint8Array(downloaded.buffer)], "janny-card.png", { type: downloaded.mimeType }),
