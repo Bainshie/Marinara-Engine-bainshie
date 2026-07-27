@@ -96,6 +96,8 @@ export interface PendingSpatialMapDraftReview {
   result?: GenerateSpatialMapDraftResponse;
   source: "game_setup";
   mode?: "ai" | "template";
+  /** Opaque package-owned selection handed from a capability setup surface to its review surface. */
+  selection?: unknown;
 }
 
 export interface GameSetupLearnedOptions {

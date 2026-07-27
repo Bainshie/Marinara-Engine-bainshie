@@ -6340,7 +6340,7 @@ function GameSurfaceComponent({
   const startSessionResetRef = useRef(startSession.reset);
   const pendingSetupMapPlanRef = useRef<
     | { mode: "manual" }
-    | { mode: "template" }
+    | { mode: "template"; selection: unknown }
     | {
         mode: "ai";
         size: SpatialMapDraftSize;
@@ -6382,6 +6382,7 @@ function GameSurfaceComponent({
           chatId,
           source: "game_setup",
           mode: "template",
+          selection: plan.selection,
         });
         toast.info(localizeUi("ui.game.gamesurfacecomponent.chooseAMapTemplateThenReviewItBeforeSaving"));
         return;

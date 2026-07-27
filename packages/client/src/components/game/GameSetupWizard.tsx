@@ -78,10 +78,17 @@ import { useGameAssetStore } from "../../stores/game-asset.store";
 import { useUIStore } from "../../stores/ui.store";
 import { parseGameSetupShareFileJson, resolveGameSetupImport } from "../../lib/game-setup-share";
 import { useTranslation as useUiTranslation } from "react-i18next";
+import { CapabilityElement } from "../capabilities/CapabilityElement";
 
 const GameAssetsBrowserView = lazy(() =>
   import("../game-assets/GameAssetsBrowserView").then((module) => ({ default: module.GameAssetsBrowserView })),
 );
+
+interface CapabilitySetupSelection {
+  id: string;
+  label: string;
+  payload: unknown;
+}
 
 interface GameSetupWizardProps {
   onComplete: (
@@ -91,7 +98,7 @@ interface GameSetupWizardProps {
     gameName?: string,
     mapPlan?:
       | { mode: "manual" }
-      | { mode: "template" }
+      | { mode: "template"; selection: CapabilitySetupSelection }
       | {
           mode: "ai";
           size: SpatialMapDraftSize;
@@ -481,6 +488,8 @@ export function GameSetupWizard({
   const [draftSpatialMap, setDraftSpatialMap] = useState(false);
   const [manualSpatialMap, setManualSpatialMap] = useState(false);
   const [templateSpatialMap, setTemplateSpatialMap] = useState(false);
+  const [spatialTemplatePickerOpen, setSpatialTemplatePickerOpen] = useState(false);
+  const [spatialTemplateSelection, setSpatialTemplateSelection] = useState<CapabilitySetupSelection | null>(null);
   const [spatialMapDraftSize, setSpatialMapDraftSize] = useState<SpatialMapDraftSize>("medium");
   const [spatialMapGroundingMode, setSpatialMapGroundingMode] = useState<SpatialMapGroundingMode>("setup");
   const [spatialMapInstructions, setSpatialMapInstructions] = useState("");
@@ -796,7 +805,13 @@ export function GameSetupWizard({
 
   useEffect(() => {
     if (installedAgentsLoading) return;
-    if (!hierarchicalMapsInstalled) setDraftSpatialMap(false);
+    if (!hierarchicalMapsInstalled) {
+      setDraftSpatialMap(false);
+      setManualSpatialMap(false);
+      setTemplateSpatialMap(false);
+      setSpatialTemplateSelection(null);
+      setSpatialTemplatePickerOpen(false);
+    }
     if (!musicDjInstalled) setEnableSpotifyDj(false);
     if (!lorebookKeeperInstalled) setEnableLorebookKeeper(false);
     if (!illustratorInstalled) {
@@ -809,6 +824,32 @@ export function GameSetupWizard({
     lorebookKeeperInstalled,
     musicDjInstalled,
   ]);
+
+  const handleSpatialTemplateSelected = useCallback((selection: unknown) => {
+    const candidate = selection && typeof selection === "object" && !Array.isArray(selection)
+      ? (selection as Record<string, unknown>)
+      : null;
+    if (
+      !candidate ||
+      typeof candidate.id !== "string" ||
+      !candidate.id.trim() ||
+      typeof candidate.label !== "string" ||
+      !candidate.label.trim() ||
+      !("payload" in candidate)
+    ) {
+      toast.error(localizeUi("ui.game.gamesetupwizard.theSelectedMapTemplateCouldNotBeRead"));
+      return;
+    }
+    setSpatialTemplateSelection({
+      id: candidate.id,
+      label: candidate.label,
+      payload: candidate.payload,
+    });
+    setTemplateSpatialMap(true);
+    setDraftSpatialMap(false);
+    setManualSpatialMap(false);
+    setSpatialTemplatePickerOpen(false);
+  }, [localizeUi]);
 
   const handlePromptPresetChange = useCallback((presetId: string | null) => {
     setPromptPresetTouched(true);
@@ -969,6 +1010,8 @@ export function GameSetupWizard({
       );
       setManualSpatialMap(false);
       setTemplateSpatialMap(false);
+      setSpatialTemplateSelection(null);
+      setSpatialTemplatePickerOpen(false);
       setSpatialMapDraftSize("medium");
       setSpatialMapGroundingMode("setup");
       setSpatialMapInstructions(importedSpatialMapInstructions);
@@ -1107,7 +1150,9 @@ export function GameSetupWizard({
         : enableAgents && hierarchicalMapsInstalled && manualSpatialMap
           ? { mode: "manual" as const }
         : enableAgents && hierarchicalMapsInstalled && templateSpatialMap
-          ? { mode: "template" as const }
+          ? spatialTemplateSelection
+            ? { mode: "template" as const, selection: spatialTemplateSelection }
+            : undefined
         : undefined,
     );
   };
@@ -2407,6 +2452,7 @@ export function GameSetupWizard({
                   setDraftSpatialMap((enabled) => !enabled);
                   setManualSpatialMap(false);
                   setTemplateSpatialMap(false);
+                  setSpatialTemplateSelection(null);
                 }}
                 className={cn(
                   "flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2.5 text-left transition-all",
@@ -2448,6 +2494,7 @@ export function GameSetupWizard({
                     setManualSpatialMap((enabled) => !enabled);
                     setDraftSpatialMap(false);
                     setTemplateSpatialMap(false);
+                    setSpatialTemplateSelection(null);
                   }}
                   className={cn(
                     "mt-2 flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2.5 text-left transition-all",
@@ -2490,9 +2537,7 @@ export function GameSetupWizard({
                   type="button"
                   aria-pressed={templateSpatialMap}
                   onClick={() => {
-                    setTemplateSpatialMap((enabled) => !enabled);
-                    setDraftSpatialMap(false);
-                    setManualSpatialMap(false);
+                    setSpatialTemplatePickerOpen(true);
                   }}
                   className={cn(
                     "mt-2 flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2.5 text-left transition-all",
@@ -2511,7 +2556,11 @@ export function GameSetupWizard({
                         {localizeUi("ui.game.gamesetupwizard.useATemplate")}
                       </span>
                       <span className="block text-[0.575rem] leading-relaxed text-[var(--muted-foreground)]">
-                        {localizeUi("ui.game.gamesetupwizard.chooseASavedMapTemplateAfterSetupThenReview")}
+                        {spatialTemplateSelection
+                          ? localizeUi("ui.game.gamesetupwizard.selectedMapTemplateValue1", {
+                              value1: spatialTemplateSelection.label,
+                            })
+                          : localizeUi("ui.game.gamesetupwizard.chooseASavedMapTemplateAfterSetupThenReview")}
                       </span>
                     </span>
                   </span>
@@ -2909,6 +2958,16 @@ export function GameSetupWizard({
           </motion.div>
         </AnimatePresence>
       </div>
+      {spatialTemplatePickerOpen && (
+        <CapabilityElement
+          packageId="hierarchical-maps"
+          view="setup"
+          capabilityProps={{
+            onSelect: handleSpatialTemplateSelected,
+            onClose: () => setSpatialTemplatePickerOpen(false),
+          }}
+        />
+      )}
     </>
   );
 }
