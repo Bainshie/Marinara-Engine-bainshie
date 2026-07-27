@@ -1147,7 +1147,7 @@ test("modal backdrops ignore drag releases but still close on a fresh outside cl
   await expect(dialog).toHaveCount(0);
 });
 
-test("connection model fetch errors inherit the configured chroma text color", async ({ page }, testInfo) => {
+test("connection model fetch errors inherit the configured editor accent", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name.includes("mobile"), "Desktop connection editor chrome is covered here.");
 
   const connectionResponse = await page.request.post("/api/connections", {
@@ -1159,18 +1159,40 @@ test("connection model fetch errors inherit the configured chroma text color", a
   expect(connectionResponse.ok()).toBeTruthy();
   const connection = (await connectionResponse.json()) as { id: string };
   const networkError = "NetworkError when attempting to fetch resource.";
+  const internalServerError = "Internal Server Error";
+  const accentColor = "rgb(20, 184, 166)";
+  let fetchCount = 0;
 
   try {
     await page.route(`**/api/connections/${connection.id}/models`, async (route) => {
+      const message = fetchCount === 0 ? networkError : internalServerError;
+      fetchCount += 1;
       await route.fulfill({
         status: 502,
         contentType: "application/json",
-        body: JSON.stringify({ error: { message: networkError } }),
+        body: JSON.stringify({ error: { message } }),
       });
     });
     await page.goto("/");
+    await page.evaluate(async (accent) => {
+      const { useUIStore } = (await import("/src/stores/ui.store.ts")) as {
+        useUIStore: {
+          getState: () => {
+            setAppAccentColor: (color: string) => void;
+          };
+        };
+      };
+      useUIStore.getState().setAppAccentColor(accent);
+    }, "#14b8a6");
+    await expect
+      .poll(() =>
+        page.evaluate(() =>
+          getComputedStyle(document.documentElement).getPropertyValue("--marinara-app-accent-static").trim(),
+        ),
+      )
+      .toBe("#14b8a6");
     await page.evaluate(() => {
-      document.documentElement.style.setProperty("--marinara-chat-chrome-panel-text", "rgb(12, 34, 56)");
+      document.documentElement.style.setProperty("--marinara-chat-chrome-panel-text", "rgb(236, 72, 153)");
       document.documentElement.style.setProperty("--destructive", "rgb(255, 0, 0)");
     });
 
@@ -1188,9 +1210,14 @@ test("connection model fetch errors inherit the configured chroma text color", a
 
     const errorText = editor.getByText(networkError, { exact: true });
     await expect(errorText).toBeVisible();
-    await expect(errorText).toHaveClass(/mari-chrome-text/u);
-    await expect(errorText).toHaveCSS("color", "rgb(12, 34, 56)");
+    await expect(errorText).toHaveCSS("color", accentColor);
     expect(await errorText.getAttribute("class")).not.toMatch(/destructive|pink|red|rose/iu);
+
+    await editor.getByRole("button", { name: "Fetch Models from API" }).click();
+    const internalErrorText = editor.getByText(internalServerError, { exact: true });
+    await expect(internalErrorText).toBeVisible();
+    await expect(internalErrorText).toHaveCSS("color", accentColor);
+    expect(await internalErrorText.getAttribute("class")).not.toMatch(/destructive|pink|red|rose/iu);
   } finally {
     await page.request.delete(`/api/connections/${connection.id}`).catch(() => undefined);
   }
@@ -2734,6 +2761,150 @@ test("Personal Extensions default to the Professor Mari-only locked workflow", a
   expect(warningColors.warning).toBe(warningColors.accent);
 });
 
+test(
+  "external Agent imports require the Danger Zone gate and explicit capabilities",
+  async ({ page, request }, testInfo) => {
+    test.skip(
+      testInfo.project.name !== "mobile-chromium",
+      "This stateful import-policy flow runs once against the shared test server",
+    );
+
+    const disabledPolicy = await request.patch("/api/agents/import-policy", { data: { enabled: false } });
+    expect(disabledPolicy.ok()).toBeTruthy();
+
+    const testSuffix = Date.now().toString(36);
+    const localAgentName = `Locally Authored Agent ${testSuffix}`;
+    const importedAgentName = `Permission Review Agent ${testSuffix}`;
+    let localAgentId: string | undefined;
+    let importedAgentId: string | undefined;
+    try {
+      const localAgentResponse = await request.post("/api/agents", {
+        data: {
+          type: `e2e-local-agent-${testSuffix}`,
+          name: localAgentName,
+          description: "Must remain creatable while external imports are locked.",
+          phase: "parallel",
+          connectionId: null,
+          imagePath: null,
+          promptTemplate: "Return a short note.",
+          settings: { resultType: "context_injection", customCapabilities: {} },
+        },
+      });
+      expect(localAgentResponse.ok()).toBeTruthy();
+      const localAgent = (await localAgentResponse.json()) as { id: string };
+      localAgentId = localAgent.id;
+
+      const blockedImport = await request.post("/api/agents/import", {
+        data: {
+          agent: {
+            type: "untrusted-haptic",
+            name: "Blocked External Agent",
+            description: "",
+            phase: "post_processing",
+            connectionId: null,
+            imagePath: null,
+            resultType: "haptic_command",
+            promptTemplate: "Return a haptic command.",
+            settings: { customCapabilities: { control_haptics: true } },
+          },
+          source: "file",
+          approvedCapabilities: ["control_haptics"],
+          acknowledgePermissions: true,
+        },
+      });
+      expect(blockedImport.status()).toBe(403);
+
+      await page.goto("/");
+      await page.locator('[data-tour="panel-agents"]').click();
+      const disabledHelp = 'Enable "Allow custom Agent imports" in Advanced Settings → Danger Zone first.';
+      const lockedImportButton = page.getByTitle(disabledHelp).first();
+      await expect(lockedImportButton).toHaveAttribute("aria-disabled", "true");
+      await lockedImportButton.dispatchEvent("click");
+      await expect(page.getByText(disabledHelp, { exact: true }).last()).toBeVisible();
+
+      await page.locator('[data-tour="panel-settings"]').click();
+      await page.getByRole("tab", { name: "Advanced" }).click();
+      const agentImportToggle = page.getByLabel("Allow custom Agent imports");
+      const extensionImportToggle = page.getByLabel("Allow third-party extension imports");
+      await expect(agentImportToggle).toBeEnabled();
+      await expect(agentImportToggle).not.toBeChecked();
+      expect(
+        await agentImportToggle.evaluate((toggle) => {
+          const extensionLabel = [...document.querySelectorAll("label")].find(
+            (label) => label.textContent?.trim() === "Allow third-party extension imports",
+          );
+          const extension =
+            extensionLabel instanceof HTMLLabelElement
+              ? document.getElementById(extensionLabel.htmlFor)
+              : null;
+          return Boolean(
+            extension && (toggle.compareDocumentPosition(extension) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0,
+          );
+        }),
+      ).toBe(true);
+
+      const enabledPolicy = await request.patch("/api/agents/import-policy", { data: { enabled: true } });
+      expect(enabledPolicy.ok()).toBeTruthy();
+      await page.reload();
+      await page.locator('[data-tour="panel-agents"]').click();
+      await expect(page.getByTitle("Import agents")).toHaveAttribute("aria-disabled", "false");
+
+      const packageInput = page.locator('input[type="file"][accept*="application/json"]');
+      await packageInput.setInputFiles({
+        name: "permission-review-agent.json",
+        mimeType: "application/json",
+        buffer: Buffer.from(
+          JSON.stringify({
+            type: "untrusted-haptic",
+            name: importedAgentName,
+            description: "Requests haptic control.",
+            phase: "post_processing",
+            resultType: "haptic_command",
+            promptTemplate: "Return a haptic command.",
+            settings: { customCapabilities: { control_haptics: true } },
+          }),
+        ),
+      });
+
+      await expect(page.getByRole("dialog", { name: "Review Agent Import Permissions" })).toBeVisible();
+      const hapticPermission = page.getByLabel("Control haptic devices");
+      await expect(hapticPermission).not.toBeChecked();
+      await hapticPermission.check();
+      await expect(hapticPermission).toBeChecked();
+      await page.getByRole("button", { name: "Approve Permissions and Import" }).click();
+      await expect(page.getByRole("dialog", { name: "Review Agent Import Permissions" })).toHaveCount(0);
+
+      const agentsResponse = await request.get("/api/agents");
+      expect(agentsResponse.ok()).toBeTruthy();
+      const agents = (await agentsResponse.json()) as Array<{ id: string; name: string; settings: string }>;
+      const importedAgent = agents.find((agent) => agent.name === importedAgentName);
+      expect(importedAgent).toBeTruthy();
+      importedAgentId = importedAgent?.id;
+      const importedSettings = JSON.parse(importedAgent!.settings) as Record<string, unknown>;
+      expect(importedSettings.customAgentImportSource).toBe("file");
+      expect(importedSettings.customAgentPermissionsExplicit).toBe(true);
+      expect(importedSettings.customCapabilities).toEqual({ control_haptics: true });
+    } finally {
+      try {
+        if (!localAgentId || !importedAgentId) {
+          const cleanupAgentsResponse = await request.get("/api/agents").catch(() => null);
+          if (cleanupAgentsResponse?.ok()) {
+            const cleanupAgents = (await cleanupAgentsResponse.json()) as Array<{ id: string; name: string }>;
+            localAgentId ??= cleanupAgents.find((agent) => agent.name === localAgentName)?.id;
+            importedAgentId ??= cleanupAgents.find((agent) => agent.name === importedAgentName)?.id;
+          }
+        }
+        await Promise.all([
+          localAgentId ? request.delete(`/api/agents/${localAgentId}`).catch(() => undefined) : Promise.resolve(),
+          importedAgentId ? request.delete(`/api/agents/${importedAgentId}`).catch(() => undefined) : Promise.resolve(),
+        ]);
+      } finally {
+        await request.patch("/api/agents/import-policy", { data: { enabled: false } });
+      }
+    }
+  },
+);
+
 test("Roleplay Active Context shows rich lorebook activation provenance", async ({ page, request }, testInfo) => {
   const lorebookId = "roleplay-active-context-smoke-lorebook";
   const chatResponse = await request.post("/api/chats", {
@@ -4102,76 +4273,113 @@ test("ElevenLabs keeps models visible and exposes scrollable account voices in e
       labels: { accent: index % 2 === 0 ? "Polish" : "English" },
     };
   });
-
-  await page.route("**/api/tts/config", async (route) => {
-    if (route.request().method() === "PUT") {
-      Object.assign(config, route.request().postDataJSON());
-      saveCount += 1;
-      await route.fulfill({ status: 204 });
-      return;
-    }
-    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(config) });
+  const characterName = `ElevenLabs Voice Picker Character ${Date.now()}`;
+  const characterResponse = await page.request.post("/api/characters", {
+    data: { data: { name: characterName } },
   });
-  await page.route("**/api/tts/voices", async (route) => {
-    voiceFetchCount += 1;
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({
-        voices: voiceOptions.map((voice) => voice.id),
-        voiceOptions,
-        fromProvider: true,
-        source: "elevenlabs",
-      }),
+  expect(characterResponse.ok()).toBeTruthy();
+  const character = (await characterResponse.json()) as { id: string };
+
+  try {
+    await page.route("**/api/tts/config", async (route) => {
+      if (route.request().method() === "PUT") {
+        Object.assign(config, route.request().postDataJSON());
+        saveCount += 1;
+        await route.fulfill({ status: 204 });
+        return;
+      }
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(config) });
     });
-  });
-  await page.route("**/api/tts/models", async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({
-        models: [
-          { id: "eleven_multilingual_v2", name: "Eleven Multilingual v2" },
-          { id: "eleven_v3", name: "Eleven v3" },
-          { id: "eleven_flash_v2_5", name: "Eleven Flash v2.5" },
-        ],
-        fromProvider: true,
-        source: "elevenlabs",
-      }),
+    await page.route("**/api/tts/voices", async (route) => {
+      voiceFetchCount += 1;
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          voices: voiceOptions.map((voice) => voice.id),
+          voiceOptions,
+          fromProvider: true,
+          source: "elevenlabs",
+        }),
+      });
     });
-  });
+    await page.route("**/api/tts/models", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          models: [
+            { id: "eleven_multilingual_v2", name: "Eleven Multilingual v2" },
+            { id: "eleven_v3", name: "Eleven v3" },
+            { id: "eleven_flash_v2_5", name: "Eleven Flash v2.5" },
+          ],
+          fromProvider: true,
+          source: "elevenlabs",
+        }),
+      });
+    });
 
-  await page.goto("/");
-  await page.locator('[data-tour="panel-connections"]').click();
-  const rightPanel = page.locator('[data-component="RightPanel"]');
-  const ttsLabel = rightPanel.getByText("Text to Speech", { exact: true });
-  const ttsCard = ttsLabel.locator("xpath=../../..");
-  await ttsCard.getByTitle("Expand").click();
+    await page.goto("/");
+    await page.locator('[data-tour="panel-connections"]').click();
+    const rightPanel = page.locator('[data-component="RightPanel"]');
+    const ttsLabel = rightPanel.getByText("Text to Speech", { exact: true });
+    const ttsCard = ttsLabel.locator("xpath=../../..");
+    await ttsCard.getByTitle("Expand").click();
 
-  const modelSelect = ttsCard.getByRole("combobox", { name: "Model" });
-  await expect(modelSelect.locator("option")).toHaveCount(3);
-  await expect(modelSelect.locator('option[value="eleven_v3"]')).toHaveText("Eleven v3 (eleven_v3)");
+    const modelSelect = ttsCard.getByRole("combobox", { name: "Model" });
+    await expect(modelSelect.locator("option")).toHaveCount(3);
+    await expect(modelSelect.locator('option[value="eleven_v3"]')).toHaveText("Eleven v3 (eleven_v3)");
 
-  await ttsCard.getByRole("button", { name: "All Characters Voice" }).click();
-  const voiceList = ttsCard.getByTestId("tts-voice-options");
-  await expect(voiceList.getByRole("option")).toHaveCount(49);
-  await expect(voiceList.getByText("Custom Voice 48 (voice-48)", { exact: true })).toBeAttached();
-  await expect(voiceList).toHaveCSS("overflow-y", "scroll");
-  expect(
-    await voiceList.evaluate((element) => ({
-      scrollable: element.scrollHeight > element.clientHeight,
-      gutter: getComputedStyle(element).scrollbarGutter,
-    })),
-  ).toEqual({ scrollable: true, gutter: "stable" });
+    const allCharactersVoicePicker = ttsCard.getByRole("button", { name: "All Characters Voice" });
+    await allCharactersVoicePicker.click();
+    const voiceList = page.getByTestId("tts-voice-options");
+    await expect(voiceList.getByRole("option")).toHaveCount(49);
+    await expect(voiceList.getByText("Custom Voice 48 (voice-48)", { exact: true })).toBeAttached();
+    await expect(voiceList).toHaveCSS("overflow-y", "scroll");
+    expect(
+      await voiceList.evaluate((element) => ({
+        scrollable: element.scrollHeight > element.clientHeight,
+        gutter: getComputedStyle(element).scrollbarGutter,
+      })),
+    ).toEqual({ scrollable: true, gutter: "stable" });
 
-  await page.keyboard.press("Escape");
-  await ttsCard.getByRole("combobox", { name: "Voice Option" }).selectOption("per-character");
-  const refreshButton = ttsCard.getByRole("button", { name: "Refresh", exact: true });
-  await expect(refreshButton).toBeVisible();
-  const fetchesBeforeRefresh = voiceFetchCount;
-  await refreshButton.click();
-  await expect.poll(() => saveCount).toBeGreaterThan(0);
-  await expect.poll(() => voiceFetchCount).toBeGreaterThan(fetchesBeforeRefresh);
+    await page.keyboard.press("Escape");
+    await expect(allCharactersVoicePicker).toBeFocused();
+    await ttsCard.getByRole("combobox", { name: "Voice Option" }).selectOption("per-character");
+    const refreshButton = ttsCard.getByRole("button", { name: "Refresh", exact: true });
+    await expect(refreshButton).toBeVisible();
+    await ttsCard.getByRole("button", { name: "Add character voice" }).click();
+
+    const characterPicker = ttsCard.getByRole("button", { name: "Select character" });
+    await characterPicker.click();
+    const characterList = page.getByTestId("tts-character-options");
+    await expect(characterList).toBeVisible();
+    await expect(characterList).toHaveCSS("overflow-y", "scroll");
+    await expect(characterList.locator("xpath=../..")).toHaveCSS("position", "fixed");
+    await characterList.getByRole("option", { name: characterName, exact: true }).click();
+    await expect(characterPicker).toBeFocused();
+    await characterPicker.click();
+    await page.keyboard.press("Escape");
+    await expect(characterPicker).toBeFocused();
+
+    const characterVoicePicker = ttsCard.getByRole("button", { name: /^Voice for / });
+    const characterVoiceTriggerBox = await characterVoicePicker.boundingBox();
+    await characterVoicePicker.click();
+    const characterVoiceList = page.getByTestId("tts-voice-options");
+    const characterVoiceMenuBox = await characterVoiceList.locator("xpath=../..").boundingBox();
+    expect(characterVoiceTriggerBox).not.toBeNull();
+    expect(characterVoiceMenuBox).not.toBeNull();
+    expect(characterVoiceMenuBox!.width).toBeGreaterThan(characterVoiceTriggerBox!.width + 40);
+    await page.keyboard.press("Escape");
+    await expect(characterVoicePicker).toBeFocused();
+
+    const fetchesBeforeRefresh = voiceFetchCount;
+    await refreshButton.click();
+    await expect.poll(() => saveCount).toBeGreaterThan(0);
+    await expect.poll(() => voiceFetchCount).toBeGreaterThan(fetchesBeforeRefresh);
+  } finally {
+    await page.request.delete(`/api/characters/${character.id}`).catch(() => undefined);
+  }
 });
 
 test("failed Game Lorebook Keeper run exposes a retry action", async ({ page }, testInfo) => {

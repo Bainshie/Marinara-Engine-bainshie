@@ -139,6 +139,7 @@ import {
   usePersonalExtensionPolicy,
   useSetExternalExtensionsEnabled,
 } from "../../hooks/use-personal-extensions";
+import { useAgentImportPolicy, useSetAgentImportsEnabled } from "../../hooks/use-agents";
 import { DraftNumberInput } from "../ui/DraftNumberInput";
 import { ExportFormatDialog, type ExportFormatChoice } from "../ui/ExportFormatDialog";
 import { inspectCharacterFilesForEmbeddedLorebooks } from "../../lib/character-import";
@@ -628,7 +629,7 @@ const SETTINGS_SEARCHABLE_CONTROLS: readonly SettingsSearchableControlMeta[] = [
   {
     id: "trim-incomplete-output",
     sectionId: "responses",
-    label: "Trim incomplete model endings",
+    label: "Trim incomplete sentences from the response",
     description: "Trim trailing unfinished sentences from AI responses.",
     aliases: ["trim", "unfinished", "sentence"],
     kind: "Toggle",
@@ -6600,6 +6601,8 @@ function AdvancedSettings() {
   const [adminSecret, setAdminSecret] = useState(() => localStorage.getItem(ADMIN_SECRET_STORAGE_KEY) ?? "");
   const { data: extensionPolicy, isLoading: extensionPolicyLoading } = usePersonalExtensionPolicy();
   const setExternalExtensionsEnabled = useSetExternalExtensionsEnabled();
+  const { data: agentImportPolicy, isLoading: agentImportPolicyLoading } = useAgentImportPolicy();
+  const setAgentImportsEnabled = useSetAgentImportsEnabled();
   const nativeConsoleBridge = getMarinaraAndroidBridge();
   const canOpenNativeConsole = typeof nativeConsoleBridge?.openConsole === "function";
   const nativeConsoleHelp = getNativeConsoleShortcutHelp();
@@ -6644,6 +6647,28 @@ function AdvancedSettings() {
       }
     },
     [setExternalExtensionsEnabled, t],
+  );
+
+  const handleAgentImportsToggle = useCallback(
+    async (enabled: boolean) => {
+      if (enabled) {
+        const confirmed = await showConfirmDialog({
+          title: t("settings.agentImports.confirm.title"),
+          message: t("settings.agentImports.warning"),
+          confirmLabel: t("settings.agentImports.confirm.action"),
+          cancelLabel: t("settings.agentImports.confirm.cancel"),
+          tone: "destructive",
+        });
+        if (!confirmed) return;
+      }
+      try {
+        await setAgentImportsEnabled.mutateAsync(enabled);
+        toast.success(enabled ? t("settings.agentImports.enabled") : t("settings.agentImports.disabled"));
+      } catch (toggleError) {
+        toast.error(getPrivilegedActionErrorMessage(toggleError, t("settings.agentImports.error")));
+      }
+    },
+    [setAgentImportsEnabled, t],
   );
 
   type ProfileExportFormat = "native" | "compatible" | "zip";
@@ -7501,6 +7526,18 @@ function AdvancedSettings() {
             </div>
           )}
           <div className="mt-2 flex flex-col gap-2 rounded-lg border border-[var(--border)] bg-[var(--background)]/45 p-2.5">
+            <ToggleSetting
+              label={t("settings.agentImports.toggle.label")}
+              checked={agentImportPolicy?.enabled ?? false}
+              onChange={(enabled) => void handleAgentImportsToggle(enabled)}
+              disabled={agentImportPolicyLoading || setAgentImportsEnabled.isPending}
+              help={t("settings.agentImports.toggle.help")}
+            />
+            <div className="flex items-start gap-2 text-[0.6875rem] leading-relaxed text-[var(--primary)]">
+              <ShieldAlert size="0.875rem" className="mt-0.5 shrink-0" />
+              <p>{t("settings.agentImports.warning")}</p>
+            </div>
+            <div className="my-1 border-t border-[var(--border)]" />
             <ToggleSetting
               label={t("settings.externalExtensions.toggle.label")}
               checked={extensionPolicy?.externalExtensionsEnabled ?? false}

@@ -200,6 +200,7 @@ async function generateElevenLabsGameAudio(
       allowedProtocols: ["https:"],
     },
     maxResponseBytes: MAX_GAME_AUDIO_BYTES,
+    decodeCompressedResponse: true,
   });
   if (!response.ok) {
     const detail = readProviderErrorDetail(await response.text().catch(() => ""));
@@ -664,6 +665,7 @@ export async function fetchElevenLabsVoiceOptions(
   query: Record<string, string> = {},
 ): Promise<VoiceOption[]> {
   const voiceOptions: VoiceOption[] = [];
+  const seenPageTokens = new Set<string>();
   let nextPageToken: string | null = null;
 
   for (let page = 0; page < 100; page += 1) {
@@ -686,9 +688,15 @@ export async function fetchElevenLabsVoiceOptions(
         flagName: "TTS_LOCAL_URLS_ENABLED",
       },
       maxResponseBytes: 2 * 1024 * 1024,
+      decodeCompressedResponse: true,
     });
 
-    if (!res.ok) throw new Error(`ElevenLabs voices request failed (${res.status})`);
+    if (!res.ok) {
+      const detail = readProviderErrorDetail(await res.text().catch(() => ""));
+      throw new Error(
+        `ElevenLabs voices request failed (${res.status})${detail ? `: ${detail}` : ""}`,
+      );
+    }
 
     const data = await res.json();
     voiceOptions.push(...parseVoiceOptions(data));
@@ -697,9 +705,34 @@ export async function fetchElevenLabsVoiceOptions(
     const hasMore = obj?.has_more === true;
     nextPageToken = readString(obj?.next_page_token) ?? null;
     if (!hasMore || !nextPageToken) break;
+    if (seenPageTokens.has(nextPageToken)) {
+      throw new Error("ElevenLabs voices pagination returned a repeated page token");
+    }
+    seenPageTokens.add(nextPageToken);
   }
 
   return voiceOptions;
+}
+
+export async function fetchAllElevenLabsVoiceOptions(baseUrl: string, apiKey: string): Promise<VoiceOption[]> {
+  const results = await Promise.allSettled([
+    fetchElevenLabsVoiceOptions(baseUrl, apiKey),
+    fetchElevenLabsVoiceOptions(baseUrl, apiKey, { voice_type: "saved" }),
+  ]);
+  const successfulResults = results.filter(
+    (result): result is PromiseFulfilledResult<VoiceOption[]> => result.status === "fulfilled",
+  );
+  if (successfulResults.length === 0) {
+    const errors = results
+      .filter((result): result is PromiseRejectedResult => result.status === "rejected")
+      .map((result) => (result.reason instanceof Error ? result.reason.message : String(result.reason)));
+    throw new Error(
+      errors.length > 0
+        ? `ElevenLabs voice discovery failed: ${errors.join("; ")}`
+        : "ElevenLabs voice discovery failed",
+    );
+  }
+  return mergeVoiceOptions(successfulResults.flatMap((result) => result.value));
 }
 
 export function parseElevenLabsModelOptions(data: unknown): ModelOption[] {
@@ -723,8 +756,12 @@ async function fetchElevenLabsModelOptions(baseUrl: string, apiKey: string): Pro
       flagName: "TTS_LOCAL_URLS_ENABLED",
     },
     maxResponseBytes: 2 * 1024 * 1024,
+    decodeCompressedResponse: true,
   });
-  if (!res.ok) throw new Error(`ElevenLabs models request failed (${res.status})`);
+  if (!res.ok) {
+    const detail = readProviderErrorDetail(await res.text().catch(() => ""));
+    throw new Error(`ElevenLabs models request failed (${res.status})${detail ? `: ${detail}` : ""}`);
+  }
   return parseElevenLabsModelOptions(await res.json());
 }
 
@@ -775,21 +812,7 @@ async function fetchProviderVoices(cfg: TTSConfig): Promise<TTSVoicesResponse> {
       );
     }
 
-    const voiceQueries: Array<Record<string, string>> = [
-      {},
-      { voice_type: "personal" },
-      { voice_type: "workspace" },
-    ];
-    const results = await Promise.allSettled(
-      voiceQueries.map((query) => fetchElevenLabsVoiceOptions(base, cfg.apiKey, query)),
-    );
-    const successfulResults = results.filter(
-      (result): result is PromiseFulfilledResult<VoiceOption[]> => result.status === "fulfilled",
-    );
-    if (successfulResults.length === 0) {
-      throw new Error("ElevenLabs voice discovery failed");
-    }
-    const voices = mergeVoiceOptions(successfulResults.flatMap((result) => result.value));
+    const voices = await fetchAllElevenLabsVoiceOptions(base, cfg.apiKey);
     return voices.length > 0 ? responseFromVoiceOptions(cfg.source, voices, true) : fallbackVoices(cfg.source);
   }
 
@@ -867,9 +890,10 @@ export async function ttsRoutes(app: FastifyInstance) {
     } catch (error) {
       logger.warn(error, "TTS voice discovery failed for source %s", cfg.source);
       if (cfg.source === "elevenlabs" && cfg.apiKey) {
-        return reply
-          .status(502)
-          .send({ error: "Could not load ElevenLabs voices. Check the connection and try again." });
+        return reply.status(502).send({
+          error: "Could not load ElevenLabs voices. Check the connection and try again.",
+          detail: error instanceof Error ? error.message : "Unknown provider error",
+        });
       }
       return fallbackVoices(cfg.source);
     }
@@ -886,7 +910,10 @@ export async function ttsRoutes(app: FastifyInstance) {
       return await fetchProviderModels(cfg);
     } catch (error) {
       logger.warn(error, "TTS model discovery failed for source %s", cfg.source);
-      return reply.status(502).send({ error: "Could not load ElevenLabs models. Check the connection and try again." });
+      return reply.status(502).send({
+        error: "Could not load ElevenLabs models. Check the connection and try again.",
+        detail: error instanceof Error ? error.message : "Unknown provider error",
+      });
     }
   });
 
@@ -1058,6 +1085,7 @@ export async function ttsRoutes(app: FastifyInstance) {
           flagName: "TTS_LOCAL_URLS_ENABLED",
         },
         maxResponseBytes: MAX_TTS_AUDIO_BYTES,
+        decodeCompressedResponse: cfg.source === "elevenlabs",
       });
     } catch (err: unknown) {
       const msg =
