@@ -45,6 +45,8 @@ import { confirmNonEmptyFolderDelete, showConfirmDialog } from "../../lib/app-di
 import { useUIStore, type UserStatus } from "../../stores/ui.store";
 import { cn, getAvatarCropStyle, type AvatarCropValue } from "../../lib/utils";
 import { chatBackgroundMetadataToUrl } from "../../lib/backgrounds";
+import { formatRelativeContact } from "../../lib/relative-time";
+import { ChatRowPeek } from "./ChatRowPeek";
 import { useState, useCallback, useMemo, useRef, useEffect } from "react";
 import { usePresenceClock } from "../../hooks/use-presence-clock";
 import { toast } from "sonner";
@@ -231,6 +233,8 @@ export function ChatSidebar() {
   const abortControllers = useChatStore((s) => s.abortControllers);
   const perChatTyping = useChatStore((s) => s.perChatTyping);
   const inputDrafts = useChatStore((s) => s.inputDrafts);
+  const chatNotifications = useChatStore((s) => s.chatNotifications);
+  const chatListRef = useRef<HTMLDivElement>(null);
   // One interval for the whole list: a 60s-cadence clock so schedule/override-derived
   // status dots refresh when time alone changes them, without per-row timers.
   const presenceNow = usePresenceClock();
@@ -866,17 +870,35 @@ export function ChatSidebar() {
 
     // ── Row liveness ──
     // Exactly one subtitle, so rows never change height as these states come and go.
-    // Precedence: typing > generating > draft.
+    // Precedence: typing > generating > notification > draft.
+    // Reuses the list's existing 60s clock, so these tick without per-row timers.
+    // Conversation chats only — roleplay/game rows are already busy enough.
+    const relativeTime =
+      chat.mode === "conversation" && chat.lastMessageAt
+        ? formatRelativeContact(chat.lastMessageAt, presenceNow.getTime())
+        : null;
+
     const isGenerating = abortControllers.has(chat.id);
     const typingCharacter = perChatTyping.get(chat.id);
     const hasDraft = !isActive && Boolean(inputDrafts.get(chat.id)?.trim());
+    // Enrichment only: notifications auto-dismiss on a timer while the unread count badge
+    // persists, so the badge stays the durable signal and this just names who/what.
+    const notification = isActive ? undefined : chatNotifications.get(chat.id);
+    const notificationLabel = !notification
+      ? null
+      : notification.kind === "call"
+        ? notification.reason?.trim() ||
+          localizeUi("ui.layout.chatsidebar.incomingCallFromValue1", { value1: notification.characterName })
+        : localizeUi("ui.layout.chatsidebar.value1Replied", { value1: notification.characterName });
     const subtitle = typingCharacter
       ? localizeUi("ui.layout.chatsidebar.value1IsTyping", { value1: typingCharacter })
       : isGenerating
         ? localizeUi("ui.layout.chatsidebar.generating")
-        : hasDraft
-          ? localizeUi("ui.layout.chatsidebar.unsentDraft")
-          : null;
+        : notificationLabel
+          ? notificationLabel
+          : hasDraft
+            ? localizeUi("ui.layout.chatsidebar.unsentDraft")
+            : null;
 
     // Banner: the chat's own background image, bled across the row and heavily muted. Only
     // on the active/hovered row — 40 at once is soup, and it doubles as the active cue.
@@ -1137,6 +1159,11 @@ export function ChatSidebar() {
           )}
         </div>
 
+        {/* Last-activity time — conversation chats only */}
+        {relativeTime && (
+          <span className="mari-chrome-accent-text-muted shrink-0 text-[0.625rem] tabular-nums">{relativeTime}</span>
+        )}
+
         {/* Branch count badge */}
         {branchCount > 1 && (
           <span className="mari-chrome-muted-badge flex shrink-0 items-center gap-0.5 px-1.5 py-0.5 text-[0.625rem]">
@@ -1379,6 +1406,7 @@ export function ChatSidebar() {
 
       {/* Chat list */}
       <div
+        ref={chatListRef}
         data-chat-root-drop-zone
         className={cn(
           "flex-1 overflow-y-auto px-2 pb-1 pt-0 transition-colors",
@@ -1417,6 +1445,7 @@ export function ChatSidebar() {
           setIsRootDropTarget(false);
         }}
       >
+        <ChatRowPeek containerRef={chatListRef} activeChatId={activeChatId} disabled={multiSelectMode} />
         {isLoading && (
           <div className="flex flex-col gap-2 px-2 py-4">
             {[1, 2, 3].map((i) => (
