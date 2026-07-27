@@ -57,6 +57,10 @@ import {
   NOODLE_PERSONA_IDENTITY_INSTRUCTION,
 } from "../../packages/server/src/services/noodle/noodle-prompt.js";
 import { buildPartyRecruitCardPrompt } from "../../packages/server/src/services/game/gm-prompts.js";
+import {
+  normalizeCyoaChoiceOutput,
+  normalizeCyoaDialogueQuotes,
+} from "../../packages/server/src/services/agents/cyoa-choice-normalization.js";
 
 const personaA = {
   id: "noodle-account-a",
@@ -507,6 +511,7 @@ import {
   buildRuntimeAgentSectionEligibleTypesForTest,
   clearUnusedRuntimeAgentSectionsForTest,
   makeRuntimeAgentSectionTokens,
+  splitRuntimeHandledAgentInjectionsForTest,
 } from "../../packages/server/src/services/generation/runtime-agent-sections.js";
 import {
   getTextRewritePendingState,
@@ -528,6 +533,7 @@ import {
   appendSeparateAgentInjectionMessage,
   collectLatestTrackerCharacterHistory,
   computeSummaryHideIds,
+  formatSeparateAgentInjection,
   getMessageHiddenFromAICharacterIds,
   injectIntoOutputFormatOrLastUser,
   isMessageHiddenFromAIForCharacter,
@@ -699,6 +705,65 @@ const keywordOptions = {
 };
 
 const cases: RegressionCase[] = [
+  {
+    name: "CYOA accepts escaped double quotes and normalizes single-quoted dialogue",
+    async run() {
+      assert.equal(
+        normalizeCyoaDialogueQuotes(`'Hold still,' I whisper. I can't leave the captain's key behind.`),
+        `"Hold still," I whisper. I can't leave the captain's key behind.`,
+      );
+      assert.equal(
+        normalizeCyoaDialogueQuotes(`I answer, "Already correct."`),
+        `I answer, "Already correct."`,
+        "double quotes decoded from valid JSON should remain unchanged",
+      );
+      assert.equal(
+        normalizeCyoaDialogueQuotes(`I can't abandon James' coat.`),
+        `I can't abandon James' coat.`,
+        "contractions and possessives are apostrophes, not dialogue delimiters",
+      );
+      assert.deepEqual(
+        normalizeCyoaChoiceOutput({
+          choices: [
+            { label: "Reassure her", text: `'You're safe,' I promise.` },
+            { label: "Ask directly", text: `I ask, "What happened?"` },
+          ],
+        }),
+        {
+          choices: [
+            { label: "Reassure her", text: `"You're safe," I promise.` },
+            { label: "Ask directly", text: `I ask, "What happened?"` },
+          ],
+        },
+      );
+
+      const providerResponse = JSON.stringify({
+        choices: [
+          { label: "Reassure her", text: `'You're safe,' I promise.` },
+          { label: "Ask directly", text: `I ask, "What happened?"` },
+        ],
+      });
+      const { provider } = makeCapturingProvider(providerResponse);
+      const result = await executeAgent(
+        makeRegressionAgentConfig({
+          id: "builtin:cyoa",
+          type: "cyoa",
+          name: "CYOA Choices",
+          promptTemplate: "Return CYOA choices.",
+        }) as any,
+        makeRegressionAgentContext(),
+        provider as any,
+        "regression-model",
+      );
+
+      assert.equal(result.success, true);
+      assert.deepEqual(
+        result.data,
+        normalizeCyoaChoiceOutput(JSON.parse(providerResponse)),
+        "the shared agent-result boundary should normalize CYOA output before persistence and display",
+      );
+    },
+  },
   {
     name: "/continue can append directly without inserting a newline",
     run: () => {
@@ -1249,6 +1314,227 @@ const cases: RegressionCase[] = [
         assert.equal(payload.indexedTrackCount, allTrackUris.length);
         assert.equal(payload.recentAvoidedCount, recentTrackUris.length);
         assert.deepEqual(new Set((payload.tracks ?? []).map((track) => track.uri)), new Set(freshTrackUris));
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+    },
+  },
+  {
+    name: "Spotify repeats a Music DJ track selection as one context",
+    async run() {
+      const originalFetch = globalThis.fetch;
+      const selectedUris = [
+        "spotify:track:AAAAAAAAAAAAAAAAAAAAAA",
+        "spotify:track:BBBBBBBBBBBBBBBBBBBBBB",
+        "spotify:track:CCCCCCCCCCCCCCCCCCCCCC",
+      ];
+      const playbackBodies: Array<{ uris?: string[]; position_ms?: number }> = [];
+      const queuedUris: string[] = [];
+      const repeatStates: string[] = [];
+      let activeUri = "spotify:track:ZZZZZZZZZZZZZZZZZZZZZZ";
+      let repeatState = "track";
+
+      globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+        const url = new URL(typeof input === "string" || input instanceof URL ? input : input.url);
+        const method = init?.method ?? "GET";
+        if (url.pathname === "/v1/me/player" && method === "GET") {
+          return new Response(
+            JSON.stringify({
+              is_playing: true,
+              repeat_state: repeatState,
+              item: { uri: activeUri },
+              device: { id: "regression-device", name: "Regression device", type: "computer" },
+            }),
+            { status: 200, headers: { "Content-Type": "application/json" } },
+          );
+        }
+        if (url.pathname === "/v1/me/player/play" && method === "PUT") {
+          const body = JSON.parse(String(init?.body ?? "{}")) as { uris?: string[]; position_ms?: number };
+          playbackBodies.push(body);
+          activeUri = body.uris?.[0] ?? activeUri;
+          return new Response(null, { status: 204 });
+        }
+        if (url.pathname === "/v1/me/player/repeat" && method === "PUT") {
+          repeatState = url.searchParams.get("state") ?? "off";
+          repeatStates.push(repeatState);
+          return new Response(null, { status: 204 });
+        }
+        if (url.pathname === "/v1/me/player/queue" && method === "POST") {
+          queuedUris.push(url.searchParams.get("uri") ?? "");
+          return new Response(null, { status: 204 });
+        }
+        throw new Error(`Unexpected Spotify regression request: ${method} ${url.pathname}`);
+      }) as typeof fetch;
+
+      try {
+        const results = await executeToolCalls(
+          [
+            {
+              id: "call_spotify_repeat_context",
+              type: "function",
+              function: {
+                name: "spotify_play",
+                arguments: JSON.stringify({ uris: selectedUris, reason: "Regression selection" }),
+              },
+            },
+          ],
+          {
+            spotify: { accessToken: "regression-token" },
+            spotifyRepeatAfterPlay: "track",
+          },
+        );
+
+        assert.equal(results[0]?.success, true);
+        const payload = JSON.parse(results[0]!.result) as {
+          repeat?: string;
+          repeatState?: string;
+          queued?: number;
+        };
+        assert.deepEqual(playbackBodies[0]?.uris, selectedUris);
+        assert.deepEqual(queuedUris, [], "repeatable Music DJ selections must not use Spotify's disposable queue");
+        assert.equal(repeatStates.at(-1), "context");
+        assert.equal(payload.repeat, "context");
+        assert.equal(payload.repeatState, "context");
+        assert.equal(payload.queued, selectedUris.length);
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+    },
+  },
+  {
+    name: "Spotify keeps repeat-track for a single Music DJ song",
+    async run() {
+      const originalFetch = globalThis.fetch;
+      const selectedUri = "spotify:track:DDDDDDDDDDDDDDDDDDDDDD";
+      const playbackBodies: Array<{ uris?: string[] }> = [];
+      const repeatStates: string[] = [];
+      let activeUri = "spotify:track:ZZZZZZZZZZZZZZZZZZZZZZ";
+      let repeatState = "track";
+
+      globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+        const url = new URL(typeof input === "string" || input instanceof URL ? input : input.url);
+        const method = init?.method ?? "GET";
+        if (url.pathname === "/v1/me/player" && method === "GET") {
+          return new Response(
+            JSON.stringify({
+              is_playing: true,
+              repeat_state: repeatState,
+              item: { uri: activeUri },
+              device: { id: "regression-device", name: "Regression device", type: "computer" },
+            }),
+            { status: 200, headers: { "Content-Type": "application/json" } },
+          );
+        }
+        if (url.pathname === "/v1/me/player/play" && method === "PUT") {
+          const body = JSON.parse(String(init?.body ?? "{}")) as { uris?: string[] };
+          playbackBodies.push(body);
+          activeUri = body.uris?.[0] ?? activeUri;
+          return new Response(null, { status: 204 });
+        }
+        if (url.pathname === "/v1/me/player/repeat" && method === "PUT") {
+          repeatState = url.searchParams.get("state") ?? "off";
+          repeatStates.push(repeatState);
+          return new Response(null, { status: 204 });
+        }
+        throw new Error(`Unexpected Spotify regression request: ${method} ${url.pathname}`);
+      }) as typeof fetch;
+
+      try {
+        const results = await executeToolCalls(
+          [
+            {
+              id: "call_spotify_repeat_track",
+              type: "function",
+              function: {
+                name: "spotify_play",
+                arguments: JSON.stringify({ uri: selectedUri, reason: "Regression single" }),
+              },
+            },
+          ],
+          {
+            spotify: { accessToken: "regression-token" },
+            spotifyRepeatAfterPlay: "track",
+          },
+        );
+
+        assert.equal(results[0]?.success, true);
+        const payload = JSON.parse(results[0]!.result) as { repeat?: string; repeatState?: string };
+        assert.deepEqual(playbackBodies[0]?.uris, [selectedUri]);
+        assert.deepEqual(repeatStates, ["off", "track"]);
+        assert.equal(payload.repeat, "track");
+        assert.equal(payload.repeatState, "track");
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+    },
+  },
+  {
+    name: "Spotify does not report a repeated Music DJ selection before context repeat is confirmed",
+    async run() {
+      const originalFetch = globalThis.fetch;
+      const selectedUris = [
+        "spotify:track:EEEEEEEEEEEEEEEEEEEEEE",
+        "spotify:track:FFFFFFFFFFFFFFFFFFFFFF",
+      ];
+      let activeUri = "spotify:track:ZZZZZZZZZZZZZZZZZZZZZZ";
+      let repeatRequests = 0;
+
+      globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+        const url = new URL(typeof input === "string" || input instanceof URL ? input : input.url);
+        const method = init?.method ?? "GET";
+        if (url.pathname === "/v1/me/player" && method === "GET") {
+          return new Response(
+            JSON.stringify({
+              is_playing: true,
+              repeat_state: "off",
+              item: { uri: activeUri },
+              device: { id: "regression-device", name: "Regression device", type: "computer" },
+            }),
+            { status: 200, headers: { "Content-Type": "application/json" } },
+          );
+        }
+        if (url.pathname === "/v1/me/player/play" && method === "PUT") {
+          const body = JSON.parse(String(init?.body ?? "{}")) as { uris?: string[] };
+          activeUri = body.uris?.[0] ?? activeUri;
+          return new Response(null, { status: 204 });
+        }
+        if (url.pathname === "/v1/me/player/repeat" && method === "PUT") {
+          repeatRequests++;
+          return new Response(null, { status: 204 });
+        }
+        throw new Error(`Unexpected Spotify regression request: ${method} ${url.pathname}`);
+      }) as typeof fetch;
+
+      try {
+        const results = await executeToolCalls(
+          [
+            {
+              id: "call_spotify_repeat_unconfirmed",
+              type: "function",
+              function: {
+                name: "spotify_play",
+                arguments: JSON.stringify({ uris: selectedUris, reason: "Unconfirmed repeat regression" }),
+              },
+            },
+          ],
+          {
+            spotify: { accessToken: "regression-token" },
+            spotifyRepeatAfterPlay: "context",
+          },
+        );
+
+        assert.equal(results[0]?.success, true);
+        const payload = JSON.parse(results[0]!.result) as {
+          applied?: boolean;
+          playbackPending?: boolean;
+          verification?: string;
+          repeatState?: string;
+        };
+        assert.equal(repeatRequests, 4, "Spotify repeat should be retried while playback reports it as off");
+        assert.equal(payload.applied, true);
+        assert.equal(payload.playbackPending, true);
+        assert.equal(payload.verification, "pending");
+        assert.equal(payload.repeatState, "off");
       } finally {
         globalThis.fetch = originalFetch;
       }
@@ -2037,6 +2323,27 @@ const cases: RegressionCase[] = [
     },
   },
   {
+    name: "regex editor examples use direct-entry escaping that works in Live Test",
+    run() {
+      const locale = JSON.parse(
+        readFileSync(
+          new URL("../../packages/client/src/localization/locales/en.json", import.meta.url),
+          "utf8",
+        ),
+      ) as Record<string, string>;
+      const editorSource = readFileSync(
+        new URL("../../packages/client/src/components/agents/RegexScriptEditor.tsx", import.meta.url),
+        "utf8",
+      );
+      const oocPattern = locale["ui.agents.regexscripteditor.ooc"];
+
+      assert.equal(oocPattern, String.raw`\(OOC:.*?\)`);
+      assert.equal(applyRegexReplacement("(OOC: Hey.)", new RegExp(oocPattern!, "gi"), ""), "");
+      assert.ok(editorSource.includes(String.raw`{"\\(OOC:.*?\\)"}`));
+      assert.ok(!editorSource.includes(String.raw`{"\\\\(OOC:.*?\\\\)"}`));
+    },
+  },
+  {
     name: "provider concurrency failures remain visible in generation and agent messages",
     run() {
       const providerMessage = "Provider concurrency limit exceeded for this account";
@@ -2207,6 +2514,16 @@ const cases: RegressionCase[] = [
       assert.match(routeSource, /storyboardAgentVideoConnectionId/u);
       assert.match(routeSource, /meta\.storyboardAgentIncludeCharacterAppearance !== false/u);
       assert.match(routeSource, /meta\.storyboardAgentUseAvatarReferences !== false/u);
+      assert.match(
+        routeSource,
+        /setupConfig\.enableSpriteGeneration \? \[BUILT_IN_AGENT_IDS\.ILLUSTRATOR\] : \[\]/u,
+        "Game setup must activate Illustrator when visual generation is enabled",
+      );
+      assert.match(
+        routeSource,
+        /setupConfig\.gameStoryboardsEnabled \? \[STORYBOARD_AGENT_ID\] : \[\]/u,
+        "Game setup must activate Storyboard when storyboard generation is enabled",
+      );
 
       assert.deepEqual(
         {
@@ -5755,6 +6072,40 @@ Use HTML sparingly and diegetically. Do not replace normal prose/dialogue unless
       clearUnusedRuntimeAgentSectionsForTest(messages, [["knowledge-router", tokens]]);
 
       assert.equal(messages.length, 0);
+    },
+  },
+  {
+    name: "assembled presets own unmatched runtime agent placement",
+    run() {
+      const tokens = makeRuntimeAgentSectionTokens("long-term-memory", "placement");
+      const markerMessages = [{ content: tokens.placeholder }];
+      const marked = splitRuntimeHandledAgentInjectionsForTest(
+        markerMessages,
+        new Map([["long-term-memory", tokens]]),
+        [{ agentType: "long-term-memory", text: "MEMORY" }],
+        { omitUnmatched: true },
+      );
+      assert.deepEqual(marked.fallbackInjections, []);
+      assert.deepEqual(marked.omittedInjections, []);
+      assert.equal(markerMessages[0]?.content, "MEMORY");
+
+      const omitted = splitRuntimeHandledAgentInjectionsForTest(
+        [{ content: "preset" }],
+        new Map([["long-term-memory", tokens]]),
+        [{ agentType: "long-term-memory", text: "MEMORY" }],
+        { omitUnmatched: true },
+      );
+      assert.equal(omitted.omittedInjections.length, 1);
+      assert.equal(
+        formatSeparateAgentInjection("long-term-memory", "MEMORY", "xml"),
+        "<long_term_memory>\nMEMORY\n</long_term_memory>",
+      );
+
+      const fallback = splitRuntimeHandledAgentInjectionsForTest([{ content: "conversation" }], new Map(), [
+        { agentType: "long-term-memory", text: "MEMORY" },
+      ]);
+      assert.equal(fallback.fallbackInjections.length, 1);
+      assert.deepEqual(fallback.omittedInjections, []);
     },
   },
   {

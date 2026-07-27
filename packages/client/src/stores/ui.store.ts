@@ -74,6 +74,10 @@ export type TrackerDataPanelSection = "world" | "persona" | "characters" | "ques
 export type TrackerPanelCollapsedSections = Partial<Record<TrackerDataPanelSection, boolean>>;
 export type TrackerPanelSectionOrder = TrackerDataPanelSection[];
 export type EchoChamberSide = "top-left" | "top-right" | "bottom-left" | "bottom-right";
+export interface EchoChamberSize {
+  width: number;
+  height: number;
+}
 export type UserStatus = "active" | "idle" | "dnd" | "invisible";
 export type RoleplayAvatarStyle = "none" | "circles" | "rectangles" | "panel";
 export type GameDialogueDisplayMode = "classic" | "stacked";
@@ -122,6 +126,29 @@ export const TRACKER_PANEL_SIZE_PROFILE_WIDTHS: Record<TrackerPanelSizeProfile, 
   standard: 340,
   expanded: 420,
 };
+
+function normalizeEchoChamberSize(value: unknown): EchoChamberSize | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const candidate = value as { width?: unknown; height?: unknown };
+  const width = Number(candidate.width);
+  const height = Number(candidate.height);
+  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) return null;
+  return {
+    width: Math.min(10_000, Math.round(width)),
+    height: Math.min(10_000, Math.round(height)),
+  };
+}
+
+function normalizeEchoChamberSizes(value: unknown): Record<string, EchoChamberSize> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const normalized: Record<string, EchoChamberSize> = {};
+  for (const [chatId, size] of Object.entries(value)) {
+    if (!chatId.trim()) continue;
+    const nextSize = normalizeEchoChamberSize(size);
+    if (nextSize) normalized[chatId] = nextSize;
+  }
+  return normalized;
+}
 export const TRACKER_PANEL_WIDTH_DEFAULT = TRACKER_PANEL_SIZE_PROFILE_WIDTHS.standard;
 export const TRACKER_PANEL_WIDTH_MIN = TRACKER_PANEL_SIZE_PROFILE_WIDTHS.compact;
 export const TRACKER_PANEL_WIDTH_MAX = TRACKER_PANEL_SIZE_PROFILE_WIDTHS.expanded;
@@ -753,6 +780,7 @@ interface UIState {
   // ── EchoChamber ──
   echoChamberOpen: boolean;
   echoChamberSide: EchoChamberSide;
+  echoChamberSizeByChatId: Record<string, EchoChamberSize>;
 
   // ── User Status ──
   /** The user's manually chosen status. Persisted. */
@@ -998,6 +1026,7 @@ interface UIState {
   dismissLinkApiBanner: () => void;
   toggleEchoChamber: () => void;
   setEchoChamberSide: (side: EchoChamberSide) => void;
+  setEchoChamberSizeForChat: (chatId: string, size: EchoChamberSize) => void;
   setUserStatus: (status: UserStatus) => void;
   setUserStatusManual: (status: UserStatus) => void;
   setUserActivity: (activity: string) => void;
@@ -1381,6 +1410,7 @@ export const useUIStore = create<UIState>()(
       linkApiBannerDismissed: false,
       echoChamberOpen: true,
       echoChamberSide: "bottom-right" as EchoChamberSide,
+      echoChamberSizeByChatId: {},
       userStatusManual: "active" as const,
       userStatus: "active" as UserStatus,
       userActivity: "",
@@ -2257,6 +2287,17 @@ export const useUIStore = create<UIState>()(
       dismissLinkApiBanner: () => set({ linkApiBannerDismissed: true }),
       toggleEchoChamber: () => set((s) => ({ echoChamberOpen: !s.echoChamberOpen })),
       setEchoChamberSide: (side) => set({ echoChamberSide: side }),
+      setEchoChamberSizeForChat: (chatId, size) => {
+        const normalizedChatId = chatId.trim();
+        const normalizedSize = normalizeEchoChamberSize(size);
+        if (!normalizedChatId || !normalizedSize) return;
+        set((state) => ({
+          echoChamberSizeByChatId: {
+            ...state.echoChamberSizeByChatId,
+            [normalizedChatId]: normalizedSize,
+          },
+        }));
+      },
       setUserStatus: (status) => set({ userStatus: status }),
       setUserStatusManual: (status) => set({ userStatusManual: status, userStatus: status }),
       setUserActivity: (activity) => set({ userActivity: activity.slice(0, USER_ACTIVITY_MAX_LENGTH) }),
@@ -2274,7 +2315,7 @@ export const useUIStore = create<UIState>()(
     }),
     {
       name: "marinara-engine-ui",
-      version: 85,
+      version: 87,
       // Debounce localStorage writes to avoid sync I/O on every state change
       storage: createJSONStorage(() => {
         let timer: ReturnType<typeof setTimeout> | null = null;
@@ -2848,6 +2889,31 @@ export const useUIStore = create<UIState>()(
           if (persisted.imageGameWidth === undefined) persisted.imageGameWidth = 1280;
           if (persisted.imageGameHeight === undefined) persisted.imageGameHeight = 720;
         }
+        // v85 → v86: navigation mode "private" became "noodler". A user who was on a NoodleR
+        // screen at upgrade time rehydrates the old mode, which no longer matches the union —
+        // it falls through to NoodleHome and breaks the Noodle screen. Every old variant has a
+        // structurally equivalent renamed state, so translate rather than reset to the hub.
+        if (version <= 85 && persisted.noodleNavigation?.mode === "private") {
+          const nav = persisted.noodleNavigation;
+          if (nav.view === "profiles") {
+            persisted.noodleNavigation = { mode: "noodler", view: "profiles" };
+          } else if (nav.view === "profile" && typeof nav.accountId === "string") {
+            persisted.noodleNavigation = { mode: "noodler", view: "profile", accountId: nav.accountId };
+          } else if (nav.view === "create-profile" && typeof nav.publicAccountId === "string") {
+            persisted.noodleNavigation = {
+              mode: "noodler",
+              view: "create-profile",
+              noodleAccountId: nav.publicAccountId,
+            };
+          } else {
+            persisted.noodleNavigation = { mode: "noodler", view: "hub" };
+          }
+        }
+        // v86 -> v87: remember Echo Chamber dimensions independently for each chat.
+        if (version <= 86) {
+          persisted.echoChamberSizeByChatId = {};
+        }
+        persisted.echoChamberSizeByChatId = normalizeEchoChamberSizes(persisted.echoChamberSizeByChatId);
         // v84 -> v85: keep the historical blank-line behavior for /continue by default.
         if (version <= 84 && persisted.continueAddsNewline === undefined) {
           persisted.continueAddsNewline = true;
@@ -2886,7 +2952,7 @@ export const useUIStore = create<UIState>()(
         noodleOpen: state.noodleOpen,
         noodleSelectedPersonaId: state.noodleSelectedPersonaId,
         noodleNavigation:
-          state.noodleNavigation.mode === "verification" ? { mode: "private", view: "hub" } : state.noodleNavigation,
+          state.noodleNavigation.mode === "verification" ? { mode: "noodler", view: "hub" } : state.noodleNavigation,
         characterLibraryOpen: state.characterLibraryOpen,
         cardLibraryKind: state.cardLibraryKind,
         agentCatalogOpen: state.agentCatalogOpen,
@@ -3020,6 +3086,7 @@ export const useUIStore = create<UIState>()(
         linkApiBannerDismissed: state.linkApiBannerDismissed,
         echoChamberOpen: state.echoChamberOpen,
         echoChamberSide: state.echoChamberSide,
+        echoChamberSizeByChatId: state.echoChamberSizeByChatId,
         userStatusManual: state.userStatusManual,
         userStatus: state.userStatus,
         userActivity: state.userActivity,

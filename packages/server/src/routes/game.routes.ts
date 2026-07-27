@@ -146,6 +146,8 @@ import {
   normalizeRpgStatPools,
   normalizeIllustratorImagesPerGeneration,
   resolveGameSetupArtStylePrompt,
+  BUILT_IN_AGENT_IDS,
+  STORYBOARD_AGENT_ID,
   SPOTIFY_RECENT_TRACK_HISTORY_LIMIT,
   createTacticalCombat,
   applyAction as applyTacticalAction,
@@ -6167,6 +6169,8 @@ export async function gameRoutes(app: FastifyInstance) {
     const setupActiveAgentIds = [
       ...(setupConfig.enableSpotifyDj ? ["spotify"] : []),
       ...(setupConfig.gameWorldMapMode === "hierarchical" ? [HIERARCHICAL_MAPS_AGENT_ID] : []),
+      ...(setupConfig.enableSpriteGeneration ? [BUILT_IN_AGENT_IDS.ILLUSTRATOR] : []),
+      ...(setupConfig.gameStoryboardsEnabled ? [STORYBOARD_AGENT_ID] : []),
     ];
     const spotifySourceType = setupConfig.spotifySourceType ?? "liked";
     const gameChatParameters = mergeStoredGenerationParameters(
