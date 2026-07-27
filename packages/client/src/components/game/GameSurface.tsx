@@ -6338,13 +6338,18 @@ function GameSurfaceComponent({
   const gameSetupResetRef = useRef(gameSetup.reset);
   const startGameResetRef = useRef(startGame.reset);
   const startSessionResetRef = useRef(startSession.reset);
-  const pendingSetupMapDraftRef = useRef<{
-    size: SpatialMapDraftSize;
-    groundingMode: SpatialMapGroundingMode;
-    sourceLorebookIds: string[];
-    instructions?: string;
-    connectionId?: string;
-  } | null>(null);
+  const pendingSetupMapPlanRef = useRef<
+    | { mode: "manual" }
+    | {
+        mode: "ai";
+        size: SpatialMapDraftSize;
+        groundingMode: SpatialMapGroundingMode;
+        sourceLorebookIds: string[];
+        instructions?: string;
+        connectionId?: string;
+      }
+    | null
+  >(null);
   createGameResetRef.current = createGame.reset;
   gameSetupResetRef.current = gameSetup.reset;
   startGameResetRef.current = startGame.reset;
@@ -6357,12 +6362,17 @@ function GameSurfaceComponent({
     startSessionResetRef.current();
   }, [activeChatId]);
 
-  const completePostSetupMapDraft = useCallback(
+  const completePostSetupMapPlan = useCallback(
     async (chatId: string) => {
-      const request = pendingSetupMapDraftRef.current;
-      pendingSetupMapDraftRef.current = null;
-      if (!request) {
+      const plan = pendingSetupMapPlanRef.current;
+      pendingSetupMapPlanRef.current = null;
+      if (!plan) {
         useGameModeStore.getState().setSetupActive(false);
+        return;
+      }
+      if (plan.mode === "manual") {
+        useGameModeStore.getState().setSetupActive(false);
+        useUIStore.getState().openSpatialMapDetail(chatId);
         return;
       }
 
@@ -6370,11 +6380,11 @@ function GameSurfaceComponent({
         const result = await generateSetupMapDraft.mutateAsync({
           chatId,
           operation: "create",
-          size: request.size,
-          groundingMode: request.groundingMode,
-          sourceLorebookIds: request.sourceLorebookIds,
-          instructions: request.instructions,
-          connectionId: request.connectionId,
+          size: plan.size,
+          groundingMode: plan.groundingMode,
+          sourceLorebookIds: plan.sourceLorebookIds,
+          instructions: plan.instructions,
+          connectionId: plan.connectionId,
           debugMode: useUIStore.getState().debugMode,
         });
         useGameModeStore.getState().setSetupActive(false);
@@ -6557,8 +6567,8 @@ function GameSurfaceComponent({
       }
 
       if (request.kind === "game_setup") {
-        if (pendingSetupMapDraftRef.current) {
-          void completePostSetupMapDraft(targetChatId);
+        if (pendingSetupMapPlanRef.current) {
+          void completePostSetupMapPlan(targetChatId);
         } else {
           useGameModeStore.getState().setSetupActive(false);
         }
@@ -6568,7 +6578,7 @@ function GameSurfaceComponent({
       }
       setJsonRepairRequest(null);
     },
-    [activeChatId, completePostSetupMapDraft, gameId, queryClient],
+    [activeChatId, completePostSetupMapPlan, gameId, queryClient],
   );
 
   const handleNpcPortraitClick = useCallback(
@@ -9797,31 +9807,29 @@ function GameSurfaceComponent({
           }
         >
           <GameSetupWizard
-            onComplete={(config, preferences, conns, wizardGameName, mapDraft) => {
+            onComplete={(config, preferences, conns, wizardGameName, mapPlan) => {
               const runSetup = (chatId: string) => {
-                pendingSetupMapDraftRef.current = mapDraft
-                  ? {
-                      size: mapDraft.size,
-                      groundingMode: mapDraft.groundingMode,
-                      sourceLorebookIds: mapDraft.sourceLorebookIds,
-                      instructions: mapDraft.instructions,
-                      connectionId: conns.gmConnectionId,
-                    }
-                  : null;
+                pendingSetupMapPlanRef.current =
+                  mapPlan?.mode === "ai"
+                    ? {
+                        ...mapPlan,
+                        connectionId: conns.gmConnectionId,
+                      }
+                    : (mapPlan ?? null);
                 gameSetup.mutate(
                   {
                     chatId,
                     connectionId: conns.gmConnectionId,
                     preferences,
                     promptPresetId: config.promptPresetId ?? null,
-                    keepSetupActive: Boolean(mapDraft),
+                    keepSetupActive: Boolean(mapPlan),
                   },
                   {
                     onSuccess: () => {
-                      if (mapDraft) void completePostSetupMapDraft(chatId);
+                      if (mapPlan) void completePostSetupMapPlan(chatId);
                     },
                     onError: (error) => {
-                      if (!handleJsonRepairError(error)) pendingSetupMapDraftRef.current = null;
+                      if (!handleJsonRepairError(error)) pendingSetupMapPlanRef.current = null;
                     },
                   },
                 );

@@ -6153,6 +6153,17 @@ test("Game setup only shows features owned by installed agents", async ({ page, 
     await expect(dialog.getByRole("heading", { name: "Features", exact: true })).toBeVisible();
     await dialog.getByRole("button", { name: /^Enable Agents\b/u }).click();
     await expect(dialog.getByText("Hierarchical world map", { exact: true })).toBeVisible();
+    const manualMapButton = dialog.getByRole("button", { name: /^Create manually\b/u });
+    const aiMapButton = dialog.getByRole("button", { name: /^Draft with AI\b/u });
+    await expect(manualMapButton).toBeVisible();
+    await expect(manualMapButton).toHaveAttribute("aria-pressed", "false");
+    await manualMapButton.click();
+    await expect(manualMapButton).toHaveAttribute("aria-pressed", "true");
+    await expect(aiMapButton).toHaveAttribute("aria-pressed", "false");
+    await aiMapButton.click();
+    await expect(aiMapButton).toHaveAttribute("aria-pressed", "true");
+    await expect(manualMapButton).toHaveAttribute("aria-pressed", "false");
+    await expect(dialog.getByText("Map size", { exact: true })).toBeVisible();
     expect(errors).toEqual([]);
   } finally {
     await request.delete(`/api/chats/${chat.id}`, { timeout: 10_000 });
