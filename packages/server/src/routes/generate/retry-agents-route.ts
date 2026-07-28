@@ -1049,7 +1049,6 @@ async function buildRetryAgentContext(args: {
       const { join, extname } = await import("path");
       const availableBackgrounds: Array<{
         filename: string;
-        originalName?: string | null;
         tags: string[];
         source?: "user" | "game_asset";
       }> = [];
@@ -1057,7 +1056,7 @@ async function buildRetryAgentContext(args: {
       if (existsSync(bgDir)) {
         const exts = new Set([".jpg", ".jpeg", ".png", ".gif", ".webp", ".avif"]);
         const files = readdirSync(bgDir).filter((f: string) => exts.has(extname(f).toLowerCase()));
-        let meta: Record<string, { originalName?: string; tags: string[] }> = {};
+        let meta: Record<string, { tags: string[] }> = {};
         const metaPath = join(bgDir, "meta.json");
         if (existsSync(metaPath)) {
           try {
@@ -1069,7 +1068,6 @@ async function buildRetryAgentContext(args: {
         availableBackgrounds.push(
           ...files.map((f: string) => ({
             filename: f,
-            originalName: meta[f]?.originalName ?? null,
             tags: meta[f]?.tags ?? [],
             source: "user" as const,
           })),
@@ -1080,7 +1078,6 @@ async function buildRetryAgentContext(args: {
           .filter((entry) => !entry.path.startsWith("__user_bg__/"))
           .map((entry) => ({
             filename: `gameAsset:${entry.path}`,
-            originalName: entry.tag,
             tags: entry.subcategory ? [entry.subcategory] : [],
             source: "game_asset" as const,
           })),
@@ -2773,11 +2770,7 @@ async function applyRetryResultEffects(args: {
         const editNeededValue = rewriteData.editNeeded;
         const strictEditNeeded = isBuiltInTextRewriteAgentType(result.agentType);
         const rewriteAllowed =
-          editNeededValue === false
-            ? false
-            : strictEditNeeded
-              ? explicitlyRequestsTextRewrite(editNeededValue)
-              : true;
+          editNeededValue === false ? false : strictEditNeeded ? explicitlyRequestsTextRewrite(editNeededValue) : true;
         const droppedProtectedMarkup =
           strictEditNeeded && textRewriteDropsProtectedMarkup(currentResponseForRewrite, editedText);
         if (droppedProtectedMarkup) {
@@ -3270,8 +3263,7 @@ async function applyRetryResultEffects(args: {
             const spatialLocationReferenceImage = await resolveSpatialLocationReferenceImage({
               db: app.db,
               chatId,
-              projection:
-                retryOwnerSpatialProjection?.ownerMode === "roleplay" ? retryOwnerSpatialProjection : null,
+              projection: retryOwnerSpatialProjection?.ownerMode === "roleplay" ? retryOwnerSpatialProjection : null,
             });
             let referenceImages: string[] | undefined;
             const referenceResolution = await resolveIllustratorCharacterReferences({

@@ -527,14 +527,10 @@ test("Function Calling can require the first tool round per chat", async ({ page
     await expect(forceToolCall).toBeVisible();
     await expect(forceToolCall).not.toBeChecked();
     await section.getByText("Force To Call Tool", { exact: true }).click();
-    await expect
-      .poll(async () => (await readMetadata()).forceToolCall)
-      .toBe(true);
+    await expect.poll(async () => (await readMetadata()).forceToolCall).toBe(true);
 
     await section.getByText("Force To Call Tool", { exact: true }).click();
-    await expect
-      .poll(async () => (await readMetadata()).forceToolCall)
-      .toBe(false);
+    await expect.poll(async () => (await readMetadata()).forceToolCall).toBe(false);
   } finally {
     await request.delete(`/api/chats/${chat.id}`).catch(() => undefined);
   }
@@ -2545,7 +2541,8 @@ test("sent text stays cleared and the first message edit persists after stopped 
     await expect
       .poll(async () =>
         (await readMessages()).some(
-          (message) => message.role === "user" && message.content === "Sent text must stay cleared when stopped before the reply",
+          (message) =>
+            message.role === "user" && message.content === "Sent text must stay cleared when stopped before the reply",
         ),
       )
       .toBe(true);
@@ -2557,7 +2554,9 @@ test("sent text stays cleared and the first message edit persists after stopped 
     await expect(page.locator(`[data-message-id="${secondMessage!.id}"]`)).toContainText(
       "Edited on the first save with cleared draft",
     );
-    await expect(page.getByText("Sent text must stay cleared when stopped before the reply", { exact: true })).toBeVisible();
+    await expect(
+      page.getByText("Sent text must stay cleared when stopped before the reply", { exact: true }),
+    ).toBeVisible();
   } finally {
     for (const response of openProviderResponses) response.end();
     await Promise.allSettled([
@@ -11163,7 +11162,7 @@ test("mobile Game keeps CYOA usable above four HUD widgets", async ({ page, requ
   }
 });
 
-test("Background rows keep long tag lists collapsed without crowding desktop controls", async ({ page }, testInfo) => {
+test("Background cards keep names readable and load thumbnails", async ({ page }, testInfo) => {
   await page.route("**/api/backgrounds", async (route) => {
     await route.fulfill({
       status: 200,
@@ -11173,7 +11172,6 @@ test("Background rows keep long tag lists collapsed without crowding desktop con
           id: "user:collapsible-background-tags.png",
           filename: "collapsible-background-tags.png",
           url: "/api/backgrounds/file/collapsible-background-tags.png",
-          originalName: "Collapsible background tags",
           tags: ["fontaine", "rainy night", "quarantine berth", "warm interior"],
           source: "user",
           createdAt: "2026-07-27T00:00:00.000Z",
@@ -11188,51 +11186,55 @@ test("Background rows keep long tag lists collapsed without crowding desktop con
   await page.getByRole("tab", { name: "Appearance" }).click();
   await page.getByPlaceholder("Search settings").fill("Backgrounds");
   await page.getByRole("button", { name: /Backgrounds Section/ }).click();
+  await page.getByRole("button", { name: "Browse library" }).click();
+  await expect(page.getByRole("dialog", { name: "Background Library" })).toBeVisible();
 
-  const backgroundRow = page.locator('[data-background-id="user:collapsible-background-tags.png"]');
-  const backgroundName = backgroundRow.locator("[data-background-name]");
-  const backgroundTagsToggle = backgroundRow.locator("[data-background-tags-toggle]");
-  await expect(backgroundTagsToggle).toHaveAttribute("aria-expanded", "false");
-  await expect(backgroundRow.getByText("quarantine berth", { exact: true })).toHaveCount(0);
+  const card = page.locator('[data-background-id="user:collapsible-background-tags.png"]');
+  await expect(card).toBeVisible();
+  await expect(card.getByText("quarantine berth", { exact: true })).toBeVisible();
+  // Cards request the cached thumbnail, never the full-size original.
+  await expect(card.locator("img")).toHaveAttribute("src", /\?w=320$/);
+  await expect(card.locator("img")).toHaveAttribute("loading", "lazy");
 
   if (!testInfo.project.name.includes("mobile")) {
-    await backgroundTagsToggle.focus();
-    const actionBar = backgroundRow.locator("[data-background-actions]");
-    const deleteButton = backgroundRow.getByTitle("Delete background");
-    const favoriteButton = backgroundRow.locator("[data-background-default-toggle]");
-    const [nameBox, tagToggleBox, actionBarBox, deleteColor, favoriteColor] = await Promise.all([
-      backgroundName.boundingBox(),
-      backgroundTagsToggle.boundingBox(),
-      actionBar.boundingBox(),
-      deleteButton.evaluate((element) => getComputedStyle(element).color),
-      favoriteButton.evaluate((element) => getComputedStyle(element).color),
+    await card.hover();
+    const [nameBox, actionBox] = await Promise.all([
+      card.locator("[data-background-name]").boundingBox(),
+      card.locator("[data-background-actions]").boundingBox(),
     ]);
     expect(nameBox).not.toBeNull();
-    expect(tagToggleBox).not.toBeNull();
-    expect(actionBarBox).not.toBeNull();
-    expect(nameBox!.width).toBeGreaterThanOrEqual(80);
-    expect(tagToggleBox!.height).toBeLessThanOrEqual(22);
-    expect(actionBarBox!.width).toBeLessThanOrEqual(55);
-    expect(deleteColor).toBe(favoriteColor);
+    expect(actionBox).not.toBeNull();
+    expect(nameBox!.width).toBeGreaterThanOrEqual(60);
 
-    const editTagsButton = backgroundRow.locator("[data-background-edit-tags]");
-    await editTagsButton.click();
-    const tagInputBox = await backgroundRow.locator("[data-background-tag-input]").boundingBox();
+    await card.locator("[data-background-edit-tags]").click();
+    const tagInputBox = await card.locator("[data-background-tag-input]").boundingBox();
     expect(tagInputBox).not.toBeNull();
-    expect(tagInputBox!.width).toBeGreaterThanOrEqual(100);
-    await editTagsButton.click();
-    await backgroundTagsToggle.click();
-    await expect(backgroundTagsToggle).toHaveAttribute("aria-expanded", "false");
+    expect(tagInputBox!.width).toBeGreaterThanOrEqual(80);
+    await card.locator("[data-background-edit-tags]").click();
   }
 
-  await backgroundTagsToggle.focus();
-  await page.keyboard.press("Enter");
-  await expect(backgroundTagsToggle).toHaveAttribute("aria-expanded", "true");
-  await expect(backgroundRow.getByText("quarantine berth", { exact: true })).toBeVisible();
-  await backgroundTagsToggle.focus();
-  await page.keyboard.press("Enter");
-  await expect(backgroundTagsToggle).toHaveAttribute("aria-expanded", "false");
-  await expect(backgroundRow.getByText("quarantine berth", { exact: true })).toHaveCount(0);
+  // The action row is always visible on touch, so it must sit above the tag chips rather than
+  // float over them the way it does on hover-capable pointers.
+  if (testInfo.project.name.includes("mobile")) {
+    const [actionsBox, tagBox] = await Promise.all([
+      card.locator("[data-background-actions]").boundingBox(),
+      card.getByText("quarantine berth", { exact: true }).boundingBox(),
+    ]);
+    expect(actionsBox).not.toBeNull();
+    expect(tagBox).not.toBeNull();
+    expect(actionsBox!.y + actionsBox!.height).toBeLessThanOrEqual(tagBox!.y);
+    // Touch targets stay tappable.
+    expect(actionsBox!.height).toBeGreaterThanOrEqual(36);
+  }
+
+  await card.getByRole("button", { name: /Use .* for this chat/ }).click();
+  // Selecting closes the modal, so the card detaches. Re-open and assert the persisted selection.
+  await expect(page.getByRole("dialog", { name: "Background Library" })).toBeHidden();
+  await page.getByRole("button", { name: "Browse library" }).click();
+  await expect(page.getByRole("dialog", { name: "Background Library" })).toBeVisible();
+  await expect(
+    page.locator('[data-background-id="user:collapsible-background-tags.png"]'),
+  ).toHaveAttribute("data-background-selected", "true");
 });
 
 test("Roleplay displays a selected background when its file route is GET-only", async ({ page }, testInfo) => {
@@ -11254,7 +11256,6 @@ test("Roleplay displays a selected background when its file route is GET-only", 
             id: "user:rp-background-smoke.png",
             filename: "rp-background-smoke.png",
             url: backgroundUrl,
-            originalName: "Roleplay background smoke",
             tags: [],
             source: "user",
             createdAt: "2026-07-16T00:00:00.000Z",
@@ -11283,7 +11284,7 @@ test("Roleplay displays a selected background when its file route is GET-only", 
     await page.locator('[data-tour="panel-settings"]').click();
     await page.getByPlaceholder("Search settings").fill("Backgrounds");
     await page.getByRole("button", { name: /Backgrounds Section/ }).click();
-    await page.getByRole("button", { name: "Remove" }).click();
+    await page.getByRole("button", { name: "Clear selection" }).click();
     await expect
       .poll(async () =>
         page
@@ -11360,7 +11361,9 @@ test("Background library organization works with desktop drag and touch drag", a
   });
   expect(uploadResponse.ok()).toBeTruthy();
   const uploaded = (await uploadResponse.json()) as { filename: string; url: string };
-  const backgroundId = `user:${uploaded.filename}`;
+  // Renaming a background changes its filename, and the filename is its id and its displayed name.
+  let currentFilename = uploaded.filename;
+  let backgroundId = `user:${currentFilename}`;
   let folderId: string | null = null;
 
   try {
@@ -11374,10 +11377,41 @@ test("Background library organization works with desktop drag and touch drag", a
     await page.getByRole("tab", { name: "Appearance" }).click();
     await page.getByPlaceholder("Search settings").fill("Backgrounds");
     await page.getByRole("button", { name: /Backgrounds Section/ }).click();
+    await page.getByRole("button", { name: "Browse library" }).click();
+    await expect(page.getByRole("dialog", { name: "Background Library" })).toBeVisible();
+    await expect(page.getByRole("button", { name: /My uploads/ })).toBeVisible();
+    await page.getByRole("button", { name: /My uploads/ }).click();
 
+    const backgroundRowBeforeRename = page.locator(`[data-background-id="${backgroundId}"]:not([aria-hidden="true"])`);
+    await backgroundRowBeforeRename.getByTitle("Rename background").click();
+    const renameInput = backgroundRowBeforeRename.getByLabel(`Rename ${currentFilename}`);
+    await renameInput.fill(`rainy-arcade-${suffix}`);
+    const [renameResponse] = await Promise.all([
+      page.waitForResponse(
+        (response) =>
+          response.request().method() === "PATCH" &&
+          new URL(response.url()).pathname === `/api/backgrounds/${encodeURIComponent(currentFilename)}/rename`,
+      ),
+      renameInput.press("Enter"),
+    ]);
+    currentFilename = ((await renameResponse.json()) as { filename: string }).filename;
+    backgroundId = `user:${currentFilename}`;
+    expect(currentFilename).toBe(`rainy-arcade-${suffix}.gif`);
     await expect(
-      page.getByText("Drag and drop backgrounds to folders, double-click or double-tap to rename."),
+      page.locator(`[data-background-id="${backgroundId}"]:not([aria-hidden="true"])`).getByText(currentFilename, {
+        exact: true,
+      }),
     ).toBeVisible();
+
+    await page.reload();
+    await page.locator('[data-tour="panel-settings"]').click();
+    await page.getByRole("tab", { name: "Appearance" }).click();
+    await page.getByPlaceholder("Search settings").fill("Backgrounds");
+    await page.getByRole("button", { name: /Backgrounds Section/ }).click();
+    await page.getByRole("button", { name: "Browse library" }).click();
+    await page.getByPlaceholder("Search backgrounds").fill(`rainy-arcade-${suffix}`);
+
+    await expect(page.getByText("Drag a background onto a folder chip to file it.")).toBeVisible();
     const sortSelect = page.getByLabel("Sort backgrounds");
     await expect(sortSelect.locator("option")).toHaveText(["A-Z", "Z-A", "Newest", "Oldest"]);
     await page.getByRole("button", { name: /Tags \(/ }).click();
@@ -11385,6 +11419,8 @@ test("Background library organization works with desktop drag and touch drag", a
 
     const backgroundRow = page.locator(`[data-background-id="${backgroundId}"]:not([aria-hidden="true"])`);
     await expect(backgroundRow).toBeVisible();
+    await expect(backgroundRow.getByText(currentFilename, { exact: true })).toBeVisible();
+    await page.getByPlaceholder("Search backgrounds").fill("");
     const backgroundActions = backgroundRow.locator("[data-background-actions]");
     const defaultToggle = backgroundRow.locator("[data-background-default-toggle]");
     if (testInfo.project.name.includes("mobile")) {
@@ -11410,12 +11446,15 @@ test("Background library organization works with desktop drag and touch drag", a
     }
     await defaultToggle.click();
 
+    await page.getByRole("button", { name: "New Folder" }).click();
+    const newFolderPrompt = page.getByRole("dialog").getByRole("textbox");
+    await expect(newFolderPrompt).toBeVisible();
     const [createFolderResponse] = await Promise.all([
       page.waitForResponse(
         (response) =>
           response.request().method() === "POST" && new URL(response.url()).pathname === "/api/backgrounds/folders",
       ),
-      page.getByRole("button", { name: "New Folder" }).click(),
+      newFolderPrompt.press("Enter"),
     ]);
     expect(createFolderResponse.ok()).toBeTruthy();
     const createdFolder = (await createFolderResponse.json()) as { id: string; name: string };
@@ -11454,10 +11493,8 @@ test("Background library organization works with desktop drag and touch drag", a
         .poll(() =>
           page.evaluate(
             ({ point, targetFolderId }) =>
-              document
-                .elementFromPoint(point.x, point.y)
-                ?.closest<HTMLElement>("[data-background-folder-id]")
-                ?.dataset.backgroundFolderId === targetFolderId,
+              document.elementFromPoint(point.x, point.y)?.closest<HTMLElement>("[data-background-folder-id]")?.dataset
+                .backgroundFolderId === targetFolderId,
             { point: end, targetFolderId: folderId! },
           ),
         )
@@ -11494,15 +11531,63 @@ test("Background library organization works with desktop drag and touch drag", a
       })
       .toBe(folderId);
 
-    const folderHeader = folder.getByRole("button", { name: /folder .*Double-tap or press F2 to rename/i });
-    await folderHeader.dblclick();
-    const folderNameInput = folder.locator("input");
-    await expect(folderNameInput).toBeVisible();
-    await folderNameInput.fill(`Scenes ${suffix}`);
-    await folderNameInput.press("Enter");
-    await expect(folder.getByText(`Scenes ${suffix}`, { exact: true })).toBeVisible();
+    // Dragging is pointer-only, so the same move has to be reachable from the card's action row.
+    await page.locator('[data-background-folder-filter-id="all"]').click();
+    await backgroundRow.locator("[data-background-move]").click();
+    await page.getByRole("dialog").getByRole("button", { name: "Unfiled", exact: true }).click();
+    await expect
+      .poll(async () => {
+        const response = await page.request.get("/api/backgrounds");
+        const backgrounds = (await response.json()) as Array<{ id: string; folderId: string | null }>;
+        return backgrounds.find((background) => background.id === backgroundId)?.folderId ?? null;
+      })
+      .toBeNull();
+    await backgroundRow.locator("[data-background-move]").click();
+    await page.getByRole("dialog").getByRole("button", { name: createdFolder.name, exact: true }).click();
+    await expect
+      .poll(async () => {
+        const response = await page.request.get("/api/backgrounds");
+        const backgrounds = (await response.json()) as Array<{ id: string; folderId: string | null }>;
+        return backgrounds.find((background) => background.id === backgroundId)?.folderId ?? null;
+      })
+      .toBe(folderId);
+
+    // The star is a favorite, independent of the Roleplay default set earlier in this test.
+    const favoriteToggle = backgroundRow.locator("[data-background-favorite-toggle]");
+    await favoriteToggle.scrollIntoViewIfNeeded();
+    await favoriteToggle.click();
+    await expect(favoriteToggle).toHaveAttribute("aria-pressed", "true");
+    await expect
+      .poll(async () => {
+        const response = await page.request.get("/api/backgrounds");
+        const backgrounds = (await response.json()) as Array<{ id: string; favorite?: boolean }>;
+        return backgrounds.find((background) => background.id === backgroundId)?.favorite ?? false;
+      })
+      .toBe(true);
+    await page.locator('[data-background-folder-filter-id="favorites"]').click();
+    await expect(backgroundRow).toBeVisible();
+
+    // Rename and delete the active folder from the folder chips; its background falls back to unfiled.
+    await page.locator(`[data-background-folder-filter-id="${folderId}"]`).click();
+    await page.getByRole("button", { name: /^Rename folder / }).click();
+    const folderNamePrompt = page.getByRole("dialog").getByRole("textbox");
+    await folderNamePrompt.fill(`Alleys ${suffix}`);
+    await folderNamePrompt.press("Enter");
+    await expect(page.locator(`[data-background-folder-filter-id="${folderId}"]`)).toContainText(`Alleys ${suffix}`);
+
+    await page.getByRole("button", { name: `Delete folder Alleys ${suffix}` }).click();
+    await page.getByRole("button", { name: "Delete Folder", exact: true }).click();
+    await expect(page.locator(`[data-background-folder-filter-id="${folderId}"]`)).toHaveCount(0);
+    await expect
+      .poll(async () => {
+        const response = await page.request.get("/api/backgrounds");
+        const backgrounds = (await response.json()) as Array<{ id: string; folderId: string | null }>;
+        return backgrounds.find((background) => background.id === backgroundId)?.folderId ?? null;
+      })
+      .toBeNull();
+    folderId = null;
   } finally {
     if (folderId) await page.request.delete(`/api/backgrounds/folders/${encodeURIComponent(folderId)}`);
-    await page.request.delete(`/api/backgrounds/${encodeURIComponent(uploaded.filename)}`);
+    await page.request.delete(`/api/backgrounds/${encodeURIComponent(currentFilename)}`);
   }
 });
