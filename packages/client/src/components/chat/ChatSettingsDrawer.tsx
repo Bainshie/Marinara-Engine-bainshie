@@ -8682,7 +8682,11 @@ export function ChatSettingsDrawer({
               excludePastReasoning={metadata.excludePastReasoning as boolean | undefined}
               imageCaptioningEnabled={metadata.imageCaptioningEnabled as boolean | undefined}
               imageCaptioningConnectionId={
-                typeof metadata.imageCaptioningConnectionId === "string" ? metadata.imageCaptioningConnectionId : null
+                Object.prototype.hasOwnProperty.call(metadata, "imageCaptioningConnectionId")
+                  ? typeof metadata.imageCaptioningConnectionId === "string"
+                    ? metadata.imageCaptioningConnectionId
+                    : null
+                  : undefined
               }
               onChatParametersChange={(chatParameters) => updateMeta.mutate({ id: chat.id, chatParameters })}
               onContextMessageLimitChange={(contextMessageLimit) =>

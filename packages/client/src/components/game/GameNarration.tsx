@@ -4485,6 +4485,39 @@ export function GameNarration({
                 const voiceEntry = sideVoiceKey ? gameVoiceCacheRef.current.get(sideVoiceKey) : undefined;
                 const voicePaused = gameVoicePausedKey === sideVoiceKey;
                 const voiceActive = gameVoicePlayingKey === sideVoiceKey;
+                const sourceMessageId = line.voiceSourceMessageId ?? active?.sourceMessageId ?? null;
+                const sourceSegmentIndex = line.voiceSourceSegmentIndex ?? active?.sourceSegmentIndex ?? null;
+                const sourceMessage = sourceMessageId ? (sourceMessagesById.get(sourceMessageId) ?? null) : null;
+                const translatedText = sourceMessageId ? translations[sourceMessageId] : undefined;
+                const translationSource = sourceMessageId ? translationSources[sourceMessageId] : undefined;
+                const isTranslating = sourceMessageId ? !!translating[sourceMessageId] : false;
+                const translatedSegmentText =
+                  sourceMessage && sourceSegmentIndex != null
+                    ? getGameTranslatedSegmentText(
+                        sourceMessage,
+                        translatedText,
+                        speakerColors,
+                        sourceSegmentIndex,
+                      )
+                    : undefined;
+                const showTranslationOnly =
+                  translationDisplayOnly &&
+                  !!sourceMessage &&
+                  !!translatedSegmentText &&
+                  !isTranslating &&
+                  gameTranslationMatchesMessage(sourceMessage, translationSource);
+                const displayedLine = showTranslationOnly
+                  ? { ...line, content: translatedSegmentText! }
+                  : line;
+                const translationPanel =
+                  !showTranslationOnly && sourceMessage
+                    ? renderTranslationPanel(
+                        sourceMessage,
+                        translatedSegmentText,
+                        isTranslating,
+                        "mt-1.5",
+                      )
+                    : null;
                 const voiceControl =
                   sideVoiceKey && voiceEntry && voiceEntry.status !== "error" ? (
                     <span
@@ -4541,11 +4574,12 @@ export function GameNarration({
                     style={{ animationDelay: `${i * 80}ms` }}
                   >
                     <PartyOverlayBox
-                      line={line}
+                      line={displayedLine}
                       avatar={charAvatar}
                       color={charColor}
                       nameColor={charNameColor}
                       voiceControl={voiceControl}
+                      translation={translationPanel}
                     />
                   </div>
                 );
@@ -5821,12 +5855,14 @@ function PartyOverlayBox({
   color,
   nameColor,
   voiceControl,
+  translation,
 }: {
   line: PartyDialogueLine;
   avatar: SpeakerAvatarInfo | null;
   color?: string;
   nameColor?: string;
   voiceControl?: ReactNode;
+  translation?: ReactNode;
 }) {
   const styleByType: Record<string, { border: string; bg: string; icon: string; labelColor: string }> = {
     side: { border: "border-white/15", bg: "bg-black/75", icon: "💬", labelColor: "text-white/85" },
@@ -5890,6 +5926,7 @@ function PartyOverlayBox({
               __html: formatNarration(line.content, false),
             }}
           />
+          {translation}
         </div>
       </div>
     </div>

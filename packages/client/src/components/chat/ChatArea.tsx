@@ -3129,6 +3129,9 @@ export function ChatArea() {
             connectedChatName={connectedChatName}
             onOpenSettings={handleOpenSettingsPanel}
             onCloseSettings={handleCloseSettingsPanel}
+            externalGalleryOpen={galleryOpen}
+            externalGalleryAnchor={galleryAnchor}
+            onCloseExternalGallery={handleCloseGalleryPanel}
             onSwitchChat={chat.connectedChatId ? () => setActiveChatId(chat.connectedChatId!) : undefined}
             onDeleteMessage={handleDelete}
             onPeekPrompt={handlePeekPrompt}
@@ -3140,7 +3143,7 @@ export function ChatArea() {
             chat={chat}
             settingsOpen={settingsOpen}
             settingsAnchor={settingsAnchor}
-            galleryOpen={galleryOpen}
+            galleryOpen={false}
             galleryAnchor={galleryAnchor}
             wizardOpen={wizardOpen}
             peekPromptData={peekPromptData}
@@ -3161,11 +3164,6 @@ export function ChatArea() {
             onCloseSettings={handleCloseSettingsPanel}
             onCloseGallery={handleCloseGalleryPanel}
             onOpenScheduleEditor={handleOpenScheduleEditor}
-            onIllustrate={() =>
-              retryAgents(activeChatId, ["illustrator"], {
-                illustratorRetryTargets: ["illustration"],
-              })
-            }
             onWizardFinish={() => {
               setWizardOpen(false);
               handleOpenSettingsPanel();
