@@ -171,7 +171,7 @@ import {
   illustratorRequestedBackground,
   illustratorTrackerLocationChanged,
   resolveIllustratorImageConnectionId,
-  resolveIllustratorStyleProfile,
+  resolveIllustratorPromptStyle,
 } from "../../services/generation/illustrator-background-generation.js";
 import { writeManualIllustratorPromptPlan } from "../../services/generation/illustrator-manual-prompt-generation.js";
 import {
@@ -492,22 +492,14 @@ async function resolveManualIllustratorStyleInstruction(args: {
   conns: ReturnType<typeof createConnectionsStorage>;
   illustratorAgent: ResolvedAgent;
 }): Promise<string> {
-  const imageSettings = await loadImageGenerationUserSettings(args.app.db);
-  const setupConfig = parseSettingsRecord(args.chatMeta.gameSetupConfig);
-  const imageConnectionId = resolveIllustratorImageConnectionId(
-    args.chatMode,
-    args.chatMeta,
-    args.illustratorAgent.settings.imageConnectionId,
-  );
-  const imageConnection =
-    (imageConnectionId ? await args.conns.getWithKey(imageConnectionId) : null) ??
-    (await args.conns.getDefaultForImageGeneration());
-  const imageDefaults = imageConnection ? resolveConnectionImageDefaults(imageConnection) : null;
-  return resolveIllustratorStyleProfile(
-    setupConfig,
-    args.chatMeta,
-    imageDefaults?.styleProfileId,
-    imageSettings.styleProfiles,
+  return (
+    await resolveIllustratorPromptStyle({
+      db: args.app.db,
+      connections: args.conns,
+      illustratorAgent: args.illustratorAgent,
+      chatMode: args.chatMode,
+      chatMetadata: args.chatMeta,
+    })
   ).styleInstruction;
 }
 
@@ -522,13 +514,17 @@ async function executeManualIllustratorPromptRequest(args: {
 }): Promise<AgentResult> {
   const startedAt = Date.now();
   try {
-    const styleInstruction = await resolveManualIllustratorStyleInstruction({
-      app: args.app,
-      chatMode: args.chat.mode,
-      chatMeta: args.chatMeta,
-      conns: args.conns,
-      illustratorAgent: args.illustratorEntry.resolved,
-    });
+    const cachedStyleInstruction = args.agentContext.memory._illustratorImageStyleInstruction;
+    const styleInstruction =
+      typeof cachedStyleInstruction === "string"
+        ? cachedStyleInstruction
+        : await resolveManualIllustratorStyleInstruction({
+            app: args.app,
+            chatMode: args.chat.mode,
+            chatMeta: args.chatMeta,
+            conns: args.conns,
+            illustratorAgent: args.illustratorEntry.resolved,
+          });
     const generated = await writeManualIllustratorPromptPlan({
       illustratorAgent: args.illustratorEntry.resolved,
       context: args.agentContext,
@@ -3344,11 +3340,15 @@ async function applyRetryResultEffects(args: {
               styleProfileId,
               imageDefaults,
               generatedStyle: style,
-              omitProfileStyleText: illData._styleProfileInstructionApplied === true,
+              omitProfileStyleText:
+                illData._styleProfileInstructionApplied === true ||
+                typeof agentContext.memory._illustratorImageStyleInstruction === "string",
+              omitProfileSubjectTags: true,
             });
             const finalNegativePrompt = mergeIllustratorNegativePrompt(
               compiledPrompt.prompt,
               compiledPrompt.negativePrompt,
+              requestedNegativePrompt,
             );
             const promptSubmission = resolveIllustratorPromptSubmission({
               generatedPrompt: compiledPrompt.prompt,
@@ -3980,6 +3980,24 @@ export async function registerRetryAgentsRoute(app: FastifyInstance) {
               useLatestGameStateFallback: false,
             })
           : null;
+      const retryIllustratorPromptAgent = resolvedAgents.find((entry) => entry.resolved.type === "illustrator");
+      if (retryIllustratorPromptAgent) {
+        try {
+          const { styleInstruction } = await resolveIllustratorPromptStyle({
+            db: app.db,
+            connections: conns,
+            illustratorAgent: retryIllustratorPromptAgent.resolved,
+            chatMode,
+            chatMetadata: chatMeta,
+          });
+          agentContext.memory._illustratorImageStyleInstruction = styleInstruction;
+          if (preGenerationAgentContext) {
+            preGenerationAgentContext.memory._illustratorImageStyleInstruction = styleInstruction;
+          }
+        } catch (error) {
+          logger.warn(error, "[retry-agents] Failed to resolve image style instruction for the prompt writer");
+        }
+      }
       if (preGenerationAgentContext) preGenerationAgentContext.signal = abortController.signal;
       if (debugMode) {
         const emitRetryAgentDebug = (event: AgentCallDebugEvent) => {
