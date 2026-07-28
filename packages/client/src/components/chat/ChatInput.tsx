@@ -138,8 +138,16 @@ function getChatInputTextareaMaxHeightPx() {
 }
 
 function resizeChatInputTextarea(el: HTMLTextAreaElement) {
+  const maxHeight = getChatInputTextareaMaxHeightPx();
+
+  // Measure without a vertical scrollbar. If the scrollbar is allowed to
+  // appear during measurement it narrows the textarea, creates an extra wrap,
+  // and can make Firefox alternate between two heights on successive inputs.
+  el.style.overflowY = "hidden";
   el.style.height = "auto";
-  el.style.height = `${Math.min(el.scrollHeight, getChatInputTextareaMaxHeightPx())}px`;
+  const contentHeight = el.scrollHeight;
+  el.style.height = `${Math.min(contentHeight, maxHeight)}px`;
+  el.style.overflowY = contentHeight > maxHeight ? "auto" : "hidden";
 }
 
 function useIsMobileComposerViewport() {
@@ -232,6 +240,7 @@ export const ChatInput = memo(function ChatInput({
   const focusAfterMobileRestoreRef = useRef(false);
   const draftTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const resizeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const resizeFrameRef = useRef(0);
   const heldDeleteKeyRef = useRef(false);
   const heldDeleteDraftRef = useRef<{ chatId: string; text: string } | null>(null);
   const heldDeleteResizeRef = useRef<HTMLTextAreaElement | null>(null);
@@ -499,6 +508,7 @@ export const ChatInput = memo(function ChatInput({
       // Cancel pending debounce timers
       if (draftTimerRef.current) clearTimeout(draftTimerRef.current);
       if (resizeTimerRef.current) clearTimeout(resizeTimerRef.current);
+      if (resizeFrameRef.current) cancelAnimationFrame(resizeFrameRef.current);
       heldDeleteKeyRef.current = false;
       heldDeleteDraftRef.current = null;
       heldDeleteResizeRef.current = null;
@@ -1465,6 +1475,15 @@ export const ChatInput = memo(function ChatInput({
     }, delay);
   }, []);
 
+  const scheduleTextareaFrameResize = useCallback((el: HTMLTextAreaElement) => {
+    if (resizeFrameRef.current) return;
+    resizeFrameRef.current = requestAnimationFrame(() => {
+      resizeFrameRef.current = 0;
+      if (textareaRef.current !== el) return;
+      resizeChatInputTextarea(el);
+    });
+  }, []);
+
   const releaseHeldDeleteWork = useCallback(() => {
     if (!heldDeleteKeyRef.current) return;
     heldDeleteKeyRef.current = false;
@@ -1563,6 +1582,11 @@ export const ChatInput = memo(function ChatInput({
     const shouldDeferDeleteWork = mode === "roleplay" && isDeleting && heldDeleteKeyRef.current;
     const fixed = applyTextareaQuoteFormat(el, quoteFormat, inputEvent);
     syncInputState(fixed);
+    if (!isDeleting) {
+      // Resize once before Firefox's next paint so newly wrapped text remains
+      // visible without competing with a second, delayed height measurement.
+      scheduleTextareaFrameResize(el);
+    }
 
     // Keep draft in sync so it survives remounts (debounced to avoid store churn)
     if (activeChatId) {
@@ -1575,14 +1599,19 @@ export const ChatInput = memo(function ChatInput({
       }
     }
 
-    // Roleplay can paint a substantially heavier scene than the other modes.
-    // Wait for a short typing pause before forcing the scrollHeight layout read.
+    // Insertions already received their single frame resize above. Keep
+    // deletion shrinking off the held-key path so Backspace stays smooth.
     if (shouldDeferDeleteWork) {
       heldDeleteResizeRef.current = el;
+    } else if (!isDeleting) {
+      if (resizeTimerRef.current) {
+        clearTimeout(resizeTimerRef.current);
+        resizeTimerRef.current = null;
+      }
     } else {
       scheduleTextareaResize(
         el,
-        isDeleting ? ROLEPLAY_INPUT_DELETE_RESIZE_IDLE_MS : ROLEPLAY_INPUT_RESIZE_IDLE_MS,
+        ROLEPLAY_INPUT_DELETE_RESIZE_IDLE_MS,
       );
     }
 
@@ -2047,6 +2076,7 @@ export const ChatInput = memo(function ChatInput({
           rows={1}
           spellCheck
           autoCorrect="on"
+          data-lt-active={mode === "roleplay" ? "false" : undefined}
           className="mari-chat-input-textarea max-h-[12.5rem] min-w-0 flex-1 resize-none bg-transparent py-0 text-sm leading-normal text-foreground/90 placeholder:text-foreground/30 outline-none disabled:cursor-not-allowed disabled:opacity-40"
         />
 

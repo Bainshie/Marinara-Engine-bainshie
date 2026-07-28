@@ -2433,6 +2433,119 @@ test("typographic quotes do not pull the Roleplay caret behind later text", asyn
   }
 });
 
+test("desktop Roleplay composition keeps ambient work off the input path and grows before paint", async ({
+  page,
+}, testInfo) => {
+  test.skip(!testInfo.project.name.includes("desktop"), "Desktop composer performance is covered on desktop.");
+
+  const chatResponse = await page.request.post("/api/chats", {
+    data: { name: "Roleplay Composer Performance Smoke", mode: "roleplay", characterIds: [] },
+  });
+  expect(chatResponse.ok()).toBeTruthy();
+  const chat = (await chatResponse.json()) as { id: string };
+
+  try {
+    await page.addInitScript((chatId) => {
+      const persisted = JSON.parse(localStorage.getItem("marinara-engine-ui") ?? '{"state":{},"version":87}') as {
+        state: Record<string, unknown>;
+        version: number;
+      };
+      persisted.state.hasCompletedOnboarding = true;
+      persisted.state.appAccentPulseMode = true;
+      localStorage.setItem("marinara-engine-ui", JSON.stringify(persisted));
+      localStorage.setItem("marinara-active-chat-id", chatId);
+    }, chat.id);
+    await page.goto("/");
+
+    const input = page.locator("textarea.mari-chat-input-textarea");
+    const root = page.locator("html");
+    await expect(input).toHaveAttribute("data-lt-active", "false");
+    await expect(root).toHaveAttribute("data-marinara-accent-animation");
+
+    await page.evaluate(() => {
+      const measurementWindow = window as Window & { __lastKeyboardOpen?: boolean };
+      window.addEventListener("marinara:chat-visual-viewport-change", (event) => {
+        measurementWindow.__lastKeyboardOpen = (
+          event as CustomEvent<{ keyboardOpen?: boolean }>
+        ).detail?.keyboardOpen;
+      });
+    });
+    await page.setViewportSize({ width: 1440, height: 700 });
+    await input.focus();
+
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () => (window as Window & { __lastKeyboardOpen?: boolean }).__lastKeyboardOpen,
+        ),
+      )
+      .toBe(false);
+    await expect(root).not.toHaveAttribute("data-marinara-accent-animation");
+
+    const initialHeight = await input.evaluate((element) => {
+      element.style.flex = "0 0 240px";
+      element.style.width = "240px";
+      return element.clientHeight;
+    });
+    await input.evaluate((element) => {
+      const value =
+        "A long Roleplay sentence should wrap onto another line without briefly hiding the newly typed text.";
+      element.value = value;
+      element.dispatchEvent(
+        new InputEvent("input", {
+          bubbles: true,
+          data: value,
+          inputType: "insertText",
+        }),
+      );
+    });
+    const wrappedHeight = await input.evaluate(
+      (element) =>
+        new Promise<number>((resolve) => {
+          requestAnimationFrame(() => resolve(element.clientHeight));
+        }),
+    );
+    expect(wrappedHeight).toBeGreaterThan(initialHeight);
+
+    const resizeStability = await input.evaluate(
+      (element) =>
+        new Promise<{ heightDelta: number; delayedStyleMutations: number; overflowY: string }>(
+          (resolve) => {
+            const heights: number[] = [];
+            let delayedStyleMutations = 0;
+            const observer = new MutationObserver((records) => {
+              delayedStyleMutations += records.length;
+            });
+            observer.observe(element, { attributes: true, attributeFilter: ["style"] });
+
+            const sample = () => {
+              heights.push(element.getBoundingClientRect().height);
+              if (heights.length < 18) {
+                requestAnimationFrame(sample);
+                return;
+              }
+              observer.disconnect();
+              resolve({
+                heightDelta: Math.max(...heights) - Math.min(...heights),
+                delayedStyleMutations,
+                overflowY: element.style.overflowY,
+              });
+            };
+            requestAnimationFrame(sample);
+          },
+        ),
+    );
+    expect(resizeStability.heightDelta).toBeLessThanOrEqual(1);
+    expect(resizeStability.delayedStyleMutations).toBe(0);
+    expect(resizeStability.overflowY).toBe("hidden");
+
+    await input.blur();
+    await expect(root).toHaveAttribute("data-marinara-accent-animation");
+  } finally {
+    await page.request.delete(`/api/chats/${chat.id}`);
+  }
+});
+
 test("mobile Roleplay composition avoids draft rewrites and pauses ambient rendering", async ({ page }, testInfo) => {
   test.skip(!testInfo.project.name.includes("mobile"), "Mobile composer resource behavior is covered on mobile.");
 
