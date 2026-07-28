@@ -149,6 +149,48 @@ function normalizeEchoChamberSizes(value: unknown): Record<string, EchoChamberSi
   }
   return normalized;
 }
+
+interface ImmediateUiStorageSnapshot {
+  customCursorEnabled: boolean | undefined;
+  echoChamberSizes: string;
+}
+
+function readImmediateUiStorageSnapshot(value: string | null): ImmediateUiStorageSnapshot {
+  if (!value) {
+    return {
+      customCursorEnabled: undefined,
+      echoChamberSizes: "{}",
+    };
+  }
+
+  try {
+    const parsed = JSON.parse(value) as {
+      state?: {
+        customCursorEnabled?: unknown;
+        echoChamberSizeByChatId?: unknown;
+      };
+    };
+    return {
+      customCursorEnabled:
+        typeof parsed.state?.customCursorEnabled === "boolean" ? parsed.state.customCursorEnabled : undefined,
+      echoChamberSizes: JSON.stringify(normalizeEchoChamberSizes(parsed.state?.echoChamberSizeByChatId)),
+    };
+  } catch {
+    return {
+      customCursorEnabled: undefined,
+      echoChamberSizes: "{}",
+    };
+  }
+}
+
+function shouldFlushUiStorageImmediately(previousValue: string | null, nextValue: string): boolean {
+  const previous = readImmediateUiStorageSnapshot(previousValue);
+  const next = readImmediateUiStorageSnapshot(nextValue);
+  return (
+    previous.customCursorEnabled !== next.customCursorEnabled ||
+    previous.echoChamberSizes !== next.echoChamberSizes
+  );
+}
 export const TRACKER_PANEL_WIDTH_DEFAULT = TRACKER_PANEL_SIZE_PROFILE_WIDTHS.standard;
 export const TRACKER_PANEL_WIDTH_MIN = TRACKER_PANEL_SIZE_PROFILE_WIDTHS.compact;
 export const TRACKER_PANEL_WIDTH_MAX = TRACKER_PANEL_SIZE_PROFILE_WIDTHS.expanded;
@@ -2354,18 +2396,6 @@ export const useUIStore = create<UIState>()(
         let pendingName: string | null = null;
         let pendingValue: string | null = null;
 
-        const readCustomCursorPreference = (value: string | null): boolean | undefined => {
-          if (!value) return undefined;
-          try {
-            const parsed = JSON.parse(value) as { state?: { customCursorEnabled?: unknown } };
-            return typeof parsed.state?.customCursorEnabled === "boolean"
-              ? parsed.state.customCursorEnabled
-              : undefined;
-          } catch {
-            return undefined;
-          }
-        };
-
         const flush = () => {
           if (pendingName !== null && pendingValue !== null) {
             localStorage.setItem(pendingName, pendingValue);
@@ -2393,7 +2423,7 @@ export const useUIStore = create<UIState>()(
             const previousValue = pendingValue ?? localStorage.getItem(name);
             pendingName = name;
             pendingValue = value;
-            if (readCustomCursorPreference(previousValue) !== readCustomCursorPreference(value)) {
+            if (shouldFlushUiStorageImmediately(previousValue, value)) {
               flush();
               return;
             }
