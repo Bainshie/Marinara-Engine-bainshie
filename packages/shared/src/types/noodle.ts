@@ -121,6 +121,7 @@ export interface NoodleSettings {
   allowGalleryImageAttachments: boolean;
   imageCaptioningEnabled: boolean;
   imageCaptioningConnectionId: string | null;
+  imageCaptioningUseConnectionDefault: boolean;
   enableLorebookContext: boolean;
   includeCharacterSchedules: boolean;
   enableEnhancedTimelineWriting: boolean;
