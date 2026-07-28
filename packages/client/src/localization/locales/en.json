@@ -6176,7 +6176,6 @@
   "ui.panels.characterspanel.favorites": "Favorites",
   "ui.panels.characterspanel.favs": "Favs",
   "ui.panels.characterspanel.loadMoreValue1Loaded": "Load more ({{value1}} loaded)",
-  "ui.panels.characterspanel.moveToFolder": "Move to Folder",
   "ui.panels.characterspanel.noCharactersYet": "No characters yet",
   "ui.panels.characterspanel.noMatchesFound": "No matches found",
   "ui.panels.characterspanel.nonFavs": "Non-favs",

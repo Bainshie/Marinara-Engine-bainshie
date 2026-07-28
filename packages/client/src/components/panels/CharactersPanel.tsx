@@ -663,13 +663,14 @@ export function CharactersPanel() {
     if (ids.length === 0) return;
 
     const choice = await showChoiceDialog({
-      title: localizeUi("ui.panels.characterspanel.moveToFolder"),
+      title: localizeUi("lorebook.editor.batch.move"),
       message: localizeUi("ui.panels.characterspanel.chooseFolderForValue1Character", {
         value1: ids.length,
         value2: ids.length === 1 ? "" : localizeUi("ui.noodle.stageprofileview.s"),
       }),
       choices: [
-        ...parsedGroups.map((folder) => ({ key: folder.id, label: folder.name })),
+        // Uniform tone: no folder is a recommended target, so none gets the primary highlight.
+        ...parsedGroups.map((folder) => ({ key: folder.id, label: folder.name, tone: "accent" as const })),
         { key: "__none__", label: localizeUi("ui.panels.characterspanel.removeFromFolder"), tone: "accent" as const },
       ],
     });
@@ -1604,7 +1605,7 @@ export function CharactersPanel() {
               onClick={() => void handleMoveSelected()}
               disabled={selectedCharacterIds.size === 0 || parsedGroups.length === 0}
               className="mari-chrome-control flex-1 px-3 py-2 text-xs"
-              title={localizeUi("ui.panels.characterspanel.moveToFolder")}
+              title={localizeUi("lorebook.editor.batch.move")}
             >
               <FolderInput size="0.75rem" />
               {localizeUi("lorebook.editor.batch.move")}
