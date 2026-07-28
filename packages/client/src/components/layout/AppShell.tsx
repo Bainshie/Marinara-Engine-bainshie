@@ -238,6 +238,8 @@ export function AppShell() {
     let frame = 0;
     let focusTimers: number[] = [];
     let largestViewportHeight = window.visualViewport?.height ?? window.innerHeight;
+    const supportsVirtualKeyboard =
+      navigator.maxTouchPoints > 0 || window.matchMedia("(any-pointer: coarse)").matches;
     const updateVisualViewportGeometry = () => {
       if (frame) cancelAnimationFrame(frame);
       frame = requestAnimationFrame(() => {
@@ -255,7 +257,7 @@ export function AppShell() {
         dispatchChatVisualViewportChange({
           height,
           offsetTop,
-          keyboardOpen: largestViewportHeight - height >= 80,
+          keyboardOpen: supportsVirtualKeyboard && largestViewportHeight - height >= 80,
         });
       });
     };
@@ -1028,10 +1030,11 @@ export function AppShell() {
     trackerPanelWidth,
   ]);
 
-  const trackerPanelHudClearance =
-    !shellOverlayMode && trackerPanelAnchoredForMotion && trackerPanelHideHudWidgets && trackerPanelSurfaceAvailable
+  const trackerPanelOverlayClearance =
+    !shellOverlayMode && trackerPanelAnchoredForMotion && trackerPanelSurfaceAvailable
       ? trackerPanelResolvedWidth + TRACKER_PANEL_HUD_GAP
       : 0;
+  const trackerPanelHudClearance = trackerPanelHideHudWidgets ? trackerPanelOverlayClearance : 0;
   const trackerPanelContentScale = resolveTrackerPanelContentScale(trackerPanelWidth, trackerPanelResolvedWidth);
   const trackerPanelPortal =
     trackerPanelActive &&
@@ -1238,6 +1241,7 @@ export function AppShell() {
               {
                 "--tracker-panel-hud-clear-left": `${trackerPanelSide === "left" ? trackerPanelHudClearance : 0}px`,
                 "--tracker-panel-hud-clear-right": `${trackerPanelSide === "right" ? trackerPanelHudClearance : 0}px`,
+                "--tracker-panel-overlay-clearance": `${trackerPanelOverlayClearance}px`,
               } as CSSProperties
             }
           >

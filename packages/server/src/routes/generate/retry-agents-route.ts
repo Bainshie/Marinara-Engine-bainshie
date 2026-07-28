@@ -172,7 +172,9 @@ import {
   illustratorRequestedBackground,
   illustratorTrackerLocationChanged,
   resolveIllustratorImageConnectionId,
+  resolveIllustratorPromptStyle,
 } from "../../services/generation/illustrator-background-generation.js";
+import { writeManualIllustratorPromptPlan } from "../../services/generation/illustrator-manual-prompt-generation.js";
 import {
   isExclusiveIllustratorRetryTarget,
   parseIllustratorRetryTargets,
@@ -482,6 +484,82 @@ function buildIllustratorImagePrompt(args: {
 
   const fullPrompt = [...prefixParts, imagePrompt].join(", ");
   return args.imagePositivePrompt ? `${fullPrompt}, ${args.imagePositivePrompt}` : fullPrompt;
+}
+
+async function resolveManualIllustratorStyleInstruction(args: {
+  app: FastifyInstance;
+  chatMode: unknown;
+  chatMeta: Record<string, unknown>;
+  conns: ReturnType<typeof createConnectionsStorage>;
+  illustratorAgent: ResolvedAgent;
+}): Promise<string> {
+  return (
+    await resolveIllustratorPromptStyle({
+      db: args.app.db,
+      connections: args.conns,
+      illustratorAgent: args.illustratorAgent,
+      chatMode: args.chatMode,
+      chatMetadata: args.chatMeta,
+    })
+  ).styleInstruction;
+}
+
+async function executeManualIllustratorPromptRequest(args: {
+  app: FastifyInstance;
+  chat: any;
+  chatMeta: Record<string, unknown>;
+  conns: ReturnType<typeof createConnectionsStorage>;
+  illustratorEntry: ResolvedRetryAgent;
+  agentContext: AgentContext;
+  debugMode: boolean;
+}): Promise<AgentResult> {
+  const startedAt = Date.now();
+  try {
+    const cachedStyleInstruction = args.agentContext.memory._illustratorImageStyleInstruction;
+    const styleInstruction =
+      typeof cachedStyleInstruction === "string"
+        ? cachedStyleInstruction
+        : await resolveManualIllustratorStyleInstruction({
+            app: args.app,
+            chatMode: args.chat.mode,
+            chatMeta: args.chatMeta,
+            conns: args.conns,
+            illustratorAgent: args.illustratorEntry.resolved,
+          });
+    const generated = await writeManualIllustratorPromptPlan({
+      illustratorAgent: args.illustratorEntry.resolved,
+      context: args.agentContext,
+      styleInstruction,
+      signal: args.agentContext.signal,
+      debugLog: (message, ...values) => logDebugOverride(args.debugMode || isDebugAgentsEnabled(), message, ...values),
+    });
+    return {
+      agentId: args.illustratorEntry.resolved.id,
+      agentType: "illustrator",
+      type: "image_prompt",
+      data: {
+        ...generated.plan,
+        // The host owns this decision because the user already pressed Illustration.
+        shouldGenerate: true,
+        _styleProfileInstructionApplied: true,
+      },
+      tokensUsed: generated.tokensUsed,
+      durationMs: Date.now() - startedAt,
+      success: true,
+      error: null,
+    };
+  } catch (error) {
+    return {
+      agentId: args.illustratorEntry.resolved.id,
+      agentType: "illustrator",
+      type: "image_prompt",
+      data: null,
+      tokensUsed: 0,
+      durationMs: Date.now() - startedAt,
+      success: false,
+      error: error instanceof Error ? error.message : "Manual Illustrator prompt generation failed",
+    };
+  }
 }
 
 async function resolvePersonaContext(
@@ -3265,10 +3343,15 @@ async function applyRetryResultEffects(args: {
               styleProfileId,
               imageDefaults,
               generatedStyle: style,
+              omitProfileStyleText:
+                illData._styleProfileInstructionApplied === true ||
+                typeof agentContext.memory._illustratorImageStyleInstruction === "string",
+              omitProfileSubjectTags: true,
             });
             const finalNegativePrompt = mergeIllustratorNegativePrompt(
               compiledPrompt.prompt,
               compiledPrompt.negativePrompt,
+              requestedNegativePrompt,
             );
             const promptSubmission = resolveIllustratorPromptSubmission({
               generatedPrompt: compiledPrompt.prompt,
@@ -3580,6 +3663,7 @@ async function applyRetryResultEffects(args: {
         decisionReason: backgroundDecisionReason,
         gameState: latestGameState,
         recentMessages: agentContext.recentMessages,
+        force: isManualIllustratorBackgroundRequest,
         signal: agentContext.signal,
         debugLog: (message, ...values) => logDebugOverride(debugMode || isDebugAgentsEnabled(), message, ...values),
       });
@@ -3899,6 +3983,24 @@ export async function registerRetryAgentsRoute(app: FastifyInstance) {
               useLatestGameStateFallback: false,
             })
           : null;
+      const retryIllustratorPromptAgent = resolvedAgents.find((entry) => entry.resolved.type === "illustrator");
+      if (retryIllustratorPromptAgent) {
+        try {
+          const { styleInstruction } = await resolveIllustratorPromptStyle({
+            db: app.db,
+            connections: conns,
+            illustratorAgent: retryIllustratorPromptAgent.resolved,
+            chatMode,
+            chatMetadata: chatMeta,
+          });
+          agentContext.memory._illustratorImageStyleInstruction = styleInstruction;
+          if (preGenerationAgentContext) {
+            preGenerationAgentContext.memory._illustratorImageStyleInstruction = styleInstruction;
+          }
+        } catch (error) {
+          logger.warn(error, "[retry-agents] Failed to resolve image style instruction for the prompt writer");
+        }
+      }
       if (preGenerationAgentContext) preGenerationAgentContext.signal = abortController.signal;
       if (debugMode) {
         const emitRetryAgentDebug = (event: AgentCallDebugEvent) => {
@@ -3933,10 +4035,10 @@ export async function registerRetryAgentsRoute(app: FastifyInstance) {
       const lorebookKeeperAgent = resolvedAgents.find((entry) => entry.resolved.type === "lorebook-keeper") ?? null;
       const nonLorebookAgents = resolvedAgents.filter((entry) => entry.resolved.type !== "lorebook-keeper");
       if (
-        illustratorPromptReviewOverride &&
+        (illustratorPromptReviewOverride || isManualIllustratorBackgroundRequest || isManualIllustratorImageRequest) &&
         (nonLorebookAgents.length !== 1 || nonLorebookAgents[0]?.resolved.type !== "illustrator")
       ) {
-        throw new Error("Illustrator prompt review can only resume a single Illustrator retry");
+        throw new Error("Manual Illustrator requests require exactly one resolved Illustrator agent");
       }
       if (cyoaAgentWillRun) {
         logger.info("[retry-agents] CYOA re-roll chatId=%s assistantMessageId=%s", chatId, lastAssistant?.id ?? "none");
@@ -3954,9 +4056,37 @@ export async function registerRetryAgentsRoute(app: FastifyInstance) {
               error: null,
             } satisfies AgentResult,
           ]
-        : nonLorebookAgents.length > 0
-          ? await executeRetryBatches(agentContext, nonLorebookAgents, preGenerationAgentContext)
-          : [];
+        : isManualIllustratorBackgroundRequest
+          ? [
+              {
+                agentId: nonLorebookAgents[0]!.resolved.id,
+                agentType: "illustrator",
+                type: "image_prompt",
+                data: {
+                  generateBackground: true,
+                  reason: "Manual Gallery background request",
+                },
+                tokensUsed: 0,
+                durationMs: 0,
+                success: true,
+                error: null,
+              } satisfies AgentResult,
+            ]
+          : isManualIllustratorImageRequest
+            ? [
+                await executeManualIllustratorPromptRequest({
+                  app,
+                  chat,
+                  chatMeta,
+                  conns,
+                  illustratorEntry: nonLorebookAgents[0]!,
+                  agentContext,
+                  debugMode,
+                }),
+              ]
+            : nonLorebookAgents.length > 0
+              ? await executeRetryBatches(agentContext, nonLorebookAgents, preGenerationAgentContext)
+              : [];
       const results = rawResults
         .map(markInvalidJsonAgentResult)
         .map((result) =>

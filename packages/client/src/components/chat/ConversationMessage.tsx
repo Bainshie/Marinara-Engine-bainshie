@@ -105,6 +105,7 @@ interface ConversationMessageProps {
   isSelected?: boolean;
   onToggleSelect?: (toggle: MessageSelectionToggle) => void;
   hasDraftInput?: boolean;
+  translationDisplayOnly?: boolean;
 }
 
 // ── Shell component ──────────────────────────────────────────────
@@ -145,6 +146,7 @@ export const ConversationMessage = memo(function ConversationMessage({
   isSelected,
   onToggleSelect,
   hasDraftInput = false,
+  translationDisplayOnly = false,
 }: ConversationMessageProps) {
   const { t: localizeUi } = useUiTranslation();
   // ── Local state ──
@@ -171,8 +173,9 @@ export const ConversationMessage = memo(function ConversationMessage({
   const conversationAvatarShape = useUIStore((s) => s.conversationAvatarShape);
 
   // ── Translation ──
-  const { translate, translations, translating } = useTranslate();
+  const { translate, translations, translationSources, translating } = useTranslate();
   const translatedText = translations[message.id];
+  const translationSource = translationSources[message.id];
   const isTranslating = !!translating[message.id];
 
   // ── Derived flags ──
@@ -344,6 +347,13 @@ export const ConversationMessage = memo(function ConversationMessage({
       ),
     );
   }, [contentParts, macroContext, message.activeSwipeIndex, message.id, quoteFormat, visiblePartCount]);
+  const showTranslationOnly =
+    translationDisplayOnly &&
+    !!translatedText &&
+    !isTranslating &&
+    (translationSource === renderedContent || translationSource === message.content);
+  const displayedContent = showTranslationOnly ? translatedText : renderedContent;
+  const displayedContentParts = showTranslationOnly ? null : renderedContentParts;
 
   // ── Attachment removal ──
   const qc = useQueryClient();
@@ -463,12 +473,12 @@ export const ConversationMessage = memo(function ConversationMessage({
   }, [scopedCharacterMap]);
 
   const groupedSegments = useMemo(() => {
-    if (isUser || !renderedContent) return null;
+    if (isUser || !displayedContent) return null;
     const knownNames = charByName ? new Set(charByName.keys()) : new Set<string>();
     const leadingCharacter = message.characterId ? scopedCharacterMap?.get(message.characterId) : null;
     const leadingSpeaker = leadingCharacter?.convoDisplayName?.trim() || leadingCharacter?.name || null;
-    return parseGroupedSpeakerSegments(renderedContent, knownNames, leadingSpeaker);
-  }, [isUser, renderedContent, charByName, message.characterId, scopedCharacterMap]);
+    return parseGroupedSpeakerSegments(displayedContent, knownNames, leadingSpeaker);
+  }, [isUser, displayedContent, charByName, message.characterId, scopedCharacterMap]);
 
   // Segment-targeted reactions render inline under their speaker's segment; the
   // remainder (whole-message entries + orphans from a re-segmentation) keeps the
@@ -500,7 +510,8 @@ export const ConversationMessage = memo(function ConversationMessage({
 
   // ── Staggered reveal for multi-speaker segments ──
   const segmentCount = groupedSegments?.length ?? 0;
-  const prevContentRef = useRef(renderedContent);
+  const prevContentRef = useRef(displayedContent);
+  const prevTranslationOnlyRef = useRef(showTranslationOnly);
   const initialRenderRef = useRef(true);
   const [internalVisibleSegments, setInternalVisibleSegments] = useState(segmentCount);
 
@@ -508,11 +519,18 @@ export const ConversationMessage = memo(function ConversationMessage({
     if (initialRenderRef.current) {
       initialRenderRef.current = false;
       setInternalVisibleSegments(segmentCount);
-      prevContentRef.current = renderedContent;
+      prevContentRef.current = displayedContent;
+      prevTranslationOnlyRef.current = showTranslationOnly;
       return;
     }
-    if (renderedContent !== prevContentRef.current && segmentCount > 1) {
-      prevContentRef.current = renderedContent;
+    if (prevTranslationOnlyRef.current !== showTranslationOnly) {
+      prevTranslationOnlyRef.current = showTranslationOnly;
+      prevContentRef.current = displayedContent;
+      setInternalVisibleSegments(segmentCount);
+      return;
+    }
+    if (displayedContent !== prevContentRef.current && segmentCount > 1) {
+      prevContentRef.current = displayedContent;
       setInternalVisibleSegments(1);
       let count = 1;
       const reveal = () => {
@@ -524,8 +542,9 @@ export const ConversationMessage = memo(function ConversationMessage({
       return () => timers.forEach(clearTimeout);
     }
     setInternalVisibleSegments(segmentCount);
-    prevContentRef.current = renderedContent;
-  }, [renderedContent, segmentCount]);
+    prevContentRef.current = displayedContent;
+    prevTranslationOnlyRef.current = showTranslationOnly;
+  }, [displayedContent, segmentCount, showTranslationOnly]);
   const visibleSegments =
     segmentCount > 0 ? Math.max(1, Math.min(visibleSegmentCount ?? internalVisibleSegments, segmentCount)) : 0;
 
@@ -618,14 +637,14 @@ export const ConversationMessage = memo(function ConversationMessage({
 
   // ── Copy / translate ──
   const handleCopy = useCallback(() => {
-    copyToClipboard(renderedContent);
+    copyToClipboard(displayedContent);
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
-  }, [renderedContent]);
+  }, [displayedContent]);
 
   const handleTranslate = useCallback(
-    () => translate(message.id, renderedContent, message.chatId),
-    [message.id, message.chatId, renderedContent, translate],
+    () => translate(message.id, renderedContent, message.chatId, [message.content]),
+    [message.content, message.id, message.chatId, renderedContent, translate],
   );
 
   // ── Mobile tap (show actions / multi-select) ──
@@ -669,7 +688,7 @@ export const ConversationMessage = memo(function ConversationMessage({
 
   // ── Bubble-specific derived values ──
   const streamingBubbleDraftContent =
-    isBubbleStyle && !!isStreaming && renderedContentParts?.length ? renderedContentParts.join("\n\n") : null;
+    isBubbleStyle && !!isStreaming && displayedContentParts?.length ? displayedContentParts.join("\n\n") : null;
   const shouldHideUserAvatar = (isUser && !!hideUserAvatar) || (isBubbleStyle && isUser);
   const bubbleCornerClass = isUser
     ? bubbleGroupPosition === "single"
@@ -732,8 +751,8 @@ export const ConversationMessage = memo(function ConversationMessage({
     mentionNames,
     charByName,
     quoteFormat,
-    renderedContent,
-    renderedContentParts,
+    renderedContent: displayedContent,
+    renderedContentParts: displayedContentParts,
     emojiMap: emojiMap ?? EMPTY_CUSTOM_EMOJI_MAP,
     stickerMap: stickerMap ?? EMPTY_CUSTOM_STICKER_MAP,
     groupedSegments,
@@ -769,6 +788,7 @@ export const ConversationMessage = memo(function ConversationMessage({
     isLastAssistantMessage,
     translatedText,
     isTranslating,
+    showTranslationOnly,
     hasSwipes: (message.swipeCount ?? 0) > 1,
     swipeCount: message.swipeCount ?? 0,
     multiSelectMode,

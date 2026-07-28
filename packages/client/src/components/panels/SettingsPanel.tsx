@@ -4,6 +4,7 @@
 import {
   TRACKER_DATA_PANEL_SECTIONS,
   TRACKER_PANEL_DEFAULT_BACKGROUND_COLOR,
+  QUICK_REPLIES_SETTINGS_CONTROL_ID,
   useUIStore,
   getDefaultAppAccentColor,
   getDefaultAppBackgroundColor,
@@ -119,6 +120,7 @@ import { useInstalledCapabilityPackages } from "../../hooks/use-capability-packa
 import { useDocsLanguage, useFixDocsLanguage, useSetDocsLanguage } from "../../hooks/use-docs-language";
 import { HelpTooltip } from "../ui/HelpTooltip";
 import { ColorPicker } from "../ui/ColorPicker";
+import { EmojiPicker } from "../ui/EmojiPicker";
 import { TrackerPanelIcon } from "../ui/TrackerPanelIcon";
 import { TrackerSizeTierIcon } from "../ui/TrackerSizeTierIcon";
 import {
@@ -520,7 +522,7 @@ const SETTINGS_SEARCHABLE_CONTROLS: readonly SettingsSearchableControlMeta[] = [
     sectionId: "application",
     label: "Documentation Language",
     description: "Choose the language for Marinara's built-in guides.",
-    aliases: ["documentation", "guides", "docs", "manual", "spanish", "español", "german", "deutsch"],
+    aliases: ["documentation", "guides", "docs", "manual", "spanish", "español", "german", "deutsch", "french", "français"],
     kind: "Select",
   },
   {
@@ -1136,7 +1138,7 @@ const SETTINGS_SEARCHABLE_CONTROLS: readonly SettingsSearchableControlMeta[] = [
     kind: "Input",
   },
   {
-    id: "quick-replies",
+    id: QUICK_REPLIES_SETTINGS_CONTROL_ID,
     sectionId: "input-editing",
     label: "Quick replies",
     description: "Show alternate draft actions beside Send.",
@@ -1203,9 +1205,17 @@ const SETTINGS_SEARCHABLE_CONTROLS: readonly SettingsSearchableControlMeta[] = [
     id: "automatic-backups",
     sectionId: "backup-export",
     label: "Automatic backups",
-    description: "Keep one scheduled full backup and replace it after each successful run.",
+    description: "Schedule full backups and choose how many automatic archives to retain.",
     aliases: ["backup", "daily", "weekly", "monthly", "scheduled"],
     kind: "Toggle",
+  },
+  {
+    id: "automatic-backups-kept",
+    sectionId: "backup-export",
+    label: "Automatic backups kept",
+    description: "Retain between 1 and 9999 automatic backup archives without affecting manual backups.",
+    aliases: ["backup", "retention", "history", "rotate", "automatic"],
+    kind: "Input",
   },
 ] as const;
 
@@ -2335,6 +2345,8 @@ export function SettingsPanel() {
   const localize = useLocalizedUiText();
   const rawSettingsTab = useUIStore((s) => s.settingsTab);
   const setSettingsTab = useUIStore((s) => s.setSettingsTab);
+  const settingsTargetControlId = useUIStore((s) => s.settingsTargetControlId);
+  const setSettingsTargetControlId = useUIStore((s) => s.setSettingsTargetControlId);
   const settingsTab = normalizeSettingsTab(rawSettingsTab);
   const [settingsSearch, setSettingsSearch] = useState("");
   const [quickAccessOpen, setQuickAccessOpen] = useState(false);
@@ -2390,6 +2402,16 @@ export function SettingsPanel() {
     },
     [setSettingsTab],
   );
+
+  useEffect(() => {
+    if (!settingsTargetControlId) return;
+    const control = SETTINGS_SEARCHABLE_CONTROLS.find((entry) => entry.id === settingsTargetControlId);
+    const section = control ? SETTINGS_SECTION_BY_ID.get(control.sectionId) : null;
+    if (control && section) {
+      jumpToSearchResult({ type: "control", control, section });
+    }
+    setSettingsTargetControlId(null);
+  }, [jumpToSearchResult, setSettingsTargetControlId, settingsTargetControlId]);
 
   return (
     <div className="mari-settings-panel-chrome flex h-full flex-col overflow-hidden">
@@ -2592,7 +2614,7 @@ function QuickRepliesSetting() {
 
   return (
     <div
-      id={getSettingsControlAnchorId("quick-replies")}
+      id={getSettingsControlAnchorId(QUICK_REPLIES_SETTINGS_CONTROL_ID)}
       className={cn(
         "scroll-mt-3 overflow-hidden rounded-xl border transition-colors",
         showQuickRepliesMenu
@@ -2743,6 +2765,43 @@ function QuickRepliesSetting() {
   );
 }
 
+function CustomQuickReplyIconButton({
+  icon,
+  onSelect,
+}: {
+  icon: string | undefined;
+  onSelect: (icon: string) => void;
+}) {
+  const localize = useLocalizedUiText();
+  const [open, setOpen] = useState(false);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+
+  return (
+    <>
+      <button
+        ref={buttonRef}
+        type="button"
+        onClick={() => setOpen((current) => !current)}
+        className="flex h-6 w-6 shrink-0 items-center justify-center rounded bg-[var(--secondary)]/60 text-sm leading-none outline-none ring-1 ring-transparent transition-colors hover:bg-[var(--secondary)] focus-visible:ring-[var(--primary)]/40"
+        title={localize("Choose quick reply icon")}
+        aria-label={localize("Choose quick reply icon")}
+        aria-expanded={open}
+      >
+        {icon?.trim() || "✨"}
+      </button>
+      <EmojiPicker
+        open={open}
+        onClose={() => setOpen(false)}
+        onSelect={(emoji) => {
+          onSelect(emoji);
+          setOpen(false);
+        }}
+        anchorRef={buttonRef}
+      />
+    </>
+  );
+}
+
 function CustomQuickRepliesManager() {
   const localize = useLocalizedUiText();
   const customQuickReplies = useUIStore((s) => s.customQuickReplies);
@@ -2780,6 +2839,10 @@ function CustomQuickRepliesManager() {
               className="grid gap-1 rounded-md border border-[var(--border)]/60 bg-[var(--background)]/30 p-1.5"
             >
               <div className="flex items-center gap-1.5">
+                <CustomQuickReplyIconButton
+                  icon={entry.icon}
+                  onSelect={(icon) => updateCustomQuickReply(entry.id, { icon })}
+                />
                 <input
                   value={entry.label}
                   onChange={(event) => updateCustomQuickReply(entry.id, { label: event.target.value })}
@@ -6877,6 +6940,7 @@ function AdvancedSettings() {
   type AutomaticBackupSettings = {
     enabled: boolean;
     frequency: AutomaticBackupFrequency;
+    retentionCount: number;
     lastBackupAt: string | null;
     lastError: string | null;
     nextBackupAt: string | null;
@@ -6888,7 +6952,7 @@ function AdvancedSettings() {
     refetchInterval: (query) => (query.state.data?.enabled ? 30_000 : false),
   });
   const automaticBackupMutation = useMutation({
-    mutationFn: (settings: Pick<AutomaticBackupSettings, "enabled" | "frequency">) =>
+    mutationFn: (settings: Pick<AutomaticBackupSettings, "enabled" | "frequency" | "retentionCount">) =>
       api.put<AutomaticBackupSettings>("/backup/automatic", settings),
     onSuccess: (settings) => {
       qc.setQueryData(["backups", "automatic"], settings);
@@ -6902,12 +6966,15 @@ function AdvancedSettings() {
       );
     },
   });
-  const updateAutomaticBackup = (patch: Partial<Pick<AutomaticBackupSettings, "enabled" | "frequency">>) => {
+  const updateAutomaticBackup = (
+    patch: Partial<Pick<AutomaticBackupSettings, "enabled" | "frequency" | "retentionCount">>,
+  ) => {
     const current = automaticBackupQuery.data;
     if (!current) return;
     automaticBackupMutation.mutate({
       enabled: patch.enabled ?? current.enabled,
       frequency: patch.frequency ?? current.frequency,
+      retentionCount: patch.retentionCount ?? current.retentionCount,
     });
   };
 
@@ -7410,6 +7477,33 @@ function AdvancedSettings() {
                     {localizeUi(`ui.panels.advancedsettings.automaticBackupFrequency.${frequency}`)}
                   </button>
                 ))}
+              </div>
+              <div
+                id={getSettingsControlAnchorId("automatic-backups-kept")}
+                className="mt-2 grid scroll-mt-3 gap-2 border-t border-[var(--border)]/60 pt-2 sm:grid-cols-[minmax(0,1fr)_5.5rem] sm:items-center"
+              >
+                <div className="min-w-0">
+                  <label
+                    htmlFor="automatic-backup-retention-count"
+                    className="text-[0.6875rem] font-medium text-[var(--foreground)]"
+                  >
+                    {localizeUi("ui.panels.advancedsettings.automaticBackupsKept")}
+                  </label>
+                  <p className="mt-0.5 text-[0.625rem] leading-relaxed text-[var(--muted-foreground)]">
+                    {localizeUi("ui.panels.advancedsettings.automaticBackupsKeptDescription")}
+                  </p>
+                </div>
+                <DraftNumberInput
+                  id="automatic-backup-retention-count"
+                  value={automaticBackupQuery.data.retentionCount}
+                  min={1}
+                  max={9999}
+                  selectOnFocus
+                  disabled={automaticBackupMutation.isPending}
+                  onCommit={(retentionCount) => updateAutomaticBackup({ retentionCount })}
+                  ariaLabel={localizeUi("ui.panels.advancedsettings.automaticBackupsKeptAriaLabel")}
+                  className="mari-chrome-field h-9 w-full px-2 text-right text-xs tabular-nums"
+                />
               </div>
               <p className="mt-2 text-[0.625rem] leading-relaxed text-[var(--muted-foreground)]">
                 {automaticBackupQuery.data.lastError

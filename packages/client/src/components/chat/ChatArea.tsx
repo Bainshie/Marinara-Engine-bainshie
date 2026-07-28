@@ -277,8 +277,19 @@ function isMediaPromptPreviewTimeout(error: unknown): boolean {
   return error instanceof DOMException && error.name === "TimeoutError";
 }
 
-const shouldIgnoreIntuitiveSwipeTarget = (target: EventTarget | null): boolean => {
+const shouldIgnoreIntuitiveSwipeTarget = (
+  target: EventTarget | null,
+  { allowEmptyMainComposer = false }: { allowEmptyMainComposer?: boolean } = {},
+): boolean => {
   if (!(target instanceof Element)) return false;
+  if (
+    allowEmptyMainComposer &&
+    target instanceof HTMLTextAreaElement &&
+    target.dataset.chatComposer === "true" &&
+    target.value.length === 0
+  ) {
+    return false;
+  }
   return Boolean(
     target.closest(
       [
@@ -510,6 +521,10 @@ export function ChatArea() {
   const streamingChatId = useChatStore((s) => s.streamingChatId);
   const isStreamingGlobal = useChatStore((s) => s.isStreaming);
   const isStreaming = isStreamingGlobal && streamingChatId === activeChatId;
+  const isBackgroundIllustration = useChatStore((s) =>
+    activeChatId ? s.backgroundIllustrationChatIds.has(activeChatId) : false,
+  );
+  const isTextStreaming = isStreaming && !isBackgroundIllustration;
   const isPageActive = usePageActivity();
   const regenerateMessageId = useChatStore((s) => s.regenerateMessageId);
   const chatBackground = useUIStore((s) => s.chatBackground);
@@ -2261,7 +2276,8 @@ export function ChatArea() {
       if (event.defaultPrevented) return;
 
       if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
-      if (shouldIgnoreIntuitiveSwipeTarget(event.target)) return;
+      if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+      if (shouldIgnoreIntuitiveSwipeTarget(event.target, { allowEmptyMainComposer: true })) return;
 
       if (event.repeat && event.key === "ArrowRight" && latestAssistantMessageForSwipes) {
         const swipeCount = latestAssistantMessageForSwipes.swipeCount ?? 1;
@@ -2290,7 +2306,7 @@ export function ChatArea() {
       if (event.repeat || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
       if (!latestMessageForEdit) return;
       // Don't try to edit a message that's currently streaming/regenerating.
-      if (isStreaming || agentProcessing) return;
+      if (isTextStreaming || (agentProcessing && !isBackgroundIllustration)) return;
 
       const target = event.target;
       if (target instanceof Element) {
@@ -2322,9 +2338,10 @@ export function ChatArea() {
     agentProcessing,
     chatMode,
     editLastMessageOnArrowUp,
+    isBackgroundIllustration,
     intuitiveSwipeBlocked,
     isRoleplay,
-    isStreaming,
+    isTextStreaming,
     latestMessageForEdit,
   ]);
 
@@ -3311,7 +3328,8 @@ export function ChatArea() {
           isLoading={isLoading}
           hasNextPage={!!hasNextPage}
           isFetchingNextPage={isFetchingNextPage}
-          isStreaming={isStreaming}
+          isStreaming={isTextStreaming}
+          generationVisualsPaused={isStreaming || agentProcessing}
           agentProcessing={agentProcessing}
           regenerateMessageId={regenerateMessageId}
           shouldAnimateMessages={shouldAnimateMessages}

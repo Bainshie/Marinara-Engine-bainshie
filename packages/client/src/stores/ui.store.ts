@@ -68,6 +68,7 @@ export type TrackerThoughtBubbleDisplay = "inline" | "floating";
 export type MusicPlayerSource = "spotify" | "youtube" | "custom";
 export const TRACKER_TEMPERATURE_UNITS = ["celsius", "fahrenheit"] as const;
 export type TrackerTemperatureUnit = (typeof TRACKER_TEMPERATURE_UNITS)[number];
+export const QUICK_REPLIES_SETTINGS_CONTROL_ID = "quick-replies" as const;
 export const TRACKER_PANEL_SIZE_PROFILES = ["compact", "standard", "expanded"] as const;
 export type TrackerPanelSizeProfile = (typeof TRACKER_PANEL_SIZE_PROFILES)[number];
 export type TrackerDataPanelSection = "world" | "persona" | "characters" | "quests" | "custom";
@@ -454,6 +455,8 @@ export interface CustomQuickReply {
   id: string;
   label: string;
   content: string;
+  /** Emoji shown on the compact Roleplay quick-reply rail. */
+  icon?: string;
 }
 
 interface UIState {
@@ -476,6 +479,8 @@ interface UIState {
   trackerPanelCollapsedSections: TrackerPanelCollapsedSections;
   trackerPanelSectionOrder: TrackerPanelSectionOrder;
   settingsTab: string;
+  /** Transient control id that the Settings panel should reveal and focus. */
+  settingsTargetControlId: typeof QUICK_REPLIES_SETTINGS_CONTROL_ID | null;
   modal: { type: string; props?: Record<string, unknown> } | null;
   theme: "dark" | "light";
   appBackgroundColor: string;
@@ -803,6 +808,8 @@ interface UIState {
   // ── Impersonate Settings ──
   /** Custom prompt template for /impersonate (empty = use server default). Persisted. */
   impersonatePromptTemplate: string;
+  /** Saved template loaded into the working impersonate prompt, or null for the built-in default. Persisted. */
+  activeImpersonatePromptTemplateId: string | null;
   /** When true, CYOA choices generate impersonate requests instead of normal user messages. Persisted. */
   impersonateCyoaChoices: boolean;
   /** Override preset used when impersonating (null = use chat default). Persisted. */
@@ -840,6 +847,7 @@ interface UIState {
   closeRightPanel: () => void;
   toggleRightPanel: (panel: Panel) => void;
   setSettingsTab: (tab: string) => void;
+  setSettingsTargetControlId: (controlId: typeof QUICK_REPLIES_SETTINGS_CONTROL_ID | null) => void;
   openModal: (type: string, props?: Record<string, unknown>) => void;
   closeModal: () => void;
   setTheme: (theme: "dark" | "light") => void;
@@ -1022,6 +1030,8 @@ interface UIState {
   setWeatherEffects: (v: boolean) => void;
   // Impersonate settings actions
   setImpersonatePromptTemplate: (v: string) => void;
+  selectImpersonatePromptTemplate: (template: { id: string; prompt: string } | null) => void;
+  clearActiveImpersonatePromptTemplate: () => void;
   setImpersonateCyoaChoices: (v: boolean) => void;
   setImpersonatePresetId: (id: string | null) => void;
   setImpersonateConnectionId: (id: string | null) => void;
@@ -1220,7 +1230,6 @@ export function pickSyncedSettings(state: UIState) {
     customConversationPrompt: state.customConversationPrompt,
     scheduleGenerationPreferences: state.scheduleGenerationPreferences,
     conversationTimeZone: state.conversationTimeZone,
-    impersonatePromptTemplate: state.impersonatePromptTemplate,
     impersonateCyoaChoices: state.impersonateCyoaChoices,
     impersonatePresetId: state.impersonatePresetId,
     impersonateConnectionId: state.impersonateConnectionId,
@@ -1252,6 +1261,7 @@ export const useUIStore = create<UIState>()(
       trackerPanelCollapsedSections: {},
       trackerPanelSectionOrder: [...TRACKER_DATA_PANEL_SECTIONS],
       settingsTab: "general",
+      settingsTargetControlId: null,
       modal: null,
       theme: "dark" as const,
       appBackgroundColor: "",
@@ -1431,6 +1441,7 @@ export const useUIStore = create<UIState>()(
 
       // Impersonate settings defaults
       impersonatePromptTemplate: "",
+      activeImpersonatePromptTemplateId: null,
       impersonateCyoaChoices: false,
       impersonatePresetId: null,
       impersonateConnectionId: null,
@@ -1542,6 +1553,7 @@ export const useUIStore = create<UIState>()(
         }),
 
       setSettingsTab: (tab) => set({ settingsTab: tab }),
+      setSettingsTargetControlId: (controlId) => set({ settingsTargetControlId: controlId }),
       openModal: (type, props) => set({ modal: { type, props } }),
       closeModal: () => set({ modal: null }),
       setTheme: (theme) => set({ theme }),
@@ -2095,7 +2107,10 @@ export const useUIStore = create<UIState>()(
       setShowQuickReplyImpersonate: (v) => set({ showQuickReplyImpersonate: v }),
       addCustomQuickReply: (label, content) =>
         set((state) => ({
-          customQuickReplies: [...state.customQuickReplies, { id: generateClientId(), label: label.trim(), content }],
+          customQuickReplies: [
+            ...state.customQuickReplies,
+            { id: generateClientId(), label: label.trim(), content, icon: "✨" },
+          ],
         })),
       updateCustomQuickReply: (id, patch) =>
         set((state) => ({
@@ -2105,6 +2120,7 @@ export const useUIStore = create<UIState>()(
                   ...entry,
                   ...(patch.label !== undefined ? { label: patch.label } : {}),
                   ...(patch.content !== undefined ? { content: patch.content } : {}),
+                  ...(patch.icon !== undefined ? { icon: patch.icon } : {}),
                 }
               : entry,
           ),
@@ -2289,6 +2305,12 @@ export const useUIStore = create<UIState>()(
       setEnterToSendGame: (v) => set({ enterToSendGame: v }),
       setWeatherEffects: (v) => set({ weatherEffects: v }),
       setImpersonatePromptTemplate: (v) => set({ impersonatePromptTemplate: v }),
+      selectImpersonatePromptTemplate: (template) =>
+        set({
+          activeImpersonatePromptTemplateId: template?.id ?? null,
+          impersonatePromptTemplate: template?.prompt ?? "",
+        }),
+      clearActiveImpersonatePromptTemplate: () => set({ activeImpersonatePromptTemplateId: null }),
       setImpersonateCyoaChoices: (v) => set({ impersonateCyoaChoices: v }),
       setImpersonatePresetId: (id) => set({ impersonatePresetId: id }),
       setImpersonateConnectionId: (id) => set({ impersonateConnectionId: id }),
@@ -3117,6 +3139,7 @@ export const useUIStore = create<UIState>()(
         scheduleGenerationPreferences: state.scheduleGenerationPreferences,
         conversationTimeZone: state.conversationTimeZone,
         impersonatePromptTemplate: state.impersonatePromptTemplate,
+        activeImpersonatePromptTemplateId: state.activeImpersonatePromptTemplateId,
         impersonateCyoaChoices: state.impersonateCyoaChoices,
         impersonatePresetId: state.impersonatePresetId,
         impersonateConnectionId: state.impersonateConnectionId,

@@ -493,6 +493,53 @@ test("Chat Settings adds a formatted greeting after the setup wizard is skipped"
   }
 });
 
+test("Function Calling can require the first tool round per chat", async ({ page, request }, testInfo) => {
+  test.skip(!testInfo.project.name.includes("desktop"), "Function Calling settings are covered once on desktop.");
+
+  const chatResponse = await request.post("/api/chats", {
+    data: {
+      name: "Required Tool Call Smoke",
+      mode: "roleplay",
+      characterIds: [],
+    },
+  });
+  expect(chatResponse.ok()).toBeTruthy();
+  const chat = (await chatResponse.json()) as { id: string };
+  await page.addInitScript((chatId) => localStorage.setItem("marinara-active-chat-id", chatId), chat.id);
+
+  const readMetadata = async () => {
+    const response = await request.get(`/api/chats/${chat.id}`);
+    const stored = (await response.json()) as { metadata: string | Record<string, unknown> };
+    return typeof stored.metadata === "string"
+      ? (JSON.parse(stored.metadata) as Record<string, unknown>)
+      : stored.metadata;
+  };
+
+  try {
+    await page.goto("/");
+    await page.getByRole("button", { name: "Chat Settings", exact: true }).filter({ visible: true }).click();
+
+    const section = page.locator('[data-chat-settings-section="function-calling"]');
+    await section.locator('[role="button"][aria-expanded]').click();
+    await section.getByText("Enable Tool Use", { exact: true }).click();
+
+    const forceToolCall = section.getByLabel("Force To Call Tool", { exact: true });
+    await expect(forceToolCall).toBeVisible();
+    await expect(forceToolCall).not.toBeChecked();
+    await section.getByText("Force To Call Tool", { exact: true }).click();
+    await expect
+      .poll(async () => (await readMetadata()).forceToolCall)
+      .toBe(true);
+
+    await section.getByText("Force To Call Tool", { exact: true }).click();
+    await expect
+      .poll(async () => (await readMetadata()).forceToolCall)
+      .toBe(false);
+  } finally {
+    await request.delete(`/api/chats/${chat.id}`).catch(() => undefined);
+  }
+});
+
 test("settings profile exports use the new identity and legacy exports still import", async ({ request }, testInfo) => {
   test.skip(!testInfo.project.name.includes("desktop"), "Settings profile transfer contract is covered once.");
 
@@ -2110,6 +2157,230 @@ test("provider concurrency errors appear in generation toasts", async ({ page },
   }
 });
 
+test("sent text stays cleared and the first message edit persists after stopped generation", async ({
+  page,
+  request,
+}, testInfo) => {
+  test.skip(!testInfo.project.name.includes("desktop"), "Stopped-generation edit persistence is covered on desktop.");
+  test.setTimeout(90_000);
+
+  const suffix = Date.now().toString(36);
+  const providerRequests: Array<Record<string, unknown>> = [];
+  const openProviderResponses = new Set<import("node:http").ServerResponse>();
+  const providerServer = createServer((incoming, response) => {
+    const chunks: Buffer[] = [];
+    incoming.on("data", (chunk) => chunks.push(Buffer.from(chunk)));
+    incoming.on("end", () => {
+      if (incoming.method !== "POST" || incoming.url !== "/v1/chat/completions") {
+        response.writeHead(404, { "content-type": "application/json" });
+        response.end(JSON.stringify({ error: "Unexpected stopped-generation provider request" }));
+        return;
+      }
+      providerRequests.push(JSON.parse(Buffer.concat(chunks).toString("utf8")) as Record<string, unknown>);
+      openProviderResponses.add(response);
+      response.on("close", () => openProviderResponses.delete(response));
+      response.writeHead(200, {
+        "content-type": "text/event-stream",
+        connection: "keep-alive",
+        "cache-control": "no-cache",
+      });
+      response.flushHeaders();
+      if (providerRequests.length <= 2) {
+        response.write(
+          `data: ${JSON.stringify({
+            choices: [{ index: 0, delta: { content: "Partial response" }, finish_reason: null }],
+          })}\n\n`,
+        );
+      }
+    });
+  });
+  await new Promise<void>((resolve) => providerServer.listen(0, "127.0.0.1", resolve));
+
+  let connectionId = "";
+  let characterId = "";
+  let chatId = "";
+  try {
+    const address = providerServer.address();
+    if (!address || typeof address === "string") throw new Error("Stopped-generation provider fixture did not bind");
+
+    const connectionResponse = await request.post("/api/connections", {
+      data: {
+        name: `Stopped Edit Provider ${suffix}`,
+        provider: "custom",
+        baseUrl: `http://127.0.0.1:${address.port}/v1`,
+        apiKey: "e2e-stopped-edit",
+        model: "stopped-edit-model",
+        maxContext: 32_768,
+      },
+    });
+    expect(connectionResponse.ok(), await connectionResponse.text()).toBeTruthy();
+    connectionId = ((await connectionResponse.json()) as { id: string }).id;
+
+    const characterResponse = await request.post("/api/characters", {
+      data: {
+        data: {
+          name: `Stopped Edit Character ${suffix}`,
+          description: "A patient regression-test partner.",
+          first_mes: "",
+        },
+      },
+    });
+    expect(characterResponse.ok(), await characterResponse.text()).toBeTruthy();
+    characterId = ((await characterResponse.json()) as { id: string }).id;
+
+    const chatResponse = await request.post("/api/chats", {
+      data: {
+        name: `Stopped Edit Chat ${suffix}`,
+        mode: "roleplay",
+        characterIds: [characterId],
+        connectionId,
+      },
+    });
+    expect(chatResponse.ok(), await chatResponse.text()).toBeTruthy();
+    chatId = ((await chatResponse.json()) as { id: string }).id;
+    await request.patch(`/api/chats/${chatId}/metadata`, {
+      data: { enableAgents: false },
+    });
+    await page.addInitScript((activeChatId) => localStorage.setItem("marinara-active-chat-id", activeChatId), chatId);
+    await page.goto("/");
+
+    const input = page.locator("textarea.mari-chat-input-textarea");
+    const sendButton = page.locator("button.mari-chat-send-btn");
+    const stopCurrentGeneration = async (expectedProviderRequestCount: number) => {
+      await expect.poll(() => providerRequests.length).toBe(expectedProviderRequestCount);
+      await expect(sendButton.locator("svg.lucide-circle-stop")).toBeVisible();
+      await sendButton.click();
+      await expect(sendButton.locator("svg.lucide-circle-stop")).toHaveCount(0);
+    };
+    const readMessages = async () => {
+      const response = await request.get(`/api/chats/${chatId}/messages`);
+      return (await response.json()) as Array<{ id: string; role: string; content: string }>;
+    };
+    const editMessageOnce = async (messageId: string, nextContent: string) => {
+      const message = page.locator(`[data-message-id="${messageId}"]`);
+      await message.hover();
+      await message.getByTitle("Edit", { exact: true }).click();
+      const editor = message.locator("textarea");
+      await editor.fill(nextContent);
+      await message.getByLabel("Save edit", { exact: true }).click();
+      await expect(message).toContainText(nextContent);
+      await expect
+        .poll(async () => (await readMessages()).find((candidate) => candidate.id === messageId)?.content)
+        .toBe(nextContent);
+    };
+
+    await input.fill("Original message with retained draft");
+    await sendButton.click();
+    await expect(input).toHaveValue("");
+    await input.fill("Unsent composer text");
+    await stopCurrentGeneration(1);
+    const firstMessage = (await readMessages()).find(
+      (message) => message.role === "user" && message.content === "Original message with retained draft",
+    );
+    expect(firstMessage).toBeTruthy();
+    await editMessageOnce(firstMessage!.id, "Edited on the first save with retained draft");
+    await expect(input).toHaveValue("Unsent composer text");
+
+    await input.fill("Original message with cleared draft");
+    await sendButton.click();
+    await expect(input).toHaveValue("");
+    await stopCurrentGeneration(2);
+    await expect(input).toHaveValue("");
+    const secondMessage = (await readMessages()).find(
+      (message) => message.role === "user" && message.content === "Original message with cleared draft",
+    );
+    expect(secondMessage).toBeTruthy();
+    await editMessageOnce(secondMessage!.id, "Edited on the first save with cleared draft");
+
+    await input.fill("Sent text must stay cleared when stopped before the reply");
+    await sendButton.click();
+    await expect(input).toHaveValue("");
+    await stopCurrentGeneration(3);
+    await expect(input).toHaveValue("");
+    await expect
+      .poll(async () =>
+        (await readMessages()).some(
+          (message) => message.role === "user" && message.content === "Sent text must stay cleared when stopped before the reply",
+        ),
+      )
+      .toBe(true);
+
+    await page.reload();
+    await expect(page.locator(`[data-message-id="${firstMessage!.id}"]`)).toContainText(
+      "Edited on the first save with retained draft",
+    );
+    await expect(page.locator(`[data-message-id="${secondMessage!.id}"]`)).toContainText(
+      "Edited on the first save with cleared draft",
+    );
+    await expect(page.getByText("Sent text must stay cleared when stopped before the reply", { exact: true })).toBeVisible();
+  } finally {
+    for (const response of openProviderResponses) response.end();
+    await Promise.allSettled([
+      chatId ? request.delete(`/api/chats/${chatId}`) : Promise.resolve(),
+      characterId ? request.delete(`/api/characters/${characterId}`) : Promise.resolve(),
+      connectionId ? request.delete(`/api/connections/${connectionId}`) : Promise.resolve(),
+    ]);
+    await new Promise<void>((resolve, reject) => {
+      providerServer.close((error) => (error ? reject(error) : resolve()));
+    });
+  }
+});
+
+test("empty focused chat composers keep keyboard swipe navigation", async ({ page, request }, testInfo) => {
+  test.skip(!testInfo.project.name.includes("desktop"), "Keyboard swipe navigation is covered on desktop.");
+
+  const chatResponse = await request.post("/api/chats", {
+    data: { name: "Focused Composer Swipe Navigation", mode: "roleplay", characterIds: [] },
+  });
+  expect(chatResponse.ok()).toBeTruthy();
+  const chat = (await chatResponse.json()) as { id: string };
+  const messageResponse = await request.post(`/api/chats/${chat.id}/messages`, {
+    data: { role: "assistant", content: "First focused-composer swipe." },
+  });
+  expect(messageResponse.ok()).toBeTruthy();
+  const message = (await messageResponse.json()) as { id: string };
+  const swipeResponse = await request.post(`/api/chats/${chat.id}/messages/${message.id}/swipes`, {
+    data: { content: "Second focused-composer swipe.", silent: true },
+  });
+  expect(swipeResponse.ok()).toBeTruthy();
+
+  try {
+    await page.addInitScript((chatId) => {
+      localStorage.setItem("marinara-active-chat-id", chatId);
+      localStorage.setItem(
+        "marinara-engine-ui",
+        JSON.stringify({
+          state: {
+            intuitiveSwipeNavigation: true,
+            intuitiveSwipeRerollLatest: false,
+          },
+          version: 87,
+        }),
+      );
+    }, chat.id);
+    await page.goto("/");
+
+    const composer = page.locator("textarea.mari-chat-input-textarea");
+    const messageRow = page.locator(`[data-message-id="${message.id}"]`);
+    await expect(messageRow).toContainText("First focused-composer swipe.");
+
+    await composer.focus();
+    await expect(composer).toHaveValue("");
+    await composer.press("ArrowRight");
+    await expect(messageRow).toContainText("Second focused-composer swipe.");
+
+    await composer.fill("Do not navigate while I am typing");
+    await composer.press("ArrowLeft");
+    await expect(messageRow).toContainText("Second focused-composer swipe.");
+
+    await composer.fill("");
+    await composer.press("ArrowLeft");
+    await expect(messageRow).toContainText("First focused-composer swipe.");
+  } finally {
+    await request.delete(`/api/chats/${chat.id}`);
+  }
+});
+
 test("typographic quotes do not pull the Roleplay caret behind later text", async ({ page }, testInfo) => {
   test.skip(!testInfo.project.name.includes("desktop"), "Roleplay quote caret behavior is covered on desktop.");
 
@@ -2158,6 +2429,258 @@ test("typographic quotes do not pull the Roleplay caret behind later text", asyn
     await expect.poll(() => input.evaluate((element) => element.selectionStart)).toBe(2);
     await expect.poll(() => input.evaluate((element) => element.selectionEnd)).toBe(2);
   } finally {
+    await page.request.delete(`/api/chats/${chat.id}`);
+  }
+});
+
+test("desktop Roleplay composition keeps ambient work off the input path and grows before paint", async ({
+  page,
+}, testInfo) => {
+  test.skip(!testInfo.project.name.includes("desktop"), "Desktop composer performance is covered on desktop.");
+
+  const chatResponse = await page.request.post("/api/chats", {
+    data: { name: "Roleplay Composer Performance Smoke", mode: "roleplay", characterIds: [] },
+  });
+  expect(chatResponse.ok()).toBeTruthy();
+  const chat = (await chatResponse.json()) as { id: string };
+
+  try {
+    await page.addInitScript((chatId) => {
+      const persisted = JSON.parse(localStorage.getItem("marinara-engine-ui") ?? '{"state":{},"version":87}') as {
+        state: Record<string, unknown>;
+        version: number;
+      };
+      persisted.state.hasCompletedOnboarding = true;
+      persisted.state.appAccentPulseMode = true;
+      localStorage.setItem("marinara-engine-ui", JSON.stringify(persisted));
+      localStorage.setItem("marinara-active-chat-id", chatId);
+    }, chat.id);
+    await page.goto("/");
+
+    const input = page.locator("textarea.mari-chat-input-textarea");
+    const root = page.locator("html");
+    await expect(input).toHaveAttribute("data-lt-active", "false");
+    await expect(root).toHaveAttribute("data-marinara-accent-animation");
+
+    await page.evaluate(() => {
+      const measurementWindow = window as Window & { __lastKeyboardOpen?: boolean };
+      window.addEventListener("marinara:chat-visual-viewport-change", (event) => {
+        measurementWindow.__lastKeyboardOpen = (
+          event as CustomEvent<{ keyboardOpen?: boolean }>
+        ).detail?.keyboardOpen;
+      });
+    });
+    await page.setViewportSize({ width: 1440, height: 700 });
+    await input.focus();
+
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () => (window as Window & { __lastKeyboardOpen?: boolean }).__lastKeyboardOpen,
+        ),
+      )
+      .toBe(false);
+    await expect(root).not.toHaveAttribute("data-marinara-accent-animation");
+
+    const initialHeight = await input.evaluate((element) => {
+      element.style.flex = "0 0 240px";
+      element.style.width = "240px";
+      return element.clientHeight;
+    });
+    await input.evaluate((element) => {
+      const value =
+        "A long Roleplay sentence should wrap onto another line without briefly hiding the newly typed text.";
+      element.value = value;
+      element.dispatchEvent(
+        new InputEvent("input", {
+          bubbles: true,
+          data: value,
+          inputType: "insertText",
+        }),
+      );
+    });
+    const wrappedHeight = await input.evaluate(
+      (element) =>
+        new Promise<number>((resolve) => {
+          requestAnimationFrame(() => resolve(element.clientHeight));
+        }),
+    );
+    expect(wrappedHeight).toBeGreaterThan(initialHeight);
+
+    const resizeStability = await input.evaluate(
+      (element) =>
+        new Promise<{ heightDelta: number; delayedStyleMutations: number; overflowY: string }>(
+          (resolve) => {
+            const heights: number[] = [];
+            let delayedStyleMutations = 0;
+            const observer = new MutationObserver((records) => {
+              delayedStyleMutations += records.length;
+            });
+            observer.observe(element, { attributes: true, attributeFilter: ["style"] });
+
+            const sample = () => {
+              heights.push(element.getBoundingClientRect().height);
+              if (heights.length < 18) {
+                requestAnimationFrame(sample);
+                return;
+              }
+              observer.disconnect();
+              resolve({
+                heightDelta: Math.max(...heights) - Math.min(...heights),
+                delayedStyleMutations,
+                overflowY: element.style.overflowY,
+              });
+            };
+            requestAnimationFrame(sample);
+          },
+        ),
+    );
+    expect(resizeStability.heightDelta).toBeLessThanOrEqual(1);
+    expect(resizeStability.delayedStyleMutations).toBe(0);
+    expect(resizeStability.overflowY).toBe("hidden");
+
+    await input.blur();
+    await expect(root).toHaveAttribute("data-marinara-accent-animation");
+  } finally {
+    await page.request.delete(`/api/chats/${chat.id}`);
+  }
+});
+
+test("mobile Roleplay composition avoids draft rewrites and pauses ambient rendering", async ({ page }, testInfo) => {
+  test.skip(!testInfo.project.name.includes("mobile"), "Mobile composer resource behavior is covered on mobile.");
+
+  const chatResponse = await page.request.post("/api/chats", {
+    data: { name: "Mobile Composition Smoke", mode: "roleplay", characterIds: [] },
+  });
+  expect(chatResponse.ok()).toBeTruthy();
+  const chat = (await chatResponse.json()) as { id: string };
+
+  try {
+    await page.addInitScript((chatId) => {
+      const persisted = JSON.parse(localStorage.getItem("marinara-engine-ui") ?? '{"state":{},"version":87}') as {
+        state: Record<string, unknown>;
+        version: number;
+      };
+      persisted.state.hasCompletedOnboarding = true;
+      persisted.state.quoteFormat = "typographic";
+      localStorage.setItem("marinara-engine-ui", JSON.stringify(persisted));
+      localStorage.setItem("marinara-active-chat-id", chatId);
+    }, chat.id);
+    await page.goto("/");
+
+    const input = page.locator("textarea.mari-chat-input-textarea");
+    await input.evaluate((element) => {
+      element.value = 'She said "';
+      element.dispatchEvent(
+        new InputEvent("input", {
+          bubbles: true,
+          data: '"',
+          inputType: "insertCompositionText",
+          isComposing: true,
+        }),
+      );
+    });
+
+    await expect(input).toHaveValue('She said "');
+    await expect(page.locator('[data-chat-mode="roleplay"]')).toHaveClass(/mari-generation-render-paused/u);
+
+    await input.fill("");
+    await input.blur();
+    await expect(page.locator('[data-chat-mode="roleplay"]')).not.toHaveClass(/mari-generation-render-paused/u);
+  } finally {
+    await page.request.delete(`/api/chats/${chat.id}`);
+  }
+});
+
+test("held Roleplay deletion defers draft persistence and autosizing until a release boundary", async ({
+  page,
+}, testInfo) => {
+  test.skip(!testInfo.project.name.includes("desktop"), "Held-key composer behavior is covered on desktop.");
+
+  const chatResponse = await page.request.post("/api/chats", {
+    data: { name: "Held Delete Smoke", mode: "roleplay", characterIds: [] },
+  });
+  expect(chatResponse.ok()).toBeTruthy();
+  const chat = (await chatResponse.json()) as { id: string };
+
+  try {
+    await page.addInitScript((chatId) => {
+      const persisted = JSON.parse(localStorage.getItem("marinara-engine-ui") ?? '{"state":{},"version":87}') as {
+        state: Record<string, unknown>;
+        version: number;
+      };
+      persisted.state.hasCompletedOnboarding = true;
+      localStorage.setItem("marinara-engine-ui", JSON.stringify(persisted));
+      localStorage.setItem("marinara-active-chat-id", chatId);
+    }, chat.id);
+    await page.goto("/");
+
+    const input = page.locator("textarea.mari-chat-input-textarea");
+    const initialValue =
+      "The sustained deletion regression keeps this Roleplay draft long enough to exercise textarea autosizing.";
+    await input.fill(initialValue);
+
+    const readPersistedDraft = () =>
+      page.evaluate((chatId) => {
+        const entries = JSON.parse(localStorage.getItem("marinara-input-drafts") ?? "[]") as Array<[string, string]>;
+        return new Map(entries).get(chatId) ?? "";
+      }, chat.id);
+    await expect.poll(readPersistedDraft).toBe(initialValue);
+
+    await input.evaluate((element) => {
+      const measurementWindow = window as Window & { __heldDeleteStyleMutations?: number };
+      measurementWindow.__heldDeleteStyleMutations = 0;
+      new MutationObserver((records) => {
+        measurementWindow.__heldDeleteStyleMutations =
+          (measurementWindow.__heldDeleteStyleMutations ?? 0) +
+          records.filter((record) => record.attributeName === "style").length;
+      }).observe(element, { attributes: true, attributeFilter: ["style"] });
+    });
+
+    await input.focus();
+    await page.keyboard.down("Backspace");
+    await page.waitForTimeout(520);
+
+    await expect(input).toHaveValue(initialValue.slice(0, -1));
+    expect(await readPersistedDraft()).toBe(initialValue);
+    expect(
+      await page.evaluate(
+        () => (window as Window & { __heldDeleteStyleMutations?: number }).__heldDeleteStyleMutations ?? 0,
+      ),
+    ).toBe(0);
+
+    await page.keyboard.up("Backspace");
+    await expect.poll(readPersistedDraft).toBe(initialValue.slice(0, -1));
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () => (window as Window & { __heldDeleteStyleMutations?: number }).__heldDeleteStyleMutations ?? 0,
+        ),
+      )
+      .toBeGreaterThan(0);
+
+    await input.fill(initialValue);
+    await expect.poll(readPersistedDraft).toBe(initialValue);
+    await page.evaluate(() => {
+      (window as Window & { __heldDeleteStyleMutations?: number }).__heldDeleteStyleMutations = 0;
+    });
+
+    await input.focus();
+    await page.keyboard.down("Backspace");
+    await page.evaluate(() => window.dispatchEvent(new Event("blur")));
+
+    await expect(input).toHaveValue(initialValue.slice(0, -1));
+    await expect.poll(readPersistedDraft).toBe(initialValue.slice(0, -1));
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () => (window as Window & { __heldDeleteStyleMutations?: number }).__heldDeleteStyleMutations ?? 0,
+        ),
+      )
+      .toBeGreaterThan(0);
+    await page.keyboard.up("Backspace");
+  } finally {
+    await page.keyboard.up("Backspace").catch(() => undefined);
     await page.request.delete(`/api/chats/${chat.id}`);
   }
 });
@@ -2626,6 +3149,116 @@ test("Roleplay side panels synchronize their slide with the desktop shell resize
   }
 });
 
+test("new Roleplay chats seed character Tracker custom-field defaults without reclaiming chat values", async ({
+  request,
+}) => {
+  const suffix = Date.now().toString(36);
+  const characterResponse = await request.post("/api/characters", {
+    data: {
+      data: {
+        name: `Tracker Defaults ${suffix}`,
+        extensions: {
+          trackerCustomFieldDefaults: [
+            { name: "Mental State", value: "Calm" },
+            { name: "Goal", value: "Find the atlas" },
+          ],
+        },
+      },
+    },
+  });
+  expect(characterResponse.ok()).toBeTruthy();
+  const character = (await characterResponse.json()) as { id: string };
+  const statsOnlyCharacterResponse = await request.post("/api/characters", {
+    data: {
+      data: {
+        name: `Tracker Stats ${suffix}`,
+        extensions: {
+          rpgStats: {
+            enabled: true,
+            attributes: [],
+            hp: { value: 7, max: 10 },
+            pools: [{ name: "Resolve", value: 7, max: 10, color: "#60a5fa" }],
+          },
+        },
+      },
+    },
+  });
+  expect(statsOnlyCharacterResponse.ok()).toBeTruthy();
+  const statsOnlyCharacter = (await statsOnlyCharacterResponse.json()) as { id: string };
+  const chatIds: string[] = [];
+
+  try {
+    const createChat = async () => {
+      const response = await request.post("/api/chats", {
+        data: {
+          name: `Tracker Defaults ${suffix}`,
+          mode: "roleplay",
+          characterIds: [character.id, statsOnlyCharacter.id],
+        },
+      });
+      expect(response.ok()).toBeTruthy();
+      const chat = (await response.json()) as { id: string };
+      chatIds.push(chat.id);
+      return chat.id;
+    };
+    const readCharacter = async (chatId: string, characterId = character.id) => {
+      const response = await request.get(`/api/chats/${chatId}/game-state`);
+      expect(response.ok()).toBeTruthy();
+      const state = (await response.json()) as {
+        presentCharacters: Array<{
+          characterId: string;
+          customFields: Record<string, string>;
+          stats: Array<{ name: string; value: number; max: number; color: string }>;
+        }>;
+      };
+      return state.presentCharacters.find((entry) => entry.characterId === characterId);
+    };
+
+    const firstChatId = await createChat();
+    const firstSeed = await readCharacter(firstChatId);
+    expect(firstSeed?.customFields).toEqual({
+      "Mental State": "Calm",
+      Goal: "Find the atlas",
+    });
+    expect((await readCharacter(firstChatId, statsOnlyCharacter.id))?.stats).toEqual([
+      { name: "Resolve", value: 7, max: 10, color: "#60a5fa" },
+    ]);
+
+    const editedCharacters = [
+      {
+        ...firstSeed,
+        customFields: {
+          ...firstSeed?.customFields,
+          "Mental State": "Restless",
+        },
+      },
+    ];
+    const editResponse = await request.patch(`/api/chats/${firstChatId}/game-state`, {
+      data: { presentCharacters: editedCharacters, manual: true },
+    });
+    expect(editResponse.ok()).toBeTruthy();
+    const removeResponse = await request.patch(`/api/chats/${firstChatId}`, {
+      data: { characterIds: [statsOnlyCharacter.id] },
+    });
+    expect(removeResponse.ok()).toBeTruthy();
+    const reAddResponse = await request.patch(`/api/chats/${firstChatId}`, {
+      data: { characterIds: [character.id, statsOnlyCharacter.id] },
+    });
+    expect(reAddResponse.ok()).toBeTruthy();
+    expect((await readCharacter(firstChatId))?.customFields["Mental State"]).toBe("Restless");
+
+    const secondChatId = await createChat();
+    expect((await readCharacter(secondChatId))?.customFields["Mental State"]).toBe("Calm");
+  } finally {
+    await Promise.all(chatIds.map((chatId) => request.delete(`/api/chats/${chatId}`).catch(() => undefined)));
+    await Promise.all(
+      [character.id, statsOnlyCharacter.id].map((characterId) =>
+        request.delete(`/api/characters/${characterId}`).catch(() => undefined),
+      ),
+    );
+  }
+});
+
 test("desktop Tracker stays in the Roleplay gutter without shifting the chat column", async ({ page }, testInfo) => {
   test.skip(!testInfo.project.name.includes("desktop"), "Desktop Tracker gutter behavior is covered on desktop.");
 
@@ -2818,7 +3451,7 @@ test("legacy browser records are cleaned while extension imports stay locked", a
         };
       }),
     )
-    .toEqual({ version: 84, hasExtensionRecords: false, hasCleanupFlag: false });
+    .toEqual({ version: 87, hasExtensionRecords: false, hasCleanupFlag: false });
 
   expect(
     await page.evaluate(
@@ -2900,149 +3533,149 @@ test("Personal Extensions default to the Professor Mari-only locked workflow", a
   expect(warningColors.warning).toBe(warningColors.accent);
 });
 
-test(
-  "external Agent imports require the Danger Zone gate and explicit capabilities",
-  async ({ page, request }, testInfo) => {
-    test.skip(
-      testInfo.project.name !== "mobile-chromium",
-      "This stateful import-policy flow runs once against the shared test server",
-    );
+test("external Agent imports require the Danger Zone gate and explicit capabilities", async ({
+  page,
+  request,
+}, testInfo) => {
+  test.skip(
+    testInfo.project.name !== "mobile-chromium",
+    "This stateful import-policy flow runs once against the shared test server",
+  );
 
-    const disabledPolicy = await request.patch("/api/agents/import-policy", { data: { enabled: false } });
-    expect(disabledPolicy.ok()).toBeTruthy();
+  const disabledPolicy = await request.patch("/api/agents/import-policy", { data: { enabled: false } });
+  expect(disabledPolicy.ok()).toBeTruthy();
 
-    const testSuffix = Date.now().toString(36);
-    const localAgentName = `Locally Authored Agent ${testSuffix}`;
-    const importedAgentName = `Permission Review Agent ${testSuffix}`;
-    let localAgentId: string | undefined;
-    let importedAgentId: string | undefined;
-    try {
-      const localAgentResponse = await request.post("/api/agents", {
-        data: {
-          type: `e2e-local-agent-${testSuffix}`,
-          name: localAgentName,
-          description: "Must remain creatable while external imports are locked.",
-          phase: "parallel",
+  const testSuffix = Date.now().toString(36);
+  const localAgentName = `Locally Authored Agent ${testSuffix}`;
+  const importedAgentName = `Permission Review Agent ${testSuffix}`;
+  let localAgentId: string | undefined;
+  let importedAgentId: string | undefined;
+  try {
+    const localAgentResponse = await request.post("/api/agents", {
+      data: {
+        type: `e2e-local-agent-${testSuffix}`,
+        name: localAgentName,
+        description: "Must remain creatable while external imports are locked.",
+        phase: "parallel",
+        connectionId: null,
+        imagePath: null,
+        promptTemplate: "Return a short note.",
+        settings: { resultType: "context_injection", customCapabilities: {} },
+      },
+    });
+    expect(localAgentResponse.ok()).toBeTruthy();
+    const localAgent = (await localAgentResponse.json()) as { id: string };
+    localAgentId = localAgent.id;
+
+    const blockedImport = await request.post("/api/agents/import", {
+      data: {
+        agent: {
+          type: "untrusted-haptic",
+          name: "Blocked External Agent",
+          description: "",
+          phase: "post_processing",
           connectionId: null,
           imagePath: null,
-          promptTemplate: "Return a short note.",
-          settings: { resultType: "context_injection", customCapabilities: {} },
+          resultType: "haptic_command",
+          promptTemplate: "Return a haptic command.",
+          settings: { customCapabilities: { control_haptics: true } },
         },
-      });
-      expect(localAgentResponse.ok()).toBeTruthy();
-      const localAgent = (await localAgentResponse.json()) as { id: string };
-      localAgentId = localAgent.id;
+        source: "file",
+        approvedCapabilities: ["control_haptics"],
+        acknowledgePermissions: true,
+      },
+    });
+    expect(blockedImport.status()).toBe(403);
 
-      const blockedImport = await request.post("/api/agents/import", {
-        data: {
-          agent: {
-            type: "untrusted-haptic",
-            name: "Blocked External Agent",
-            description: "",
-            phase: "post_processing",
-            connectionId: null,
-            imagePath: null,
-            resultType: "haptic_command",
-            promptTemplate: "Return a haptic command.",
-            settings: { customCapabilities: { control_haptics: true } },
-          },
-          source: "file",
-          approvedCapabilities: ["control_haptics"],
-          acknowledgePermissions: true,
-        },
-      });
-      expect(blockedImport.status()).toBe(403);
+    await page.goto("/");
+    await page.locator('[data-tour="panel-agents"]').click();
+    const disabledHelp = 'Enable "Allow custom Agent imports" in Advanced Settings → Danger Zone first.';
+    const lockedImportButton = page.getByTitle(disabledHelp).first();
+    await expect(lockedImportButton).toHaveAttribute("aria-disabled", "true");
+    await lockedImportButton.dispatchEvent("click");
+    await expect(page.getByText(disabledHelp, { exact: true }).last()).toBeVisible();
 
-      await page.goto("/");
-      await page.locator('[data-tour="panel-agents"]').click();
-      const disabledHelp = 'Enable "Allow custom Agent imports" in Advanced Settings → Danger Zone first.';
-      const lockedImportButton = page.getByTitle(disabledHelp).first();
-      await expect(lockedImportButton).toHaveAttribute("aria-disabled", "true");
-      await lockedImportButton.dispatchEvent("click");
-      await expect(page.getByText(disabledHelp, { exact: true }).last()).toBeVisible();
+    await page.locator('[data-tour="panel-settings"]').click();
+    await page.getByRole("tab", { name: "Advanced" }).click();
+    const agentImportToggle = page.getByLabel("Allow custom Agent imports");
+    const extensionImportToggle = page.getByLabel("Allow third-party extension imports");
+    await expect(agentImportToggle).toBeEnabled();
+    await expect(agentImportToggle).not.toBeChecked();
+    expect(
+      await agentImportToggle.evaluate((toggle) => {
+        const extensionLabel = [...document.querySelectorAll("label")].find(
+          (label) => label.textContent?.trim() === "Allow third-party extension imports",
+        );
+        const extension =
+          extensionLabel instanceof HTMLLabelElement ? document.getElementById(extensionLabel.htmlFor) : null;
+        return Boolean(
+          extension && (toggle.compareDocumentPosition(extension) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0,
+        );
+      }),
+    ).toBe(true);
 
-      await page.locator('[data-tour="panel-settings"]').click();
-      await page.getByRole("tab", { name: "Advanced" }).click();
-      const agentImportToggle = page.getByLabel("Allow custom Agent imports");
-      const extensionImportToggle = page.getByLabel("Allow third-party extension imports");
-      await expect(agentImportToggle).toBeEnabled();
-      await expect(agentImportToggle).not.toBeChecked();
-      expect(
-        await agentImportToggle.evaluate((toggle) => {
-          const extensionLabel = [...document.querySelectorAll("label")].find(
-            (label) => label.textContent?.trim() === "Allow third-party extension imports",
-          );
-          const extension =
-            extensionLabel instanceof HTMLLabelElement
-              ? document.getElementById(extensionLabel.htmlFor)
-              : null;
-          return Boolean(
-            extension && (toggle.compareDocumentPosition(extension) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0,
-          );
+    const enabledPolicy = await request.patch("/api/agents/import-policy", { data: { enabled: true } });
+    expect(enabledPolicy.ok()).toBeTruthy();
+    await page.reload();
+    await page.locator('[data-tour="panel-agents"]').click();
+    await expect(page.getByTitle("Import agents")).toHaveAttribute("aria-disabled", "false");
+
+    const packageInput = page
+      .getByRole("region", { name: "Agents" })
+      .locator('input[type="file"][accept*="application/json"]');
+    await packageInput.setInputFiles({
+      name: "permission-review-agent.json",
+      mimeType: "application/json",
+      buffer: Buffer.from(
+        JSON.stringify({
+          type: "untrusted-haptic",
+          name: importedAgentName,
+          description: "Requests haptic control.",
+          phase: "post_processing",
+          resultType: "haptic_command",
+          promptTemplate: "Return a haptic command.",
+          settings: { customCapabilities: { control_haptics: true } },
         }),
-      ).toBe(true);
+      ),
+    });
 
-      const enabledPolicy = await request.patch("/api/agents/import-policy", { data: { enabled: true } });
-      expect(enabledPolicy.ok()).toBeTruthy();
-      await page.reload();
-      await page.locator('[data-tour="panel-agents"]').click();
-      await expect(page.getByTitle("Import agents")).toHaveAttribute("aria-disabled", "false");
+    await expect(page.getByRole("dialog", { name: "Review Agent Import Permissions" })).toBeVisible();
+    const hapticPermission = page.getByLabel("Control haptic devices");
+    await expect(hapticPermission).not.toBeChecked();
+    await hapticPermission.check();
+    await expect(hapticPermission).toBeChecked();
+    await page.getByRole("button", { name: "Approve Permissions and Import" }).click();
+    await expect(page.getByRole("dialog", { name: "Review Agent Import Permissions" })).toHaveCount(0);
 
-      const packageInput = page.locator('input[type="file"][accept*="application/json"]');
-      await packageInput.setInputFiles({
-        name: "permission-review-agent.json",
-        mimeType: "application/json",
-        buffer: Buffer.from(
-          JSON.stringify({
-            type: "untrusted-haptic",
-            name: importedAgentName,
-            description: "Requests haptic control.",
-            phase: "post_processing",
-            resultType: "haptic_command",
-            promptTemplate: "Return a haptic command.",
-            settings: { customCapabilities: { control_haptics: true } },
-          }),
-        ),
-      });
-
-      await expect(page.getByRole("dialog", { name: "Review Agent Import Permissions" })).toBeVisible();
-      const hapticPermission = page.getByLabel("Control haptic devices");
-      await expect(hapticPermission).not.toBeChecked();
-      await hapticPermission.check();
-      await expect(hapticPermission).toBeChecked();
-      await page.getByRole("button", { name: "Approve Permissions and Import" }).click();
-      await expect(page.getByRole("dialog", { name: "Review Agent Import Permissions" })).toHaveCount(0);
-
-      const agentsResponse = await request.get("/api/agents");
-      expect(agentsResponse.ok()).toBeTruthy();
-      const agents = (await agentsResponse.json()) as Array<{ id: string; name: string; settings: string }>;
-      const importedAgent = agents.find((agent) => agent.name === importedAgentName);
-      expect(importedAgent).toBeTruthy();
-      importedAgentId = importedAgent?.id;
-      const importedSettings = JSON.parse(importedAgent!.settings) as Record<string, unknown>;
-      expect(importedSettings.customAgentImportSource).toBe("file");
-      expect(importedSettings.customAgentPermissionsExplicit).toBe(true);
-      expect(importedSettings.customCapabilities).toEqual({ control_haptics: true });
-    } finally {
-      try {
-        if (!localAgentId || !importedAgentId) {
-          const cleanupAgentsResponse = await request.get("/api/agents").catch(() => null);
-          if (cleanupAgentsResponse?.ok()) {
-            const cleanupAgents = (await cleanupAgentsResponse.json()) as Array<{ id: string; name: string }>;
-            localAgentId ??= cleanupAgents.find((agent) => agent.name === localAgentName)?.id;
-            importedAgentId ??= cleanupAgents.find((agent) => agent.name === importedAgentName)?.id;
-          }
+    const agentsResponse = await request.get("/api/agents");
+    expect(agentsResponse.ok()).toBeTruthy();
+    const agents = (await agentsResponse.json()) as Array<{ id: string; name: string; settings: string }>;
+    const importedAgent = agents.find((agent) => agent.name === importedAgentName);
+    expect(importedAgent).toBeTruthy();
+    importedAgentId = importedAgent?.id;
+    const importedSettings = JSON.parse(importedAgent!.settings) as Record<string, unknown>;
+    expect(importedSettings.customAgentImportSource).toBe("file");
+    expect(importedSettings.customAgentPermissionsExplicit).toBe(true);
+    expect(importedSettings.customCapabilities).toEqual({ control_haptics: true });
+  } finally {
+    try {
+      if (!localAgentId || !importedAgentId) {
+        const cleanupAgentsResponse = await request.get("/api/agents").catch(() => null);
+        if (cleanupAgentsResponse?.ok()) {
+          const cleanupAgents = (await cleanupAgentsResponse.json()) as Array<{ id: string; name: string }>;
+          localAgentId ??= cleanupAgents.find((agent) => agent.name === localAgentName)?.id;
+          importedAgentId ??= cleanupAgents.find((agent) => agent.name === importedAgentName)?.id;
         }
-        await Promise.all([
-          localAgentId ? request.delete(`/api/agents/${localAgentId}`).catch(() => undefined) : Promise.resolve(),
-          importedAgentId ? request.delete(`/api/agents/${importedAgentId}`).catch(() => undefined) : Promise.resolve(),
-        ]);
-      } finally {
-        await request.patch("/api/agents/import-policy", { data: { enabled: false } });
       }
+      await Promise.all([
+        localAgentId ? request.delete(`/api/agents/${localAgentId}`).catch(() => undefined) : Promise.resolve(),
+        importedAgentId ? request.delete(`/api/agents/${importedAgentId}`).catch(() => undefined) : Promise.resolve(),
+      ]);
+    } finally {
+      await request.patch("/api/agents/import-policy", { data: { enabled: false } });
     }
-  },
-);
+  }
+});
 
 test("Roleplay Active Context shows rich lorebook activation provenance", async ({ page, request }, testInfo) => {
   const lorebookId = "roleplay-active-context-smoke-lorebook";
@@ -4765,7 +5398,10 @@ test("Backup & Export identifies the automatic backup location", async ({ page }
 
   const backupSection = page.locator("#settings-section-backup-export");
   await expect(backupSection).toBeVisible();
-  await expect(backupSection).toContainText("DATA_DIR/backups/marinara-automatic-backup.zip");
+  await expect(backupSection).toContainText("Automatic backups kept");
+  await expect(backupSection.getByLabel("Number of automatic backups kept")).toHaveValue("1");
+  await expect(backupSection).toContainText("DATA_DIR/backups");
+  await expect(backupSection).toContainText("marinara-automatic-backup.zip");
   await expect(backupSection).toContainText("Docker defaults to /app/data");
   await expect(backupSection).toContainText("On Android, app storage is usually inaccessible");
 });
@@ -5215,6 +5851,11 @@ test("downloadable agent catalog is usable on desktop and mobile", async ({ page
   });
   await page.route("**/api/agents", async (route) => {
     await route.fulfill({ status: 200, contentType: "application/json", body: "[]" });
+  });
+  // Keep this catalog-only experiment isolated from the server-wide import-policy
+  // mutation exercised by the dedicated Danger Zone flow in the other project.
+  await page.route("**/api/agents/import-policy", async (route) => {
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ enabled: true }) });
   });
   await page.route("**/api/custom-agent-repositories", async (route) => {
     await route.fulfill({
@@ -6381,7 +7022,7 @@ test("Game setup only shows features owned by installed agents", async ({ page, 
       body: JSON.stringify({ scannedAt: "2026-07-14T00:00:00.000Z", count: 0, assets: {}, byCategory: {} }),
     });
   });
-  await page.route("**/api/backgrounds/file/Black.jpg", async (route) => {
+  await page.route("**/api/backgrounds/file/Black.jpg**", async (route) => {
     await route.fulfill({
       status: 200,
       contentType: "image/gif",
@@ -6720,7 +7361,7 @@ test("Roleplay and Game chat settings link empty agent libraries to Download Age
       body: JSON.stringify({ scannedAt: "2026-07-14T00:00:00.000Z", count: 0, assets: {}, byCategory: {} }),
     });
   });
-  await page.route("**/api/backgrounds/file/Black.jpg", async (route) => {
+  await page.route("**/api/backgrounds/file/Black.jpg**", async (route) => {
     await route.fulfill({
       status: 200,
       contentType: "image/gif",
@@ -6837,7 +7478,7 @@ test("Illustrator owns the merged scene-video and Storyboard subsections while a
       body: JSON.stringify({ entries: [], budgetSkippedEntries: [], totalTokens: 0, totalEntries: 0 }),
     });
   });
-  await page.route("**/api/backgrounds/file/Black.jpg", async (route) => {
+  await page.route("**/api/backgrounds/file/Black.jpg**", async (route) => {
     await route.fulfill({
       status: 200,
       contentType: "image/gif",
@@ -7116,7 +7757,7 @@ test("Hierarchical Maps settings stay inside the active agent entry", async ({ p
       body: JSON.stringify({ scannedAt: "2026-07-16T00:00:00.000Z", count: 0, assets: {}, byCategory: {} }),
     });
   });
-  await page.route("**/api/backgrounds/file/Black.jpg", async (route) => {
+  await page.route("**/api/backgrounds/file/Black.jpg**", async (route) => {
     await route.fulfill({
       status: 200,
       contentType: "image/gif",
@@ -7210,7 +7851,7 @@ test("Roleplay setup points empty agent libraries to the Agents tab", async ({ p
   await page.route("**/api/agents", async (route) => {
     await route.fulfill({ status: 200, contentType: "application/json", body: "[]" });
   });
-  await page.route("**/api/backgrounds/file/Black.jpg", async (route) => {
+  await page.route("**/api/backgrounds/file/Black.jpg**", async (route) => {
     await route.fulfill({
       status: 200,
       contentType: "image/gif",
@@ -7905,13 +8546,18 @@ test("streamed profile and full-backup ZIPs round-trip through import preview", 
   try {
     const automaticSettingsResponse = await request.get("/api/backup/automatic");
     expect(automaticSettingsResponse.ok()).toBeTruthy();
-    const automaticSettings = (await automaticSettingsResponse.json()) as { enabled: boolean };
+    const automaticSettings = (await automaticSettingsResponse.json()) as {
+      enabled: boolean;
+      retentionCount: number;
+    };
     expect(automaticSettings.enabled).toBe(false);
+    expect(automaticSettings.retentionCount).toBeGreaterThanOrEqual(1);
 
     const enableAutomaticResponse = await request.put("/api/backup/automatic", {
-      data: { enabled: true, frequency: "daily" },
+      data: { enabled: true, frequency: "daily", retentionCount: 3 },
     });
     expect(enableAutomaticResponse.ok()).toBeTruthy();
+    expect(((await enableAutomaticResponse.json()) as { retentionCount: number }).retentionCount).toBe(3);
     await expect
       .poll(
         async () => {
@@ -7968,7 +8614,9 @@ test("streamed profile and full-backup ZIPs round-trip through import preview", 
       expect(preview.imported.characters).toBeGreaterThanOrEqual(1);
     }
   } finally {
-    await request.put("/api/backup/automatic", { data: { enabled: false, frequency: "daily" } }).catch(() => undefined);
+    await request
+      .put("/api/backup/automatic", { data: { enabled: false, frequency: "daily", retentionCount: 1 } })
+      .catch(() => undefined);
     await request.delete(`/api/characters/${character.id}`).catch(() => undefined);
   }
 });
@@ -9744,7 +10392,7 @@ test("mobile chat composer follows the visual viewport above the software keyboa
   }
 });
 
-test("kaomoji stays in Conversation and uses the configured chat accent", async ({ page }) => {
+test("Conversation media searches match GIFs and internal presses keep the picker open", async ({ page }) => {
   const response = await page.request.post("/api/chats", {
     data: {
       name: "Kaomoji Scrollbar Smoke",
@@ -9761,23 +10409,22 @@ test("kaomoji stays in Conversation and uses the configured chat accent", async 
     }, chat.id);
     await page.goto("/");
 
-    await page.evaluate(() => {
-      document.documentElement.style.setProperty("--marinara-chat-chrome-button-text-active", "rgb(20, 184, 166)");
-      document.documentElement.style.setProperty("--primary", "rgb(236, 72, 153)");
-    });
     await page.getByRole("button", { name: /Emoji, GIFs/u }).click();
+    const mediaPicker = page.locator("[data-conversation-media-picker]:visible");
+    await expect(mediaPicker).toBeVisible();
     const emojiSearchInput = page.locator('input[placeholder="Search emojis..."]:visible');
     const emojiSearchStyle = await emojiSearchInput.evaluate((input) => {
       const style = getComputedStyle(input);
+      const shellStyle = getComputedStyle(input.parentElement!);
       return {
-        backgroundColor: style.backgroundColor,
-        borderRadius: style.borderRadius,
+        backgroundColor: shellStyle.backgroundColor,
+        borderRadius: shellStyle.borderRadius,
         fontSize: style.fontSize,
-        paddingBlock: `${style.paddingTop} ${style.paddingBottom}`,
-        paddingInline: `${style.paddingLeft} ${style.paddingRight}`,
+        paddingBlock: `${shellStyle.paddingTop} ${shellStyle.paddingBottom}`,
+        paddingInline: `${shellStyle.paddingLeft} ${shellStyle.paddingRight}`,
       };
     });
-    await page.getByRole("button", { name: "Kaomoji" }).click();
+    await mediaPicker.getByRole("button", { name: "Kaomoji", exact: true }).click();
     const picker = page.getByRole("dialog", { name: "Kaomoji picker" });
     await expect(picker).toBeVisible();
 
@@ -9788,7 +10435,6 @@ test("kaomoji stays in Conversation and uses the configured chat accent", async 
     expect(categoriesFit).toBe(true);
     expect(resultsFit).toBe(true);
 
-    const searchIcon = picker.locator("svg").first();
     const searchInput = picker.getByPlaceholder("Search kaomoji…");
     const kaomojiSearchStyle = await searchInput.evaluate((input) => {
       const inputStyle = getComputedStyle(input);
@@ -9801,11 +10447,24 @@ test("kaomoji stays in Conversation and uses the configured chat accent", async 
         paddingInline: `${shellStyle.paddingLeft} ${shellStyle.paddingRight}`,
       };
     });
-    expect(kaomojiSearchStyle).toEqual(emojiSearchStyle);
-    await expect(searchIcon).toHaveCSS("color", "rgb(20, 184, 166)");
-    await expect
-      .poll(() => searchInput.evaluate((input) => getComputedStyle(input, "::placeholder").color))
-      .toBe("rgb(20, 184, 166)");
+    await picker.locator("[data-kaomoji-results]").dispatchEvent("pointerdown");
+    await expect(mediaPicker).toBeVisible();
+
+    await mediaPicker.getByRole("button", { name: "GIFs", exact: true }).click();
+    const gifSearchInput = page.getByRole("textbox", { name: "Search for GIFs", exact: true });
+    const gifSearchStyle = await gifSearchInput.evaluate((input) => {
+      const inputStyle = getComputedStyle(input);
+      const shellStyle = getComputedStyle(input.parentElement!);
+      return {
+        backgroundColor: shellStyle.backgroundColor,
+        borderRadius: shellStyle.borderRadius,
+        fontSize: inputStyle.fontSize,
+        paddingBlock: `${shellStyle.paddingTop} ${shellStyle.paddingBottom}`,
+        paddingInline: `${shellStyle.paddingLeft} ${shellStyle.paddingRight}`,
+      };
+    });
+    expect(emojiSearchStyle).toEqual(gifSearchStyle);
+    expect(kaomojiSearchStyle).toEqual(gifSearchStyle);
   } finally {
     await page.request.delete(`/api/chats/${chat.id}`).catch(() => undefined);
   }
@@ -9956,7 +10615,7 @@ test("mobile Game keeps CYOA usable above four HUD widgets", async ({ page, requ
         body: JSON.stringify({ scannedAt: "2026-07-16T00:00:00.000Z", count: 0, assets: {}, byCategory: {} }),
       });
     });
-    await page.route("**/api/backgrounds/file/Black.jpg", async (route) => {
+    await page.route("**/api/backgrounds/file/Black.jpg**", async (route) => {
       await route.fulfill({
         status: 200,
         contentType: "image/gif",
@@ -10054,6 +10713,78 @@ test("mobile Game keeps CYOA usable above four HUD widgets", async ({ page, requ
   }
 });
 
+test("Background rows keep long tag lists collapsed without crowding desktop controls", async ({ page }, testInfo) => {
+  await page.route("**/api/backgrounds", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify([
+        {
+          id: "user:collapsible-background-tags.png",
+          filename: "collapsible-background-tags.png",
+          url: "/api/backgrounds/file/collapsible-background-tags.png",
+          originalName: "Collapsible background tags",
+          tags: ["fontaine", "rainy night", "quarantine berth", "warm interior"],
+          source: "user",
+          createdAt: "2026-07-27T00:00:00.000Z",
+          folderId: null,
+        },
+      ]),
+    });
+  });
+
+  await page.goto("/");
+  await page.locator('[data-tour="panel-settings"]').click();
+  await page.getByRole("tab", { name: "Appearance" }).click();
+  await page.getByPlaceholder("Search settings").fill("Backgrounds");
+  await page.getByRole("button", { name: /Backgrounds Section/ }).click();
+
+  const backgroundRow = page.locator('[data-background-id="user:collapsible-background-tags.png"]');
+  const backgroundName = backgroundRow.locator("[data-background-name]");
+  const backgroundTagsToggle = backgroundRow.locator("[data-background-tags-toggle]");
+  await expect(backgroundTagsToggle).toHaveAttribute("aria-expanded", "false");
+  await expect(backgroundRow.getByText("quarantine berth", { exact: true })).toHaveCount(0);
+
+  if (!testInfo.project.name.includes("mobile")) {
+    await backgroundTagsToggle.focus();
+    const actionBar = backgroundRow.locator("[data-background-actions]");
+    const deleteButton = backgroundRow.getByTitle("Delete background");
+    const favoriteButton = backgroundRow.locator("[data-background-default-toggle]");
+    const [nameBox, tagToggleBox, actionBarBox, deleteColor, favoriteColor] = await Promise.all([
+      backgroundName.boundingBox(),
+      backgroundTagsToggle.boundingBox(),
+      actionBar.boundingBox(),
+      deleteButton.evaluate((element) => getComputedStyle(element).color),
+      favoriteButton.evaluate((element) => getComputedStyle(element).color),
+    ]);
+    expect(nameBox).not.toBeNull();
+    expect(tagToggleBox).not.toBeNull();
+    expect(actionBarBox).not.toBeNull();
+    expect(nameBox!.width).toBeGreaterThanOrEqual(80);
+    expect(tagToggleBox!.height).toBeLessThanOrEqual(22);
+    expect(actionBarBox!.width).toBeLessThanOrEqual(55);
+    expect(deleteColor).toBe(favoriteColor);
+
+    const editTagsButton = backgroundRow.locator("[data-background-edit-tags]");
+    await editTagsButton.click();
+    const tagInputBox = await backgroundRow.locator("[data-background-tag-input]").boundingBox();
+    expect(tagInputBox).not.toBeNull();
+    expect(tagInputBox!.width).toBeGreaterThanOrEqual(100);
+    await editTagsButton.click();
+    await backgroundTagsToggle.click();
+    await expect(backgroundTagsToggle).toHaveAttribute("aria-expanded", "false");
+  }
+
+  await backgroundTagsToggle.focus();
+  await page.keyboard.press("Enter");
+  await expect(backgroundTagsToggle).toHaveAttribute("aria-expanded", "true");
+  await expect(backgroundRow.getByText("quarantine berth", { exact: true })).toBeVisible();
+  await backgroundTagsToggle.focus();
+  await page.keyboard.press("Enter");
+  await expect(backgroundTagsToggle).toHaveAttribute("aria-expanded", "false");
+  await expect(backgroundRow.getByText("quarantine berth", { exact: true })).toHaveCount(0);
+});
+
 test("Roleplay displays a selected background when its file route is GET-only", async ({ page }, testInfo) => {
   const chatResponse = await page.request.post("/api/chats", {
     data: { name: "Roleplay Background Smoke", mode: "roleplay", characterIds: [] },
@@ -10082,7 +10813,7 @@ test("Roleplay displays a selected background when its file route is GET-only", 
         ]),
       });
     });
-    await page.route(`**${backgroundUrl}`, async (route) => {
+    await page.route(`**${backgroundUrl}**`, async (route) => {
       requestedMethods.push(route.request().method());
       if (route.request().method() !== "GET") {
         await route.fulfill({ status: 405, body: "" });
@@ -10112,7 +10843,7 @@ test("Roleplay displays a selected background when its file route is GET-only", 
           ),
       )
       .toBe(true);
-    await page.locator(`img[src="${backgroundUrl}"]`).locator("..").click();
+    await page.locator(`img[src^="${backgroundUrl}"]`).locator("..").click();
 
     await expect
       .poll(async () =>
@@ -10131,8 +10862,8 @@ test("Roleplay displays a selected background when its file route is GET-only", 
       .toBe(true);
 
     const roleplaySurface = page.locator('[data-chat-mode="roleplay"]');
-    const activeBackground = page.locator(`img.mari-background[src="${backgroundUrl}"]`);
-    await expect(activeBackground).toHaveCSS("object-fit", testInfo.project.name.includes("mobile") ? "cover" : "fill");
+    const activeBackground = page.locator(`img.mari-background[src^="${backgroundUrl}"]`);
+    await expect(activeBackground).toHaveCSS("object-fit", "cover");
     const expectBackgroundToFitRoleplaySurface = async () => {
       await expect
         .poll(async () => {
@@ -10202,7 +10933,7 @@ test("Background library organization works with desktop drag and touch drag", a
     await page.getByRole("button", { name: /Tags \(/ }).click();
     await page.getByRole("button", { name: "smoke-folder", exact: true }).click();
 
-    const backgroundRow = page.locator(`[data-background-id="${backgroundId}"]`);
+    const backgroundRow = page.locator(`[data-background-id="${backgroundId}"]:not([aria-hidden="true"])`);
     await expect(backgroundRow).toBeVisible();
     const backgroundActions = backgroundRow.locator("[data-background-actions]");
     const defaultToggle = backgroundRow.locator("[data-background-default-toggle]");
@@ -10243,42 +10974,63 @@ test("Background library organization works with desktop drag and touch drag", a
     const folder = page.locator(`[data-background-folder-id="${folderId}"]`);
     await expect(folder).toBeVisible();
     if (testInfo.project.name.includes("mobile")) {
+      const dragHandle = backgroundRow.getByTitle(/^Drag /);
+      const startRect = await dragHandle.boundingBox();
+      expect(startRect).not.toBeNull();
+      const start = {
+        x: startRect!.x + startRect!.width / 2,
+        y: startRect!.y + startRect!.height / 2,
+      };
+      await dragHandle.evaluate((handle, point) => {
+        const touch = { identifier: 1, target: handle, clientX: point.x, clientY: point.y };
+        const event = new Event("touchstart", { bubbles: true, cancelable: true });
+        Object.defineProperties(event, {
+          touches: { value: [touch] },
+          changedTouches: { value: [touch] },
+        });
+        handle.dispatchEvent(event);
+      }, start);
+      await expect(backgroundRow).toHaveAttribute("draggable", "false");
+      await page.waitForTimeout(350);
+      await expect(backgroundRow).toHaveClass(/opacity-50/);
+      await folder.scrollIntoViewIfNeeded();
+      const targetRect = await folder.boundingBox();
+      expect(targetRect).not.toBeNull();
+      const end = {
+        x: targetRect!.x + targetRect!.width / 2,
+        y: targetRect!.y + Math.min(targetRect!.height / 2, 20),
+      };
+      await expect
+        .poll(() =>
+          page.evaluate(
+            ({ point, targetFolderId }) =>
+              document
+                .elementFromPoint(point.x, point.y)
+                ?.closest<HTMLElement>("[data-background-folder-id]")
+                ?.dataset.backgroundFolderId === targetFolderId,
+            { point: end, targetFolderId: folderId! },
+          ),
+        )
+        .toBe(true);
       await page.evaluate(
-        ({ sourceId, targetFolderId }) => {
+        ({ sourceId, point }) => {
           const source = document.querySelector<HTMLElement>(`[data-background-id="${sourceId}"]`);
-          const handle = source?.querySelector<HTMLElement>("button[title^='Drag']");
-          const target = document.querySelector<HTMLElement>(`[data-background-folder-id="${targetFolderId}"]`);
-          if (!source || !handle || !target) throw new Error("Background touch drag fixtures were not rendered");
-          const startRect = handle.getBoundingClientRect();
-          const targetRect = target.getBoundingClientRect();
-          const start = new Touch({
-            identifier: 1,
-            target: handle,
-            clientX: startRect.left + startRect.width / 2,
-            clientY: startRect.top + startRect.height / 2,
+          if (!source) throw new Error("Background touch drag source was not rendered");
+          const touch = { identifier: 1, target: source, clientX: point.x, clientY: point.y };
+          const move = new Event("touchmove", { bubbles: true, cancelable: true });
+          Object.defineProperties(move, {
+            touches: { value: [touch] },
+            changedTouches: { value: [touch] },
           });
-          const end = new Touch({
-            identifier: 1,
-            target: handle,
-            clientX: targetRect.left + targetRect.width / 2,
-            clientY: targetRect.top + Math.min(targetRect.height / 2, 20),
+          window.dispatchEvent(move);
+          const end = new Event("touchend", { bubbles: true, cancelable: true });
+          Object.defineProperties(end, {
+            touches: { value: [] },
+            changedTouches: { value: [touch] },
           });
-          handle.dispatchEvent(
-            new TouchEvent("touchstart", {
-              bubbles: true,
-              cancelable: true,
-              touches: [start],
-              changedTouches: [start],
-            }),
-          );
-          window.dispatchEvent(
-            new TouchEvent("touchmove", { bubbles: true, cancelable: true, touches: [end], changedTouches: [end] }),
-          );
-          window.dispatchEvent(
-            new TouchEvent("touchend", { bubbles: true, cancelable: true, touches: [], changedTouches: [end] }),
-          );
+          window.dispatchEvent(end);
         },
-        { sourceId: backgroundId, targetFolderId: folderId! },
+        { sourceId: backgroundId, point: end },
       );
     } else {
       await backgroundRow.dragTo(folder);
