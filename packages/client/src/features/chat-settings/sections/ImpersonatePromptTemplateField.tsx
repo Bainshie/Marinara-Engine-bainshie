@@ -159,7 +159,7 @@ export function ImpersonatePromptTemplateField() {
   };
 
   const handleResetPromptDraft = () => {
-    if (saveAsPending) return;
+    if (promptTemplateCatalogMutationPending) return;
     setPromptTemplate(activePromptTemplate?.prompt ?? "");
     setTemplateNameDraft(null);
   };
@@ -273,7 +273,7 @@ export function ImpersonatePromptTemplateField() {
           <button
             type="button"
             onClick={handleResetPromptDraft}
-            disabled={saveAsPending}
+            disabled={promptTemplateCatalogMutationPending}
             className="flex h-6 w-6 items-center justify-center rounded-md text-[var(--muted-foreground)] transition-colors hover:bg-[var(--accent)] hover:text-[var(--foreground)] disabled:cursor-not-allowed disabled:opacity-40"
             title={localizeUi("ui.chatSettings.impersonatesection.resetUnsavedChanges")}
             aria-label={localizeUi("ui.chatSettings.impersonatesection.resetUnsavedChanges")}

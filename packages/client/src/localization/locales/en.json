@@ -3361,7 +3361,7 @@
   "ui.chatSettings.impersonatesection.discardAndSwitch": "Discard and switch",
   "ui.chatSettings.impersonatesection.discardUnsavedPromptChanges": "Discard unsaved prompt changes?",
   "ui.chatSettings.impersonatesection.emptyUseChatBuiltInDefault": "Empty = use chat/built-in default",
-  "ui.chatSettings.impersonatesection.enableQuickSendInSettingsGeneralInputEditingQuick": "Enable Quick Send in Settings > General > Input & Editing > Quick replies.",
+  "ui.chatSettings.impersonatesection.enableQuickSendInSettingsGeneralInputEditingQuick": "Enable Quick replies in Settings > General > Input & Editing > Quick replies.",
   "ui.chatSettings.impersonatesection.expandEditor": "Expand editor",
   "ui.chatSettings.impersonatesection.expandPromptTemplateEditor": "Expand prompt template editor",
   "ui.chatSettings.impersonatesection.globalSettingsAppliedToEveryImpersonateGenerationAcrossAll": "Global settings applied to every /impersonate generation across all chats.",

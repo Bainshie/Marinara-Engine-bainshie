@@ -11,6 +11,7 @@ import {
   appSettingsUpdateSchema,
   impersonatePromptTemplateCatalogSchema,
 } from "@marinara-engine/shared";
+import { logger } from "../lib/logger.js";
 import { createAppSettingsStorage } from "../services/storage/app-settings.storage.js";
 
 const ALLOWED_KEYS = new Set([
@@ -25,9 +26,13 @@ export async function appSettingsRoutes(app: FastifyInstance) {
 
   app.get(`/${IMPERSONATE_PROMPT_TEMPLATES_SETTINGS_KEY}`, async () => {
     const value = await storage.get(IMPERSONATE_PROMPT_TEMPLATES_SETTINGS_KEY);
-    return value
-      ? impersonatePromptTemplateCatalogSchema.parse(JSON.parse(value))
-      : EMPTY_IMPERSONATE_PROMPT_TEMPLATE_CATALOG;
+    if (!value) return EMPTY_IMPERSONATE_PROMPT_TEMPLATE_CATALOG;
+    try {
+      return impersonatePromptTemplateCatalogSchema.parse(JSON.parse(value));
+    } catch (error) {
+      logger.warn(error, "Ignoring invalid stored impersonate prompt template catalog");
+      return EMPTY_IMPERSONATE_PROMPT_TEMPLATE_CATALOG;
+    }
   });
 
   app.put(`/${IMPERSONATE_PROMPT_TEMPLATES_SETTINGS_KEY}`, async (req) => {
