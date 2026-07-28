@@ -237,6 +237,7 @@ export function AppShell() {
     const root = document.documentElement;
     let frame = 0;
     let focusTimers: number[] = [];
+    let orientationTimers: number[] = [];
     let largestViewportHeight = window.visualViewport?.height ?? window.innerHeight;
     const supportsVirtualKeyboard =
       navigator.maxTouchPoints > 0 || window.matchMedia("(any-pointer: coarse)").matches;
@@ -279,22 +280,36 @@ export function AppShell() {
       focusTimers.push(window.setTimeout(updateVisualViewportGeometry, 80));
       focusTimers.push(window.setTimeout(updateVisualViewportGeometry, 320));
     };
+    const refreshAfterOrientationChange = () => {
+      orientationTimers.forEach((timer) => window.clearTimeout(timer));
+      orientationTimers = [];
+      const resetViewportBaseline = () => {
+        // A shorter landscape viewport is not necessarily a software keyboard.
+        // Re-establish the baseline while browser chrome and safe areas settle.
+        largestViewportHeight = 0;
+        updateVisualViewportGeometry();
+      };
+      resetViewportBaseline();
+      orientationTimers.push(window.setTimeout(resetViewportBaseline, 80));
+      orientationTimers.push(window.setTimeout(resetViewportBaseline, 320));
+    };
 
     updateVisualViewportGeometry();
     window.visualViewport?.addEventListener("resize", updateVisualViewportGeometry);
     window.visualViewport?.addEventListener("scroll", updateVisualViewportGeometry);
     window.addEventListener("resize", updateVisualViewportGeometry);
-    window.addEventListener("orientationchange", updateVisualViewportGeometry);
+    window.addEventListener("orientationchange", refreshAfterOrientationChange);
     document.addEventListener("focusin", refreshAfterFocusChange);
     document.addEventListener("focusout", refreshAfterFocusChange);
 
     return () => {
       if (frame) cancelAnimationFrame(frame);
       focusTimers.forEach((timer) => window.clearTimeout(timer));
+      orientationTimers.forEach((timer) => window.clearTimeout(timer));
       window.visualViewport?.removeEventListener("resize", updateVisualViewportGeometry);
       window.visualViewport?.removeEventListener("scroll", updateVisualViewportGeometry);
       window.removeEventListener("resize", updateVisualViewportGeometry);
-      window.removeEventListener("orientationchange", updateVisualViewportGeometry);
+      window.removeEventListener("orientationchange", refreshAfterOrientationChange);
       document.removeEventListener("focusin", refreshAfterFocusChange);
       document.removeEventListener("focusout", refreshAfterFocusChange);
       root.style.removeProperty("--mari-visual-viewport-height");

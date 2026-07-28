@@ -10446,6 +10446,15 @@ test("mobile chat composer follows the visual viewport above the software keyboa
         viewport.dispatchEvent(new Event("scroll"));
       },
     });
+    Object.defineProperty(window, "__rotateMarinaraVisualViewport", {
+      configurable: true,
+      value: (height: number) => {
+        state.height = height;
+        state.offsetTop = 0;
+        window.dispatchEvent(new Event("orientationchange"));
+        viewport.dispatchEvent(new Event("resize"));
+      },
+    });
   });
   await page.addInitScript((chatId) => {
     localStorage.setItem("marinara-active-chat-id", chatId);
@@ -10477,6 +10486,43 @@ test("mobile chat composer follows the visual viewport above the software keyboa
       .toBeLessThanOrEqual(2);
     await expect(textarea).toBeVisible();
     await expect.poll(() => composer.evaluate((element) => getComputedStyle(element).paddingBottom)).toBe("34px");
+
+    const initialViewportHeight = await page.evaluate(() => window.innerHeight);
+    const rotatedViewportHeight = Math.max(240, initialViewportHeight - 200);
+    await page.evaluate((height) => {
+      (
+        window as typeof window & {
+          __rotateMarinaraVisualViewport: (height: number) => void;
+        }
+      ).__rotateMarinaraVisualViewport(height);
+    }, rotatedViewportHeight);
+    await expect
+      .poll(() =>
+        page.evaluate(() =>
+          getComputedStyle(document.documentElement).getPropertyValue("--mari-visual-viewport-height").trim(),
+        ),
+      )
+      .toBe(`${rotatedViewportHeight}px`);
+    await expect(page.locator("html")).not.toHaveAttribute("data-mari-software-keyboard-open", "");
+    await expect.poll(() => composer.evaluate((element) => getComputedStyle(element).paddingBottom)).toBe("34px");
+
+    await page.evaluate((height) => {
+      (
+        window as typeof window & {
+          __rotateMarinaraVisualViewport: (height: number) => void;
+        }
+      ).__rotateMarinaraVisualViewport(height);
+    }, initialViewportHeight);
+    await expect
+      .poll(() =>
+        page.evaluate(() =>
+          getComputedStyle(document.documentElement).getPropertyValue("--mari-visual-viewport-height").trim(),
+        ),
+      )
+      .toBe(`${initialViewportHeight}px`);
+    await expect(page.locator("html")).not.toHaveAttribute("data-mari-software-keyboard-open", "");
+    await page.waitForTimeout(350);
+
     await textarea.focus();
 
     await page.evaluate(() => {
@@ -10516,6 +10562,9 @@ test("mobile chat composer follows the visual viewport above the software keyboa
       .poll(() => transcript.evaluate((element) => element.scrollHeight - element.scrollTop - element.clientHeight))
       .toBeLessThanOrEqual(2);
 
+    // Let the delayed focus viewport samples settle before simulating a user
+    // deliberately scrolling away from the latest message.
+    await page.waitForTimeout(350);
     await transcript.evaluate((element) => {
       element.scrollTop = Math.max(0, element.scrollTop - 320);
     });
