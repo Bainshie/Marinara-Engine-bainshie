@@ -511,6 +511,7 @@ export const ConversationMessage = memo(function ConversationMessage({
   // ── Staggered reveal for multi-speaker segments ──
   const segmentCount = groupedSegments?.length ?? 0;
   const prevContentRef = useRef(displayedContent);
+  const prevTranslationOnlyRef = useRef(showTranslationOnly);
   const initialRenderRef = useRef(true);
   const [internalVisibleSegments, setInternalVisibleSegments] = useState(segmentCount);
 
@@ -519,6 +520,13 @@ export const ConversationMessage = memo(function ConversationMessage({
       initialRenderRef.current = false;
       setInternalVisibleSegments(segmentCount);
       prevContentRef.current = displayedContent;
+      prevTranslationOnlyRef.current = showTranslationOnly;
+      return;
+    }
+    if (prevTranslationOnlyRef.current !== showTranslationOnly) {
+      prevTranslationOnlyRef.current = showTranslationOnly;
+      prevContentRef.current = displayedContent;
+      setInternalVisibleSegments(segmentCount);
       return;
     }
     if (displayedContent !== prevContentRef.current && segmentCount > 1) {
@@ -535,7 +543,8 @@ export const ConversationMessage = memo(function ConversationMessage({
     }
     setInternalVisibleSegments(segmentCount);
     prevContentRef.current = displayedContent;
-  }, [displayedContent, segmentCount]);
+    prevTranslationOnlyRef.current = showTranslationOnly;
+  }, [displayedContent, segmentCount, showTranslationOnly]);
   const visibleSegments =
     segmentCount > 0 ? Math.max(1, Math.min(visibleSegmentCount ?? internalVisibleSegments, segmentCount)) : 0;
 

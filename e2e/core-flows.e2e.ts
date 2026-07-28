@@ -3055,6 +3055,23 @@ test("new Roleplay chats seed character Tracker custom-field defaults without re
   });
   expect(characterResponse.ok()).toBeTruthy();
   const character = (await characterResponse.json()) as { id: string };
+  const statsOnlyCharacterResponse = await request.post("/api/characters", {
+    data: {
+      data: {
+        name: `Tracker Stats ${suffix}`,
+        extensions: {
+          rpgStats: {
+            enabled: true,
+            attributes: [],
+            hp: { value: 7, max: 10 },
+            pools: [{ name: "Resolve", value: 7, max: 10, color: "#60a5fa" }],
+          },
+        },
+      },
+    },
+  });
+  expect(statsOnlyCharacterResponse.ok()).toBeTruthy();
+  const statsOnlyCharacter = (await statsOnlyCharacterResponse.json()) as { id: string };
   const chatIds: string[] = [];
 
   try {
@@ -3063,7 +3080,7 @@ test("new Roleplay chats seed character Tracker custom-field defaults without re
         data: {
           name: `Tracker Defaults ${suffix}`,
           mode: "roleplay",
-          characterIds: [character.id],
+          characterIds: [character.id, statsOnlyCharacter.id],
         },
       });
       expect(response.ok()).toBeTruthy();
@@ -3071,13 +3088,17 @@ test("new Roleplay chats seed character Tracker custom-field defaults without re
       chatIds.push(chat.id);
       return chat.id;
     };
-    const readCharacter = async (chatId: string) => {
+    const readCharacter = async (chatId: string, characterId = character.id) => {
       const response = await request.get(`/api/chats/${chatId}/game-state`);
       expect(response.ok()).toBeTruthy();
       const state = (await response.json()) as {
-        presentCharacters: Array<{ characterId: string; customFields: Record<string, string> }>;
+        presentCharacters: Array<{
+          characterId: string;
+          customFields: Record<string, string>;
+          stats: Array<{ name: string; value: number; max: number; color: string }>;
+        }>;
       };
-      return state.presentCharacters.find((entry) => entry.characterId === character.id);
+      return state.presentCharacters.find((entry) => entry.characterId === characterId);
     };
 
     const firstChatId = await createChat();
@@ -3086,6 +3107,9 @@ test("new Roleplay chats seed character Tracker custom-field defaults without re
       "Mental State": "Calm",
       Goal: "Find the atlas",
     });
+    expect((await readCharacter(firstChatId, statsOnlyCharacter.id))?.stats).toEqual([
+      { name: "Resolve", value: 7, max: 10, color: "#60a5fa" },
+    ]);
 
     const editedCharacters = [
       {
@@ -3100,17 +3124,25 @@ test("new Roleplay chats seed character Tracker custom-field defaults without re
       data: { presentCharacters: editedCharacters, manual: true },
     });
     expect(editResponse.ok()).toBeTruthy();
-    const noOpRosterResponse = await request.patch(`/api/chats/${firstChatId}`, {
-      data: { characterIds: [character.id] },
+    const removeResponse = await request.patch(`/api/chats/${firstChatId}`, {
+      data: { characterIds: [statsOnlyCharacter.id] },
     });
-    expect(noOpRosterResponse.ok()).toBeTruthy();
+    expect(removeResponse.ok()).toBeTruthy();
+    const reAddResponse = await request.patch(`/api/chats/${firstChatId}`, {
+      data: { characterIds: [character.id, statsOnlyCharacter.id] },
+    });
+    expect(reAddResponse.ok()).toBeTruthy();
     expect((await readCharacter(firstChatId))?.customFields["Mental State"]).toBe("Restless");
 
     const secondChatId = await createChat();
     expect((await readCharacter(secondChatId))?.customFields["Mental State"]).toBe("Calm");
   } finally {
     await Promise.all(chatIds.map((chatId) => request.delete(`/api/chats/${chatId}`).catch(() => undefined)));
-    await request.delete(`/api/characters/${character.id}`).catch(() => undefined);
+    await Promise.all(
+      [character.id, statsOnlyCharacter.id].map((characterId) =>
+        request.delete(`/api/characters/${characterId}`).catch(() => undefined),
+      ),
+    );
   }
 });
 

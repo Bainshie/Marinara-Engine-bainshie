@@ -1932,6 +1932,8 @@ export function GameNarration({
   ]);
 
   const active = segments[activeIndex] ?? null;
+  const activeDisplayLen = active ? effectDisplayLength(active.content) : 0;
+  const doneTyping = !!active && visibleChars >= activeDisplayLen;
   const activeSourceMessageId = active ? segmentSourceMessageIdsRef.current[activeIndex] : null;
   const activeSourceMessage = activeSourceMessageId ? (sourceMessagesById.get(activeSourceMessageId) ?? null) : null;
   const activeTranslatedText = activeSourceMessageId ? translations[activeSourceMessageId] : undefined;
@@ -1946,6 +1948,7 @@ export function GameNarration({
     !!activeSourceMessage &&
     !!activeTranslatedSegmentText &&
     !activeIsTranslating &&
+    doneTyping &&
     gameTranslationMatchesMessage(activeSourceMessage, activeTranslationSource);
   const activeVisibleContent =
     active && showActiveTranslationOnly
@@ -2277,9 +2280,6 @@ export function GameNarration({
     }
     prevActiveRef.current = { index: activeIndex, content: active.content };
   }, [active, activeIndex]);
-
-  const activeDisplayLen = active ? effectDisplayLength(active.content) : 0;
-  const doneTyping = !!active && visibleChars >= activeDisplayLen;
 
   useLayoutEffect(() => {
     if (!active || editingContent !== null || messageOffset > 0 || !isMobileGameViewport()) return;

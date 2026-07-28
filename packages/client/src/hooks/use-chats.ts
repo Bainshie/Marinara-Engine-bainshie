@@ -1089,6 +1089,15 @@ export function useUpdateMessage(chatId: string | null) {
         !!chatId && !!context && forgetRecentMessageContentEdit(chatId, _vars.messageId, context.revision);
       if (chatId && shouldRollback && context?.previous) {
         qc.setQueryData(chatKeys.messages(chatId), context.previous);
+        const revertedMessage = findCachedMessage(context.previous, _vars.messageId);
+        if (revertedMessage) {
+          rememberRecentMessageContentEdit(
+            chatId,
+            _vars.messageId,
+            revertedMessage.content,
+            revertedMessage.activeSwipeIndex,
+          );
+        }
       }
     },
     onSettled: () => {

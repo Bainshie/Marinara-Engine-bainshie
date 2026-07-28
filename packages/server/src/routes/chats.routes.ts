@@ -446,8 +446,6 @@ async function buildRoleplayTrackerDefaultCharacters(
 
     const extensions = (data.extensions ?? {}) as Record<string, unknown>;
     const customFields = characterTrackerCustomFieldDefaultsToRecord(extensions.trackerCustomFieldDefaults);
-    if (Object.keys(customFields).length === 0) continue;
-
     const rpgStats = extensions.rpgStats as RPGStatsConfig | undefined;
     const stats = rpgStats?.enabled
       ? normalizeRpgStatPools(rpgStats).map((pool) => ({
@@ -457,6 +455,7 @@ async function buildRoleplayTrackerDefaultCharacters(
           color: pool.color,
         }))
       : [];
+    if (Object.keys(customFields).length === 0 && stats.length === 0) continue;
 
     seeds.push({
       characterId,
