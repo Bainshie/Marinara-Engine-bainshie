@@ -95,6 +95,7 @@ assert.equal(normalizeNoodleSettings({ maxImagePromptsPerDay: 7, maxImagesPerRef
 assert.equal(normalizeNoodleSettings({}).imageCaptioningEnabled, false);
 assert.equal(normalizeNoodleSettings({ imageCaptioningEnabled: false }).imageCaptioningUseConnectionDefault, true);
 assert.equal(normalizeNoodleSettings({ imageCaptioningEnabled: true }).imageCaptioningEnabled, true);
+assert.equal(normalizeNoodleSettings({ imageCaptioningEnabled: true }).imageCaptioningUseConnectionDefault, false);
 assert.equal(
   normalizeNoodleSettings({
     imageCaptioningEnabled: false,
