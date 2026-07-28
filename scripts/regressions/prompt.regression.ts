@@ -2422,6 +2422,10 @@ const cases: RegressionCase[] = [
         resolveGameGmPromptTemplate({ gameGmPromptTemplateId: ANIME_GAME_PROMPT_TEMPLATE_ID }),
         ANIME_GAME_SYSTEM_PROMPT,
       );
+      assert.equal(
+        resolveGameGmPromptTemplate({}, { gameGmPromptTemplateId: ANIME_GAME_PROMPT_TEMPLATE_ID }),
+        ANIME_GAME_SYSTEM_PROMPT,
+      );
     },
   },
   {
@@ -2467,6 +2471,10 @@ const cases: RegressionCase[] = [
         new URL("../../packages/server/src/routes/game.routes.ts", import.meta.url),
         "utf8",
       );
+      const chatsRouteSource = readFileSync(
+        new URL("../../packages/server/src/routes/chats.routes.ts", import.meta.url),
+        "utf8",
+      );
 
       assert.equal(normalizeGameStoryboardKeyframeCount(undefined), 3);
       assert.equal(normalizeGameStoryboardKeyframeCount(0), 1);
@@ -2496,6 +2504,10 @@ const cases: RegressionCase[] = [
       assert.match(
         setupSource,
         /gameGmPromptTemplateId:\s*gamePresentation === "anime" \? ANIME_GAME_PROMPT_TEMPLATE_ID : null/u,
+      );
+      assert.match(
+        chatsRouteSource,
+        /const customPrompt = resolveGameGmPromptTemplate\(chatMeta, setupConfig\);/u,
       );
       assert.match(editorSource, /StoryboardAgentSettingsPanel/u);
       assert.match(editorSource, /\{!isStoryboardAgent && \(\s*<FieldGroup[\s\S]*?agentBudget/u);
