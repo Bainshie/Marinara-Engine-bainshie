@@ -671,6 +671,46 @@ function VoiceSelect({
   );
 }
 
+function CustomizableVoiceInput({
+  value,
+  options,
+  placeholder,
+  ariaLabel,
+  compact = false,
+  onChange,
+}: {
+  value: string;
+  options: VoiceOption[];
+  placeholder: string;
+  ariaLabel: string;
+  compact?: boolean;
+  onChange: (value: string) => void;
+}) {
+  const listId = useId();
+  return (
+    <div className="min-w-0 flex-1">
+      <input
+        type="text"
+        list={listId}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className={cn(INPUT_CLS, compact && "py-2 text-xs")}
+        placeholder={placeholder}
+        aria-label={ariaLabel}
+        autoComplete="off"
+        data-testid="tts-custom-voice-input"
+      />
+      <datalist id={listId}>
+        {options.map((option) => (
+          <option key={option.id} value={option.id}>
+            {formatVoiceOptionLabel(option)}
+          </option>
+        ))}
+      </datalist>
+    </div>
+  );
+}
+
 function CharacterSelect({
   value,
   options,
@@ -1141,9 +1181,7 @@ export function TTSConfigCard() {
       );
     } catch (error) {
       setSaveStatus("error");
-      toast.error(
-        getTtsRequestErrorMessage(error, localizeUi("ui.panels.ttsconfigcard.couldNotRefreshVoices")),
-      );
+      toast.error(getTtsRequestErrorMessage(error, localizeUi("ui.panels.ttsconfigcard.couldNotRefreshVoices")));
     }
   };
 
@@ -1175,10 +1213,7 @@ export function TTSConfigCard() {
   ]);
   const voicesFromProvider = voicesData?.fromProvider ?? false;
   const voicesErrorMessage = voicesError
-    ? getTtsRequestErrorMessage(
-        voicesRequestError,
-        localizeUi("ui.panels.ttsconfigcard.couldNotRefreshVoices"),
-      )
+    ? getTtsRequestErrorMessage(voicesRequestError, localizeUi("ui.panels.ttsconfigcard.couldNotRefreshVoices"))
     : null;
   const modelOptions = useMemo(() => {
     const providerModels = modelsData?.source === "elevenlabs" ? modelsData.models : [];
@@ -1606,7 +1641,9 @@ export function TTSConfigCard() {
                     ? localizeUi("ui.panels.ttsconfigcard.pocketttsBuiltInOrCustomVoiceFromYourServer")
                     : source === "xai"
                       ? localizeUi("ui.panels.ttsconfigcard.xaiVoiceIdBuiltInsIncludeEveAraRex")
-                      : localizeUi("ui.panels.ttsconfigcard.voiceToUseForSynthesisFetchedFromYourConfigured")
+                      : localizeUi(
+                          "ui.panels.ttsconfigcard.chooseAProviderVoiceOrEnterACustomOpenaiCompatibleValueSuchAsAKokoroMix",
+                        )
               }
             >
               <div className="flex gap-2">
@@ -1617,6 +1654,17 @@ export function TTSConfigCard() {
                     fetching={fetchingVoices}
                     selectLabel="PocketTTS server voice"
                     inputLabel="PocketTTS voice ID, URL, or path"
+                    onChange={(nextVoice) => {
+                      setVoice(nextVoice);
+                      mark({ voice: nextVoice });
+                    }}
+                  />
+                ) : source === "openai" ? (
+                  <CustomizableVoiceInput
+                    value={voice}
+                    options={voiceOptions}
+                    placeholder={localizeUi("ui.panels.ttsconfigcard.customVoiceOrKokoroMix")}
+                    ariaLabel={localizeUi("ui.panels.ttsconfigcard.allCharactersVoice")}
                     onChange={(nextVoice) => {
                       setVoice(nextVoice);
                       mark({ voice: nextVoice });
@@ -1727,17 +1775,30 @@ export function TTSConfigCard() {
                       assignedCharacterIds={assignedCharacterIds}
                       onChange={(characterId) => handleVoiceAssignmentCharacterChange(index, characterId)}
                     />
-                    <VoiceSelect
-                      value={assignment.voice}
-                      onChange={(nextVoice) => handleVoiceAssignmentVoiceChange(index, nextVoice)}
-                      disabled={fetchingVoices || voiceOptions.length === 0}
-                      options={voiceOptions}
-                      placeholder={localizeUi("ui.panels.ttsconfigcard.selectVoice")}
-                      ariaLabel={localizeUi("ui.panels.ttsconfigcard.characterVoiceFor", {
-                        name: assignment.characterName || localizeUi("ui.panels.appearancesettings.character"),
-                      })}
-                      compact
-                    />
+                    {source === "openai" ? (
+                      <CustomizableVoiceInput
+                        value={assignment.voice}
+                        onChange={(nextVoice) => handleVoiceAssignmentVoiceChange(index, nextVoice)}
+                        options={voiceOptions}
+                        placeholder={localizeUi("ui.panels.ttsconfigcard.customVoiceOrKokoroMix")}
+                        ariaLabel={localizeUi("ui.panels.ttsconfigcard.characterVoiceFor", {
+                          name: assignment.characterName || localizeUi("ui.panels.appearancesettings.character"),
+                        })}
+                        compact
+                      />
+                    ) : (
+                      <VoiceSelect
+                        value={assignment.voice}
+                        onChange={(nextVoice) => handleVoiceAssignmentVoiceChange(index, nextVoice)}
+                        disabled={fetchingVoices || voiceOptions.length === 0}
+                        options={voiceOptions}
+                        placeholder={localizeUi("ui.panels.ttsconfigcard.selectVoice")}
+                        ariaLabel={localizeUi("ui.panels.ttsconfigcard.characterVoiceFor", {
+                          name: assignment.characterName || localizeUi("ui.panels.appearancesettings.character"),
+                        })}
+                        compact
+                      />
+                    )}
                     <button
                       type="button"
                       onClick={() => handleRemoveVoiceAssignment(index)}
@@ -1791,6 +1852,14 @@ export function TTSConfigCard() {
                       fetching={fetchingVoices}
                       selectLabel="PocketTTS narrator server voice"
                       inputLabel="PocketTTS narrator voice ID, URL, or path"
+                      onChange={handleNarratorVoiceChange}
+                    />
+                  ) : source === "openai" ? (
+                    <CustomizableVoiceInput
+                      value={narratorVoice}
+                      options={voiceOptions}
+                      placeholder={localizeUi("ui.panels.ttsconfigcard.customVoiceOrKokoroMix")}
+                      ariaLabel={localizeUi("ui.panels.ttsconfigcard.narratorVoice")}
                       onChange={handleNarratorVoiceChange}
                     />
                   ) : (
