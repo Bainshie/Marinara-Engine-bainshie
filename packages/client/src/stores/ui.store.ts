@@ -803,6 +803,8 @@ interface UIState {
   // ── Impersonate Settings ──
   /** Custom prompt template for /impersonate (empty = use server default). Persisted. */
   impersonatePromptTemplate: string;
+  /** Saved template loaded into the working impersonate prompt, or null for the built-in default. Persisted. */
+  activeImpersonatePromptTemplateId: string | null;
   /** When true, CYOA choices generate impersonate requests instead of normal user messages. Persisted. */
   impersonateCyoaChoices: boolean;
   /** Override preset used when impersonating (null = use chat default). Persisted. */
@@ -1023,6 +1025,8 @@ interface UIState {
   setWeatherEffects: (v: boolean) => void;
   // Impersonate settings actions
   setImpersonatePromptTemplate: (v: string) => void;
+  selectImpersonatePromptTemplate: (template: { id: string; prompt: string } | null) => void;
+  clearActiveImpersonatePromptTemplate: () => void;
   setImpersonateCyoaChoices: (v: boolean) => void;
   setImpersonatePresetId: (id: string | null) => void;
   setImpersonateConnectionId: (id: string | null) => void;
@@ -1221,7 +1225,6 @@ export function pickSyncedSettings(state: UIState) {
     customConversationPrompt: state.customConversationPrompt,
     scheduleGenerationPreferences: state.scheduleGenerationPreferences,
     conversationTimeZone: state.conversationTimeZone,
-    impersonatePromptTemplate: state.impersonatePromptTemplate,
     impersonateCyoaChoices: state.impersonateCyoaChoices,
     impersonatePresetId: state.impersonatePresetId,
     impersonateConnectionId: state.impersonateConnectionId,
@@ -1433,6 +1436,7 @@ export const useUIStore = create<UIState>()(
 
       // Impersonate settings defaults
       impersonatePromptTemplate: "",
+      activeImpersonatePromptTemplateId: null,
       impersonateCyoaChoices: false,
       impersonatePresetId: null,
       impersonateConnectionId: null,
@@ -2292,6 +2296,12 @@ export const useUIStore = create<UIState>()(
       setEnterToSendGame: (v) => set({ enterToSendGame: v }),
       setWeatherEffects: (v) => set({ weatherEffects: v }),
       setImpersonatePromptTemplate: (v) => set({ impersonatePromptTemplate: v }),
+      selectImpersonatePromptTemplate: (template) =>
+        set({
+          activeImpersonatePromptTemplateId: template?.id ?? null,
+          impersonatePromptTemplate: template?.prompt ?? "",
+        }),
+      clearActiveImpersonatePromptTemplate: () => set({ activeImpersonatePromptTemplateId: null }),
       setImpersonateCyoaChoices: (v) => set({ impersonateCyoaChoices: v }),
       setImpersonatePresetId: (id) => set({ impersonatePresetId: id }),
       setImpersonateConnectionId: (id) => set({ impersonateConnectionId: id }),
@@ -3120,6 +3130,7 @@ export const useUIStore = create<UIState>()(
         scheduleGenerationPreferences: state.scheduleGenerationPreferences,
         conversationTimeZone: state.conversationTimeZone,
         impersonatePromptTemplate: state.impersonatePromptTemplate,
+        activeImpersonatePromptTemplateId: state.activeImpersonatePromptTemplateId,
         impersonateCyoaChoices: state.impersonateCyoaChoices,
         impersonatePresetId: state.impersonatePresetId,
         impersonateConnectionId: state.impersonateConnectionId,
