@@ -11,6 +11,7 @@ import {
   IMAGE_DEFAULTS_STORAGE_KEY,
   MODEL_LISTS,
   VIDEO_DEFAULTS_STORAGE_KEY,
+  connectionImageCaptioningDefaultsSchema,
   createConnectionSchema,
   createDefaultVideoGenerationProfile,
   generationParametersSchema,
@@ -387,6 +388,17 @@ export async function connectionsRoutes(app: FastifyInstance) {
       }
       params = { ...parsed.data };
       const rawRecord = raw as Record<string, unknown>;
+      const imageCaptioningDefaults = connectionImageCaptioningDefaultsSchema.safeParse(rawRecord);
+      if (!imageCaptioningDefaults.success) {
+        return reply.status(400).send({
+          error: "Invalid image captioning defaults",
+          issues: imageCaptioningDefaults.error.issues.map((issue) => ({
+            path: issue.path.join("."),
+            message: issue.message,
+          })),
+        });
+      }
+      Object.assign(params, imageCaptioningDefaults.data);
       if (Object.prototype.hasOwnProperty.call(rawRecord, IMAGE_DEFAULTS_STORAGE_KEY)) {
         params[IMAGE_DEFAULTS_STORAGE_KEY] = rawRecord[IMAGE_DEFAULTS_STORAGE_KEY];
       }

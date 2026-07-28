@@ -1409,6 +1409,106 @@ test("connection test-message errors inherit the configured editor accent", asyn
   }
 });
 
+test("Connection image captioning defaults persist with a dedicated captioning connection", async ({
+  page,
+  request,
+}, testInfo) => {
+  test.skip(testInfo.project.name.includes("mobile"), "Desktop connection-default editing is covered here.");
+
+  const suffix = Date.now().toString(36);
+  const chatConnectionName = `Caption Defaults Chat ${suffix}`;
+  const captionConnectionName = `Caption Defaults Vision ${suffix}`;
+  const captionModel = `vision-model-${suffix}`;
+  const chatConnectionResponse = await request.post("/api/connections", {
+    data: {
+      name: chatConnectionName,
+      provider: "custom",
+      baseUrl: "http://127.0.0.1:1/v1",
+      model: `chat-model-${suffix}`,
+    },
+  });
+  const captionConnectionResponse = await request.post("/api/connections", {
+    data: {
+      name: captionConnectionName,
+      provider: "custom",
+      baseUrl: "http://127.0.0.1:1/v1",
+      model: captionModel,
+    },
+  });
+  expect(chatConnectionResponse.ok()).toBeTruthy();
+  expect(captionConnectionResponse.ok()).toBeTruthy();
+  const chatConnection = (await chatConnectionResponse.json()) as { id: string };
+  const captionConnection = (await captionConnectionResponse.json()) as { id: string };
+
+  try {
+    const invalidDefaultsResponse = await request.put(
+      `/api/connections/${chatConnection.id}/default-parameters`,
+      {
+        data: {
+          imageCaptioningEnabled: true,
+          imageCaptioningConnectionId: "",
+        },
+      },
+    );
+    expect(invalidDefaultsResponse.status()).toBe(400);
+
+    await page.goto("/");
+    await page.locator('[data-tour="panel-connections"]').click();
+    const rightPanel = page.locator('[data-component="RightPanelDesktop"]');
+    await rightPanel
+      .getByText(chatConnectionName, { exact: true })
+      .first()
+      .evaluate((element) => (element as HTMLElement).click());
+
+    const editor = page.locator(".mari-editor-shell");
+    await expect(editor).toBeVisible();
+    await editor
+      .getByText("Use custom defaults for this connection", { exact: true })
+      .evaluate((element) => (element as HTMLElement).click());
+    await expect(editor.getByRole("checkbox", { name: "Use custom defaults for this connection" })).toBeChecked();
+    await editor
+      .getByText("Image Captioning", { exact: true })
+      .evaluate((element) => (element as HTMLElement).click());
+    await expect(editor.getByRole("checkbox", { name: "Image Captioning" })).toBeChecked();
+    const captioningSelect = editor
+      .getByText("Captioning Connection", { exact: true })
+      .locator("..")
+      .getByRole("combobox");
+    await captioningSelect.selectOption(captionConnection.id);
+
+    await Promise.all([
+      page.waitForResponse(
+        (response) =>
+          response.url().endsWith(`/api/connections/${chatConnection.id}/default-parameters`) &&
+          response.request().method() === "PUT" &&
+          response.ok(),
+      ),
+      editor.getByRole("button", { name: "Save", exact: true }).click(),
+    ]);
+
+    const storedResponse = await request.get(`/api/connections/${chatConnection.id}`);
+    expect(storedResponse.ok()).toBeTruthy();
+    const stored = (await storedResponse.json()) as { defaultParameters: string | null };
+    const storedDefaults = JSON.parse(stored.defaultParameters ?? "{}") as Record<string, unknown>;
+    expect(storedDefaults.imageCaptioningEnabled).toBe(true);
+    expect(storedDefaults.imageCaptioningConnectionId).toBe(captionConnection.id);
+
+    await editor.locator(".mari-editor-header .mari-editor-action").first().click();
+    await rightPanel
+      .getByText(chatConnectionName, { exact: true })
+      .first()
+      .evaluate((element) => (element as HTMLElement).click());
+    await expect(editor.getByRole("checkbox", { name: "Use custom defaults for this connection" })).toBeChecked();
+    await expect(editor.getByRole("checkbox", { name: "Image Captioning" })).toBeChecked();
+    await expect(captioningSelect).toHaveValue(captionConnection.id);
+  } finally {
+    await Promise.all([
+      request.delete(`/api/connections/${chatConnection.id}`).catch(() => undefined),
+      request.delete(`/api/connections/${captionConnection.id}`).catch(() => undefined),
+    ]);
+  }
+});
+
 test("Connection Discard uses the configured editor accent", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name.includes("mobile"), "Desktop connection editor guard chrome is covered here.");
 

@@ -44,6 +44,7 @@ import { toast } from "sonner";
 import {
   noodleTextMentionsHandle as textMentionsHandle,
   noodlePollInputSchema,
+  parseConnectionImageCaptioningDefaults,
   PROFESSOR_MARI_ID,
   readNoodlePollFromMetadata,
   type NoodleTextMention,
@@ -675,6 +676,20 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
   const noodlePromptLoading = noodlePromptDetail.isLoading || noodlePromptDefault.isLoading;
   const noodlePromptDirty = noodlePromptDraft !== noodlePromptText;
   const settings = data?.settings;
+  const noodleGenerationConnection = settings?.generationConnectionId
+    ? connections.find((connection) => connection.id === settings.generationConnectionId)
+    : null;
+  const noodleImageCaptioningDefaults = parseConnectionImageCaptioningDefaults(
+    noodleGenerationConnection?.defaultParameters,
+  );
+  const effectiveImageCaptioningEnabled =
+    settings?.imageCaptioningUseConnectionDefault === false
+      ? settings.imageCaptioningEnabled
+      : noodleImageCaptioningDefaults.imageCaptioningEnabled === true;
+  const effectiveImageCaptioningConnectionId =
+    settings?.imageCaptioningUseConnectionDefault === false
+      ? settings.imageCaptioningConnectionId
+      : (noodleImageCaptioningDefaults.imageCaptioningConnectionId ?? null);
   const accounts = useMemo(
     () =>
       (data?.accounts ?? []).filter(
@@ -3041,16 +3056,28 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
               <ToggleSetting
                 label={localizeUi("ui.noodle.noodlehome.imageCaptioning")}
                 help={localizeUi("ui.noodle.noodlehome.convertsTimelineImagesIntoConciseDescriptionsBeforeRefreshGeneration")}
-                checked={settings.imageCaptioningEnabled}
+                checked={effectiveImageCaptioningEnabled}
                 disabled={updateSettings.isPending || connections.length === 0}
-                onChange={(checked) => saveSettings({ imageCaptioningEnabled: checked })}
+                onChange={(checked) =>
+                  saveSettings({
+                    imageCaptioningEnabled: checked,
+                    imageCaptioningConnectionId: checked ? effectiveImageCaptioningConnectionId : null,
+                    imageCaptioningUseConnectionDefault: false,
+                  })
+                }
               />
-              {settings.imageCaptioningEnabled && (
+              {effectiveImageCaptioningEnabled && (
                 <label className="block space-y-1.5">
                   <FieldLabel help={localizeUi("ui.noodle.noodlehome.chooseAVisionCapableTextConnectionDefaultUsesThe")}>{localizeUi("ui.noodle.noodlehome.captioningConnection")}</FieldLabel>
                   <select
-                    value={settings.imageCaptioningConnectionId ?? ""}
-                    onChange={(event) => saveSettings({ imageCaptioningConnectionId: event.target.value || null })}
+                    value={effectiveImageCaptioningConnectionId ?? ""}
+                    onChange={(event) =>
+                      saveSettings({
+                        imageCaptioningEnabled: true,
+                        imageCaptioningConnectionId: event.target.value || null,
+                        imageCaptioningUseConnectionDefault: false,
+                      })
+                    }
                     className={fieldClass}
                   >
                     <option value="">{localizeUi("ui.noodle.noodlehome.useNoodleGenerationConnection")}</option>
@@ -3061,6 +3088,22 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
                     ))}
                   </select>
                 </label>
+              )}
+              {!settings.imageCaptioningUseConnectionDefault && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    saveSettings({
+                      imageCaptioningEnabled: false,
+                      imageCaptioningConnectionId: null,
+                      imageCaptioningUseConnectionDefault: true,
+                    })
+                  }
+                  disabled={updateSettings.isPending}
+                  className="w-full rounded-md border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)] px-3 py-2 text-xs font-semibold text-[var(--muted-foreground)] transition-colors hover:bg-[var(--accent)] hover:text-[var(--foreground)] disabled:opacity-50"
+                >
+                  {localizeUi("ui.noodle.noodlehome.useConnectionDefault")}
+                </button>
               )}
             </div>
           </Section>
