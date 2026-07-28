@@ -26,6 +26,8 @@ import {
   Square as SquareIcon,
   ArrowUpDown,
   Tag,
+  Loader2,
+  PhoneIncoming,
 } from "lucide-react";
 import { useBulkExportChats, useChats, useCreateChat, useDeleteChat, useDeleteChatGroup } from "../../hooks/use-chats";
 import { useChatPresets, useApplyChatPreset } from "../../hooks/use-chat-presets";
@@ -251,6 +253,8 @@ export function ChatSidebar() {
   const { data: folders } = useChatFolders();
   const createFolderMut = useCreateFolder();
   const updateFolderMut = useUpdateFolder();
+  // Stable across renders, unlike the mutation object itself — safe as an effect dep.
+  const mutateFolder = updateFolderMut.mutate;
   const deleteFolderMut = useDeleteFolder();
   const reorderFoldersMut = useReorderFolders();
   const moveChatMut = useMoveChat();
@@ -537,10 +541,17 @@ export function ChatSidebar() {
   // Uses a structured ref so each concern (tab, folder, scroll) resolves
   // independently — folder expansion retries when folders load late, and
   // scroll waits until both tab and folder are settled.
-  const syncRef = useRef<{ chatId: string | null; tabSynced: boolean; folderSynced: boolean }>({
+  const syncRef = useRef<{
+    chatId: string | null;
+    tabSynced: boolean;
+    folderSynced: boolean;
+    /** Folder we already asked to expand — the mutation is in flight, don't ask again. */
+    expandRequestedFolderId: string | null;
+  }>({
     chatId: null,
     tabSynced: false,
     folderSynced: false,
+    expandRequestedFolderId: null,
   });
   // When true the next sync skips clearing the search query — set by
   // the sidebar's own click handler so clicking a search result doesn't
@@ -560,6 +571,7 @@ export function ChatSidebar() {
       s.chatId = activeChatId;
       s.tabSynced = false;
       s.folderSynced = false;
+      s.expandRequestedFolderId = null;
     }
 
     // 1. Tab sync — once per chat switch
@@ -590,7 +602,13 @@ export function ChatSidebar() {
       } else if (folders) {
         const folder = folders.find((f) => f.id === chat.folderId);
         if (folder?.collapsed) {
-          updateFolderMut.mutate({ id: folder.id, collapsed: false });
+          // Once per folder: this effect re-runs on every render (the mutation object
+          // identity changes), and mutating re-renders — firing again here is an
+          // infinite update loop (React #185) until the folders query comes back.
+          if (s.expandRequestedFolderId !== folder.id) {
+            s.expandRequestedFolderId = folder.id;
+            mutateFolder({ id: folder.id, collapsed: false });
+          }
           // folderSynced stays false — re-runs after query invalidation
         } else {
           s.folderSynced = true;
@@ -608,7 +626,7 @@ export function ChatSidebar() {
       }, 200);
       return () => clearTimeout(timer);
     }
-  }, [activeChatId, chats, folders, updateFolderMut]);
+  }, [activeChatId, chats, folders, mutateFolder]);
 
   const handleNewChat = useCallback(
     (mode: ChatMode) => {
@@ -901,6 +919,13 @@ export function ChatSidebar() {
           : hasDraft
             ? localizeUi("ui.layout.chatsidebar.unsentDraft")
             : null;
+    // Same precedence as the subtitle: whatever the line says is what the icon marks.
+    const SubtitleIcon =
+      typingCharacter || isGenerating
+        ? Loader2
+        : notificationLabel && notification?.kind === "call"
+          ? PhoneIncoming
+          : null;
 
     // Banner: the chat's own background image, bled across the row and heavily muted.
     // Sits at -z-10 inside the row's own stacking context (see `isolate`), so the
@@ -1023,14 +1048,11 @@ export function ChatSidebar() {
           </span>
         )}
 
-        {/* Active / generating indicator */}
-        {(isActive || isGenerating) && (
+        {/* Active indicator — generation is shown by the subtitle spinner instead. */}
+        {isActive && (
           <span
-            className={cn(
-              // left-0, not -left-0.5: the row now clips (overflow-hidden, for the banner).
-              "mari-chrome-accent-progress mari-accent-animated absolute left-0 top-1/2 h-5 w-1 -translate-y-1/2 rounded-full",
-              isGenerating && "animate-pulse",
-            )}
+            // left-0, not -left-0.5: the row now clips (overflow-hidden, for the banner).
+            className="mari-chrome-accent-progress mari-accent-animated absolute left-0 top-1/2 h-5 w-1 -translate-y-1/2 rounded-full"
           />
         )}
 
@@ -1169,8 +1191,16 @@ export function ChatSidebar() {
             {chat.name}
           </span>
           {subtitle && (
-            <span className="mari-chrome-accent-text-muted block truncate text-[0.6875rem] leading-tight">
-              {subtitle}
+            <span className="mari-chrome-accent-text-muted flex items-center gap-1 truncate text-[0.6875rem] leading-tight">
+              {SubtitleIcon && (
+                <SubtitleIcon
+                  className={cn(
+                    "h-2.5 w-2.5 shrink-0",
+                    SubtitleIcon === Loader2 ? "animate-spin" : "animate-pulse",
+                  )}
+                />
+              )}
+              <span className="truncate">{subtitle}</span>
             </span>
           )}
         </div>

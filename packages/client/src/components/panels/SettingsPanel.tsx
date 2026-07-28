@@ -520,7 +520,7 @@ const SETTINGS_SEARCHABLE_CONTROLS: readonly SettingsSearchableControlMeta[] = [
     sectionId: "application",
     label: "Documentation Language",
     description: "Choose the language for Marinara's built-in guides.",
-    aliases: ["documentation", "guides", "docs", "manual", "spanish", "español", "german", "deutsch"],
+    aliases: ["documentation", "guides", "docs", "manual", "spanish", "español", "german", "deutsch", "french", "français"],
     kind: "Select",
   },
   {
@@ -1203,9 +1203,17 @@ const SETTINGS_SEARCHABLE_CONTROLS: readonly SettingsSearchableControlMeta[] = [
     id: "automatic-backups",
     sectionId: "backup-export",
     label: "Automatic backups",
-    description: "Keep one scheduled full backup and replace it after each successful run.",
+    description: "Schedule full backups and choose how many automatic archives to retain.",
     aliases: ["backup", "daily", "weekly", "monthly", "scheduled"],
     kind: "Toggle",
+  },
+  {
+    id: "automatic-backups-kept",
+    sectionId: "backup-export",
+    label: "Automatic backups kept",
+    description: "Retain between 1 and 9999 automatic backup archives without affecting manual backups.",
+    aliases: ["backup", "retention", "history", "rotate", "automatic"],
+    kind: "Input",
   },
 ] as const;
 
@@ -5189,33 +5197,22 @@ function AppearanceSettings() {
                 </span>
               </div>
             </label>
-            <div className="flex flex-col gap-2">
-              <span className="inline-flex items-center gap-1 text-[0.6875rem] font-medium">
+            <label className="flex items-center gap-2">
+              <span className="inline-flex shrink-0 items-center gap-1 text-[0.6875rem] font-medium">
                 {localizeUi("ui.panels.appearancesettings.chatListBackgrounds")}
                 <HelpTooltip text={localizeUi("ui.panels.appearancesettings.showsEachChatsOwnBackgroundAsAMutedBanner")} />
               </span>
-              <div
+              <select
                 id={getSettingsControlAnchorId("chat-list-backgrounds")}
-                className="grid scroll-mt-3 grid-cols-1 gap-2 sm:grid-cols-3"
+                value={chatListBackgrounds}
+                onChange={(e) => setChatListBackgrounds(e.target.value as ChatListBackgroundMode)}
+                className="h-7 min-w-0 flex-1 scroll-mt-3 rounded-md border border-[var(--border)] bg-[var(--secondary)] px-2 text-xs"
               >
                 {CHAT_LIST_BACKGROUND_OPTIONS.map((opt) => (
-                  <button
-                    key={opt.id}
-                    type="button"
-                    onClick={() => setChatListBackgrounds(opt.id)}
-                    className={cn(
-                      "flex flex-col items-start gap-1 rounded-lg border p-3 text-left text-xs transition-all",
-                      chatListBackgrounds === opt.id
-                        ? "border-[var(--primary)] bg-[var(--primary)]/10 ring-1 ring-[var(--primary)]"
-                        : "border-[var(--border)] hover:border-[var(--primary)]/40",
-                    )}
-                  >
-                    <span className="font-semibold">{opt.label}</span>
-                    <span className="text-[0.625rem] leading-tight text-[var(--muted-foreground)]">{opt.desc}</span>
-                  </button>
+                  <option key={opt.id} value={opt.id}>{opt.label}</option>
                 ))}
-              </div>
-            </div>
+              </select>
+            </label>
             <BackgroundPicker
               selected={chatBackground}
               onSelect={setChatBackground}
@@ -6890,6 +6887,7 @@ function AdvancedSettings() {
   type AutomaticBackupSettings = {
     enabled: boolean;
     frequency: AutomaticBackupFrequency;
+    retentionCount: number;
     lastBackupAt: string | null;
     lastError: string | null;
     nextBackupAt: string | null;
@@ -6901,7 +6899,7 @@ function AdvancedSettings() {
     refetchInterval: (query) => (query.state.data?.enabled ? 30_000 : false),
   });
   const automaticBackupMutation = useMutation({
-    mutationFn: (settings: Pick<AutomaticBackupSettings, "enabled" | "frequency">) =>
+    mutationFn: (settings: Pick<AutomaticBackupSettings, "enabled" | "frequency" | "retentionCount">) =>
       api.put<AutomaticBackupSettings>("/backup/automatic", settings),
     onSuccess: (settings) => {
       qc.setQueryData(["backups", "automatic"], settings);
@@ -6915,12 +6913,15 @@ function AdvancedSettings() {
       );
     },
   });
-  const updateAutomaticBackup = (patch: Partial<Pick<AutomaticBackupSettings, "enabled" | "frequency">>) => {
+  const updateAutomaticBackup = (
+    patch: Partial<Pick<AutomaticBackupSettings, "enabled" | "frequency" | "retentionCount">>,
+  ) => {
     const current = automaticBackupQuery.data;
     if (!current) return;
     automaticBackupMutation.mutate({
       enabled: patch.enabled ?? current.enabled,
       frequency: patch.frequency ?? current.frequency,
+      retentionCount: patch.retentionCount ?? current.retentionCount,
     });
   };
 
@@ -7423,6 +7424,33 @@ function AdvancedSettings() {
                     {localizeUi(`ui.panels.advancedsettings.automaticBackupFrequency.${frequency}`)}
                   </button>
                 ))}
+              </div>
+              <div
+                id={getSettingsControlAnchorId("automatic-backups-kept")}
+                className="mt-2 grid scroll-mt-3 gap-2 border-t border-[var(--border)]/60 pt-2 sm:grid-cols-[minmax(0,1fr)_5.5rem] sm:items-center"
+              >
+                <div className="min-w-0">
+                  <label
+                    htmlFor="automatic-backup-retention-count"
+                    className="text-[0.6875rem] font-medium text-[var(--foreground)]"
+                  >
+                    {localizeUi("ui.panels.advancedsettings.automaticBackupsKept")}
+                  </label>
+                  <p className="mt-0.5 text-[0.625rem] leading-relaxed text-[var(--muted-foreground)]">
+                    {localizeUi("ui.panels.advancedsettings.automaticBackupsKeptDescription")}
+                  </p>
+                </div>
+                <DraftNumberInput
+                  id="automatic-backup-retention-count"
+                  value={automaticBackupQuery.data.retentionCount}
+                  min={1}
+                  max={9999}
+                  selectOnFocus
+                  disabled={automaticBackupMutation.isPending}
+                  onCommit={(retentionCount) => updateAutomaticBackup({ retentionCount })}
+                  ariaLabel={localizeUi("ui.panels.advancedsettings.automaticBackupsKeptAriaLabel")}
+                  className="mari-chrome-field h-9 w-full px-2 text-right text-xs tabular-nums"
+                />
               </div>
               <p className="mt-2 text-[0.625rem] leading-relaxed text-[var(--muted-foreground)]">
                 {automaticBackupQuery.data.lastError

@@ -20,7 +20,7 @@ import {
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
 import { useQueryClient, type InfiniteData } from "@tanstack/react-query";
-import { useChatStore } from "../../stores/chat.store";
+import { updateCurrentInputSnapshot, useChatStore } from "../../stores/chat.store";
 import { useAgentStore } from "../../stores/agent.store";
 import { useUIStore } from "../../stores/ui.store";
 import { useGenerate } from "../../hooks/use-generate";
@@ -92,14 +92,8 @@ const TEXT_ATTACHMENT_EXTENSIONS = new Set([
   "yml",
 ]);
 const PDF_ATTACHMENT_MIME_TYPE = "application/pdf";
-const QUOTE_INPUT_TRIGGER_RE = /["'\u2018\u2019\u201a\u201b\u201c\u201d\u201e\u201f]/;
-
-function shouldFormatQuoteInput(event: FormEvent<HTMLTextAreaElement> | undefined, value: string): boolean {
-  const inputEvent = event?.nativeEvent as InputEvent | undefined;
-  const inputType = typeof inputEvent?.inputType === "string" ? inputEvent.inputType : "";
-  if (inputType.startsWith("delete")) return false;
-  return QUOTE_INPUT_TRIGGER_RE.test(inputEvent?.data ?? value);
-}
+const ROLEPLAY_INPUT_RESIZE_IDLE_MS = 150;
+const ROLEPLAY_INPUT_DELETE_RESIZE_IDLE_MS = 450;
 
 function getFileExtension(fileName: string): string {
   const match = fileName.toLowerCase().match(/\.([a-z0-9]+)$/);
@@ -238,8 +232,10 @@ export const ChatInput = memo(function ChatInput({
   const focusAfterMobileRestoreRef = useRef(false);
   const draftTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const resizeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const currentInputFrameRef = useRef<number | null>(null);
-  const pendingCurrentInputRef = useRef("");
+  const heldDeleteKeyRef = useRef(false);
+  const heldDeleteDraftRef = useRef<{ chatId: string; text: string } | null>(null);
+  const heldDeleteResizeRef = useRef<HTMLTextAreaElement | null>(null);
+  const hasInputRef = useRef(false);
   const attachmentsRef = useRef<Attachment[]>([]);
   const pendingAttachmentDraftsRef = useRef<Map<string, Attachment[]>>(new Map());
   const activeChatId = useChatStore((s) => s.activeChatId);
@@ -268,7 +264,7 @@ export const ChatInput = memo(function ChatInput({
   );
   const setInputDraft = useChatStore((s) => s.setInputDraft);
   const clearInputDraft = useChatStore((s) => s.clearInputDraft);
-  const setCurrentInput = useChatStore((s) => s.setCurrentInput);
+  const setCurrentInputPresence = useChatStore((s) => s.setCurrentInputPresence);
   const removeFromResponseQueue = useChatStore((s) => s.removeFromResponseQueue);
   const clearResponseQueue = useChatStore((s) => s.clearResponseQueue);
   const activeChat = useChatStore((s) => s.activeChat);
@@ -374,20 +370,14 @@ export const ChatInput = memo(function ChatInput({
 
   const syncInputState = useCallback(
     (value: string) => {
-      const nextHasInput = value.trim().length > 0;
-      setHasInput((current) => (current === nextHasInput ? current : nextHasInput));
-      pendingCurrentInputRef.current = value;
-      if (typeof window === "undefined" || typeof window.requestAnimationFrame !== "function") {
-        setCurrentInput(value);
-        return;
-      }
-      if (currentInputFrameRef.current !== null) return;
-      currentInputFrameRef.current = window.requestAnimationFrame(() => {
-        currentInputFrameRef.current = null;
-        setCurrentInput(pendingCurrentInputRef.current);
-      });
+      const nextHasInput = /\S/u.test(value);
+      updateCurrentInputSnapshot(value);
+      if (hasInputRef.current === nextHasInput) return;
+      hasInputRef.current = nextHasInput;
+      setHasInput(nextHasInput);
+      setCurrentInputPresence(nextHasInput);
     },
-    [setCurrentInput],
+    [setCurrentInputPresence],
   );
 
   const replaceAttachments = useCallback((next: Attachment[]) => {
@@ -466,6 +456,9 @@ export const ChatInput = memo(function ChatInput({
   const prevChatIdRef = useRef<string | null>(null);
   useEffect(() => {
     if (prevChatIdRef.current !== activeChatId) {
+      heldDeleteKeyRef.current = false;
+      heldDeleteDraftRef.current = null;
+      heldDeleteResizeRef.current = null;
       // Save draft from the previous chat before switching
       if (prevChatIdRef.current && textareaRef.current) {
         const prevText = textareaRef.current.value;
@@ -506,14 +499,9 @@ export const ChatInput = memo(function ChatInput({
       // Cancel pending debounce timers
       if (draftTimerRef.current) clearTimeout(draftTimerRef.current);
       if (resizeTimerRef.current) clearTimeout(resizeTimerRef.current);
-      if (currentInputFrameRef.current !== null) {
-        cancelAnimationFrame(currentInputFrameRef.current);
-        currentInputFrameRef.current = null;
-        const chatState = useChatStore.getState();
-        if (chatState.activeChatId === chatId) {
-          chatState.setCurrentInput(pendingCurrentInputRef.current);
-        }
-      }
+      heldDeleteKeyRef.current = false;
+      heldDeleteDraftRef.current = null;
+      heldDeleteResizeRef.current = null;
       // Flush draft synchronously
       if (chatId && textarea) {
         const text = textarea.value;
@@ -1452,7 +1440,68 @@ export const ChatInput = memo(function ChatInput({
     handleImpersonateQuickButton,
   ]);
 
+  const scheduleDraftPersistence = useCallback((chatId: string, text: string) => {
+    if (draftTimerRef.current) clearTimeout(draftTimerRef.current);
+    draftTimerRef.current = setTimeout(() => {
+      draftTimerRef.current = null;
+      if (text.trim()) {
+        setInputDraft(chatId, text);
+      } else {
+        clearInputDraft(chatId);
+      }
+    }, 300);
+  }, [clearInputDraft, setInputDraft]);
+
+  const scheduleTextareaResize = useCallback((el: HTMLTextAreaElement, delay: number) => {
+    if (resizeTimerRef.current) clearTimeout(resizeTimerRef.current);
+    resizeTimerRef.current = setTimeout(() => {
+      resizeTimerRef.current = null;
+      if (textareaRef.current !== el) return;
+      resizeChatInputTextarea(el);
+    }, delay);
+  }, []);
+
+  const releaseHeldDeleteWork = useCallback(() => {
+    if (!heldDeleteKeyRef.current) return;
+    heldDeleteKeyRef.current = false;
+
+    const pendingDraft = heldDeleteDraftRef.current;
+    heldDeleteDraftRef.current = null;
+    if (pendingDraft) {
+      scheduleDraftPersistence(pendingDraft.chatId, pendingDraft.text);
+    }
+
+    const pendingResize = heldDeleteResizeRef.current;
+    heldDeleteResizeRef.current = null;
+    if (pendingResize) {
+      scheduleTextareaResize(pendingResize, ROLEPLAY_INPUT_RESIZE_IDLE_MS);
+    }
+  }, [scheduleDraftPersistence, scheduleTextareaResize]);
+
+  useEffect(() => {
+    window.addEventListener("blur", releaseHeldDeleteWork);
+    return () => window.removeEventListener("blur", releaseHeldDeleteWork);
+  }, [releaseHeldDeleteWork]);
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (
+      mode === "roleplay" &&
+      (e.key === "Backspace" || e.key === "Delete") &&
+      !heldDeleteKeyRef.current
+    ) {
+      heldDeleteKeyRef.current = true;
+      heldDeleteDraftRef.current = null;
+      heldDeleteResizeRef.current = null;
+      if (draftTimerRef.current) {
+        clearTimeout(draftTimerRef.current);
+        draftTimerRef.current = null;
+      }
+      if (resizeTimerRef.current) {
+        clearTimeout(resizeTimerRef.current);
+        resizeTimerRef.current = null;
+      }
+    }
+
     // Autocomplete navigation
     if (completions.length > 0) {
       if (e.key === "Tab" || (e.key === "Enter" && !e.shiftKey)) {
@@ -1496,43 +1545,53 @@ export const ChatInput = memo(function ChatInput({
     }
   };
 
+  const handleKeyUp = (e: React.KeyboardEvent) => {
+    if (e.key === "Backspace" || e.key === "Delete") {
+      releaseHeldDeleteWork();
+    }
+  };
+
   const handleInput = (event?: FormEvent<HTMLTextAreaElement>) => {
     const el = textareaRef.current;
     if (!el) return;
-    const fixed = shouldFormatQuoteInput(event, el.value) ? applyTextareaQuoteFormat(el, quoteFormat) : el.value;
+    const inputEvent = event?.nativeEvent as InputEvent | undefined;
+    const isDeleting = inputEvent?.inputType?.startsWith("delete") === true;
+    const shouldDeferDeleteWork = mode === "roleplay" && isDeleting && heldDeleteKeyRef.current;
+    const fixed = applyTextareaQuoteFormat(el, quoteFormat, inputEvent);
     syncInputState(fixed);
 
     // Keep draft in sync so it survives remounts (debounced to avoid store churn)
     if (activeChatId) {
-      if (draftTimerRef.current) clearTimeout(draftTimerRef.current);
       const chatId = activeChatId;
       const text = fixed;
-      draftTimerRef.current = setTimeout(() => {
-        if (text.trim()) {
-          setInputDraft(chatId, text);
-        } else {
-          clearInputDraft(chatId);
-        }
-      }, 300);
+      if (shouldDeferDeleteWork) {
+        heldDeleteDraftRef.current = { chatId, text };
+      } else {
+        scheduleDraftPersistence(chatId, text);
+      }
     }
 
     // Roleplay can paint a substantially heavier scene than the other modes.
     // Wait for a short typing pause before forcing the scrollHeight layout read.
-    if (resizeTimerRef.current) clearTimeout(resizeTimerRef.current);
-    resizeTimerRef.current = setTimeout(() => {
-      resizeTimerRef.current = null;
-      if (textareaRef.current !== el) return;
-      resizeChatInputTextarea(el);
-    }, 150);
+    if (shouldDeferDeleteWork) {
+      heldDeleteResizeRef.current = el;
+    } else {
+      scheduleTextareaResize(
+        el,
+        isDeleting ? ROLEPLAY_INPUT_DELETE_RESIZE_IDLE_MS : ROLEPLAY_INPUT_RESIZE_IDLE_MS,
+      );
+    }
 
     // Slash command autocomplete
-    const trimmed = fixed.trim();
-    if (trimmed.startsWith("/") && !trimmed.includes(" ")) {
-      const matches = getSlashCompletions(trimmed, { mode, availableCapabilityIds });
-      setCompletions(matches);
-      setSelectedCompletion(0);
-    } else {
-      setCompletions((prev) => (prev.length === 0 ? prev : []));
+    if (completions.length > 0 || /^\s*\//u.test(fixed)) {
+      const trimmed = fixed.trim();
+      if (trimmed.startsWith("/") && !trimmed.includes(" ")) {
+        const matches = getSlashCompletions(trimmed, { mode, availableCapabilityIds });
+        setCompletions(matches);
+        setSelectedCompletion(0);
+      } else if (completions.length > 0) {
+        setCompletions([]);
+      }
     }
   };
 
@@ -1970,12 +2029,15 @@ export const ChatInput = memo(function ChatInput({
         {/* Text input */}
         <textarea
           ref={textareaRef}
+          data-chat-composer="true"
           onInput={handleInput}
           onKeyDown={handleKeyDown}
+          onKeyUp={handleKeyUp}
           onPaste={handlePaste}
           onFocus={() => {
             ensureInputVisible();
           }}
+          onBlur={releaseHeldDeleteWork}
           placeholder={inputPlaceholder}
           disabled={!activeChatId}
           rows={1}
