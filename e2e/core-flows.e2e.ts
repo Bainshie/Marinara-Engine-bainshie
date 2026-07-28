@@ -5113,6 +5113,50 @@ test("PocketTTS discovers server voices and uses its speech endpoint", async ({ 
   }
 });
 
+test("OpenAI-compatible TTS accepts and persists a custom Kokoro voice mix", async ({ page, request }, testInfo) => {
+  test.skip(!testInfo.project.name.includes("desktop"), "Custom TTS voice entry is covered on desktop.");
+
+  const originalConfigResponse = await request.get("/api/tts/config");
+  expect(originalConfigResponse.ok()).toBeTruthy();
+  const originalConfig = await originalConfigResponse.json();
+  const kokoroMix = "af_bella(0.5)+af_sarah(0.5)";
+
+  try {
+    const configResponse = await request.put("/api/tts/config", {
+      data: {
+        ...(originalConfig as Record<string, unknown>),
+        enabled: false,
+        source: "openai",
+        baseUrl: "https://api.openai.com/v1",
+        model: "tts-1",
+        voice: "alloy",
+        voiceMode: "single",
+      },
+    });
+    expect(configResponse.ok()).toBeTruthy();
+
+    await page.goto("/");
+    await page.locator('[data-tour="panel-connections"]').click();
+    const rightPanel = page.locator('[data-component="RightPanel"]');
+    await expect(rightPanel).toBeVisible();
+    const ttsCard = rightPanel.getByText("Text to Speech", { exact: true }).locator("xpath=../../..");
+    await ttsCard.getByTitle("Expand").click();
+
+    const customVoiceInput = ttsCard.getByTestId("tts-custom-voice-input").first();
+    await expect(customVoiceInput).toHaveAttribute("placeholder", /Custom voice or mix/);
+    await customVoiceInput.fill(kokoroMix);
+    await expect
+      .poll(async () => {
+        const response = await request.get("/api/tts/config");
+        const config = (await response.json()) as { voice?: string };
+        return config.voice;
+      })
+      .toBe(kokoroMix);
+  } finally {
+    await request.put("/api/tts/config", { data: originalConfig });
+  }
+});
+
 test("ElevenLabs keeps models visible and exposes scrollable account voices in every assignment mode", async ({
   page,
 }, testInfo) => {
