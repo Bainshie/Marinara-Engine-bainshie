@@ -46,6 +46,9 @@ findsEmoji("🧪", "🧪");
 // Prefix-per-word matching, so a query is not a blind substring of the name.
 assert.equal(matchesEmojiQuery("tick", "🥢"), false, "'tick' must not match chopsticks");
 assert.equal(matchesEmojiQuery("apple", "🍮"), false);
+// Ambiguous single-word synonyms must not leak: "cross" → "no wrong" once made
+// every cross-named emoji a hit for "wrong".
+assert.equal(matchesEmojiQuery("wrong", "✝️"), false, "'wrong' must not match the latin cross");
 assert.equal(matchesEmojiQuery("", "🍎"), false);
 
 assert.ok(searchStandardEmojiShortcodes("celebrate").some((entry) => entry.emoji === "🎉"));

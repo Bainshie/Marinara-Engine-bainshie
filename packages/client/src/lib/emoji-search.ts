@@ -26,7 +26,6 @@ const WORD_SYNONYMS: Readonly<Record<string, string>> = {
   angry: "mad rage",
   thumbs: "thumbsup thumbsdown",
   hand: "hands",
-  raised: "hands",
   heart: "love",
   kiss: "love",
   party: "celebrate celebration congrats",
@@ -36,8 +35,6 @@ const WORD_SYNONYMS: Readonly<Record<string, string>> = {
   fire: "lit hot flame",
   hundred: "100 perfect",
   check: "tick done yes correct",
-  cross: "no wrong",
-  star: "favourite favorite",
   sparkles: "star shiny glitter",
   poop: "poo shit turd",
   rocket: "launch space ship",
@@ -64,7 +61,6 @@ const WORD_SYNONYMS: Readonly<Record<string, string>> = {
   clock: "time oclock",
   keycap: "number digit",
   button: "sign symbol",
-  cross_mark: "no wrong",
   sleeping: "tired zzz sleepy",
   vomiting: "sick puke ill",
   nauseated: "sick ill",
@@ -483,6 +479,7 @@ export const EMOJI_KEYWORDS: Readonly<Record<string, string>> = {
   "💯": "hundred perfect score",
   "🔥": "fire hot lit",
   "✨": "sparkles shiny",
+  "⭐": "star favourite favorite",
   "🌈": "rainbow",
   "☀️": "sun sunny",
   "❄️": "snowflake cold winter",
@@ -524,17 +521,22 @@ function tokenize(value: string): string[] {
   return value.toLowerCase().split(/[^a-z0-9]+/iu).filter(Boolean);
 }
 
-const searchTextCache = new Map<string, string>();
+const searchWordsCache = new Map<string, string[]>();
 
-/** Unicode name + curated keywords + synonyms for each word of the name. */
-export function emojiSearchText(emoji: string): string {
-  const cached = searchTextCache.get(emoji);
+/** Deduplicated search words: Unicode name + curated keywords + synonyms for each word of the name. */
+function emojiSearchWords(emoji: string): string[] {
+  const cached = searchWordsCache.get(emoji);
   if (cached !== undefined) return cached;
   const words = tokenize(`${EMOJI_SEARCH_NAMES[emoji] ?? ""} ${EMOJI_KEYWORDS[emoji] ?? ""}`);
   const synonyms = words.flatMap((word) => tokenize(WORD_SYNONYMS[word] ?? ""));
-  const text = Array.from(new Set([...words, ...synonyms])).join(" ");
-  searchTextCache.set(emoji, text);
-  return text;
+  const unique = Array.from(new Set([...words, ...synonyms]));
+  searchWordsCache.set(emoji, unique);
+  return unique;
+}
+
+/** Unicode name + curated keywords + synonyms for each word of the name. */
+export function emojiSearchText(emoji: string): string {
+  return emojiSearchWords(emoji).join(" ");
 }
 
 /**
@@ -546,6 +548,6 @@ export function matchesEmojiQuery(query: string, emoji: string): boolean {
   if (emoji === query.trim()) return true;
   const queryWords = tokenize(query);
   if (queryWords.length === 0) return false;
-  const words = emojiSearchText(emoji).split(" ");
+  const words = emojiSearchWords(emoji);
   return queryWords.every((queryWord) => words.some((word) => word.startsWith(queryWord)));
 }

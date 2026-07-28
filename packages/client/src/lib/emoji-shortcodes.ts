@@ -1,10 +1,9 @@
 import { EMOJI_SEARCH_NAMES } from "./emoji-catalog.generated";
-import { emojiSearchText, matchesEmojiQuery } from "./emoji-search";
+import { matchesEmojiQuery } from "./emoji-search";
 
 export interface StandardEmojiShortcode {
   name: string;
   emoji: string;
-  searchText: string;
 }
 
 const COMMON_SHORTCODES: Readonly<Record<string, string>> = {
@@ -52,13 +51,13 @@ function toShortcode(value: string): string {
 const byName = new Map<string, StandardEmojiShortcode>();
 
 for (const [name, emoji] of Object.entries(COMMON_SHORTCODES)) {
-  byName.set(name, { name, emoji, searchText: `${name.replaceAll("_", " ")} ${emojiSearchText(emoji)}` });
+  byName.set(name, { name, emoji });
 }
 
 for (const [emoji, unicodeName] of Object.entries(EMOJI_SEARCH_NAMES)) {
   const name = toShortcode(unicodeName);
   if (!name || byName.has(name)) continue;
-  byName.set(name, { name, emoji, searchText: `${name.replaceAll("_", " ")} ${emojiSearchText(emoji)}` });
+  byName.set(name, { name, emoji });
 }
 
 export const STANDARD_EMOJI_SHORTCODES: readonly StandardEmojiShortcode[] = Array.from(byName.values());
