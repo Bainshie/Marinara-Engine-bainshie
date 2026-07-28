@@ -452,6 +452,8 @@ export interface CustomQuickReply {
   id: string;
   label: string;
   content: string;
+  /** Emoji shown on the compact Roleplay quick-reply rail. */
+  icon?: string;
 }
 
 interface UIState {
@@ -2102,7 +2104,10 @@ export const useUIStore = create<UIState>()(
       setShowQuickReplyImpersonate: (v) => set({ showQuickReplyImpersonate: v }),
       addCustomQuickReply: (label, content) =>
         set((state) => ({
-          customQuickReplies: [...state.customQuickReplies, { id: generateClientId(), label: label.trim(), content }],
+          customQuickReplies: [
+            ...state.customQuickReplies,
+            { id: generateClientId(), label: label.trim(), content, icon: "✨" },
+          ],
         })),
       updateCustomQuickReply: (id, patch) =>
         set((state) => ({
@@ -2112,6 +2117,7 @@ export const useUIStore = create<UIState>()(
                   ...entry,
                   ...(patch.label !== undefined ? { label: patch.label } : {}),
                   ...(patch.content !== undefined ? { content: patch.content } : {}),
+                  ...(patch.icon !== undefined ? { icon: patch.icon } : {}),
                 }
               : entry,
           ),

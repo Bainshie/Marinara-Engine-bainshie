@@ -3091,6 +3091,7 @@ export function useGenerate() {
                       api
                         .patch(`/chats/${params.chatId}/messages/${id}/extra`, {
                           translation: result.translatedText,
+                          translationSource: textToTranslate,
                           translationHidden: false,
                         })
                         .catch(() => {});

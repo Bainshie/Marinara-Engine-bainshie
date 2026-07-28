@@ -177,7 +177,7 @@ import {
   stripConversationResponseEnvelope,
 } from "../services/conversation/transcript-sanitize.js";
 import { normalizePromptTimeZone, toZonedWallClockDate } from "../services/conversation/timezone.js";
-import { countUserMessagesAfterSummaryAnchor } from "../services/conversation/auto-summary.service.js";
+import { countConversationMessagesAfterSummaryAnchor } from "../services/conversation/auto-summary.service.js";
 import { executeKnowledgeRetrieval } from "../services/agents/knowledge-retrieval.js";
 import { executeKnowledgeRouter } from "../services/agents/knowledge-router.js";
 import { extractFileText, getSourceFilePath } from "./knowledge-sources.routes.js";
@@ -6780,7 +6780,7 @@ export async function generateRoutes(app: FastifyInstance) {
             typeof chatMeta.lastAutomaticSummaryMessageId === "string" && chatMeta.lastAutomaticSummaryMessageId.trim()
               ? chatMeta.lastAutomaticSummaryMessageId.trim()
               : null;
-          const messagesSinceLastSummary = countUserMessagesAfterSummaryAnchor(
+          const messagesSinceLastSummary = countConversationMessagesAfterSummaryAnchor(
             freshMessages,
             lastAutomaticSummaryMessageId,
           );

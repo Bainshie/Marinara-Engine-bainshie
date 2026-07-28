@@ -3036,6 +3036,116 @@ test("Roleplay side panels synchronize their slide with the desktop shell resize
   }
 });
 
+test("new Roleplay chats seed character Tracker custom-field defaults without reclaiming chat values", async ({
+  request,
+}) => {
+  const suffix = Date.now().toString(36);
+  const characterResponse = await request.post("/api/characters", {
+    data: {
+      data: {
+        name: `Tracker Defaults ${suffix}`,
+        extensions: {
+          trackerCustomFieldDefaults: [
+            { name: "Mental State", value: "Calm" },
+            { name: "Goal", value: "Find the atlas" },
+          ],
+        },
+      },
+    },
+  });
+  expect(characterResponse.ok()).toBeTruthy();
+  const character = (await characterResponse.json()) as { id: string };
+  const statsOnlyCharacterResponse = await request.post("/api/characters", {
+    data: {
+      data: {
+        name: `Tracker Stats ${suffix}`,
+        extensions: {
+          rpgStats: {
+            enabled: true,
+            attributes: [],
+            hp: { value: 7, max: 10 },
+            pools: [{ name: "Resolve", value: 7, max: 10, color: "#60a5fa" }],
+          },
+        },
+      },
+    },
+  });
+  expect(statsOnlyCharacterResponse.ok()).toBeTruthy();
+  const statsOnlyCharacter = (await statsOnlyCharacterResponse.json()) as { id: string };
+  const chatIds: string[] = [];
+
+  try {
+    const createChat = async () => {
+      const response = await request.post("/api/chats", {
+        data: {
+          name: `Tracker Defaults ${suffix}`,
+          mode: "roleplay",
+          characterIds: [character.id, statsOnlyCharacter.id],
+        },
+      });
+      expect(response.ok()).toBeTruthy();
+      const chat = (await response.json()) as { id: string };
+      chatIds.push(chat.id);
+      return chat.id;
+    };
+    const readCharacter = async (chatId: string, characterId = character.id) => {
+      const response = await request.get(`/api/chats/${chatId}/game-state`);
+      expect(response.ok()).toBeTruthy();
+      const state = (await response.json()) as {
+        presentCharacters: Array<{
+          characterId: string;
+          customFields: Record<string, string>;
+          stats: Array<{ name: string; value: number; max: number; color: string }>;
+        }>;
+      };
+      return state.presentCharacters.find((entry) => entry.characterId === characterId);
+    };
+
+    const firstChatId = await createChat();
+    const firstSeed = await readCharacter(firstChatId);
+    expect(firstSeed?.customFields).toEqual({
+      "Mental State": "Calm",
+      Goal: "Find the atlas",
+    });
+    expect((await readCharacter(firstChatId, statsOnlyCharacter.id))?.stats).toEqual([
+      { name: "Resolve", value: 7, max: 10, color: "#60a5fa" },
+    ]);
+
+    const editedCharacters = [
+      {
+        ...firstSeed,
+        customFields: {
+          ...firstSeed?.customFields,
+          "Mental State": "Restless",
+        },
+      },
+    ];
+    const editResponse = await request.patch(`/api/chats/${firstChatId}/game-state`, {
+      data: { presentCharacters: editedCharacters, manual: true },
+    });
+    expect(editResponse.ok()).toBeTruthy();
+    const removeResponse = await request.patch(`/api/chats/${firstChatId}`, {
+      data: { characterIds: [statsOnlyCharacter.id] },
+    });
+    expect(removeResponse.ok()).toBeTruthy();
+    const reAddResponse = await request.patch(`/api/chats/${firstChatId}`, {
+      data: { characterIds: [character.id, statsOnlyCharacter.id] },
+    });
+    expect(reAddResponse.ok()).toBeTruthy();
+    expect((await readCharacter(firstChatId))?.customFields["Mental State"]).toBe("Restless");
+
+    const secondChatId = await createChat();
+    expect((await readCharacter(secondChatId))?.customFields["Mental State"]).toBe("Calm");
+  } finally {
+    await Promise.all(chatIds.map((chatId) => request.delete(`/api/chats/${chatId}`).catch(() => undefined)));
+    await Promise.all(
+      [character.id, statsOnlyCharacter.id].map((characterId) =>
+        request.delete(`/api/characters/${characterId}`).catch(() => undefined),
+      ),
+    );
+  }
+});
+
 test("desktop Tracker stays in the Roleplay gutter without shifting the chat column", async ({ page }, testInfo) => {
   test.skip(!testInfo.project.name.includes("desktop"), "Desktop Tracker gutter behavior is covered on desktop.");
 
