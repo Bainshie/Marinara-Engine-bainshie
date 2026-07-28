@@ -527,14 +527,10 @@ test("Function Calling can require the first tool round per chat", async ({ page
     await expect(forceToolCall).toBeVisible();
     await expect(forceToolCall).not.toBeChecked();
     await section.getByText("Force To Call Tool", { exact: true }).click();
-    await expect
-      .poll(async () => (await readMetadata()).forceToolCall)
-      .toBe(true);
+    await expect.poll(async () => (await readMetadata()).forceToolCall).toBe(true);
 
     await section.getByText("Force To Call Tool", { exact: true }).click();
-    await expect
-      .poll(async () => (await readMetadata()).forceToolCall)
-      .toBe(false);
+    await expect.poll(async () => (await readMetadata()).forceToolCall).toBe(false);
   } finally {
     await request.delete(`/api/chats/${chat.id}`).catch(() => undefined);
   }
@@ -1441,15 +1437,12 @@ test("Connection image captioning defaults persist with a dedicated captioning c
   const captionConnection = (await captionConnectionResponse.json()) as { id: string };
 
   try {
-    const invalidDefaultsResponse = await request.put(
-      `/api/connections/${chatConnection.id}/default-parameters`,
-      {
-        data: {
-          imageCaptioningEnabled: true,
-          imageCaptioningConnectionId: "",
-        },
+    const invalidDefaultsResponse = await request.put(`/api/connections/${chatConnection.id}/default-parameters`, {
+      data: {
+        imageCaptioningEnabled: true,
+        imageCaptioningConnectionId: "",
       },
-    );
+    });
     expect(invalidDefaultsResponse.status()).toBe(400);
 
     await page.goto("/");
@@ -1466,9 +1459,7 @@ test("Connection image captioning defaults persist with a dedicated captioning c
       .getByText("Use custom defaults for this connection", { exact: true })
       .evaluate((element) => (element as HTMLElement).click());
     await expect(editor.getByRole("checkbox", { name: "Use custom defaults for this connection" })).toBeChecked();
-    await editor
-      .getByText("Image Captioning", { exact: true })
-      .evaluate((element) => (element as HTMLElement).click());
+    await editor.getByText("Image Captioning", { exact: true }).evaluate((element) => (element as HTMLElement).click());
     await expect(editor.getByRole("checkbox", { name: "Image Captioning" })).toBeChecked();
     const captioningSelect = editor
       .getByText("Captioning Connection", { exact: true })
@@ -2400,7 +2391,8 @@ test("sent text stays cleared and the first message edit persists after stopped 
     await expect
       .poll(async () =>
         (await readMessages()).some(
-          (message) => message.role === "user" && message.content === "Sent text must stay cleared when stopped before the reply",
+          (message) =>
+            message.role === "user" && message.content === "Sent text must stay cleared when stopped before the reply",
         ),
       )
       .toBe(true);
@@ -2412,7 +2404,9 @@ test("sent text stays cleared and the first message edit persists after stopped 
     await expect(page.locator(`[data-message-id="${secondMessage!.id}"]`)).toContainText(
       "Edited on the first save with cleared draft",
     );
-    await expect(page.getByText("Sent text must stay cleared when stopped before the reply", { exact: true })).toBeVisible();
+    await expect(
+      page.getByText("Sent text must stay cleared when stopped before the reply", { exact: true }),
+    ).toBeVisible();
   } finally {
     for (const response of openProviderResponses) response.end();
     await Promise.allSettled([
@@ -2565,20 +2559,14 @@ test("desktop Roleplay composition keeps ambient work off the input path and gro
     await page.evaluate(() => {
       const measurementWindow = window as Window & { __lastKeyboardOpen?: boolean };
       window.addEventListener("marinara:chat-visual-viewport-change", (event) => {
-        measurementWindow.__lastKeyboardOpen = (
-          event as CustomEvent<{ keyboardOpen?: boolean }>
-        ).detail?.keyboardOpen;
+        measurementWindow.__lastKeyboardOpen = (event as CustomEvent<{ keyboardOpen?: boolean }>).detail?.keyboardOpen;
       });
     });
     await page.setViewportSize({ width: 1440, height: 700 });
     await input.focus();
 
     await expect
-      .poll(() =>
-        page.evaluate(
-          () => (window as Window & { __lastKeyboardOpen?: boolean }).__lastKeyboardOpen,
-        ),
-      )
+      .poll(() => page.evaluate(() => (window as Window & { __lastKeyboardOpen?: boolean }).__lastKeyboardOpen))
       .toBe(false);
     await expect(root).not.toHaveAttribute("data-marinara-accent-animation");
 
@@ -2609,31 +2597,29 @@ test("desktop Roleplay composition keeps ambient work off the input path and gro
 
     const resizeStability = await input.evaluate(
       (element) =>
-        new Promise<{ heightDelta: number; delayedStyleMutations: number; overflowY: string }>(
-          (resolve) => {
-            const heights: number[] = [];
-            let delayedStyleMutations = 0;
-            const observer = new MutationObserver((records) => {
-              delayedStyleMutations += records.length;
-            });
-            observer.observe(element, { attributes: true, attributeFilter: ["style"] });
+        new Promise<{ heightDelta: number; delayedStyleMutations: number; overflowY: string }>((resolve) => {
+          const heights: number[] = [];
+          let delayedStyleMutations = 0;
+          const observer = new MutationObserver((records) => {
+            delayedStyleMutations += records.length;
+          });
+          observer.observe(element, { attributes: true, attributeFilter: ["style"] });
 
-            const sample = () => {
-              heights.push(element.getBoundingClientRect().height);
-              if (heights.length < 18) {
-                requestAnimationFrame(sample);
-                return;
-              }
-              observer.disconnect();
-              resolve({
-                heightDelta: Math.max(...heights) - Math.min(...heights),
-                delayedStyleMutations,
-                overflowY: element.style.overflowY,
-              });
-            };
-            requestAnimationFrame(sample);
-          },
-        ),
+          const sample = () => {
+            heights.push(element.getBoundingClientRect().height);
+            if (heights.length < 18) {
+              requestAnimationFrame(sample);
+              return;
+            }
+            observer.disconnect();
+            resolve({
+              heightDelta: Math.max(...heights) - Math.min(...heights),
+              delayedStyleMutations,
+              overflowY: element.style.overflowY,
+            });
+          };
+          requestAnimationFrame(sample);
+        }),
     );
     expect(resizeStability.heightDelta).toBeLessThanOrEqual(1);
     expect(resizeStability.delayedStyleMutations).toBe(0);
@@ -10433,6 +10419,42 @@ test("mobile chat composer follows the visual viewport above the software keyboa
       .poll(() => transcript.evaluate((element) => element.scrollHeight - element.scrollTop - element.clientHeight))
       .toBeGreaterThan(180);
     await expect(textarea).toBeVisible();
+
+    await page.addInitScript(() => {
+      Object.defineProperty(navigator, "userAgent", {
+        configurable: true,
+        value:
+          "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 " +
+          "(KHTML, like Gecko) Version/18.5 Mobile/15E148 Safari/604.1",
+      });
+    });
+    await page.reload();
+    await expect(page.getByText(/^Keyboard viewport history line 18\./)).toBeVisible();
+    await textarea.focus();
+    await page.evaluate(() => {
+      (
+        window as typeof window & {
+          __setMarinaraVisualViewport: (height: number, offsetTop: number) => void;
+        }
+      ).__setMarinaraVisualViewport(360, 72);
+    });
+
+    await expect
+      .poll(() =>
+        page.evaluate(() => ({
+          height: getComputedStyle(document.documentElement).getPropertyValue("--mari-visual-viewport-height").trim(),
+          top: getComputedStyle(document.documentElement).getPropertyValue("--mari-visual-viewport-offset-top").trim(),
+        })),
+      )
+      .toEqual({ height: "360px", top: "0px" });
+
+    const [iosShellBox, iosComposerBox] = await Promise.all([shell.boundingBox(), composer.boundingBox()]);
+    expect(iosShellBox).not.toBeNull();
+    expect(iosComposerBox).not.toBeNull();
+    expect(Math.abs(iosShellBox!.y)).toBeLessThanOrEqual(1);
+    expect(Math.abs(iosShellBox!.height - 360)).toBeLessThanOrEqual(1);
+    expect(iosComposerBox!.y).toBeGreaterThanOrEqual(0);
+    expect(iosComposerBox!.y + iosComposerBox!.height).toBeLessThanOrEqual(360);
   } finally {
     await page.request.delete(`/api/chats/${chat.id}`).catch(() => undefined);
   }
@@ -11050,10 +11072,8 @@ test("Background library organization works with desktop drag and touch drag", a
         .poll(() =>
           page.evaluate(
             ({ point, targetFolderId }) =>
-              document
-                .elementFromPoint(point.x, point.y)
-                ?.closest<HTMLElement>("[data-background-folder-id]")
-                ?.dataset.backgroundFolderId === targetFolderId,
+              document.elementFromPoint(point.x, point.y)?.closest<HTMLElement>("[data-background-folder-id]")?.dataset
+                .backgroundFolderId === targetFolderId,
             { point: end, targetFolderId: folderId! },
           ),
         )

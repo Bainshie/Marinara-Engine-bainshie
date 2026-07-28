@@ -31,10 +31,7 @@ import { getCssBackgroundStyle } from "../../lib/css-colors";
 import { showConfirmDialog } from "../../lib/app-dialogs";
 import { cn } from "../../lib/utils";
 import { parseChatMetadata } from "../../lib/chat-display";
-import {
-  resolveTrackerPanelContentScale,
-  resolveTrackerPanelDesktopWidth,
-} from "../../lib/tracker-panel-layout";
+import { resolveTrackerPanelContentScale, resolveTrackerPanelDesktopWidth } from "../../lib/tracker-panel-layout";
 import {
   closeTrackerPanelWindow,
   openTrackerPanelWindow,
@@ -169,7 +166,11 @@ function getViewportWidth() {
 
 function MainPaneFallback() {
   const { t: localizeUi } = useUiTranslation();
-  return <div className="mari-chrome-text-muted flex flex-1 items-center justify-center text-sm">{localizeUi("ui.characters.characterlibraryview.loading")}</div>;
+  return (
+    <div className="mari-chrome-text-muted flex flex-1 items-center justify-center text-sm">
+      {localizeUi("ui.characters.characterlibraryview.loading")}
+    </div>
+  );
 }
 /** Mounts children once `open` becomes true, then keeps them mounted so state persists.
  *  `overlay` mode uses framer-motion slide-in and never unmounts. */
@@ -211,7 +212,11 @@ function MountOnceWhenOpened({
 
 function SidePanelFallback() {
   const { t: localizeUi } = useUiTranslation();
-  return <div className="mari-chrome-text-muted flex h-full items-center justify-center text-sm">{localizeUi("ui.characters.characterlibraryview.loading")}</div>;
+  return (
+    <div className="mari-chrome-text-muted flex h-full items-center justify-center text-sm">
+      {localizeUi("ui.characters.characterlibraryview.loading")}
+    </div>
+  );
 }
 
 export function AppShell() {
@@ -223,8 +228,7 @@ export function AppShell() {
   const musicDjInstalled = (installedCapabilities.data ?? []).some(
     (capability) => capability.id === "spotify" && capability.status === "active",
   );
-  const showMusicDjUnavailablePlayer =
-    musicPlayerEnabled && !installedCapabilities.isLoading && !musicDjInstalled;
+  const showMusicDjUnavailablePlayer = musicPlayerEnabled && !installedCapabilities.isLoading && !musicDjInstalled;
 
   // Background autonomous polling for inactive conversation chats
   useBackgroundAutonomousPolling();
@@ -238,8 +242,10 @@ export function AppShell() {
     let frame = 0;
     let focusTimers: number[] = [];
     let largestViewportHeight = window.visualViewport?.height ?? window.innerHeight;
-    const supportsVirtualKeyboard =
-      navigator.maxTouchPoints > 0 || window.matchMedia("(any-pointer: coarse)").matches;
+    const supportsVirtualKeyboard = navigator.maxTouchPoints > 0 || window.matchMedia("(any-pointer: coarse)").matches;
+    const isIOSWebKit =
+      /iP(?:ad|hone|od)/i.test(navigator.userAgent) ||
+      (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
     const updateVisualViewportGeometry = () => {
       if (frame) cancelAnimationFrame(frame);
       frame = requestAnimationFrame(() => {
@@ -250,7 +256,11 @@ export function AppShell() {
         );
         const height = heightCandidates.length > 0 ? Math.min(...heightCandidates) : window.innerHeight;
         const maxOffsetTop = Math.max(0, window.innerHeight - height);
-        const offsetTop = Math.min(maxOffsetTop, Math.max(0, viewport?.offsetTop ?? 0));
+        const visualViewportOffsetTop = Math.min(maxOffsetTop, Math.max(0, viewport?.offsetTop ?? 0));
+        // iOS Safari already positions the layout viewport when its software
+        // keyboard opens. Applying visualViewport.offsetTop again translates
+        // the entire app and leaves the top of the conversation off-screen.
+        const offsetTop = isIOSWebKit ? 0 : visualViewportOffsetTop;
         largestViewportHeight = Math.max(largestViewportHeight, height);
         root.style.setProperty("--mari-visual-viewport-height", `${Math.max(0, Math.round(height))}px`);
         root.style.setProperty("--mari-visual-viewport-offset-top", `${Math.round(offsetTop)}px`);
@@ -1046,9 +1056,7 @@ export function AppShell() {
           data-component={trackerPanelDetached ? "TrackerDataSidebarDetached" : undefined}
           aria-label={trackerPanelDetached ? localizeUi("ui.layout.appshell.trackerDataPanel") : undefined}
           className={
-            trackerPanelDetached
-              ? "mari-tracker-panel h-screen w-screen overflow-hidden bg-zinc-950/95"
-              : "contents"
+            trackerPanelDetached ? "mari-tracker-panel h-screen w-screen overflow-hidden bg-zinc-950/95" : "contents"
           }
           style={trackerPanelDetached ? trackerPanelBackgroundStyle : undefined}
         >
