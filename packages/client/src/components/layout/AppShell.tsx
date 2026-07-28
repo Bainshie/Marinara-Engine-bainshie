@@ -261,10 +261,12 @@ export function AppShell() {
         largestViewportHeight = Math.max(largestViewportHeight, height);
         root.style.setProperty("--mari-visual-viewport-height", `${Math.max(0, Math.round(height))}px`);
         root.style.setProperty("--mari-visual-viewport-offset-top", `${Math.round(offsetTop)}px`);
+        const keyboardOpen = supportsVirtualKeyboard && largestViewportHeight - height >= 80;
+        root.toggleAttribute("data-mari-software-keyboard-open", keyboardOpen);
         dispatchChatVisualViewportChange({
           height,
           offsetTop,
-          keyboardOpen: supportsVirtualKeyboard && largestViewportHeight - height >= 80,
+          keyboardOpen,
         });
       });
     };
@@ -297,6 +299,7 @@ export function AppShell() {
       document.removeEventListener("focusout", refreshAfterFocusChange);
       root.style.removeProperty("--mari-visual-viewport-height");
       root.style.removeProperty("--mari-visual-viewport-offset-top");
+      root.removeAttribute("data-mari-software-keyboard-open");
     };
   }, []);
 

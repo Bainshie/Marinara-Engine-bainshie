@@ -10420,12 +10420,12 @@ test("mobile chat composer follows the visual viewport above the software keyboa
 
   await page.addInitScript(() => {
     const state = {
-      height: window.innerHeight,
+      height: null as number | null,
       offsetTop: 0,
     };
     const viewport = new EventTarget();
     Object.defineProperties(viewport, {
-      height: { configurable: true, get: () => state.height },
+      height: { configurable: true, get: () => state.height ?? window.innerHeight },
       offsetTop: { configurable: true, get: () => state.offsetTop },
       offsetLeft: { configurable: true, get: () => 0 },
       pageLeft: { configurable: true, get: () => 0 },
@@ -10453,6 +10453,9 @@ test("mobile chat composer follows the visual viewport above the software keyboa
 
   try {
     await page.goto("/");
+    await page.locator("html").evaluate((element) => {
+      element.style.setProperty("--mari-safe-area-inset-bottom", "34px");
+    });
 
     const viewportMeta = page.locator('meta[name="viewport"]');
     await expect(viewportMeta).toHaveAttribute("content", /interactive-widget=resizes-content/);
@@ -10473,6 +10476,7 @@ test("mobile chat composer follows the visual viewport above the software keyboa
       .poll(() => transcript.evaluate((element) => element.scrollHeight - element.scrollTop - element.clientHeight))
       .toBeLessThanOrEqual(2);
     await expect(textarea).toBeVisible();
+    await expect.poll(() => composer.evaluate((element) => getComputedStyle(element).paddingBottom)).toBe("34px");
     await textarea.focus();
 
     await page.evaluate(() => {
@@ -10491,6 +10495,15 @@ test("mobile chat composer follows the visual viewport above the software keyboa
         })),
       )
       .toEqual({ height: "360px", top: "72px" });
+    await expect(page.locator("html")).toHaveAttribute("data-mari-software-keyboard-open", "");
+    const compactComposerStyle = await composer.evaluate((element) => {
+      const style = getComputedStyle(element);
+      return {
+        fontSize: Number.parseFloat(style.fontSize),
+        paddingBottom: Number.parseFloat(style.paddingBottom),
+      };
+    });
+    expect(compactComposerStyle.paddingBottom).toBeCloseTo(compactComposerStyle.fontSize * 0.5, 5);
 
     const [shellBox, composerBox] = await Promise.all([shell.boundingBox(), composer.boundingBox()]);
     expect(shellBox).not.toBeNull();
@@ -10520,6 +10533,9 @@ test("mobile chat composer follows the visual viewport above the software keyboa
       });
     });
     await page.reload();
+    await page.locator("html").evaluate((element) => {
+      element.style.setProperty("--mari-safe-area-inset-bottom", "34px");
+    });
     await expect(page.getByText(/^Keyboard viewport history line 18\./)).toBeVisible();
     await textarea.focus();
     await page.evaluate(() => {
@@ -10538,6 +10554,15 @@ test("mobile chat composer follows the visual viewport above the software keyboa
         })),
       )
       .toEqual({ height: "360px", top: "0px" });
+    await expect(page.locator("html")).toHaveAttribute("data-mari-software-keyboard-open", "");
+    const iosCompactComposerStyle = await composer.evaluate((element) => {
+      const style = getComputedStyle(element);
+      return {
+        fontSize: Number.parseFloat(style.fontSize),
+        paddingBottom: Number.parseFloat(style.paddingBottom),
+      };
+    });
+    expect(iosCompactComposerStyle.paddingBottom).toBeCloseTo(iosCompactComposerStyle.fontSize * 0.5, 5);
 
     const [iosShellBox, iosComposerBox] = await Promise.all([shell.boundingBox(), composer.boundingBox()]);
     expect(iosShellBox).not.toBeNull();
