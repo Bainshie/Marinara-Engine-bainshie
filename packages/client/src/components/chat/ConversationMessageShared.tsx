@@ -123,6 +123,7 @@ export interface MessageRenderContext {
   isLastAssistantMessage?: boolean;
   translatedText?: string | null;
   isTranslating: boolean;
+  showTranslationOnly: boolean;
   // swipes
   hasSwipes: boolean;
   swipeCount: number;

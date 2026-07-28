@@ -1408,7 +1408,11 @@ export const ChatInput = memo(function ChatInput({
         id: `custom-${entry.id}`,
         label,
         description: "Send a saved custom quick reply",
-        icon: <Sparkles size="0.875rem" />,
+        icon: (
+          <span className="text-sm leading-none" aria-hidden="true">
+            {entry.icon?.trim() || "✨"}
+          </span>
+        ),
         disabled: !activeChatId || isInputBusy || isReadingAttachments,
         disabledReason: !activeChatId
           ? "Select or create a chat first."

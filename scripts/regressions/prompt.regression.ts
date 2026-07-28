@@ -16,11 +16,13 @@ import {
   compileImagePrompt,
   createRegexScriptSchema,
   createDefaultImageStyleProfileSettings,
+  characterTrackerCustomFieldDefaultsToRecord,
   getDefaultBuiltInAgentSettings,
   isAgentAvailableInChatMode,
   isPatternSafe,
   normalizeChatSummaryEntries,
   normalizeChatSummaryPromptSettings,
+  normalizeCharacterTrackerCustomFieldDefaults,
   normalizeWorldCustomFields,
   LIMITS,
   resolveRegexPatternLiteralMacros,
@@ -470,7 +472,7 @@ import {
   resolveGalleryVideoNarrationSummary,
 } from "../../packages/server/src/services/video/prompt-context.js";
 import { resolveGameGmPromptTemplate } from "../../packages/server/src/services/generation/game-gm-prompt-runtime.js";
-import { countUserMessagesAfterSummaryAnchor } from "../../packages/server/src/services/conversation/auto-summary.service.js";
+import { countConversationMessagesAfterSummaryAnchor } from "../../packages/server/src/services/conversation/auto-summary.service.js";
 import {
   prepareConversationPromptHistory,
   resolveConversationMembershipHistoryEvent,
@@ -6636,18 +6638,19 @@ Use HTML sparingly and diegetically. Do not replace normal prose/dialogue unless
     },
   },
   {
-    name: "automatic summary cadence counts real user messages when anchor is missing",
+    name: "automatic summary cadence counts user and assistant messages",
     run() {
       const messages = [
         { id: "u1", role: "user" },
         { id: "a1", role: "assistant" },
+        { id: "s1", role: "system" },
         { id: "u2", role: "user" },
         { id: "a2", role: "assistant" },
       ];
 
-      assert.equal(countUserMessagesAfterSummaryAnchor(messages, null), 2);
-      assert.equal(countUserMessagesAfterSummaryAnchor(messages, "missing"), 2);
-      assert.equal(countUserMessagesAfterSummaryAnchor(messages, "a1"), 1);
+      assert.equal(countConversationMessagesAfterSummaryAnchor(messages, null), 4);
+      assert.equal(countConversationMessagesAfterSummaryAnchor(messages, "missing"), 4);
+      assert.equal(countConversationMessagesAfterSummaryAnchor(messages, "a1"), 2);
     },
   },
   {
@@ -7090,6 +7093,29 @@ Use HTML sparingly and diegetically. Do not replace normal prose/dialogue unless
   {
     name: "tracker custom fields remain part of the model contract and survive omitted agent output",
     run() {
+      assert.deepEqual(
+        normalizeCharacterTrackerCustomFieldDefaults([
+          { name: " Mental State ", value: "Calm" },
+          { name: "mental   state", value: "Duplicate" },
+          { name: "Goal", value: 3 },
+          { name: " ", value: "Ignored" },
+        ]),
+        [
+          { name: "Mental State", value: "Calm" },
+          { name: "Goal", value: "3" },
+        ],
+      );
+      assert.deepEqual(
+        characterTrackerCustomFieldDefaultsToRecord([
+          { name: "Mental State", value: "Calm" },
+          { name: "Goal", value: "Find the atlas" },
+        ]),
+        {
+          "Mental State": "Calm",
+          Goal: "Find the atlas",
+        },
+      );
+
       assert.deepEqual(
         normalizeWorldCustomFields([
           { name: " Moon Phase ", value: "Waxing", icon: "Moon" },
