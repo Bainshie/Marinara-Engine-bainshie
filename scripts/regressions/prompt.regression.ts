@@ -467,6 +467,7 @@ import {
   chatBackgroundTags,
   safeGeneratedAssetSlug,
 } from "../../packages/server/src/services/game/game-asset-generation.js";
+import { MAPS_LOCATION_ARTWORK } from "../../packages/server/src/services/prompt-overrides/registry/game-assets.js";
 import { resolveReviewedImagePromptSubmission } from "../../packages/server/src/services/image/image-prompt-review.js";
 import {
   buildIllustratorBackgroundPlanUserPrompt,
@@ -5152,6 +5153,30 @@ Use HTML sparingly and diegetically. Do not replace normal prose/dialogue unless
     async run() {
       const campaignStyle = "luminous violet campaign brushwork";
       const scenePrompt = "Wide establishing image of Moonwell Floor. A quiet tiled bath beneath blue crystals. No text.";
+      const defaultRawPrompt = MAPS_LOCATION_ARTWORK.defaultBuilder({
+        locationName: "Moonwell Floor",
+        locationDescription: "A quiet tiled bath beneath blue crystals.",
+        locationType: "Floor",
+        parentLocationName: "Ascendant Spire",
+        parentLocationDescription: "A colossal shifting dungeon tower.",
+        locationPath: "Asterreach > Ascendant Spire > Moonwell Floor",
+        locationPrompt: scenePrompt,
+        genre: "Fantasy dungeon crawler",
+        genreLine: "Fantasy dungeon crawler.",
+        campaignArtStyle: campaignStyle,
+        campaignArtStyleLine: `Campaign art style: ${campaignStyle}.`,
+        imageInstructions: "Use blue crystal reflections.",
+        imageInstructionsLine: "User image instructions: Use blue crystal reflections.",
+      });
+      assert.equal(
+        defaultRawPrompt,
+        `${scenePrompt} Fantasy dungeon crawler. Campaign art style: ${campaignStyle}. User image instructions: Use blue crystal reflections.`,
+      );
+      assert.doesNotMatch(
+        defaultRawPrompt,
+        /SD\/Illustrious|background-only location art|game background art|high quality|anime style/iu,
+        "The Maps default must not impose provider, style, quality, or composition tags",
+      );
       const compile = (useCampaignArtStyle: boolean) =>
         buildBackgroundProviderPrompt({
           chatId: "map-artwork-campaign-toggle-regression",

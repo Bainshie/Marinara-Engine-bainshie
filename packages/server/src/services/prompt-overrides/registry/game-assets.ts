@@ -191,16 +191,7 @@ export const MAPS_LOCATION_ARTWORK: PromptOverrideKeyDef<MapsLocationArtworkCtx>
     },
   ],
   defaultBuilder: (ctx) =>
-    [
-      ctx.genreLine,
-      ctx.campaignArtStyleLine,
-      ctx.imageInstructionsLine,
-      ctx.locationPrompt,
-      "SD/Illustrious tags: scenery, environment, wide shot, landscape, full-frame background, background-only location art.",
-      "Wide-angle landscape, detailed environment, readable spatial layout, single full-frame background, no foreground characters, no main characters, no named characters, no posed character focus.",
-      "Small distant crowds, shopkeepers, silhouettes, or background figures are allowed only when they make the location feel lived-in.",
-      "No text, no UI, no panels, no collage, game background art, high quality.",
-    ]
+    [ctx.locationPrompt, ctx.genreLine, ctx.campaignArtStyleLine, ctx.imageInstructionsLine]
       .filter(Boolean)
       .join(" "),
   exampleContext: {
