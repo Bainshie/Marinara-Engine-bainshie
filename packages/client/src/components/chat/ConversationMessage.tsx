@@ -643,8 +643,8 @@ export const ConversationMessage = memo(function ConversationMessage({
   }, [displayedContent]);
 
   const handleTranslate = useCallback(
-    () => translate(message.id, renderedContent, message.chatId),
-    [message.id, message.chatId, renderedContent, translate],
+    () => translate(message.id, renderedContent, message.chatId, [message.content]),
+    [message.content, message.id, message.chatId, renderedContent, translate],
   );
 
   // ── Mobile tap (show actions / multi-select) ──

@@ -13,11 +13,19 @@ export function useTranslate() {
   const translating = useTranslationStore((s) => s.translating);
   const config = useTranslationStore((s) => s.config);
 
-  const translate = useCallback(async (messageId: string, text: string, chatId?: string) => {
+  const translate = useCallback(async (
+    messageId: string,
+    text: string,
+    chatId?: string,
+    currentSourceAliases: readonly string[] = [],
+  ) => {
     const store = useTranslationStore.getState();
+    const storedSource = store.translationSources[messageId];
+    const translationMatchesCurrentText =
+      storedSource === text || currentSourceAliases.includes(storedSource);
 
     // Toggle off if already translated. Keep the saved translation, but persist the hidden display state.
-    if (store.translations[messageId]) {
+    if (store.translations[messageId] && translationMatchesCurrentText) {
       store.removeTranslation(messageId);
       if (chatId) {
         api.patch(`/chats/${chatId}/messages/${messageId}/extra`, { translationHidden: true }).catch(() => {});
