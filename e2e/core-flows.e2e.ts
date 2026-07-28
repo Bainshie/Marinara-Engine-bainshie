@@ -527,10 +527,14 @@ test("Function Calling can require the first tool round per chat", async ({ page
     await expect(forceToolCall).toBeVisible();
     await expect(forceToolCall).not.toBeChecked();
     await section.getByText("Force To Call Tool", { exact: true }).click();
-    await expect.poll(async () => (await readMetadata()).forceToolCall).toBe(true);
+    await expect
+      .poll(async () => (await readMetadata()).forceToolCall)
+      .toBe(true);
 
     await section.getByText("Force To Call Tool", { exact: true }).click();
-    await expect.poll(async () => (await readMetadata()).forceToolCall).toBe(false);
+    await expect
+      .poll(async () => (await readMetadata()).forceToolCall)
+      .toBe(false);
   } finally {
     await request.delete(`/api/chats/${chat.id}`).catch(() => undefined);
   }
@@ -1437,12 +1441,15 @@ test("Connection image captioning defaults persist with a dedicated captioning c
   const captionConnection = (await captionConnectionResponse.json()) as { id: string };
 
   try {
-    const invalidDefaultsResponse = await request.put(`/api/connections/${chatConnection.id}/default-parameters`, {
-      data: {
-        imageCaptioningEnabled: true,
-        imageCaptioningConnectionId: "",
+    const invalidDefaultsResponse = await request.put(
+      `/api/connections/${chatConnection.id}/default-parameters`,
+      {
+        data: {
+          imageCaptioningEnabled: true,
+          imageCaptioningConnectionId: "",
+        },
       },
-    });
+    );
     expect(invalidDefaultsResponse.status()).toBe(400);
 
     await page.goto("/");
@@ -1459,7 +1466,9 @@ test("Connection image captioning defaults persist with a dedicated captioning c
       .getByText("Use custom defaults for this connection", { exact: true })
       .evaluate((element) => (element as HTMLElement).click());
     await expect(editor.getByRole("checkbox", { name: "Use custom defaults for this connection" })).toBeChecked();
-    await editor.getByText("Image Captioning", { exact: true }).evaluate((element) => (element as HTMLElement).click());
+    await editor
+      .getByText("Image Captioning", { exact: true })
+      .evaluate((element) => (element as HTMLElement).click());
     await expect(editor.getByRole("checkbox", { name: "Image Captioning" })).toBeChecked();
     const captioningSelect = editor
       .getByText("Captioning Connection", { exact: true })
@@ -2391,8 +2400,7 @@ test("sent text stays cleared and the first message edit persists after stopped 
     await expect
       .poll(async () =>
         (await readMessages()).some(
-          (message) =>
-            message.role === "user" && message.content === "Sent text must stay cleared when stopped before the reply",
+          (message) => message.role === "user" && message.content === "Sent text must stay cleared when stopped before the reply",
         ),
       )
       .toBe(true);
@@ -2404,9 +2412,7 @@ test("sent text stays cleared and the first message edit persists after stopped 
     await expect(page.locator(`[data-message-id="${secondMessage!.id}"]`)).toContainText(
       "Edited on the first save with cleared draft",
     );
-    await expect(
-      page.getByText("Sent text must stay cleared when stopped before the reply", { exact: true }),
-    ).toBeVisible();
+    await expect(page.getByText("Sent text must stay cleared when stopped before the reply", { exact: true })).toBeVisible();
   } finally {
     for (const response of openProviderResponses) response.end();
     await Promise.allSettled([
@@ -2559,14 +2565,20 @@ test("desktop Roleplay composition keeps ambient work off the input path and gro
     await page.evaluate(() => {
       const measurementWindow = window as Window & { __lastKeyboardOpen?: boolean };
       window.addEventListener("marinara:chat-visual-viewport-change", (event) => {
-        measurementWindow.__lastKeyboardOpen = (event as CustomEvent<{ keyboardOpen?: boolean }>).detail?.keyboardOpen;
+        measurementWindow.__lastKeyboardOpen = (
+          event as CustomEvent<{ keyboardOpen?: boolean }>
+        ).detail?.keyboardOpen;
       });
     });
     await page.setViewportSize({ width: 1440, height: 700 });
     await input.focus();
 
     await expect
-      .poll(() => page.evaluate(() => (window as Window & { __lastKeyboardOpen?: boolean }).__lastKeyboardOpen))
+      .poll(() =>
+        page.evaluate(
+          () => (window as Window & { __lastKeyboardOpen?: boolean }).__lastKeyboardOpen,
+        ),
+      )
       .toBe(false);
     await expect(root).not.toHaveAttribute("data-marinara-accent-animation");
 
@@ -2597,29 +2609,31 @@ test("desktop Roleplay composition keeps ambient work off the input path and gro
 
     const resizeStability = await input.evaluate(
       (element) =>
-        new Promise<{ heightDelta: number; delayedStyleMutations: number; overflowY: string }>((resolve) => {
-          const heights: number[] = [];
-          let delayedStyleMutations = 0;
-          const observer = new MutationObserver((records) => {
-            delayedStyleMutations += records.length;
-          });
-          observer.observe(element, { attributes: true, attributeFilter: ["style"] });
-
-          const sample = () => {
-            heights.push(element.getBoundingClientRect().height);
-            if (heights.length < 18) {
-              requestAnimationFrame(sample);
-              return;
-            }
-            observer.disconnect();
-            resolve({
-              heightDelta: Math.max(...heights) - Math.min(...heights),
-              delayedStyleMutations,
-              overflowY: element.style.overflowY,
+        new Promise<{ heightDelta: number; delayedStyleMutations: number; overflowY: string }>(
+          (resolve) => {
+            const heights: number[] = [];
+            let delayedStyleMutations = 0;
+            const observer = new MutationObserver((records) => {
+              delayedStyleMutations += records.length;
             });
-          };
-          requestAnimationFrame(sample);
-        }),
+            observer.observe(element, { attributes: true, attributeFilter: ["style"] });
+
+            const sample = () => {
+              heights.push(element.getBoundingClientRect().height);
+              if (heights.length < 18) {
+                requestAnimationFrame(sample);
+                return;
+              }
+              observer.disconnect();
+              resolve({
+                heightDelta: Math.max(...heights) - Math.min(...heights),
+                delayedStyleMutations,
+                overflowY: element.style.overflowY,
+              });
+            };
+            requestAnimationFrame(sample);
+          },
+        ),
     );
     expect(resizeStability.heightDelta).toBeLessThanOrEqual(1);
     expect(resizeStability.delayedStyleMutations).toBe(0);
@@ -5113,48 +5127,44 @@ test("PocketTTS discovers server voices and uses its speech endpoint", async ({ 
   }
 });
 
-test("OpenAI-compatible TTS accepts and persists a custom Kokoro voice mix", async ({ page, request }, testInfo) => {
+test("OpenAI-compatible TTS accepts and persists a custom Kokoro voice mix", async ({ page }, testInfo) => {
   test.skip(!testInfo.project.name.includes("desktop"), "Custom TTS voice entry is covered on desktop.");
 
-  const originalConfigResponse = await request.get("/api/tts/config");
-  expect(originalConfigResponse.ok()).toBeTruthy();
-  const originalConfig = await originalConfigResponse.json();
+  const configResponse = await page.request.get("/api/tts/config");
+  expect(configResponse.ok()).toBeTruthy();
+  let mockConfig = {
+    ...((await configResponse.json()) as Record<string, unknown>),
+    enabled: false,
+    source: "openai",
+    baseUrl: "https://api.openai.com/v1",
+    model: "tts-1",
+    voice: "alloy",
+    voiceMode: "single",
+  };
   const kokoroMix = "af_bella(0.5)+af_sarah(0.5)";
 
-  try {
-    const configResponse = await request.put("/api/tts/config", {
-      data: {
-        ...(originalConfig as Record<string, unknown>),
-        enabled: false,
-        source: "openai",
-        baseUrl: "https://api.openai.com/v1",
-        model: "tts-1",
-        voice: "alloy",
-        voiceMode: "single",
-      },
+  await page.route("**/api/tts/config", async (route) => {
+    if (route.request().method() === "PUT") {
+      mockConfig = route.request().postDataJSON() as typeof mockConfig;
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(mockConfig),
     });
-    expect(configResponse.ok()).toBeTruthy();
+  });
 
-    await page.goto("/");
-    await page.locator('[data-tour="panel-connections"]').click();
-    const rightPanel = page.locator('[data-component="RightPanel"]');
-    await expect(rightPanel).toBeVisible();
-    const ttsCard = rightPanel.getByText("Text to Speech", { exact: true }).locator("xpath=../../..");
-    await ttsCard.getByTitle("Expand").click();
+  await page.goto("/");
+  await page.locator('[data-tour="panel-connections"]').click();
+  const rightPanel = page.locator('[data-component="RightPanel"]');
+  await expect(rightPanel).toBeVisible();
+  const ttsCard = rightPanel.getByText("Text to Speech", { exact: true }).locator("xpath=../../..");
+  await ttsCard.getByTitle("Expand").click();
 
-    const customVoiceInput = ttsCard.getByTestId("tts-custom-voice-input").first();
-    await expect(customVoiceInput).toHaveAttribute("placeholder", /Custom voice or mix/);
-    await customVoiceInput.fill(kokoroMix);
-    await expect
-      .poll(async () => {
-        const response = await request.get("/api/tts/config");
-        const config = (await response.json()) as { voice?: string };
-        return config.voice;
-      })
-      .toBe(kokoroMix);
-  } finally {
-    await request.put("/api/tts/config", { data: originalConfig });
-  }
+  const customVoiceInput = ttsCard.getByTestId("tts-custom-voice-input-global");
+  await expect(customVoiceInput).toHaveAttribute("placeholder", /Custom voice or mix/);
+  await customVoiceInput.fill(kokoroMix);
+  await expect.poll(() => mockConfig.voice).toBe(kokoroMix);
 });
 
 test("ElevenLabs keeps models visible and exposes scrollable account voices in every assignment mode", async ({
@@ -11153,8 +11163,10 @@ test("Background library organization works with desktop drag and touch drag", a
         .poll(() =>
           page.evaluate(
             ({ point, targetFolderId }) =>
-              document.elementFromPoint(point.x, point.y)?.closest<HTMLElement>("[data-background-folder-id]")?.dataset
-                .backgroundFolderId === targetFolderId,
+              document
+                .elementFromPoint(point.x, point.y)
+                ?.closest<HTMLElement>("[data-background-folder-id]")
+                ?.dataset.backgroundFolderId === targetFolderId,
             { point: end, targetFolderId: folderId! },
           ),
         )

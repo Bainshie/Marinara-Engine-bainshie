@@ -2697,6 +2697,11 @@ function GameSurfaceComponent({
   const [galleryAnchor, setGalleryAnchor] = useState<ChatToolbarFloatingPanelAnchor>(null);
   const resolvedGalleryOpen = galleryOpen || externalGalleryOpen;
   const resolvedGalleryAnchor = externalGalleryOpen ? externalGalleryAnchor : galleryAnchor;
+  const resetGalleryState = useCallback(() => {
+    setGalleryOpen(false);
+    setGalleryAnchor(null);
+    onCloseExternalGallery?.();
+  }, [onCloseExternalGallery]);
   const [mobileRetryMenuAnchor, setMobileRetryMenuAnchor] = useState<ChatToolbarFloatingPanelAnchor>(null);
   const [mobileSessionPanelAnchor, setMobileSessionPanelAnchor] = useState<ChatToolbarFloatingPanelAnchor>(null);
   const [mobileVolumePopoverAnchor, setMobileVolumePopoverAnchor] = useState<ChatToolbarFloatingPanelAnchor>(null);
@@ -2729,10 +2734,8 @@ function GameSurfaceComponent({
     setMobileRetryMenuAnchor(null);
     setVolumePopoverOpen(false);
     setMobileVolumePopoverAnchor(null);
-    setGalleryOpen(false);
-    setGalleryAnchor(null);
-    onCloseExternalGallery?.();
-  }, [onCloseExternalGallery]);
+    resetGalleryState();
+  }, [resetGalleryState]);
   const dismissOtherFloatingWindows = useCallback(() => {
     closeLocalFloatingWindows();
     onCloseSettings();
@@ -2759,16 +2762,12 @@ function GameSurfaceComponent({
     onSwitchChat?.();
   }, [dismissOtherFloatingWindows, onSwitchChat]);
   const handleCloseGalleryPanel = useCallback(() => {
-    setGalleryOpen(false);
-    setGalleryAnchor(null);
-    onCloseExternalGallery?.();
-  }, [onCloseExternalGallery]);
+    resetGalleryState();
+  }, [resetGalleryState]);
   const closeChatDrawers = useCallback(() => {
-    setGalleryOpen(false);
-    setGalleryAnchor(null);
-    onCloseExternalGallery?.();
+    resetGalleryState();
     onCloseSettings();
-  }, [onCloseExternalGallery, onCloseSettings]);
+  }, [onCloseSettings, resetGalleryState]);
   const [activeChoices, setActiveChoices] = useState<string[] | null>(null);
   const [activeQte, setActiveQte] = useState<{ actions: string[]; timer: number } | null>(null);
   const [queuedQte, setQueuedQte] = useState<{ qte: { actions: string[]; timer: number }; messageId: string } | null>(
@@ -3058,8 +3057,8 @@ function GameSurfaceComponent({
     setVolumePopoverOpen(false);
     setRetryMenuOpen(false);
     setInventoryOpen(false);
-    onCloseExternalGallery?.();
-  }, [onCloseExternalGallery]);
+    resetGalleryState();
+  }, [resetGalleryState]);
 
   useEffect(() => {
     window.addEventListener(CHAT_FLOATING_UI_DISMISS_EVENT, closeGameFloatingPanels);
