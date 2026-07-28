@@ -111,7 +111,7 @@ try {
   const address = gatewayServer.address();
   assert.ok(address && typeof address === "object");
   const provider = new OpenAIProvider(
-    `http://127.0.0.1:${address.port}/v1`,
+    `http://localhost:${address.port}/v1`,
     "test",
     undefined,
     undefined,
