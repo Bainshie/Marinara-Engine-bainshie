@@ -522,7 +522,7 @@ const SETTINGS_SEARCHABLE_CONTROLS: readonly SettingsSearchableControlMeta[] = [
     sectionId: "application",
     label: "Documentation Language",
     description: "Choose the language for Marinara's built-in guides.",
-    aliases: ["documentation", "guides", "docs", "manual", "spanish", "español", "german", "deutsch", "french", "français"],
+    aliases: ["documentation", "guides", "docs", "manual", "spanish", "español", "german", "deutsch", "french", "français", "portuguese", "português", "brazilian"],
     kind: "Select",
   },
   {
@@ -5220,18 +5220,9 @@ function AppearanceSettings() {
       >
         <div className="flex flex-col gap-3">
           <div className="flex flex-col gap-2">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-medium inline-flex items-center gap-1">{localizeUi("ui.panels.appearancesettings.chatBackground")}{" "}
-                <HelpTooltip text={localizeUi("ui.panels.appearancesettings.importOneOrMoreCustomImagesOrChooseFrom")} />
-              </span>
-              {chatBackground && (
-                <button
-                  onClick={() => setChatBackground(null)}
-                  className="flex items-center gap-1 rounded-md px-2 py-0.5 text-[0.625rem] text-[var(--destructive)] transition-colors hover:bg-[var(--destructive)]/10"
-                >
-                  <X size="0.625rem" /> {localizeUi("settings.notifications.customSound.actions.remove")}</button>
-              )}
-            </div>
+            <span className="text-xs font-medium inline-flex items-center gap-1">{localizeUi("ui.panels.appearancesettings.chatBackground")}{" "}
+              <HelpTooltip text={localizeUi("ui.panels.appearancesettings.importOneOrMoreCustomImagesOrChooseFrom")} />
+            </span>
             <label className="flex flex-col gap-1 rounded-lg bg-[var(--secondary)]/45 p-3 ring-1 ring-[var(--border)]/70">
               <span className="inline-flex items-center gap-1 text-[0.6875rem] font-medium">{localizeUi("ui.panels.appearancesettings.backgroundBlur")}<HelpTooltip text={localizeUi("ui.panels.appearancesettings.softensSelectedRoleplayAndGameModeBackgroundImagesBehind")} />
               </span>

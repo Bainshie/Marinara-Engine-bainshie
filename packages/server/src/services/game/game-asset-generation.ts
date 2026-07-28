@@ -97,7 +97,7 @@ type GameBackgroundImage = {
   ext: string;
 };
 
-type ChatBackgroundMeta = Record<string, { originalName?: string; tags: string[] }>;
+type ChatBackgroundMeta = Record<string, { tags: string[] }>;
 
 function atomicWriteBuffer(filePath: string, buffer: Buffer): void {
   const tmpPath = `${filePath}.${process.pid}.${Date.now()}.${Math.random().toString(36).slice(2)}.tmp`;
@@ -1372,7 +1372,6 @@ export async function generateChatBackground(req: ChatBackgroundGenRequest): Pro
 
     const meta = readChatBackgroundMeta();
     meta[filename] = {
-      originalName: `Generated: ${req.locationSlug || baseSlug}`,
       tags: chatBackgroundTags(req, baseSlug),
     };
     writeChatBackgroundMeta(meta);
