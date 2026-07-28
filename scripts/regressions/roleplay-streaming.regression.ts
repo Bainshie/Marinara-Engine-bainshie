@@ -168,6 +168,16 @@ assert.match(
   "per-chat Echo Chamber dimensions should survive UI-store rehydration",
 );
 assert.match(
+  uiStoreSource,
+  /previous\.echoChamberSizes !== next\.echoChamberSizes/u,
+  "an Echo Chamber size change should bypass the debounced UI storage write",
+);
+assert.match(
+  uiStoreSource,
+  /if \(shouldFlushUiStorageImmediately\(previousValue, value\)\) \{\s+flush\(\);/u,
+  "critical UI preferences should flush synchronously before the app can close",
+);
+assert.match(
   summaryPopoverSource,
   /const \[draft, setDraft\] = useState\(\(\) => \(\{ \.\.\.entry \}\)\);/u,
   "summary typing should update editor-local state instead of rerendering the entire popover",
@@ -423,8 +433,13 @@ assert.doesNotMatch(
 );
 assert.match(
   chatHandleInputSource,
-  /const isDeleting = inputEvent\?\.inputType\?\.startsWith\("delete"\) === true;[\s\S]*?isDeleting \? ROLEPLAY_INPUT_DELETE_RESIZE_IDLE_MS : ROLEPLAY_INPUT_RESIZE_IDLE_MS/u,
-  "Roleplay deletion should use a longer resize idle window than ordinary typing",
+  /if \(!isDeleting\) \{[\s\S]*?scheduleTextareaFrameResize\(el\);[\s\S]*?\} else \{[\s\S]*?scheduleTextareaResize\([\s\S]*?ROLEPLAY_INPUT_DELETE_RESIZE_IDLE_MS/u,
+  "Roleplay insertions should resize before paint while deletions retain their idle resize window",
+);
+assert.match(
+  chatHandleInputSource,
+  /if \(shouldDeferDeleteWork\) \{\s+heldDeleteResizeRef\.current = el;/u,
+  "held Roleplay deletion should defer its layout read until the key is released",
 );
 assert.match(
   chatInputSource,
