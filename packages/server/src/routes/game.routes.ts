@@ -9136,7 +9136,7 @@ export async function gameRoutes(app: FastifyInstance) {
       const updated = await chats.patchMetadata(input.chatId, (metadata) => {
         const definition = parseStoredSpatialDefinition(metadata);
         if (!definition?.enabled) {
-          throw Object.assign(new Error("Enable and save the hierarchical map before binding Game maps."), {
+          throw Object.assign(new Error("Enable and save the world map before binding Game maps."), {
             code: "spatial_definition_missing",
             statusCode: 409,
           });

@@ -53,7 +53,7 @@ const KNOWN_INCOMPATIBLE_RUNTIMES = new Map<string, string>([
     (version) =>
       [
         `hierarchical-maps@${version}`,
-        `Hierarchical Maps ${version} is incompatible with file-native storage. Update the package before using maps.`,
+        `World Maps ${version} is incompatible with file-native storage. Update the package before using maps.`,
       ] as const,
   ),
 ]);

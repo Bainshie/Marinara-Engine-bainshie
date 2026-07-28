@@ -107,7 +107,7 @@ export const GAME_BACKGROUND: PromptOverrideKeyDef<GameBackgroundCtx> = {
   },
 };
 
-// ── Hierarchical Maps location artwork ──
+// ── World Maps location artwork ──
 
 export interface MapsLocationArtworkCtx extends Record<string, string | number | undefined> {
   locationName: string;
@@ -129,12 +129,12 @@ export const MAPS_LOCATION_ARTWORK: PromptOverrideKeyDef<MapsLocationArtworkCtx>
   key: "maps.locationArtwork",
   label: "Maps location artwork",
   description:
-    "Automatic Hierarchical Maps location and child-map artwork. Engine style profiles and global positive/negative image settings are applied after this template.",
+    "Automatic World Maps location and child-map artwork. Engine style profiles and global positive/negative image settings are applied after this template.",
   variables: [
     { name: "locationName", description: "The location name.", example: "Moonwell Floor" },
     {
       name: "locationDescription",
-      description: "The location's public description from Hierarchical Maps.",
+      description: "The location's public description from World Maps.",
       example: "A quiet tiled bath beneath blue crystals.",
     },
     { name: "locationType", description: "The configured Maps hierarchy type.", example: "Floor" },
@@ -155,7 +155,7 @@ export const MAPS_LOCATION_ARTWORK: PromptOverrideKeyDef<MapsLocationArtworkCtx>
     },
     {
       name: "locationPrompt",
-      description: "The complete fallback prompt prepared by Hierarchical Maps for this location.",
+      description: "The complete fallback prompt prepared by World Maps for this location.",
       example:
         "Wide establishing image of Moonwell Floor. A quiet tiled bath beneath blue crystals. Show the environment, architecture, lighting, palette, and stable landmarks clearly. No text.",
     },

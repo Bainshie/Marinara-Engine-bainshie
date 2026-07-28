@@ -2491,7 +2491,12 @@ const cases: RegressionCase[] = [
         /gameStoryboard(?:Prompt|Image|Video)ConnectionId|gameStoryboard(?:IncludeCharacterAppearance|UseAvatarReferences)/u,
       );
       assert.match(drawerSource, /<StoryboardChatSettingsPanel[\s\S]*?<\/Suspense>\s*<\/AgentSettingsCard>/u);
-      assert.doesNotMatch(setupSource, /setEnableStoryboard|setStoryboardKeyframeCount|gamePresentation/u);
+      assert.doesNotMatch(setupSource, /setEnableStoryboard|setStoryboardKeyframeCount/u);
+      assert.match(setupSource, /setGamePresentation/u);
+      assert.match(
+        setupSource,
+        /gameGmPromptTemplateId:\s*gamePresentation === "anime" \? ANIME_GAME_PROMPT_TEMPLATE_ID : null/u,
+      );
       assert.match(editorSource, /StoryboardAgentSettingsPanel/u);
       assert.match(editorSource, /\{!isStoryboardAgent && \(\s*<FieldGroup[\s\S]*?agentBudget/u);
       assert.doesNotMatch(

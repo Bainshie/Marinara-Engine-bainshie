@@ -2089,7 +2089,7 @@ export async function chatsRoutes(app: FastifyInstance) {
     const ownerSpatialProjection = await resolveOwnerSpatialProjection(req.params.id, {}, chat.metadata);
     if (manual && body.location !== undefined && ownerSpatialProjection?.ownerMode === "game") {
       return reply.status(409).send({
-        error: "Story location is controlled by the hierarchical map.",
+        error: "Story location is controlled by the world map.",
         code: "spatial_location_authoritative",
         field: "location",
         location: formatOwnerSpatialBreadcrumb(ownerSpatialProjection),

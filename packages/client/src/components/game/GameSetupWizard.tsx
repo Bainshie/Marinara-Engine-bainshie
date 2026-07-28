@@ -479,6 +479,7 @@ export function GameSetupWizard({
   const [gameSpecialInstructions, setGameSpecialInstructions] = useState("");
   const [promptPresetId, setPromptPresetId] = useState<string | null>(null);
   const [promptPresetTouched, setPromptPresetTouched] = useState(false);
+  const [gamePresentation, setGamePresentation] = useState<"standard" | "anime">("standard");
   const [customGamePromptEnabled, setCustomGamePromptEnabled] = useState(false);
   const [gameSystemPromptDraft, setGameSystemPromptDraft] = useState(DEFAULT_GAME_SYSTEM_PROMPT);
   const [gameSystemPromptEdited, setGameSystemPromptEdited] = useState(false);
@@ -615,8 +616,11 @@ export function GameSetupWizard({
     [selectedPromptPreset],
   );
   const effectiveGameSystemPrompt = useMemo(
-    () => selectedPromptPreset?.gamePrompt?.trim() || DEFAULT_GAME_SYSTEM_PROMPT,
-    [selectedPromptPreset?.gamePrompt],
+    () =>
+      gamePresentation === "anime"
+        ? ANIME_GAME_SYSTEM_PROMPT
+        : selectedPromptPreset?.gamePrompt?.trim() || DEFAULT_GAME_SYSTEM_PROMPT,
+    [gamePresentation, selectedPromptPreset?.gamePrompt],
   );
   const personas = useMemo(
     () =>
@@ -999,9 +1003,10 @@ export function GameSetupWizard({
       setEnableLorebookKeeper(config.enableLorebookKeeper === true);
       setPromptPresetTouched(true);
       setPromptPresetId(config.promptPresetId ?? null);
-      setCustomGamePromptEnabled(Boolean(importedCustomPrompt) || importedStoryboardGamePrompt);
+      setGamePresentation(importedStoryboardGamePrompt ? "anime" : "standard");
+      setCustomGamePromptEnabled(Boolean(importedCustomPrompt));
       setGameSystemPromptDraft(importedCustomPrompt || importedBasePrompt);
-      setGameSystemPromptEdited(Boolean(importedCustomPrompt) || importedStoryboardGamePrompt);
+      setGameSystemPromptEdited(Boolean(importedCustomPrompt));
       setGameSpecialInstructions(config.gameSpecialInstructions?.trim() || "");
       const importedSpatialMapInstructions = config.spatialMapInstructions?.trim() || "";
       setDraftSpatialMap(
@@ -1113,6 +1118,7 @@ export function GameSetupWizard({
           ? { ...(importedGenerationParametersRef.current ?? {}), ...generationParameters }
           : undefined,
         promptPresetId,
+        gameGmPromptTemplateId: gamePresentation === "anime" ? ANIME_GAME_PROMPT_TEMPLATE_ID : null,
         gameSystemPrompt: customGameSystemPrompt,
         gameSpecialInstructions: trimmedGameSpecialInstructions || null,
       },
@@ -2743,6 +2749,25 @@ export function GameSetupWizard({
           <>
             <div>
               <label className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-[var(--foreground)]">
+                <Sparkles size={12} />
+                {localizeUi("settings.sections.gamePresentation.title")}
+              </label>
+              <select
+                value={gamePresentation}
+                onChange={(event) => setGamePresentation(event.target.value === "anime" ? "anime" : "standard")}
+                className={GAME_SETUP_INPUT_CLASS}
+              >
+                <option value="standard">{localizeUi("ui.game.gamesetupwizard.standard")}</option>
+                <option value="anime">{localizeUi("ui.game.gamesetupwizard.storyboardOptimized")}</option>
+              </select>
+              <p className="mt-1 text-[0.575rem] leading-relaxed text-[var(--muted-foreground)]">
+                {gamePresentation === "anime"
+                  ? localizeUi("ui.game.gamesetupwizard.storyboardOptimizedNarrationDescription")
+                  : localizeUi("ui.game.gamesetupwizard.usesTheStandardFlexibleGameModeNarrationAndMedia")}
+              </p>
+            </div>
+            <div>
+              <label className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-[var(--foreground)]">
                 <Feather size={12} />{localizeUi("ui.game.gamesetupwizard.basePromptPreset")}</label>
               <select
                 value={promptPresetId ?? ""}
@@ -2757,7 +2782,9 @@ export function GameSetupWizard({
                 ))}
               </select>
               <p className="mt-1 text-[0.575rem] leading-relaxed text-[var(--muted-foreground)]">
-                {localizeUi("ui.game.gamesetupwizard.usesTheGameModePromptFromTheSelectedPreset")}
+                {gamePresentation === "anime"
+                  ? localizeUi("ui.game.gamesetupwizard.theStoryboardGamePromptReplacesTheSelectedPresetS")
+                  : localizeUi("ui.game.gamesetupwizard.usesTheGameModePromptFromTheSelectedPreset")}
               </p>
             </div>
 
@@ -2795,7 +2822,9 @@ export function GameSetupWizard({
                         ? gameSystemPromptEdited
                           ?localizeUi("ui.game.gamesetupwizard.customPromptWillOverrideTheSelectedPrompt")
                           :localizeUi("ui.game.gamesetupwizard.previewingTheSelectedPromptEditItToOverride")
-                        : selectedPromptPresetName
+                        : gamePresentation === "anime"
+                          ? localizeUi("ui.game.gamesetupwizard.usingStoryboardGamePrompt")
+                          : selectedPromptPresetName
                           ?localizeUi("ui.game.gamesetupwizard.usingValue1", { value1: selectedPromptPresetName })
                           :localizeUi("ui.game.gamesetupwizard.usingDefaultGamePrompt")}
                     </p>
@@ -2807,7 +2836,9 @@ export function GameSetupWizard({
                       ? gameSystemPromptEdited
                         ?localizeUi("settings.notifications.customSound.status.custom")
                         :localizeUi("settings.notifications.customSound.actions.preview")
-                      : selectedPromptPresetName
+                      : gamePresentation === "anime"
+                        ? localizeUi("ui.game.gamesurfacecomponent.storyboard")
+                        : selectedPromptPresetName
                           ?localizeUi("chat.toolbar.preset")
                           :localizeUi("ui.noodle.noodlehome.default")}
                   </span>

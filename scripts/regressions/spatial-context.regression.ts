@@ -391,7 +391,7 @@ assert.deepEqual(
   {
     ok: false,
     code: "spatial_transition_stale_definition",
-    message: "The hierarchical map changed. Review the available destinations.",
+    message: "The world map changed. Review the available destinations.",
   },
 );
 assert.equal(
@@ -545,7 +545,7 @@ assert.throws(
   (error: unknown) =>
     error instanceof GameMapBindingError &&
     error.code === "feature_unavailable" &&
-    error.message === "Hierarchical Maps is not active.",
+    error.message === "World Maps is not active.",
 );
 
 const fallbackProjection: ResolvedOwnerSpatialProjection = {
