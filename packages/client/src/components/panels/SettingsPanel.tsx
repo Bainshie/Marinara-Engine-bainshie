@@ -119,6 +119,7 @@ import { useInstalledCapabilityPackages } from "../../hooks/use-capability-packa
 import { useDocsLanguage, useFixDocsLanguage, useSetDocsLanguage } from "../../hooks/use-docs-language";
 import { HelpTooltip } from "../ui/HelpTooltip";
 import { ColorPicker } from "../ui/ColorPicker";
+import { EmojiPicker } from "../ui/EmojiPicker";
 import { TrackerPanelIcon } from "../ui/TrackerPanelIcon";
 import { TrackerSizeTierIcon } from "../ui/TrackerSizeTierIcon";
 import {
@@ -2753,6 +2754,43 @@ function QuickRepliesSetting() {
   );
 }
 
+function CustomQuickReplyIconButton({
+  icon,
+  onSelect,
+}: {
+  icon: string | undefined;
+  onSelect: (icon: string) => void;
+}) {
+  const localize = useLocalizedUiText();
+  const [open, setOpen] = useState(false);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+
+  return (
+    <>
+      <button
+        ref={buttonRef}
+        type="button"
+        onClick={() => setOpen((current) => !current)}
+        className="flex h-6 w-6 shrink-0 items-center justify-center rounded bg-[var(--secondary)]/60 text-sm leading-none outline-none ring-1 ring-transparent transition-colors hover:bg-[var(--secondary)] focus-visible:ring-[var(--primary)]/40"
+        title={localize("Choose quick reply icon")}
+        aria-label={localize("Choose quick reply icon")}
+        aria-expanded={open}
+      >
+        {icon?.trim() || "✨"}
+      </button>
+      <EmojiPicker
+        open={open}
+        onClose={() => setOpen(false)}
+        onSelect={(emoji) => {
+          onSelect(emoji);
+          setOpen(false);
+        }}
+        anchorRef={buttonRef}
+      />
+    </>
+  );
+}
+
 function CustomQuickRepliesManager() {
   const localize = useLocalizedUiText();
   const customQuickReplies = useUIStore((s) => s.customQuickReplies);
@@ -2790,6 +2828,10 @@ function CustomQuickRepliesManager() {
               className="grid gap-1 rounded-md border border-[var(--border)]/60 bg-[var(--background)]/30 p-1.5"
             >
               <div className="flex items-center gap-1.5">
+                <CustomQuickReplyIconButton
+                  icon={entry.icon}
+                  onSelect={(icon) => updateCustomQuickReply(entry.id, { icon })}
+                />
                 <input
                   value={entry.label}
                   onChange={(event) => updateCustomQuickReply(entry.id, { label: event.target.value })}

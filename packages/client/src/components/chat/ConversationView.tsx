@@ -1288,6 +1288,7 @@ export function ConversationView({
                 visibleSegmentCount={visibleSegmentCount}
                 bubbleGroupPosition={item.bubbleGroupPosition}
                 originalContent={originalContent}
+                translationDisplayOnly={chatMeta.translationDisplayOnly === true}
               />
               {regenerationDraftMessage && (
                 <ConversationMessage
@@ -1313,6 +1314,7 @@ export function ConversationView({
                   contentParts={liveStreamContentParts}
                   visiblePartCount={liveStreamContentParts?.length}
                   bubbleGroupPosition="single"
+                  translationDisplayOnly={chatMeta.translationDisplayOnly === true}
                 />
               )}
             </Fragment>
@@ -1343,6 +1345,7 @@ export function ConversationView({
             contentParts={liveStreamContentParts}
             visiblePartCount={liveStreamContentParts?.length}
             bubbleGroupPosition="single"
+            translationDisplayOnly={chatMeta.translationDisplayOnly === true}
           />
         )}
 

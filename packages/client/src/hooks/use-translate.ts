@@ -17,7 +17,7 @@ export function useTranslate() {
     const store = useTranslationStore.getState();
 
     // Toggle off if already translated. Keep the saved translation, but persist the hidden display state.
-    if (store.translations[messageId]) {
+    if (store.translations[messageId] && store.translationSources[messageId] === text) {
       store.removeTranslation(messageId);
       if (chatId) {
         api.patch(`/chats/${chatId}/messages/${messageId}/extra`, { translationHidden: true }).catch(() => {});
@@ -45,6 +45,7 @@ export function useTranslate() {
         api
           .patch(`/chats/${chatId}/messages/${messageId}/extra`, {
             translation: result.translatedText,
+            translationSource: text,
             translationHidden: false,
           })
           .catch(() => {});
