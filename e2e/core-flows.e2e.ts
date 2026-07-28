@@ -2704,7 +2704,8 @@ test("desktop Roleplay composition keeps ambient work off the input path and gro
 
     const input = page.locator("textarea.mari-chat-input-textarea");
     const root = page.locator("html");
-    await expect(input).toHaveAttribute("data-lt-active", "false");
+    await expect(input).toHaveAttribute("spellcheck", "true");
+    await expect(input).not.toHaveAttribute("data-lt-active");
     await expect(root).toHaveAttribute("data-marinara-accent-animation");
 
     await page.evaluate(() => {
@@ -2786,6 +2787,77 @@ test("desktop Roleplay composition keeps ambient work off the input path and gro
 
     await input.blur();
     await expect(root).toHaveAttribute("data-marinara-accent-animation");
+  } finally {
+    await page.request.delete(`/api/chats/${chat.id}`);
+  }
+});
+
+test("desktop Echo Chamber commits its resized dimensions before reload", async ({ page }, testInfo) => {
+  test.skip(!testInfo.project.name.includes("desktop"), "Desktop Echo Chamber resizing is covered on desktop.");
+
+  await page.route("**/api/app-settings/ui", async (route) => {
+    if (route.request().method() === "GET") {
+      await route.fulfill({ json: { value: null } });
+      return;
+    }
+    const body = route.request().postDataJSON() as { value?: unknown } | null;
+    await route.fulfill({ json: { value: typeof body?.value === "string" ? body.value : "" } });
+  });
+
+  const chatResponse = await page.request.post("/api/chats", {
+    data: { name: "Echo Chamber Size Persistence Smoke", mode: "roleplay", characterIds: [] },
+  });
+  expect(chatResponse.ok()).toBeTruthy();
+  const chat = (await chatResponse.json()) as { id: string };
+
+  try {
+    const metadataResponse = await page.request.patch(`/api/chats/${chat.id}/metadata`, {
+      data: { enableAgents: true, activeAgentIds: ["echo-chamber"] },
+    });
+    expect(metadataResponse.ok()).toBeTruthy();
+
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.addInitScript((chatId) => {
+      const persisted = JSON.parse(localStorage.getItem("marinara-engine-ui") ?? '{"state":{},"version":87}') as {
+        state: Record<string, unknown>;
+        version: number;
+      };
+      persisted.state.hasCompletedOnboarding = true;
+      persisted.state.echoChamberOpen = true;
+      persisted.state.echoChamberSide = "bottom-right";
+      localStorage.setItem("marinara-engine-ui", JSON.stringify(persisted));
+      localStorage.setItem("marinara-active-chat-id", chatId);
+    }, chat.id);
+    await page.goto("/");
+
+    const resizeHandle = page.getByRole("button", { name: "Resize Echo Chamber" });
+    await expect(resizeHandle).toBeVisible();
+    const panel = resizeHandle.locator("..");
+    const initialBox = await panel.boundingBox();
+    expect(initialBox).not.toBeNull();
+
+    await resizeHandle.press("ArrowRight");
+    await resizeHandle.press("ArrowDown");
+
+    const savedSize = await page.evaluate((chatId) => {
+      const persisted = JSON.parse(localStorage.getItem("marinara-engine-ui") ?? '{"state":{}}') as {
+        state?: {
+          echoChamberSizeByChatId?: Record<string, { width?: unknown; height?: unknown }>;
+        };
+      };
+      return persisted.state?.echoChamberSizeByChatId?.[chatId] ?? null;
+    }, chat.id);
+    expect(savedSize).not.toBeNull();
+    expect(savedSize?.width).toBeGreaterThan(Math.round(initialBox!.width));
+    expect(savedSize?.height).toBeGreaterThan(Math.round(initialBox!.height));
+
+    await page.reload();
+    const restoredHandle = page.getByRole("button", { name: "Resize Echo Chamber" });
+    await expect(restoredHandle).toBeVisible();
+    const restoredBox = await restoredHandle.locator("..").boundingBox();
+    expect(restoredBox).not.toBeNull();
+    expect(Math.abs(restoredBox!.width - Number(savedSize?.width))).toBeLessThanOrEqual(1);
+    expect(Math.abs(restoredBox!.height - Number(savedSize?.height))).toBeLessThanOrEqual(1);
   } finally {
     await page.request.delete(`/api/chats/${chat.id}`);
   }

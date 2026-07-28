@@ -2235,8 +2235,12 @@ assert.equal(
 );
 assert.deepEqual(openRouterModalities("krea/krea-2-large"), ["image"]);
 assert.deepEqual(openRouterModalities(" KREA/krea-2-medium-turbo "), ["image"]);
+assert.deepEqual(openRouterModalities("bytedance-seed/seedream-4.5"), ["image"]);
+assert.deepEqual(openRouterModalities(" BYTEDANCE-SEED/SEEDREAM-4.5-20251203 "), ["image"]);
 assert.deepEqual(openRouterModalities("google/gemini-3.1-flash-image-preview"), ["image", "text"]);
 assert.equal(usesOpenRouterImagesApi(" krea/krea-2-medium "), true);
+assert.equal(usesOpenRouterImagesApi("bytedance-seed/seedream-4.5"), true);
+assert.equal(usesOpenRouterImagesApi("BYTEDANCE-SEED/SEEDREAM-4.5-20251203"), true);
 assert.equal(usesOpenRouterImagesApi("google/gemini-3.1-flash-image-preview"), false);
 assert.equal(
   openRouterImagesUrl("https://openrouter.ai/api/v1/chat/completions"),
@@ -2255,6 +2259,20 @@ assert.deepEqual(
     prompt: "plate of spaghetti\n\nAvoid in the image: burnt pasta",
     resolution: "1K",
     aspect_ratio: "1:1",
+  },
+);
+assert.deepEqual(
+  buildOpenRouterImagesRequest({
+    prompt: "a dreamy night market",
+    model: "bytedance-seed/seedream-4.5",
+    width: 1280,
+    height: 720,
+  }),
+  {
+    model: "bytedance-seed/seedream-4.5",
+    prompt: "a dreamy night market",
+    resolution: "1K",
+    aspect_ratio: "16:9",
   },
 );
 assert.deepEqual(
