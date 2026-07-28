@@ -3947,6 +3947,7 @@ test("chat toolbar panels close when their trigger is clicked again across modes
       gameSessionStatus: "active",
       gameSessionNumber: 1,
       gameIntroPresented: true,
+      enableSpriteGeneration: true,
     },
   });
   expect(gameMetadataResponse.ok()).toBeTruthy();
@@ -3958,17 +3959,53 @@ test("chat toolbar panels close when their trigger is clicked again across modes
   await page.addInitScript((chatId) => {
     localStorage.setItem("marinara-active-chat-id", chatId);
   }, roleplayChat.id);
+  await page.route("**/api/capability-packages/installed", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify([
+        {
+          id: "illustrator",
+          version: "1.0.0",
+          manifest: {
+            schemaVersion: 1,
+            id: "illustrator",
+            name: "Illustrator",
+            version: "1.0.0",
+            description: "Gallery image generation fixture.",
+            engine: { min: "2.0.0", maxExclusive: "3.0.0" },
+            kind: ["agent"],
+            entrypoints: { agents: "agents.json" },
+            files: [{ path: "agents.json", sha256: "0".repeat(64), bytes: 1 }],
+            permissions: ["agent-runtime"],
+            restartRequired: false,
+          },
+          installedAt: "2026-01-01T00:00:00.000Z",
+          status: "active",
+          error: null,
+          readiness: "ready",
+          readinessError: null,
+          legacy: false,
+        },
+      ]),
+    });
+  });
 
   try {
     await page.goto("/");
 
-    const expectSharedDrawerToggles = async () => {
+    const expectSharedDrawerToggles = async (expectGameGenerationActions = false) => {
       const galleryButton = page.getByRole("button", { name: "Gallery", exact: true }).filter({ visible: true });
       await expect(galleryButton).toHaveCount(1);
       await galleryButton.click();
-      await expect(page.locator(".mari-chat-gallery-drawer")).toBeVisible();
+      const galleryDrawer = page.locator(".mari-chat-gallery-drawer");
+      await expect(galleryDrawer).toBeVisible();
+      if (expectGameGenerationActions) {
+        await expect(galleryDrawer.getByRole("button", { name: "Illustrate", exact: true })).toBeVisible();
+        await expect(galleryDrawer.getByRole("button", { name: "Background", exact: true })).toBeVisible();
+      }
       await galleryButton.click();
-      await expect(page.locator(".mari-chat-gallery-drawer")).toHaveCount(0);
+      await expect(galleryDrawer).toHaveCount(0);
 
       const settingsButton = page.getByRole("button", { name: "Chat Settings", exact: true }).filter({ visible: true });
       await expect(settingsButton).toHaveCount(1);
@@ -3999,7 +4036,7 @@ test("chat toolbar panels close when their trigger is clicked again across modes
     await setActiveChat(conversationChat.id);
     await expectSharedDrawerToggles();
     await setActiveChat(gameChat.id);
-    await expectSharedDrawerToggles();
+    await expectSharedDrawerToggles(true);
   } finally {
     await Promise.all([
       request.delete(`/api/chats/${roleplayChat.id}`),

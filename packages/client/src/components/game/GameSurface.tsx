@@ -2325,6 +2325,9 @@ interface GameSurfaceProps {
   connectedChatName?: string;
   onOpenSettings: (event?: ReactMouseEvent<HTMLElement>) => void;
   onCloseSettings: () => void;
+  externalGalleryOpen?: boolean;
+  externalGalleryAnchor?: ChatToolbarFloatingPanelAnchor;
+  onCloseExternalGallery?: () => void;
   onSwitchChat?: () => void;
   onDeleteMessage: (messageId: string) => void;
   onPeekPrompt?: (messageId: string) => void;
@@ -2345,6 +2348,9 @@ function GameSurfaceComponent({
   connectedChatName,
   onOpenSettings,
   onCloseSettings,
+  externalGalleryOpen = false,
+  externalGalleryAnchor = null,
+  onCloseExternalGallery,
   onSwitchChat,
   onDeleteMessage,
   onPeekPrompt,
@@ -2689,6 +2695,8 @@ function GameSurfaceComponent({
   const [sessionPanelTab, setSessionPanelTab] = useState<"history" | "journal">("history");
   const [galleryOpen, setGalleryOpen] = useState(false);
   const [galleryAnchor, setGalleryAnchor] = useState<ChatToolbarFloatingPanelAnchor>(null);
+  const resolvedGalleryOpen = galleryOpen || externalGalleryOpen;
+  const resolvedGalleryAnchor = externalGalleryOpen ? externalGalleryAnchor : galleryAnchor;
   const [mobileRetryMenuAnchor, setMobileRetryMenuAnchor] = useState<ChatToolbarFloatingPanelAnchor>(null);
   const [mobileSessionPanelAnchor, setMobileSessionPanelAnchor] = useState<ChatToolbarFloatingPanelAnchor>(null);
   const [mobileVolumePopoverAnchor, setMobileVolumePopoverAnchor] = useState<ChatToolbarFloatingPanelAnchor>(null);
@@ -2723,20 +2731,21 @@ function GameSurfaceComponent({
     setMobileVolumePopoverAnchor(null);
     setGalleryOpen(false);
     setGalleryAnchor(null);
-  }, []);
+    onCloseExternalGallery?.();
+  }, [onCloseExternalGallery]);
   const dismissOtherFloatingWindows = useCallback(() => {
     closeLocalFloatingWindows();
     onCloseSettings();
   }, [closeLocalFloatingWindows, onCloseSettings]);
   const handleOpenGalleryPanel = useCallback(
     (event?: ReactMouseEvent<HTMLElement>) => {
-      const nextOpen = !galleryOpen;
+      const nextOpen = !resolvedGalleryOpen;
       closeLocalFloatingWindows();
       onCloseSettings();
       setGalleryAnchor(nextOpen ? readFloatingPanelAnchor(event) : null);
       setGalleryOpen(nextOpen);
     },
-    [closeLocalFloatingWindows, galleryOpen, onCloseSettings, readFloatingPanelAnchor],
+    [closeLocalFloatingWindows, onCloseSettings, readFloatingPanelAnchor, resolvedGalleryOpen],
   );
   const handleOpenSettingsPanel = useCallback(
     (event?: ReactMouseEvent<HTMLElement>) => {
@@ -2752,12 +2761,14 @@ function GameSurfaceComponent({
   const handleCloseGalleryPanel = useCallback(() => {
     setGalleryOpen(false);
     setGalleryAnchor(null);
-  }, []);
+    onCloseExternalGallery?.();
+  }, [onCloseExternalGallery]);
   const closeChatDrawers = useCallback(() => {
     setGalleryOpen(false);
     setGalleryAnchor(null);
+    onCloseExternalGallery?.();
     onCloseSettings();
-  }, [onCloseSettings]);
+  }, [onCloseExternalGallery, onCloseSettings]);
   const [activeChoices, setActiveChoices] = useState<string[] | null>(null);
   const [activeQte, setActiveQte] = useState<{ actions: string[]; timer: number } | null>(null);
   const [queuedQte, setQueuedQte] = useState<{ qte: { actions: string[]; timer: number }; messageId: string } | null>(
@@ -3047,7 +3058,8 @@ function GameSurfaceComponent({
     setVolumePopoverOpen(false);
     setRetryMenuOpen(false);
     setInventoryOpen(false);
-  }, []);
+    onCloseExternalGallery?.();
+  }, [onCloseExternalGallery]);
 
   useEffect(() => {
     window.addEventListener(CHAT_FLOATING_UI_DISMISS_EVENT, closeGameFloatingPanels);
@@ -3076,7 +3088,7 @@ function GameSurfaceComponent({
     !!activeQte ||
     sessionPanelOpen ||
     gameAssetsPanelOpen ||
-    galleryOpen ||
+    resolvedGalleryOpen ||
     combatLogsOpen ||
     inventoryOpen ||
     tutorialOpen ||
@@ -3086,7 +3098,7 @@ function GameSurfaceComponent({
     !!activeReadable ||
     sessionPanelOpen ||
     gameAssetsPanelOpen ||
-    galleryOpen ||
+    resolvedGalleryOpen ||
     combatLogsOpen ||
     inventoryOpen ||
     tutorialOpen ||
@@ -11947,9 +11959,9 @@ function GameSurfaceComponent({
               <Suspense fallback={null}>
                 <ChatGalleryDrawer
                   chat={chat}
-                  open={galleryOpen}
+                  open={resolvedGalleryOpen}
                   onClose={handleCloseGalleryPanel}
-                  anchor={galleryAnchor}
+                  anchor={resolvedGalleryAnchor}
                   onIllustrate={handleManualSceneIllustration}
                   onGenerateStoryboard={handleGenerateTurnStoryboard}
                   onViewStoryboard={
