@@ -11143,21 +11143,26 @@ test("Background cards keep names readable and load thumbnails", async ({ page }
 
   // The action row is always visible on touch, so it must sit above the tag chips rather than
   // float over them the way it does on hover-capable pointers.
-  const [actionsBox, tagBox] = await Promise.all([
-    card.locator("[data-background-actions]").boundingBox(),
-    card.getByText("quarantine berth", { exact: true }).boundingBox(),
-  ]);
-  expect(actionsBox).not.toBeNull();
-  expect(tagBox).not.toBeNull();
   if (testInfo.project.name.includes("mobile")) {
+    const [actionsBox, tagBox] = await Promise.all([
+      card.locator("[data-background-actions]").boundingBox(),
+      card.getByText("quarantine berth", { exact: true }).boundingBox(),
+    ]);
+    expect(actionsBox).not.toBeNull();
+    expect(tagBox).not.toBeNull();
     expect(actionsBox!.y + actionsBox!.height).toBeLessThanOrEqual(tagBox!.y);
     // Touch targets stay tappable.
     expect(actionsBox!.height).toBeGreaterThanOrEqual(36);
   }
 
   await card.getByRole("button", { name: /Use .* for this chat/ }).click();
-  await expect(card).toHaveAttribute("data-background-selected", "true");
+  // Selecting closes the modal, so the card detaches. Re-open and assert the persisted selection.
   await expect(page.getByRole("dialog", { name: "Background Library" })).toBeHidden();
+  await page.getByRole("button", { name: "Browse library" }).click();
+  await expect(page.getByRole("dialog", { name: "Background Library" })).toBeVisible();
+  await expect(
+    page.locator('[data-background-id="user:collapsible-background-tags.png"]'),
+  ).toHaveAttribute("data-background-selected", "true");
 });
 
 test("Roleplay displays a selected background when its file route is GET-only", async ({ page }, testInfo) => {

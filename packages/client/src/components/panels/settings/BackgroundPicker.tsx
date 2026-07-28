@@ -441,7 +441,7 @@ export function BackgroundPicker({
           // Importing while browsing a folder files the uploads there instead of into Unfiled.
           const targetFolderId = folders.some((folder) => folder.id === folderFilter) ? folderFilter : null;
           if (targetFolderId) {
-            await Promise.allSettled(
+            const moves = await Promise.allSettled(
               successfulUploads.map((upload) =>
                 api.patch("/backgrounds/organization", {
                   backgroundId: `user:${upload.filename}`,
@@ -449,6 +449,10 @@ export function BackgroundPicker({
                 }),
               ),
             );
+            // An upload that fails to file would otherwise silently land in Unfiled.
+            if (moves.some((result) => result.status === "rejected")) {
+              toast.error(localizeUi("ui.panels.backgroundpicker.failedToMoveBackground"));
+            }
           }
           qc.invalidateQueries({ queryKey: BACKGROUND_QUERY_KEY });
           void refreshGameAssetManifest().catch(() => undefined);
@@ -1109,6 +1113,7 @@ export function BackgroundPicker({
           {/* Folder chips wrap like the tag filters: no rail, no scroll strip, same on touch. */}
           <div
             className="flex flex-wrap items-center gap-1"
+            role="group"
             aria-label={localizeUi("ui.panels.backgroundpicker.filterByFolder")}
           >
             {(
