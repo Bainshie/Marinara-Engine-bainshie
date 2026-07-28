@@ -238,6 +238,8 @@ export function AppShell() {
     let frame = 0;
     let focusTimers: number[] = [];
     let largestViewportHeight = window.visualViewport?.height ?? window.innerHeight;
+    const supportsVirtualKeyboard =
+      navigator.maxTouchPoints > 0 || window.matchMedia("(any-pointer: coarse)").matches;
     const updateVisualViewportGeometry = () => {
       if (frame) cancelAnimationFrame(frame);
       frame = requestAnimationFrame(() => {
@@ -255,7 +257,7 @@ export function AppShell() {
         dispatchChatVisualViewportChange({
           height,
           offsetTop,
-          keyboardOpen: largestViewportHeight - height >= 80,
+          keyboardOpen: supportsVirtualKeyboard && largestViewportHeight - height >= 80,
         });
       });
     };
