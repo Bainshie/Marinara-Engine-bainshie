@@ -1607,7 +1607,7 @@ export function CharactersPanel() {
               title={localizeUi("ui.panels.characterspanel.moveToFolder")}
             >
               <FolderInput size="0.75rem" />
-              {localizeUi("ui.panels.characterspanel.moveToFolder")}
+              {localizeUi("lorebook.editor.batch.move")}
             </button>
           }
           onExport={() => void handleExportSelected()}

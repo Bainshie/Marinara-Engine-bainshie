@@ -136,7 +136,7 @@ export function AppDialogRenderer() {
         )}
 
         {dialog.kind === "choice" && (
-          <div className="space-y-2">
+          <div className="max-h-[50vh] space-y-2 overflow-y-auto">
             {dialog.choices.map((choice, i) => (
               <button
                 key={choice.key}
