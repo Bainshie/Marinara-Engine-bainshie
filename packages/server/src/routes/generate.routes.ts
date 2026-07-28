@@ -3638,8 +3638,8 @@ export async function generateRoutes(app: FastifyInstance) {
               const exts = new Set([".jpg", ".jpeg", ".png", ".gif", ".webp", ".avif"]);
               const files = readdirSync(bgDir).filter((f: string) => exts.has(extname(f).toLowerCase()));
 
-              // Load metadata (tags + original names)
-              let meta: Record<string, { originalName?: string; tags: string[] }> = {};
+              // Load metadata (tags)
+              let meta: Record<string, { tags: string[] }> = {};
               const metaPath = join(bgDir, "meta.json");
               if (existsSync(metaPath)) {
                 try {
@@ -3651,7 +3651,6 @@ export async function generateRoutes(app: FastifyInstance) {
 
               agentContext.memory._availableBackgrounds = files.map((f: string) => ({
                 filename: f,
-                originalName: meta[f]?.originalName ?? null,
                 tags: meta[f]?.tags ?? [],
               }));
             }

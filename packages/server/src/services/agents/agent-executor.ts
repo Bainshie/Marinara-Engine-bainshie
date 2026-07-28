@@ -2486,15 +2486,14 @@ function buildAgentExtras(context: AgentContext, agentTypes: string[] = []): str
   if (context.memory._availableBackgrounds) {
     const bgs = context.memory._availableBackgrounds as Array<{
       filename: string;
-      originalName?: string | null;
       tags: string[];
       source?: "user" | "game_asset";
     }>;
     parts.push(`<available_backgrounds>`);
     for (const bg of bgs) {
-      const label = bg.originalName ? `${bg.filename} (${bg.originalName})` : bg.filename;
+      const label = escapeXml(bg.filename);
       const source = bg.source === "game_asset" ? " [source: game asset]" : "";
-      const tagStr = bg.tags.length > 0 ? ` [tags: ${bg.tags.join(", ")}]` : "";
+      const tagStr = bg.tags.length > 0 ? ` [tags: ${escapeXml(bg.tags.join(", "))}]` : "";
       parts.push(`- ${label}${source}${tagStr}`);
     }
     parts.push(`</available_backgrounds>`);
