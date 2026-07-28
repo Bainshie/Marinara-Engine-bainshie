@@ -3961,6 +3961,7 @@ test("chat toolbar panels close when their trigger is clicked again across modes
       gameSessionStatus: "active",
       gameSessionNumber: 1,
       gameIntroPresented: true,
+      enableSpriteGeneration: true,
     },
   });
   expect(gameMetadataResponse.ok()).toBeTruthy();
@@ -3972,17 +3973,53 @@ test("chat toolbar panels close when their trigger is clicked again across modes
   await page.addInitScript((chatId) => {
     localStorage.setItem("marinara-active-chat-id", chatId);
   }, roleplayChat.id);
+  await page.route("**/api/capability-packages/installed", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify([
+        {
+          id: "illustrator",
+          version: "1.0.0",
+          manifest: {
+            schemaVersion: 1,
+            id: "illustrator",
+            name: "Illustrator",
+            version: "1.0.0",
+            description: "Gallery image generation fixture.",
+            engine: { min: "2.0.0", maxExclusive: "3.0.0" },
+            kind: ["agent"],
+            entrypoints: { agents: "agents.json" },
+            files: [{ path: "agents.json", sha256: "0".repeat(64), bytes: 1 }],
+            permissions: ["agent-runtime"],
+            restartRequired: false,
+          },
+          installedAt: "2026-01-01T00:00:00.000Z",
+          status: "active",
+          error: null,
+          readiness: "ready",
+          readinessError: null,
+          legacy: false,
+        },
+      ]),
+    });
+  });
 
   try {
     await page.goto("/");
 
-    const expectSharedDrawerToggles = async () => {
+    const expectSharedDrawerToggles = async (expectGameGenerationActions = false) => {
       const galleryButton = page.getByRole("button", { name: "Gallery", exact: true }).filter({ visible: true });
       await expect(galleryButton).toHaveCount(1);
       await galleryButton.click();
-      await expect(page.locator(".mari-chat-gallery-drawer")).toBeVisible();
+      const galleryDrawer = page.locator(".mari-chat-gallery-drawer");
+      await expect(galleryDrawer).toBeVisible();
+      if (expectGameGenerationActions) {
+        await expect(galleryDrawer.getByRole("button", { name: "Illustrate", exact: true })).toBeVisible();
+        await expect(galleryDrawer.getByRole("button", { name: "Background", exact: true })).toBeVisible();
+      }
       await galleryButton.click();
-      await expect(page.locator(".mari-chat-gallery-drawer")).toHaveCount(0);
+      await expect(galleryDrawer).toHaveCount(0);
 
       const settingsButton = page.getByRole("button", { name: "Chat Settings", exact: true }).filter({ visible: true });
       await expect(settingsButton).toHaveCount(1);
@@ -4013,7 +4050,7 @@ test("chat toolbar panels close when their trigger is clicked again across modes
     await setActiveChat(conversationChat.id);
     await expectSharedDrawerToggles();
     await setActiveChat(gameChat.id);
-    await expectSharedDrawerToggles();
+    await expectSharedDrawerToggles(true);
   } finally {
     await Promise.all([
       request.delete(`/api/chats/${roleplayChat.id}`),
@@ -5088,6 +5125,46 @@ test("PocketTTS discovers server voices and uses its speech endpoint", async ({ 
       });
     }
   }
+});
+
+test("OpenAI-compatible TTS accepts and persists a custom Kokoro voice mix", async ({ page }, testInfo) => {
+  test.skip(!testInfo.project.name.includes("desktop"), "Custom TTS voice entry is covered on desktop.");
+
+  const configResponse = await page.request.get("/api/tts/config");
+  expect(configResponse.ok()).toBeTruthy();
+  let mockConfig = {
+    ...((await configResponse.json()) as Record<string, unknown>),
+    enabled: false,
+    source: "openai",
+    baseUrl: "https://api.openai.com/v1",
+    model: "tts-1",
+    voice: "alloy",
+    voiceMode: "single",
+  };
+  const kokoroMix = "af_bella(0.5)+af_sarah(0.5)";
+
+  await page.route("**/api/tts/config", async (route) => {
+    if (route.request().method() === "PUT") {
+      mockConfig = route.request().postDataJSON() as typeof mockConfig;
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(mockConfig),
+    });
+  });
+
+  await page.goto("/");
+  await page.locator('[data-tour="panel-connections"]').click();
+  const rightPanel = page.locator('[data-component="RightPanel"]');
+  await expect(rightPanel).toBeVisible();
+  const ttsCard = rightPanel.getByText("Text to Speech", { exact: true }).locator("xpath=../../..");
+  await ttsCard.getByTitle("Expand").click();
+
+  const customVoiceInput = ttsCard.getByTestId("tts-custom-voice-input-global");
+  await expect(customVoiceInput).toHaveAttribute("placeholder", /Custom voice or mix/);
+  await customVoiceInput.fill(kokoroMix);
+  await expect.poll(() => mockConfig.voice).toBe(kokoroMix);
 });
 
 test("ElevenLabs keeps models visible and exposes scrollable account voices in every assignment mode", async ({
@@ -10433,6 +10510,42 @@ test("mobile chat composer follows the visual viewport above the software keyboa
       .poll(() => transcript.evaluate((element) => element.scrollHeight - element.scrollTop - element.clientHeight))
       .toBeGreaterThan(180);
     await expect(textarea).toBeVisible();
+
+    await page.addInitScript(() => {
+      Object.defineProperty(navigator, "userAgent", {
+        configurable: true,
+        value:
+          "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 " +
+          "(KHTML, like Gecko) Version/18.5 Mobile/15E148 Safari/604.1",
+      });
+    });
+    await page.reload();
+    await expect(page.getByText(/^Keyboard viewport history line 18\./)).toBeVisible();
+    await textarea.focus();
+    await page.evaluate(() => {
+      (
+        window as typeof window & {
+          __setMarinaraVisualViewport: (height: number, offsetTop: number) => void;
+        }
+      ).__setMarinaraVisualViewport(360, 72);
+    });
+
+    await expect
+      .poll(() =>
+        page.evaluate(() => ({
+          height: getComputedStyle(document.documentElement).getPropertyValue("--mari-visual-viewport-height").trim(),
+          top: getComputedStyle(document.documentElement).getPropertyValue("--mari-visual-viewport-offset-top").trim(),
+        })),
+      )
+      .toEqual({ height: "360px", top: "0px" });
+
+    const [iosShellBox, iosComposerBox] = await Promise.all([shell.boundingBox(), composer.boundingBox()]);
+    expect(iosShellBox).not.toBeNull();
+    expect(iosComposerBox).not.toBeNull();
+    expect(Math.abs(iosShellBox!.y)).toBeLessThanOrEqual(1);
+    expect(Math.abs(iosShellBox!.height - 360)).toBeLessThanOrEqual(1);
+    expect(iosComposerBox!.y).toBeGreaterThanOrEqual(0);
+    expect(iosComposerBox!.y + iosComposerBox!.height).toBeLessThanOrEqual(360);
   } finally {
     await page.request.delete(`/api/chats/${chat.id}`).catch(() => undefined);
   }
