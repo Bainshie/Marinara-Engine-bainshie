@@ -90,6 +90,28 @@ const DIR_LABELS_BY_DOCS_LANG: Record<string, Record<string, string>> = {
     integrations: "Intégrations",
     development: "Développement",
   },
+  "pt-br": {
+    "": "Guias",
+    home: "Início",
+    installation: "Instalação",
+    connections: "Conexões",
+    conversation: "Conversation",
+    roleplay: "Roleplay",
+    game: "Game Mode",
+    characters: "Personagens",
+    chats: "Chats",
+    lorebooks: "Lorebooks",
+    agents: "Agentes",
+    media: "Mídia",
+    prompts: "Prompts",
+    noodle: "Noodle",
+    appearance: "Aparência",
+    settings: "Configurações",
+    data: "Dados",
+    extending: "Extensões",
+    integrations: "Integrações",
+    development: "Desenvolvimento",
+  },
 };
 
 function dirLabel(dir: string, docsLanguage: string) {
