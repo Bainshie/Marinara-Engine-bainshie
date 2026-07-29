@@ -1,5 +1,5 @@
 > [!IMPORTANT]
-> Contributions target `staging`. Only `SpicyMarinara` may open or merge owner-approved release promotion or hotfix PRs to `main`.
+> Contributions target `staging`. Only `SpicyMarinara` may promote this repository's `staging` branch or a same-repository `hotfix/*` branch to `main`.
 <!-- See CONTRIBUTING.md § Branches. -->
 
 ## Linked issue
