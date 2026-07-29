@@ -583,14 +583,22 @@ export function App() {
     const root = document.documentElement;
     const background = appBackgroundColor.trim();
     const defaultBackground = getDefaultAppBackgroundColor(theme);
+    const resolvedBackground = getCssColorFallback(background, defaultBackground);
 
     if (background) {
-      root.style.setProperty("--background", getCssColorFallback(background, defaultBackground));
+      root.style.setProperty("--background", resolvedBackground);
       root.style.setProperty("--marinara-app-background-paint", background);
     } else {
       root.style.removeProperty("--background");
       root.style.removeProperty("--marinara-app-background-paint");
     }
+
+    // iOS paints the safe-area/overscroll backing from the literal html/body
+    // background-color, not from resolved custom properties (see index.html).
+    // Keep that literal color tracking the active theme/custom background so
+    // it doesn't stay stuck on the dark-theme default baked into the HTML.
+    root.style.setProperty("background-color", resolvedBackground, "important");
+    document.body.style.setProperty("background-color", resolvedBackground, "important");
   }, [appBackgroundColor, theme]);
 
   useEffect(() => {
