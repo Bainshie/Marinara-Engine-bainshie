@@ -538,8 +538,8 @@ assert.match(
 );
 assert.match(
   chatRoleplaySurfaceSource,
-  /generationVisualsPaused \|\| \(isMobileToolbarViewport && \(keyboardOpen \|\| hasMobileDraftInput\)\)/u,
-  "Roleplay should pause ambient rendering while the mobile keyboard or draft is active",
+  /generationVisualsPaused \|\| \(isMobileToolbarViewport && \(keyboardOpen \|\| composerFocused \|\| hasMobileDraftInput\)\)/u,
+  "Roleplay should pause ambient rendering while the mobile keyboard, composer, or draft is active",
 );
 assert.match(
   chatRoleplaySurfaceSource,
