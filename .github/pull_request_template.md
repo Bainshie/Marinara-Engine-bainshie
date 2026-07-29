@@ -1,5 +1,5 @@
-<!-- Target branch: `staging`. The default base in this UI is `main` (release branch). -->
-<!-- Change the base to `staging` before submitting unless this is a maintainer-approved mainline change. -->
+<!-- Target branch: `staging`. This is the only contribution branch. -->
+<!-- Only SpicyMarinara may open or merge owner-approved release promotion/hotfix PRs to `main`. -->
 <!-- See CONTRIBUTING.md § Branches. -->
 
 ## Linked issue
