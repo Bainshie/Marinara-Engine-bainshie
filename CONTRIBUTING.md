@@ -58,7 +58,7 @@ Guidelines:
 - Every PR must pass the required GitHub checks and complete its CodeRabbit review before merge. These gates cannot be bypassed by developers.
 - Pasta-Devs members in the `@Pasta-Devs/developers` team may merge a ready PR into `staging` after those automated gates pass; a separate human approval is not required.
 - Outside and first-time contributors may submit only to `staging` and need at least one approving review from `@Pasta-Devs/developers` in addition to the automated gates.
-- Only `SpicyMarinara` may update or merge into `main`. Normal releases are promoted from tested `staging`; direct mainline work is reserved for an owner-approved release hotfix.
+- Only `SpicyMarinara` may update or merge into `main`. Normal releases are promoted from the same repository's tested `staging` branch; direct mainline work is reserved for an owner-owned `hotfix/*` branch in this repository.
 - Update checks and installation guides continue to track `main`, since end users install from released versions.
 
 ## Repo Layout
