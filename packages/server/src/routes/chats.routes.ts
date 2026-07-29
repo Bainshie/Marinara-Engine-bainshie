@@ -3181,11 +3181,14 @@ export async function chatsRoutes(app: FastifyInstance) {
     metadata: Record<string, unknown>,
     knownNpcNames: Set<string>,
   ): Record<string, unknown> => {
-    if (!("gameJournal" in metadata)) return metadata;
-    return {
-      ...metadata,
-      gameJournal: sanitizeGameJournalForExport(metadata.gameJournal, knownNpcNames),
-    };
+    const sanitized = { ...metadata };
+    delete sanitized.branchParentChatId;
+    delete sanitized.branchParentMessageId;
+    delete sanitized.branchMessageId;
+    if ("gameJournal" in sanitized) {
+      sanitized.gameJournal = sanitizeGameJournalForExport(sanitized.gameJournal, knownNpcNames);
+    }
+    return sanitized;
   };
 
   const safeExportNamePart = (value: unknown, fallback: string): string => {
@@ -3641,6 +3644,12 @@ export async function chatsRoutes(app: FastifyInstance) {
     copiedSourceMessages.forEach((msg, index) => {
       const branchedId = branchedMessageIds[index];
       if (branchedId) sourceToBranchedMessageId.set(msg.id, branchedId);
+    });
+    const forkSourceMessage = copiedSourceMessages.at(-1);
+    await storage.patchMetadata(newChat.id, {
+      branchParentChatId: sourceChat.id,
+      branchParentMessageId: forkSourceMessage?.id ?? null,
+      branchMessageId: forkSourceMessage ? sourceToBranchedMessageId.get(forkSourceMessage.id) ?? null : null,
     });
 
     const inheritedEntries = inheritedSourceEntries.map((entry) => ({
