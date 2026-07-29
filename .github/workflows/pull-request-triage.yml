@@ -67,6 +67,12 @@ jobs:
             const ownerLogin = 'SpicyMarinara';
             const authorLogin = context.payload.pull_request.user.login;
 
+            if (authorLogin.toLowerCase() === ownerLogin.toLowerCase()) {
+              core.notice(`${authorLogin} is the repository owner; owner approval is not required.`);
+              core.setOutput('internal', 'true');
+              return;
+            }
+
             if (process.env.MEMBERS_TOKEN_CONFIGURED !== 'true') {
               core.setFailed('PASTA_DEVS_MEMBERS_TOKEN is required to verify Pasta-Devs organization and developers-team membership.');
               return;
