@@ -771,18 +771,18 @@ export function AppShell() {
   const showAmbientDecor =
     isPageActive && !activeChatId && !detailView && !botBrowserOpen && !gameAssetsBrowserOpen && !noodleOpen;
   const hasDetailView = detailView != null;
-  const chatSurfaceActive =
-    !botBrowserOpen &&
-    !gameAssetsBrowserOpen &&
-    !noodleOpen &&
-    !hasDetailView &&
-    (!shellOverlayMode || (!sidebarOpen && !rightPanelOpen));
   const trackerPanelModeAvailable = activeChat?.mode === "roleplay" || activeChat?.mode === "visual_novel";
   const trackerPanelActive = trackerPanelEnabled && trackerPanelOpen;
   const trackerPanelDetached = trackerPanelWindowTarget !== null;
   const trackerPanelSurfaceAvailable =
     trackerPanelModeAvailable && !botBrowserOpen && !gameAssetsBrowserOpen && !noodleOpen && !hasDetailView;
   const trackerPanelVisible = trackerPanelActive && trackerPanelSurfaceAvailable && !trackerPanelDetached;
+  const chatSurfaceActive =
+    !botBrowserOpen &&
+    !gameAssetsBrowserOpen &&
+    !noodleOpen &&
+    !hasDetailView &&
+    (!shellOverlayMode || (!sidebarOpen && !rightPanelOpen && !trackerPanelVisible));
   const trackerWindowHost = trackerPanelWindowTarget?.popup ?? window;
 
   const dockTrackerPanel = useCallback(() => {

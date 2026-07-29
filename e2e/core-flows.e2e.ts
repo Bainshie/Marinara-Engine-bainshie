@@ -10899,6 +10899,25 @@ test("mobile chat composer follows the visual viewport above the software keyboa
     });
     await expect(shell).not.toHaveAttribute("data-chat-surface-active");
     await expect.poll(() => shell.evaluate((element) => getComputedStyle(element).transform)).toBe("none");
+
+    await page.evaluate(async (chatId) => {
+      const storePath = "/src/stores/ui.store.ts";
+      const { useUIStore } = (await import(/* @vite-ignore */ storePath)) as {
+        useUIStore: {
+          getState: () => {
+            closeBotBrowser: () => void;
+            setTrackerPanelEnabled: (enabled: boolean) => void;
+            setTrackerPanelOpen: (open: boolean, chatId?: string | null) => void;
+          };
+        };
+      };
+      const store = useUIStore.getState();
+      store.closeBotBrowser();
+      store.setTrackerPanelEnabled(true);
+      store.setTrackerPanelOpen(true, chatId);
+    }, chat.id);
+    await expect(shell).not.toHaveAttribute("data-chat-surface-active");
+    await expect.poll(() => shell.evaluate((element) => getComputedStyle(element).transform)).toBe("none");
   } finally {
     await page.request.delete(`/api/chats/${chat.id}`).catch(() => undefined);
   }
