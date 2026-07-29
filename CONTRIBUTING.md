@@ -56,7 +56,7 @@ Guidelines:
 - **Base your feature branch on `staging`**, not `main`. Run `git checkout staging && git pull` before branching.
 - **Open PRs against `staging`**. The GitHub web UI defaults to `main` (the repo's default branch); change the base to `staging` when filing the PR.
 - Every PR must pass the required GitHub checks and complete its CodeRabbit review before merge. These gates cannot be bypassed by developers.
-- Pasta-Devs members in the `@Pasta-Devs/developers` team may merge a ready PR into `staging` after those automated gates pass; a separate human approval is not required.
+- PRs authored by active Pasta-Devs organization members or owners do not require a separate human approval. Organization members with repository merge permission may merge a ready PR into `staging` after the automated gates pass.
 - Outside and first-time contributors may submit only to `staging` and need an approving review from repository owner `SpicyMarinara` in addition to the automated gates. Approval from another Pasta-Devs member does not satisfy this gate.
 - Only `SpicyMarinara` may update or merge into `main`. Normal releases are promoted from the same repository's tested `staging` branch; direct mainline work is reserved for an owner-owned `hotfix/*` branch in this repository.
 - Update checks and installation guides continue to track `main`, since end users install from released versions.
