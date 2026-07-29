@@ -661,19 +661,33 @@ const OBSOLETE_BUILT_IN_PROMPT_TEMPLATE_IDS: Record<string, ReadonlySet<string>>
   illustrator: new Set(["illustration", "sketch"]),
 };
 
+const RETIRED_BUILT_IN_AGENT_TOOLS: Record<string, ReadonlySet<string>> = {
+  expression: new Set(["set_expression"]),
+};
+
+export function normalizeBuiltInAgentEnabledTools(agentType: string, value: unknown): string[] | null {
+  if (!Array.isArray(value)) return null;
+  const enabledTools = value.filter((tool): tool is string => typeof tool === "string");
+  const retiredTools = RETIRED_BUILT_IN_AGENT_TOOLS[agentType];
+  return retiredTools ? enabledTools.filter((tool) => !retiredTools.has(tool)) : enabledTools;
+}
+
 export function mergeBuiltInAgentSettings(agentType: string, settings: unknown): Record<string, unknown> {
   const parsed = parseAgentSettingsRecord(settings);
+  const normalizedEnabledTools = normalizeBuiltInAgentEnabledTools(agentType, parsed.enabledTools);
+  const normalizedSettings =
+    normalizedEnabledTools === null ? parsed : { ...parsed, enabledTools: normalizedEnabledTools };
   const builtIn = BUILT_IN_AGENT_MANIFESTS.find((agent) => agent.id === agentType);
-  if (!builtIn) return parsed;
+  if (!builtIn) return normalizedSettings;
 
   const defaults = getDefaultBuiltInAgentSettings(agentType);
   const merged: Record<string, unknown> = {
     ...defaults,
-    ...parsed,
+    ...normalizedSettings,
   };
 
   const defaultPromptTemplates = normalizeAgentPromptTemplateOptions(defaults.promptTemplates);
-  const savedPromptTemplates = normalizeAgentPromptTemplateOptions(parsed.promptTemplates);
+  const savedPromptTemplates = normalizeAgentPromptTemplateOptions(normalizedSettings.promptTemplates);
   const obsoleteIds = OBSOLETE_BUILT_IN_PROMPT_TEMPLATE_IDS[agentType] ?? new Set<string>();
   const savedPromptTemplatesById = new Map(
     savedPromptTemplates.filter((entry) => !obsoleteIds.has(entry.id)).map((entry) => [entry.id, entry]),
@@ -708,7 +722,7 @@ export function replaceBuiltInAgentDefinitions(manifests: readonly BuiltInAgentM
   BUILT_IN_AGENTS.splice(0, BUILT_IN_AGENTS.length, ...manifests.map(toBuiltInAgentMeta));
   for (const key of Object.keys(DEFAULT_AGENT_TOOLS)) delete DEFAULT_AGENT_TOOLS[key];
   for (const agent of manifests) {
-    DEFAULT_AGENT_TOOLS[agent.id] = [...(agent.defaultTools ?? [])];
+    DEFAULT_AGENT_TOOLS[agent.id] = normalizeBuiltInAgentEnabledTools(agent.id, agent.defaultTools ?? []) ?? [];
   }
 }
 

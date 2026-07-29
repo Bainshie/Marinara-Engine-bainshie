@@ -17,6 +17,7 @@ import {
   isBuiltInAgentRuntimeDisabled,
   isBuiltInAgentHostManaged,
   isRetiredBuiltInAgentId,
+  normalizeBuiltInAgentEnabledTools,
   normalizeWorldCustomFields,
   normalizeAgentPhaseValue,
   normalizeAgentPromptTemplateSelectionMap,
@@ -250,7 +251,10 @@ function applyDefaultBuiltInAgentTools(agentType: string, settings: unknown): Re
     return next;
   }
 
-  if (agentType === "spotify" && currentTools.length === 0) {
+  const normalizedTools = normalizeBuiltInAgentEnabledTools(agentType, currentTools) ?? [];
+  next.enabledTools = normalizedTools;
+
+  if (agentType === "spotify" && normalizedTools.length === 0) {
     next.enabledTools = [...(DEFAULT_AGENT_TOOLS.spotify ?? [])];
   }
 
