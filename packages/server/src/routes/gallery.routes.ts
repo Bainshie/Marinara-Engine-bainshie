@@ -52,6 +52,11 @@ import { generateIllustratorImageVariants } from "../services/image/illustrator-
 import { persistGeneratedImageToEntityGalleries } from "../services/image/generated-image-entity-gallery.js";
 import { deleteChatGalleryImageEverywhere } from "../services/image/chat-gallery-cascade-deletion.js";
 import {
+  findGalleryRowByFilename,
+  resolveStoredGalleryFile,
+  storedGalleryFilename,
+} from "../services/image/gallery-file-lifecycle.js";
+import {
   resolveImageConnectionFallback,
   resolveVideoConnectionFallback,
 } from "../services/generation/media-connection-fallback.js";
@@ -234,10 +239,9 @@ function parseChatMetadata(raw: unknown): Record<string, unknown> {
   return typeof raw === "object" && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
 }
 
-function buildGalleryImageUrl(image: { filePath: string }, fallbackChatId: string) {
-  const parts = image.filePath.split("/").filter(Boolean);
-  const ownerChatId = parts.length > 1 ? parts[0]! : fallbackChatId;
-  const filename = parts[parts.length - 1] ?? image.filePath;
+function buildGalleryImageUrl(image: { chatId?: string; filePath: string }, fallbackChatId: string) {
+  const ownerChatId = image.chatId || fallbackChatId;
+  const filename = storedGalleryFilename(image.filePath);
   return `/api/gallery/file/${encodeURIComponent(ownerChatId)}/${encodeURIComponent(filename)}`;
 }
 
@@ -802,9 +806,12 @@ export async function galleryRoutes(app: FastifyInstance) {
       if (!ALLOWED_EXTS.has(extname(filename).toLowerCase())) {
         return reply.status(400).send({ error: "Unsupported file type" });
       }
-      const filePath = join(GALLERY_DIR, chatId, filename);
-      if (!existsSync(filePath)) return reply.status(404).send({ error: "Not found" });
-      return reply.sendFile(filename, join(GALLERY_DIR, chatId));
+      const image = findGalleryRowByFilename(await storage.listByChatId(chatId), filename);
+      const storedFile = image ? resolveStoredGalleryFile(image.filePath, GALLERY_DIR) : null;
+      if (!storedFile || !existsSync(storedFile.absolutePath)) {
+        return reply.status(404).send({ error: "Not found" });
+      }
+      return reply.sendFile(storedFile.filename, storedFile.directory);
     }
 
     if (parts[0] === "sprites" && (parts[1] === "facial" || parts[1] === "fullbody") && parts[2]) {
@@ -1344,7 +1351,7 @@ export async function galleryRoutes(app: FastifyInstance) {
       });
       const savedImages = [];
       for (const imageResult of imageResults) {
-        const filePath = saveImageToDisk(chatId, imageResult.base64, imageResult.ext);
+        const filePath = saveImageToDisk(chatId, imageResult.base64, imageResult.ext, { shared: true });
         const image = await storage.create({
           chatId,
           filePath,
@@ -1634,16 +1641,27 @@ export async function galleryRoutes(app: FastifyInstance) {
   // Serve a gallery image
   app.get<{ Params: { chatId: string; filename: string } }>("/file/:chatId/:filename", async (req, reply) => {
     const { chatId, filename } = req.params;
-    if (filename.includes("..") || filename.includes("/") || chatId.includes("..") || chatId.includes("/")) {
+    if (
+      filename.includes("..") ||
+      filename.includes("/") ||
+      filename.includes("\\") ||
+      chatId.includes("..") ||
+      chatId.includes("/") ||
+      chatId.includes("\\")
+    ) {
       return reply.status(400).send({ error: "Invalid path" });
     }
 
-    const filePath = join(GALLERY_DIR, chatId, filename);
-    if (!existsSync(filePath)) {
+    let image = findGalleryRowByFilename(await storage.listByChatId(chatId), filename);
+    if (!image) {
+      image = (await storage.listByFilePath(`${chatId}/${filename}`))[0] ?? null;
+    }
+    const storedFile = image ? resolveStoredGalleryFile(image.filePath, GALLERY_DIR) : null;
+    if (!storedFile || !existsSync(storedFile.absolutePath)) {
       return reply.status(404).send({ error: "Not found" });
     }
 
-    return reply.sendFile(filename, join(GALLERY_DIR, chatId));
+    return reply.sendFile(storedFile.filename, storedFile.directory);
   });
 
   // Delete a gallery image

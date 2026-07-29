@@ -30,7 +30,7 @@ export const characterImages = fileTable("character_images", {
   characterId: text("character_id")
     .notNull()
     .references(() => characters.id, { onDelete: "cascade" }),
-  /** Originating chat-gallery row for generated copies. Informational: deleting a chat keeps entity galleries. */
+  /** Originating chat-gallery row for generated references. Informational: deleting a chat keeps entity galleries. */
   sourceChatImageId: text("source_chat_image_id"),
   /** File path relative to data/gallery/ */
   filePath: text("file_path").notNull(),
@@ -56,7 +56,7 @@ export const personaImages = fileTable("persona_images", {
   personaId: text("persona_id")
     .notNull()
     .references(() => personas.id, { onDelete: "cascade" }),
-  /** Originating chat-gallery row for generated copies. Informational: deleting a chat keeps entity galleries. */
+  /** Originating chat-gallery row for generated references. Informational: deleting a chat keeps entity galleries. */
   sourceChatImageId: text("source_chat_image_id"),
   /** File path relative to data/gallery/ */
   filePath: text("file_path").notNull(),

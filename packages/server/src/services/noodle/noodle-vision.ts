@@ -1,4 +1,5 @@
 import { readFile, stat } from "node:fs/promises";
+import { existsSync } from "node:fs";
 import { extname, join } from "node:path";
 import { DATA_DIR } from "../../utils/data-dir.js";
 import { assertInsideDir, isAllowedImageBuffer } from "../../utils/security.js";
@@ -12,6 +13,14 @@ const NOODLE_VISION_MAX_DIMENSION = 1568;
 
 export interface NoodleVisionAttachment extends NoodlePromptImageCandidate {
   dataUrl: string;
+}
+
+function resolveOwnedGalleryPath(galleryRoot: string, ownerRoot: string, filename: string): string {
+  const ownedPath = assertInsideDir(ownerRoot, join(ownerRoot, filename));
+  if (existsSync(ownedPath)) return ownedPath;
+  const sharedRoot = join(galleryRoot, "shared");
+  const sharedPath = assertInsideDir(sharedRoot, join(sharedRoot, filename));
+  return existsSync(sharedPath) ? sharedPath : ownedPath;
 }
 
 function decodePathSegment(value: string | undefined): string | null {
@@ -49,21 +58,21 @@ export function resolveNoodleImagePath(imageUrl: string): string | null {
     const filename = decodePathSegment(parts[4]);
     if (!chatId || !filename) return null;
     const root = join(galleryRoot, chatId);
-    return assertInsideDir(root, join(root, filename));
+    return resolveOwnedGalleryPath(galleryRoot, root, filename);
   }
   if (parts[1] === "characters" && parts[2] === "personas" && parts[4] === "gallery" && parts[5] === "file") {
     const personaId = decodePathSegment(parts[3]);
     const filename = decodePathSegment(parts[6]);
     if (!personaId || !filename) return null;
     const root = join(galleryRoot, "personas", personaId);
-    return assertInsideDir(root, join(root, filename));
+    return resolveOwnedGalleryPath(galleryRoot, root, filename);
   }
   if (parts[1] === "characters" && parts[3] === "gallery" && parts[4] === "file") {
     const characterId = decodePathSegment(parts[2]);
     const filename = decodePathSegment(parts[5]);
     if (!characterId || !filename) return null;
     const root = join(galleryRoot, "characters", characterId);
-    return assertInsideDir(root, join(root, filename));
+    return resolveOwnedGalleryPath(galleryRoot, root, filename);
   }
   return null;
 }

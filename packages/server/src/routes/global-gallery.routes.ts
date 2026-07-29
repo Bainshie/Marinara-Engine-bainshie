@@ -10,6 +10,7 @@ import { newId } from "../utils/id-generator.js";
 import { DATA_DIR } from "../utils/data-dir.js";
 import { assertInsideDir, isAllowedImageBuffer } from "../utils/security.js";
 import { logger } from "../lib/logger.js";
+import { unlinkGalleryFileIfUnreferenced } from "../services/image/gallery-file-lifecycle.js";
 
 const GLOBAL_GALLERY_ROOT = join(DATA_DIR, "gallery", "global");
 const ALLOWED_EXTS = new Set([".jpg", ".jpeg", ".png", ".gif", ".webp", ".avif"]);
@@ -237,17 +238,8 @@ export async function globalGalleryRoutes(app: FastifyInstance) {
       return reply.status(404).send({ error: "Not found" });
     }
 
-    // Remove file from disk (assertInsideDir guards a poisoned stored filePath)
-    try {
-      const filePath = assertInsideDir(GLOBAL_GALLERY_ROOT, join(DATA_DIR, "gallery", image.filePath));
-      if (existsSync(filePath)) {
-        unlinkSync(filePath);
-      }
-    } catch (err) {
-      logger.warn(err, "Skipped global gallery file unlink for %s: path escapes gallery dir", req.params.id);
-    }
-
     await storage.removeImage(req.params.id);
+    await unlinkGalleryFileIfUnreferenced({ db: app.db, filePath: image.filePath });
     return { success: true };
   });
 }

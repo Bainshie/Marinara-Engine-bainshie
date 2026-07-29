@@ -23,6 +23,8 @@ import { createCharacterGalleryStorage } from "../storage/character-gallery.stor
 import { createChatsStorage } from "../storage/chats.storage.js";
 import { buildAssetManifest } from "../game/asset-manifest.service.js";
 import type { MariDbCommandResult } from "@marinara-engine/shared";
+import { deleteChatGalleryImageEverywhere } from "../image/chat-gallery-cascade-deletion.js";
+import { unlinkGalleryFileIfUnreferenced } from "../image/gallery-file-lifecycle.js";
 
 type Json = Record<string, unknown>;
 
@@ -466,6 +468,14 @@ function decodePathSegment(value: string | undefined) {
   return decodeURIComponent(value ?? "");
 }
 
+function resolveOwnedGalleryPath(ownerRoot: string, filename: string): string {
+  const ownedPath = assertInsideDir(ownerRoot, join(ownerRoot, filename));
+  if (existsSync(ownedPath)) return ownedPath;
+  const sharedRoot = join(GALLERY_DIR, "shared");
+  const sharedPath = assertInsideDir(sharedRoot, join(sharedRoot, filename));
+  return existsSync(sharedPath) ? sharedPath : ownedPath;
+}
+
 function appImagePathFromUrl(value: string): { path: string; label: string; url: string } | null {
   const pathname = safeUrlPath(value);
   const parts = pathname.split("/").filter(Boolean);
@@ -474,13 +484,38 @@ function appImagePathFromUrl(value: string): { path: string; label: string; url:
   if (parts[1] === "gallery" && parts[2] === "file" && parts[3] && parts[4]) {
     const chatId = decodePathSegment(parts[3]);
     const filename = decodePathSegment(parts[4]);
-    return { path: assertInsideDir(GALLERY_DIR, join(GALLERY_DIR, chatId, filename)), label: `gallery:${chatId}/${filename}`, url: pathname };
+    return {
+      path: resolveOwnedGalleryPath(join(GALLERY_DIR, chatId), filename),
+      label: `gallery:${chatId}/${filename}`,
+      url: pathname,
+    };
+  }
+  if (
+    parts[1] === "characters" &&
+    parts[2] === "personas" &&
+    parts[3] &&
+    parts[4] === "gallery" &&
+    parts[5] === "file" &&
+    parts[6]
+  ) {
+    const personaId = decodePathSegment(parts[3]);
+    const filename = decodePathSegment(parts[6]);
+    const root = join(GALLERY_DIR, "personas", personaId);
+    return {
+      path: resolveOwnedGalleryPath(root, filename),
+      label: `persona-gallery:${personaId}/${filename}`,
+      url: pathname,
+    };
   }
   if (parts[1] === "characters" && parts[3] === "gallery" && parts[4] === "file" && parts[2] && parts[5]) {
     const characterId = decodePathSegment(parts[2]);
     const filename = decodePathSegment(parts[5]);
     const root = join(GALLERY_DIR, "characters", characterId);
-    return { path: assertInsideDir(root, join(root, filename)), label: `character-gallery:${characterId}/${filename}`, url: pathname };
+    return {
+      path: resolveOwnedGalleryPath(root, filename),
+      label: `character-gallery:${characterId}/${filename}`,
+      url: pathname,
+    };
   }
   if (parts[1] === "avatars" && parts[2] === "file" && parts[3]) {
     const filename = decodePathSegment(parts[3]);
@@ -1169,19 +1204,16 @@ export class MariImagesService {
     const store = createGalleryStorage(this.db);
     const image = await store.getById(imageId);
     if (!image || image.chatId !== chatId) throw new Error(`Chat gallery image not found: ${imageId}`);
-    const path = assertInsideDir(GALLERY_DIR, join(GALLERY_DIR, image.filePath));
-    if (existsSync(path)) await unlink(path);
-    await store.remove(imageId);
-    return { deleted: image };
+    const cleanup = await deleteChatGalleryImageEverywhere({ db: this.db, image });
+    return { deleted: image, cleanup };
   }
 
   private async deleteCharacterGallery(characterId: string, imageId: string) {
     const store = createCharacterGalleryStorage(this.db);
     const image = await store.getById(imageId);
     if (!image || image.characterId !== characterId) throw new Error(`Character gallery image not found: ${imageId}`);
-    const path = assertInsideDir(GALLERY_DIR, join(GALLERY_DIR, image.filePath));
-    if (existsSync(path)) await unlink(path);
     await store.remove(imageId);
+    await unlinkGalleryFileIfUnreferenced({ db: this.db, filePath: image.filePath });
     return { deleted: image };
   }
 

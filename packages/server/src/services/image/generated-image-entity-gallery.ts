@@ -1,7 +1,6 @@
-import { copyFileSync, existsSync, mkdirSync, renameSync, unlinkSync } from "node:fs";
-import { extname, join } from "node:path";
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 import { logger } from "../../lib/logger.js";
-import { newId } from "../../utils/id-generator.js";
 import { DATA_DIR } from "../../utils/data-dir.js";
 import { assertInsideDir } from "../../utils/security.js";
 import type { CreateCharacterImageInput } from "../storage/character-gallery.storage.js";
@@ -41,9 +40,9 @@ function safeEntityIds(ids: string[] | undefined): string[] {
 }
 
 /**
- * Copy one chat-gallery image into every explicitly depicted character/persona
- * gallery. Entity-gallery deletion remains independent; explicit deletion of
- * the originating chat image uses provenance to remove its generated copies.
+ * Add references to one generated file in every explicitly depicted
+ * character/persona gallery. The image bytes remain canonical: gallery
+ * membership is metadata, not another physical copy.
  */
 export async function persistGeneratedImageToEntityGalleries(
   input: GeneratedImageEntityGalleryInput,
@@ -55,9 +54,9 @@ export async function persistGeneratedImageToEntityGalleries(
     return { characterCount: 0, personaCount: 0 };
   }
 
-  const extension = extname(sourcePath).toLowerCase() || ".png";
   const metadata = {
     sourceChatImageId: input.sourceChatImageId ?? null,
+    filePath: input.sourceFilePath,
     prompt: input.prompt,
     provider: input.provider,
     model: input.model,
@@ -65,30 +64,13 @@ export async function persistGeneratedImageToEntityGalleries(
     height: input.height,
   };
 
-  const persistOne = async (
-    kind: "characters" | "personas",
-    entityId: string,
-    createMetadata: (filePath: string) => Promise<unknown>,
-  ): Promise<boolean> => {
-    const entityDir = assertInsideDir(galleryRoot, join(galleryRoot, kind, entityId));
-    if (!existsSync(entityDir)) mkdirSync(entityDir, { recursive: true });
-    const filename = `${newId()}${extension}`;
-    const destinationPath = assertInsideDir(entityDir, join(entityDir, filename));
-    const temporaryPath = assertInsideDir(entityDir, `${destinationPath}.${process.pid}.${Date.now()}.tmp`);
+  const persistOne = async (kind: "characters" | "personas", entityId: string, createMetadata: () => Promise<unknown>) => {
     try {
-      copyFileSync(sourcePath, temporaryPath);
-      renameSync(temporaryPath, destinationPath);
-      const created = await createMetadata(`${kind}/${entityId}/${filename}`);
+      const created = await createMetadata();
       if (!created) throw new Error("Gallery metadata row was not created");
       return true;
     } catch (error) {
-      try {
-        if (existsSync(temporaryPath)) unlinkSync(temporaryPath);
-        if (existsSync(destinationPath)) unlinkSync(destinationPath);
-      } catch {
-        /* best-effort cleanup */
-      }
-      logger.warn(error, "[image-gallery] Could not save generated image for %s %s", kind, entityId);
+      logger.warn(error, "[image-gallery] Could not reference generated image for %s %s", kind, entityId);
       return false;
     }
   };
@@ -96,9 +78,7 @@ export async function persistGeneratedImageToEntityGalleries(
   let characterCount = 0;
   for (const characterId of safeEntityIds(input.characterIds)) {
     if (
-      await persistOne("characters", characterId, (filePath) =>
-        input.characterGallery.create({ characterId, filePath, ...metadata }),
-      )
+      await persistOne("characters", characterId, () => input.characterGallery.create({ characterId, ...metadata }))
     ) {
       characterCount += 1;
     }
@@ -106,9 +86,7 @@ export async function persistGeneratedImageToEntityGalleries(
   let personaCount = 0;
   for (const personaId of safeEntityIds(input.personaIds)) {
     if (
-      await persistOne("personas", personaId, (filePath) =>
-        input.personaGallery.create({ personaId, filePath, ...metadata }),
-      )
+      await persistOne("personas", personaId, () => input.personaGallery.create({ personaId, ...metadata }))
     ) {
       personaCount += 1;
     }

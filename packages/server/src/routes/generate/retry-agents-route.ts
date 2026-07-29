@@ -3433,7 +3433,7 @@ async function applyRetryResultEffects(args: {
             });
 
             for (const [variantIndex, imageResult] of imageResults.entries()) {
-              const filePath = saveImageToDisk(chatId, imageResult.base64, imageResult.ext);
+              const filePath = saveImageToDisk(chatId, imageResult.base64, imageResult.ext, { shared: true });
               // A fallback connection may have rendered this variant; record
               // the connection that actually produced it.
               const effectiveImageProvider =

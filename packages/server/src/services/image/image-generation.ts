@@ -301,12 +301,26 @@ export async function generateImage(
   }
 }
 
+export type SaveImageToDiskOptions = {
+  /**
+   * Store one canonical file for images referenced by more than one gallery.
+   * Gallery metadata remains responsible for deciding where the image appears.
+   */
+  shared?: boolean;
+};
+
 /**
  * Save a generated image to the gallery directory on disk.
- * Returns the relative file path (chatId/filename).
+ * Returns a path relative to data/gallery/.
  */
-export function saveImageToDisk(chatId: string, base64: string, ext: string): string {
-  const dir = assertInsideDir(GALLERY_DIR, join(GALLERY_DIR, chatId));
+export function saveImageToDisk(
+  chatId: string,
+  base64: string,
+  ext: string,
+  options: SaveImageToDiskOptions = {},
+): string {
+  const ownerDir = options.shared ? "shared" : chatId;
+  const dir = assertInsideDir(GALLERY_DIR, join(GALLERY_DIR, ownerDir));
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
   const filename = `${newId()}.${ext}`;
   const filePath = assertInsideDir(GALLERY_DIR, join(dir, filename));
@@ -322,7 +336,7 @@ export function saveImageToDisk(chatId: string, base64: string, ext: string): st
     }
     throw error;
   }
-  return `${chatId}/${filename}`;
+  return `${ownerDir}/${filename}`;
 }
 
 export function removeSavedImageFromDisk(filePath: string): void {

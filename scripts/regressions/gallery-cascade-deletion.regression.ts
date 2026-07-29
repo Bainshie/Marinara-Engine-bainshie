@@ -5,6 +5,11 @@ import { tmpdir } from "node:os";
 import { createFileNativeDB } from "../../packages/server/src/db/file-backed-store.js";
 import { characterImages } from "../../packages/server/src/db/schema/index.js";
 import { deleteChatGalleryImageEverywhere } from "../../packages/server/src/services/image/chat-gallery-cascade-deletion.js";
+import {
+  findGalleryRowByFilename,
+  resolveStoredGalleryFile,
+  unlinkGalleryFileIfUnreferenced,
+} from "../../packages/server/src/services/image/gallery-file-lifecycle.js";
 import { persistGeneratedImageToEntityGalleries } from "../../packages/server/src/services/image/generated-image-entity-gallery.js";
 import { createCharacterGalleryStorage } from "../../packages/server/src/services/storage/character-gallery.storage.js";
 import { createGalleryStorage } from "../../packages/server/src/services/storage/gallery.storage.js";
@@ -36,7 +41,7 @@ try {
   const chatGallery = createGalleryStorage(db);
   const characterGallery = createCharacterGalleryStorage(db);
   const personaGallery = createPersonaGalleryStorage(db);
-  const sourceRelativePath = "chat-1/generated.png";
+  const sourceRelativePath = "shared/generated.png";
   const sourceFile = writeGalleryFile(sourceRelativePath);
   const source = await chatGallery.create({
     chatId: "chat-1",
@@ -45,34 +50,61 @@ try {
   });
   assert.ok(source);
 
-  await persistGeneratedImageToEntityGalleries({
+  const persisted = await persistGeneratedImageToEntityGalleries({
     sourceFilePath: sourceRelativePath,
     sourceChatImageId: source.id,
-    characterIds: ["character-1"],
-    personaIds: ["persona-1"],
+    characterIds: ["character-1", "character-2"],
+    personaIds: ["persona-1", "persona-2"],
     characterGallery,
     personaGallery,
     galleryRoot,
     ...sourceMetadata,
   });
-  await persistGeneratedImageToEntityGalleries({
-    sourceFilePath: sourceRelativePath,
-    characterIds: ["legacy-character"],
-    personaIds: ["legacy-persona"],
-    characterGallery,
-    personaGallery,
-    galleryRoot,
-    ...sourceMetadata,
-  });
+  assert.deepEqual(persisted, { characterCount: 2, personaCount: 2 });
 
-  const linkedCharacter = (await characterGallery.listBySourceChatImageId(source.id))[0];
-  const linkedPersona = (await personaGallery.listBySourceChatImageId(source.id))[0];
-  const legacyCharacter = (await characterGallery.listAll()).find(
-    (image) => image.characterId === "legacy-character",
+  const linkedCharacters = await characterGallery.listBySourceChatImageId(source.id);
+  const linkedPersonas = await personaGallery.listBySourceChatImageId(source.id);
+  assert.equal(linkedCharacters.length, 2);
+  assert.equal(linkedPersonas.length, 2);
+  for (const reference of [...linkedCharacters, ...linkedPersonas]) {
+    assert.equal(reference.filePath, sourceRelativePath);
+  }
+  assert.equal(existsSync(join(galleryRoot, "characters")), false, "character references must not copy image bytes");
+  assert.equal(existsSync(join(galleryRoot, "personas")), false, "persona references must not copy image bytes");
+
+  const servedCharacter = findGalleryRowByFilename(
+    await characterGallery.listByCharacterId("character-1"),
+    "generated.png",
   );
-  const legacyPersona = (await personaGallery.listAll()).find((image) => image.personaId === "legacy-persona");
-  assert.ok(linkedCharacter);
-  assert.ok(linkedPersona);
+  assert.ok(servedCharacter);
+  assert.equal(resolveStoredGalleryFile(servedCharacter.filePath, galleryRoot)?.absolutePath, sourceFile);
+
+  await characterGallery.remove(linkedCharacters[0]!.id);
+  assert.equal(
+    await unlinkGalleryFileIfUnreferenced({ db, filePath: linkedCharacters[0]!.filePath, galleryRoot }),
+    false,
+  );
+  await personaGallery.remove(linkedPersonas[0]!.id);
+  assert.equal(
+    await unlinkGalleryFileIfUnreferenced({ db, filePath: linkedPersonas[0]!.filePath, galleryRoot }),
+    false,
+  );
+  assert.equal(existsSync(sourceFile), true, "deleting one gallery reference must preserve the shared file");
+
+  const legacyCharacterPath = "characters/legacy-character/generated.png";
+  const legacyPersonaPath = "personas/legacy-persona/generated.png";
+  writeGalleryFile(legacyCharacterPath);
+  writeGalleryFile(legacyPersonaPath);
+  const legacyCharacter = await characterGallery.create({
+    characterId: "legacy-character",
+    filePath: legacyCharacterPath,
+    ...sourceMetadata,
+  });
+  const legacyPersona = await personaGallery.create({
+    personaId: "legacy-persona",
+    filePath: legacyPersonaPath,
+    ...sourceMetadata,
+  });
   assert.ok(legacyCharacter);
   assert.ok(legacyPersona);
 
@@ -134,27 +166,33 @@ try {
   assert.ok(unsafeLinked);
   assert.ok(missingLinked);
 
+  const finalReferencePath = "shared/final-reference.png";
+  const finalReferenceFile = writeGalleryFile(finalReferencePath, "final-reference");
+  const finalReference = await characterGallery.create({
+    characterId: "final-reference",
+    filePath: finalReferencePath,
+    ...sourceMetadata,
+  });
+  assert.ok(finalReference);
+  await characterGallery.remove(finalReference.id);
+  assert.equal(await unlinkGalleryFileIfUnreferenced({ db, filePath: finalReferencePath, galleryRoot }), true);
+  assert.equal(existsSync(finalReferenceFile), false, "the final metadata release must remove the physical file");
+
   const deletion = await deleteChatGalleryImageEverywhere({ db, image: source, galleryRoot });
   assert.deepEqual(deletion, {
     characterCopiesRemoved: 4,
     personaCopiesRemoved: 2,
-    filesRemoved: 5,
+    filesRemoved: 3,
   });
 
   assert.equal(await chatGallery.getById(source.id), null);
-  for (const removed of [linkedCharacter, legacyCharacter, unsafeLinked, missingLinked]) {
+  for (const removed of [linkedCharacters[1]!, legacyCharacter, unsafeLinked, missingLinked]) {
     assert.equal(await characterGallery.getById(removed.id), null);
   }
-  for (const removed of [linkedPersona, legacyPersona]) {
+  for (const removed of [linkedPersonas[1]!, legacyPersona]) {
     assert.equal(await personaGallery.getById(removed.id), null);
   }
-  for (const removedFile of [
-    sourceFile,
-    join(galleryRoot, linkedCharacter.filePath),
-    join(galleryRoot, legacyCharacter.filePath),
-    join(galleryRoot, linkedPersona.filePath),
-    join(galleryRoot, legacyPersona.filePath),
-  ]) {
+  for (const removedFile of [sourceFile, join(galleryRoot, legacyCharacter.filePath), join(galleryRoot, legacyPersona.filePath)]) {
     assert.equal(existsSync(removedFile), false);
   }
 

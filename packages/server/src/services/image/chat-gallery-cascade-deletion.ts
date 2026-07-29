@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync, statSync, unlinkSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { basename, join } from "node:path";
 import type { DB } from "../../db/connection.js";
 import { logger } from "../../lib/logger.js";
@@ -8,6 +8,7 @@ import { assertInsideDir } from "../../utils/security.js";
 import { createCharacterGalleryStorage } from "../storage/character-gallery.storage.js";
 import { createGalleryStorage } from "../storage/gallery.storage.js";
 import { createPersonaGalleryStorage } from "../storage/persona-gallery.storage.js";
+import { unlinkGalleryFileIfUnreferenced } from "./gallery-file-lifecycle.js";
 
 const LEGACY_COPY_CREATION_WINDOW_MS = 60_000;
 
@@ -87,12 +88,15 @@ function uniqueRows<T extends { id: string }>(rows: readonly T[]): T[] {
   return Array.from(new Map(rows.map((row) => [row.id, row])).values());
 }
 
-function existingChatGalleryPaths(galleryRoot: string, image: ChatGalleryImage): string[] {
+function existingChatGalleryFiles(
+  galleryRoot: string,
+  image: ChatGalleryImage,
+): Array<{ relativePath: string; absolutePath: string }> {
   const filename = basename(image.filePath.replace(/\\/g, "/"));
   const candidates = new Set([image.filePath, `${image.chatId}/${filename}`]);
   return Array.from(candidates).flatMap((candidate) => {
     const resolved = resolveSafeGalleryPath(galleryRoot, candidate);
-    return resolved && existsSync(resolved) ? [resolved] : [];
+    return resolved && existsSync(resolved) ? [{ relativePath: candidate, absolutePath: resolved }] : [];
   });
 }
 
@@ -119,8 +123,9 @@ function legacyExactCopies(
 
 /**
  * Delete an explicit chat-gallery image together with generated character and
- * persona copies. Deleting a whole chat intentionally does not use this path,
- * so entity galleries remain independent when chat history is removed.
+ * persona references, plus exact legacy copies. Deleting a whole chat
+ * intentionally does not use this path, so entity galleries remain available
+ * when chat history is removed.
  */
 export async function deleteChatGalleryImageEverywhere(input: {
   db: DB;
@@ -138,8 +143,8 @@ export async function deleteChatGalleryImageEverywhere(input: {
     personaGallery.listAll(),
   ]);
 
-  const chatPaths = existingChatGalleryPaths(galleryRoot, input.image);
-  const sourcePath = chatPaths[0];
+  const chatFiles = existingChatGalleryFiles(galleryRoot, input.image);
+  const sourcePath = chatFiles[0]?.absolutePath;
   const characterCopies = uniqueRows([
     ...linkedCharacterCopies,
     ...legacyExactCopies(galleryRoot, input.image, sourcePath, allCharacterImages),
@@ -149,26 +154,16 @@ export async function deleteChatGalleryImageEverywhere(input: {
     ...legacyExactCopies(galleryRoot, input.image, sourcePath, allPersonaImages),
   ]);
 
-  const filePaths = new Set(chatPaths);
+  const filePaths = new Set(chatFiles.map((file) => file.relativePath));
   for (const copy of [...characterCopies, ...personaCopies]) {
     const filePath = resolveSafeGalleryPath(galleryRoot, copy.filePath);
-    if (filePath && existsSync(filePath)) filePaths.add(filePath);
+    if (filePath) filePaths.add(copy.filePath);
     else if (!filePath)
       logger.warn(
         "[gallery/delete] Skipped unsafe linked gallery path for image %s while deleting chat image %s",
         copy.id,
         input.image.id,
       );
-  }
-
-  let filesRemoved = 0;
-  for (const filePath of filePaths) {
-    try {
-      unlinkSync(filePath);
-      filesRemoved += 1;
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-    }
   }
 
   const filename = basename(input.image.filePath.replace(/\\/g, "/"));
@@ -185,6 +180,13 @@ export async function deleteChatGalleryImageEverywhere(input: {
     }
     await txGallery.remove(input.image.id);
   });
+
+  let filesRemoved = 0;
+  for (const filePath of filePaths) {
+    if (await unlinkGalleryFileIfUnreferenced({ db: input.db, filePath, galleryRoot })) {
+      filesRemoved += 1;
+    }
+  }
 
   return {
     characterCopiesRemoved: characterCopies.length,
