@@ -63,7 +63,6 @@ jobs:
           github-token: ${{ secrets.PASTA_DEVS_MEMBERS_TOKEN || github.token }}
           script: |
             const organization = context.repo.owner;
-            const teamSlug = 'developers';
             const ownerLogin = 'SpicyMarinara';
             const authorLogin = context.payload.pull_request.user.login;
 
@@ -74,7 +73,7 @@ jobs:
             }
 
             if (process.env.MEMBERS_TOKEN_CONFIGURED !== 'true') {
-              core.setFailed('PASTA_DEVS_MEMBERS_TOKEN is required to verify Pasta-Devs organization and developers-team membership.');
+              core.setFailed('PASTA_DEVS_MEMBERS_TOKEN is required to verify Pasta-Devs organization membership.');
               return;
             }
 
@@ -115,35 +114,13 @@ jobs:
               return;
             }
 
-            if (organizationMembership.role === 'admin') {
-              core.notice(`${authorLogin} is an active ${organization} owner; owner approval is not required.`);
+            if (organizationMembership.role === 'admin' || organizationMembership.role === 'member') {
+              core.notice(`${authorLogin} is an active ${organization} ${organizationMembership.role}; owner approval is not required.`);
               core.setOutput('internal', 'true');
               return;
             }
 
-            try {
-              const { data: teamMembership } = await github.request(
-                'GET /orgs/{org}/teams/{team_slug}/memberships/{username}',
-                {
-                  org: organization,
-                  team_slug: teamSlug,
-                  username: authorLogin,
-                },
-              );
-
-              if (teamMembership.state === 'active') {
-                core.notice(`${authorLogin} is an active ${organization}/${teamSlug} member; owner approval is not required.`);
-                core.setOutput('internal', 'true');
-                return;
-              }
-            } catch (error) {
-              if (error.status !== 404) {
-                core.setFailed(`Could not verify ${authorLogin}'s ${organization}/${teamSlug} membership (${error.status ?? 'unknown status'}).`);
-                return;
-              }
-            }
-
-            core.notice(`${authorLogin} is not an active ${organization}/${teamSlug} member; owner approval is required.`);
+            core.notice(`${authorLogin} does not have a trusted ${organization} organization role; owner approval is required.`);
             core.setOutput('internal', 'false');
 
       - name: Require owner approval for outside staging contributions
