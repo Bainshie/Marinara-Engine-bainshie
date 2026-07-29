@@ -982,8 +982,18 @@ export async function galleryRoutes(app: FastifyInstance) {
     const sceneVideos = createGameSceneVideosStorage(app.db);
     const { videoConnectionId, galleryImage, videoRuntime, durationSeconds, aspectRatio, prompt, videoFallback } =
       prepared;
-    const { source, serviceHint, baseUrl, apiKey, model, resolution, publicReferenceUpload, comfyWorkflow, comfyLoras } =
-      videoRuntime;
+    const {
+      source,
+      serviceHint,
+      baseUrl,
+      apiKey,
+      model,
+      resolution,
+      publicReferenceUpload,
+      comfyWorkflow,
+      comfyLoras,
+      comfyFps,
+    } = videoRuntime;
 
     const galleryImagePath = resolveGalleryImagePath(galleryImage);
     if (!galleryImagePath) {
@@ -1023,6 +1033,7 @@ export async function galleryRoutes(app: FastifyInstance) {
         resolution,
         comfyWorkflow,
         comfyLoras,
+        fps: comfyFps,
         referenceImage,
         publicReferenceUpload,
         queue: input.queueMediaGenerationRequests,
