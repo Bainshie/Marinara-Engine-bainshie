@@ -59,6 +59,19 @@ assert.equal(
   summaryMetadata.summary,
   "unrelated regeneration targets must leave the precompiled summary unchanged",
 );
+assert.equal(
+  resolveRoleplayChatSummary(
+    "roleplay",
+    {
+      summary: "Legacy summary without per-message provenance.",
+    },
+    {
+      excludeMessageIds: ["regenerated-assistant"],
+    },
+  ),
+  null,
+  "regeneration must omit a legacy summary that cannot prove it excludes the discarded response",
+);
 
 const storageDir = mkdtempSync(join(tmpdir(), "marinara-regeneration-context-"));
 process.env.FILE_STORAGE_DIR = storageDir;

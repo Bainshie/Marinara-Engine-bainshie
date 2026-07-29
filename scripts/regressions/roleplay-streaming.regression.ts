@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
   getStreamingCharsPerSecond,
+  getTypewriterFrameBudget,
   isGenerationSendBlocked,
   isGenerationStartBlocked,
   isMessageShadowedByLiveStream,
@@ -738,6 +739,19 @@ assert.deepEqual(
   takeTypewriterCharacters("A👩‍🔬B", 2),
   { visibleText: "A👩‍🔬", pendingText: "B", characterCount: 2 },
   "the typewriter should never reveal a partial emoji grapheme",
+);
+let simulatedThirtyFpsRemainder = 0;
+let simulatedThirtyFpsCharacters = 0;
+for (let frame = 0; frame < 30; frame += 1) {
+  const budget = getTypewriterFrameBudget(50, 1000 / 30, simulatedThirtyFpsRemainder);
+  const revealedCharacters = Math.min(Math.floor(budget.accruedCharacters), budget.maxCharacters);
+  simulatedThirtyFpsRemainder = budget.accruedCharacters - revealedCharacters;
+  simulatedThirtyFpsCharacters += revealedCharacters;
+}
+assert.equal(
+  simulatedThirtyFpsCharacters,
+  50,
+  "a 30 FPS animation cadence must preserve the configured 50 characters-per-second reveal rate",
 );
 
 assert.equal(

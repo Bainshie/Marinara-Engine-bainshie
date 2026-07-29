@@ -19,6 +19,7 @@ import { formatGenerationParameterError } from "../lib/generation-parameter-erro
 import { sanitizeAppCss } from "../lib/theme-css";
 import {
   getStreamingCharsPerSecond,
+  getTypewriterFrameBudget,
   isGenerationStartBlocked,
   reconcileTypewriterReplacement,
   shouldKeepStreamLiveThroughPostProcessing,
@@ -1395,10 +1396,6 @@ export function useGenerate() {
         const speed = useUIStore.getState().streamingSpeed;
         return getStreamingCharsPerSecond(speed, reducedMotionMedia?.matches === true);
       };
-      const getMaxCharsPerTypewriterFrame = (charsPerSecond: number) => {
-        if (charsPerSecond === Infinity) return Infinity;
-        return Math.max(1, Math.ceil(charsPerSecond / 60));
-      };
 
       const TYPEWRITER_MAX_FRAME_MS = 120;
       let lastTypewriterPaintAt = 0;
@@ -1487,9 +1484,9 @@ export function useGenerate() {
             return;
           }
 
-          const maxCharsThisFrame = getMaxCharsPerTypewriterFrame(charsPerSecond);
-          typewriterRemainder = Math.min(maxCharsThisFrame, typewriterRemainder + (charsPerSecond * elapsedMs) / 1000);
-          const n = Math.min(Math.floor(typewriterRemainder), maxCharsThisFrame, pendingText.length);
+          const frameBudget = getTypewriterFrameBudget(charsPerSecond, elapsedMs, typewriterRemainder);
+          typewriterRemainder = frameBudget.accruedCharacters;
+          const n = Math.min(Math.floor(typewriterRemainder), frameBudget.maxCharacters, pendingText.length);
           if (n < 1) {
             rafId = requestAnimationFrame(tick);
             return;

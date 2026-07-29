@@ -17,6 +17,11 @@ interface TypewriterSlice {
   characterCount: number;
 }
 
+interface TypewriterFrameBudget {
+  accruedCharacters: number;
+  maxCharacters: number;
+}
+
 interface GenerationSendBlockInput {
   streamActive: boolean;
   agentsProcessing: boolean;
@@ -50,6 +55,19 @@ export function getStreamingCharsPerSecond(streamingSpeed: number, prefersReduce
   if (prefersReducedMotion || streamingSpeed >= 100) return Infinity;
   if (!Number.isFinite(streamingSpeed)) return 50;
   return Math.max(1, Math.min(99, Math.round(streamingSpeed)));
+}
+
+/** Preserve the selected reveal rate even when animation frames arrive below 60 Hz. */
+export function getTypewriterFrameBudget(
+  charsPerSecond: number,
+  elapsedMs: number,
+  carriedRemainder: number,
+): TypewriterFrameBudget {
+  const newlyAccruedCharacters = (charsPerSecond * Math.max(0, elapsedMs)) / 1000;
+  return {
+    accruedCharacters: carriedRemainder + newlyAccruedCharacters,
+    maxCharacters: Math.max(1, Math.ceil(newlyAccruedCharacters)),
+  };
 }
 
 const typewriterGraphemeSegmenter = new Intl.Segmenter(undefined, { granularity: "grapheme" });

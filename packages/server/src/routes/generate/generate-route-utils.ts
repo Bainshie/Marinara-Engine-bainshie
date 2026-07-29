@@ -637,7 +637,10 @@ export function resolveRoleplayChatSummary(
   const excludedMessageIds = new Set((options.excludeMessageIds ?? []).filter(Boolean));
   if (excludedMessageIds.size === 0) return summary;
 
-  const entries = normalizeChatSummaryEntries(chatMetadata.summaryEntries, { legacySummary: summary });
+  const entries = normalizeChatSummaryEntries(chatMetadata.summaryEntries);
+  // Legacy summaries have no per-message provenance, so they cannot be
+  // safely retained while regenerating a historical message.
+  if (entries.length === 0) return null;
   const retainedEntries = entries.filter((entry) => {
     const coveredMessageIds = [...(entry.messageIds ?? []), ...(entry.hiddenMessageIds ?? [])];
     return !coveredMessageIds.some((messageId) => excludedMessageIds.has(messageId));
