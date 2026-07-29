@@ -84,17 +84,6 @@ jobs:
               });
             }
 
-            try {
-              const { data: ownerMembership } = await getOrganizationMembership(ownerLogin);
-              if (ownerMembership.state !== 'active' || ownerMembership.role !== 'admin') {
-                core.setFailed(`PASTA_DEVS_MEMBERS_TOKEN could not verify ${ownerLogin} as an active ${organization} owner.`);
-                return;
-              }
-            } catch (error) {
-              core.setFailed(`PASTA_DEVS_MEMBERS_TOKEN could not read ${organization} membership (${error.status ?? 'unknown status'}).`);
-              return;
-            }
-
             let organizationMembership;
             try {
               ({ data: organizationMembership } = await getOrganizationMembership(authorLogin));
