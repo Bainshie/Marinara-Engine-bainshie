@@ -8,6 +8,7 @@ import { newId, now } from "../../utils/id-generator.js";
 
 export interface CreatePersonaImageInput {
   personaId: string;
+  sourceChatImageId?: string | null;
   filePath: string;
   prompt?: string;
   provider?: string;
@@ -26,6 +27,18 @@ export function createPersonaGalleryStorage(db: DB) {
         .orderBy(desc(personaImages.createdAt));
     },
 
+    async listAll() {
+      return db.select().from(personaImages).orderBy(desc(personaImages.createdAt));
+    },
+
+    async listBySourceChatImageId(sourceChatImageId: string) {
+      return db
+        .select()
+        .from(personaImages)
+        .where(eq(personaImages.sourceChatImageId, sourceChatImageId))
+        .orderBy(desc(personaImages.createdAt));
+    },
+
     async getById(id: string) {
       const rows = await db.select().from(personaImages).where(eq(personaImages.id, id));
       return rows[0] ?? null;
@@ -36,6 +49,7 @@ export function createPersonaGalleryStorage(db: DB) {
       await db.insert(personaImages).values({
         id,
         personaId: input.personaId,
+        sourceChatImageId: input.sourceChatImageId ?? null,
         filePath: input.filePath,
         prompt: input.prompt ?? "",
         provider: input.provider ?? "",

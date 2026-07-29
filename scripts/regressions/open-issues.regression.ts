@@ -2804,6 +2804,7 @@ try {
   const personaRows: Array<Record<string, unknown>> = [];
   const persisted = await persistGeneratedImageToEntityGalleries({
     sourceFilePath: "chat-id/generated.png",
+    sourceChatImageId: "chat-image-id",
     characterIds: ["character-1", "character-1"],
     personaIds: ["persona-1"],
     characterGallery: {
@@ -2828,6 +2829,8 @@ try {
   assert.deepEqual(persisted, { characterCount: 1, personaCount: 1 });
   assert.equal(characterRows.length, 1);
   assert.equal(personaRows.length, 1);
+  assert.equal(characterRows[0]!.sourceChatImageId, "chat-image-id");
+  assert.equal(personaRows[0]!.sourceChatImageId, "chat-image-id");
   const characterFile = join(entityGalleryRoot, String(characterRows[0]!.filePath));
   const personaFile = join(entityGalleryRoot, String(personaRows[0]!.filePath));
   assert.equal(readFileSync(characterFile, "utf8"), "generated-image");

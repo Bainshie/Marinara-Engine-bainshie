@@ -8,6 +8,7 @@ import { newId, now } from "../../utils/id-generator.js";
 
 export interface CreateCharacterImageInput {
   characterId: string;
+  sourceChatImageId?: string | null;
   filePath: string;
   prompt?: string;
   provider?: string;
@@ -26,6 +27,18 @@ export function createCharacterGalleryStorage(db: DB) {
         .orderBy(desc(characterImages.createdAt));
     },
 
+    async listAll() {
+      return db.select().from(characterImages).orderBy(desc(characterImages.createdAt));
+    },
+
+    async listBySourceChatImageId(sourceChatImageId: string) {
+      return db
+        .select()
+        .from(characterImages)
+        .where(eq(characterImages.sourceChatImageId, sourceChatImageId))
+        .orderBy(desc(characterImages.createdAt));
+    },
+
     async getById(id: string) {
       const rows = await db.select().from(characterImages).where(eq(characterImages.id, id));
       return rows[0] ?? null;
@@ -36,6 +49,7 @@ export function createCharacterGalleryStorage(db: DB) {
       await db.insert(characterImages).values({
         id,
         characterId: input.characterId,
+        sourceChatImageId: input.sourceChatImageId ?? null,
         filePath: input.filePath,
         prompt: input.prompt ?? "",
         provider: input.provider ?? "",

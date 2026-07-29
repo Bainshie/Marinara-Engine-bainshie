@@ -8582,6 +8582,7 @@ export async function generateRoutes(app: FastifyInstance) {
                         });
                         await persistGeneratedImageToEntityGalleries({
                           sourceFilePath: filePath,
+                          sourceChatImageId: galleryEntry?.id,
                           characterIds: referenceResolution.characterIds,
                           personaIds: referenceResolution.personaId ? [referenceResolution.personaId] : [],
                           characterGallery,

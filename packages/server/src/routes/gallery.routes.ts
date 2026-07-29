@@ -1356,6 +1356,7 @@ export async function galleryRoutes(app: FastifyInstance) {
         if (!image) throw new Error("Generated selfie metadata could not be saved");
         await persistGeneratedImageToEntityGalleries({
           sourceFilePath: filePath,
+          sourceChatImageId: image.id,
           characterIds: [character.id],
           characterGallery,
           personaGallery,

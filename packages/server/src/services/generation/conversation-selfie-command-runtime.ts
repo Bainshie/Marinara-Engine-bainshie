@@ -311,6 +311,7 @@ async function generateSelfie(
     });
     await persistGeneratedImageToEntityGalleries({
       sourceFilePath: filePath,
+      sourceChatImageId: galleryEntry?.id,
       characterIds: args.characterId ? [args.characterId] : [],
       characterGallery: createCharacterGalleryStorage(args.db),
       personaGallery: createPersonaGalleryStorage(args.db),

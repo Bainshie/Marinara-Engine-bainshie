@@ -16,6 +16,7 @@ type PersonaGalleryStore = {
 
 export type GeneratedImageEntityGalleryInput = {
   sourceFilePath: string;
+  sourceChatImageId?: string | null;
   characterIds?: string[];
   personaIds?: string[];
   characterGallery: CharacterGalleryStore;
@@ -56,6 +57,7 @@ export async function persistGeneratedImageToEntityGalleries(
 
   const extension = extname(sourcePath).toLowerCase() || ".png";
   const metadata = {
+    sourceChatImageId: input.sourceChatImageId ?? null,
     prompt: input.prompt,
     provider: input.provider,
     model: input.model,

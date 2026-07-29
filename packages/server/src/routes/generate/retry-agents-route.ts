@@ -3450,6 +3450,7 @@ async function applyRetryResultEffects(args: {
               });
               await persistGeneratedImageToEntityGalleries({
                 sourceFilePath: filePath,
+                sourceChatImageId: galleryEntry?.id,
                 characterIds: referenceResolution.characterIds,
                 personaIds: referenceResolution.personaId ? [referenceResolution.personaId] : [],
                 characterGallery: createCharacterGalleryStorage(app.db),
