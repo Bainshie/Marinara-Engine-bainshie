@@ -4904,6 +4904,7 @@
   "ui.lorebooks.vectorizesection.vectorizeValue1Missing": "Vectorize {{value1}} missing",
   "ui.lorebooks.vectorizesection.vectorizing": "Vectorizing...",
   "ui.lorebooks.vectorizesection.vectorLimit": "Vector Limit",
+  "ui.mediaPicker.recentlyUsed": "Recently used",
   "ui.modals.aboutmeviewermodal.cardAChatSpecificOverrideOnlyAppliesHere": "card. A chat-specific override only applies here.",
   "ui.modals.aboutmeviewermodal.chatSpecific": "Chat-specific",
   "ui.modals.aboutmeviewermodal.chatSpecificAboutMeSaved": "Chat-specific about me saved",

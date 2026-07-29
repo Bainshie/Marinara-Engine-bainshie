@@ -63,9 +63,11 @@ jobs:
               repo: context.repo.repo,
               pull_number: pullNumber,
             });
+            const repositoryName = `${context.repo.owner}/${context.repo.repo}`.toLowerCase();
+            const sameRepositoryBranch = pr.head?.repo?.full_name?.toLowerCase() === repositoryName;
 
-            if (pr.author_association === 'OWNER' || pr.author_association === 'MEMBER') {
-              core.notice(`Internal ${pr.author_association.toLowerCase()} contribution; owner approval is not required.`);
+            if (sameRepositoryBranch || pr.author_association === 'OWNER' || pr.author_association === 'MEMBER') {
+              core.notice('Internal same-repository contribution; owner approval is not required.');
               return;
             }
 
