@@ -1,5 +1,5 @@
-<!-- Target branch: `staging`. This is the only contribution branch. -->
-<!-- Only SpicyMarinara may open or merge owner-approved release promotion/hotfix PRs to `main`. -->
+> [!IMPORTANT]
+> Contributions target `staging`. Only `SpicyMarinara` may open or merge owner-approved release promotion or hotfix PRs to `main`.
 <!-- See CONTRIBUTING.md § Branches. -->
 
 ## Linked issue
