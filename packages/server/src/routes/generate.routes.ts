@@ -1219,6 +1219,8 @@ export async function generateRoutes(app: FastifyInstance) {
         chatMessages = chatMessages.filter((m: any) => m.id !== input.regenerateMessageId);
         lorebookKeeperMessages = lorebookKeeperMessages.filter((m: any) => m.id !== input.regenerateMessageId);
       }
+      const regenerateContextCutoff =
+        input.regenerateMessageId && typeof regenMsg?.createdAt === "string" ? regenMsg.createdAt : null;
       const promptLastGenerationType = resolvePromptLastGenerationType(input);
       const promptIdleDuration = resolvePromptIdleDuration(chatMessages, {
         excludeMessageId: currentTurnUserMessageId,
@@ -1620,7 +1622,9 @@ export async function generateRoutes(app: FastifyInstance) {
         const agentPromptTemplateSelections = normalizeAgentPromptTemplateSelectionMap(chatMeta.agentPromptTemplateIds);
         const hasPerChatAgentList = chatActiveAgentIds.length > 0;
         const perChatAgentSet = new Set(chatActiveAgentIds);
-        const activeChatSummary = resolveRoleplayChatSummary(chatMode, chatMeta);
+        const activeChatSummary = resolveRoleplayChatSummary(chatMode, chatMeta, {
+          excludeMessageIds: input.regenerateMessageId ? [input.regenerateMessageId] : undefined,
+        });
         const runtimeSectionEligibleAgentTypes = buildRuntimeAgentSectionEligibleTypes({
           enableAgents: chatEnableAgents,
           activeAgentIds: chatActiveAgentIds,
@@ -3064,6 +3068,7 @@ export async function generateRoutes(app: FastifyInstance) {
               currentInputMessages: currentInputMessages(),
               chatId: input.chatId,
               embeddingSource: memoryRecallEmbeddingSource,
+              excludeFromMessageAt: regenerateContextCutoff,
               contextLimit: suppressModelParameters ? undefined : (effectiveMaxContext ?? connectionMaxContext),
               sendProgress,
               signal: abortController.signal,
@@ -3087,6 +3092,7 @@ export async function generateRoutes(app: FastifyInstance) {
             currentInputMessages: currentInputMessages(),
             chatId: input.chatId,
             embeddingSource: memoryRecallEmbeddingSource,
+            excludeFromMessageAt: regenerateContextCutoff,
             contextLimit: suppressModelParameters ? undefined : (effectiveMaxContext ?? connectionMaxContext),
             sendProgress,
             signal: abortController.signal,
@@ -3101,6 +3107,7 @@ export async function generateRoutes(app: FastifyInstance) {
             currentInputMessages: currentInputMessages(),
             chatId: input.chatId,
             embeddingSource: memoryRecallEmbeddingSource,
+            excludeFromMessageAt: regenerateContextCutoff,
             contextLimit: suppressModelParameters ? undefined : (effectiveMaxContext ?? connectionMaxContext),
             sendProgress,
             signal: abortController.signal,
