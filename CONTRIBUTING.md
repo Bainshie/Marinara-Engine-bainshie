@@ -75,8 +75,6 @@ Official downloadable agent and capability-package sources live in the separate 
 
 Marinara Engine owns the host integration: package loading, capability APIs and shared contracts, Engine UI/settings, storage, provider/model routing, orchestration, and compatibility handling. A fix can therefore mention or affect a downloadable agent while still belonging in Engine when it changes only how the host loads, configures, or executes the package. Determine the owning repository before opening an issue, branch, or PR, and split cross-repository changes when both package content and host integration need updates.
 
-The Engine update channel also selects the official Agent channel. Stable Engine builds use Marinara-Agents `main`; a git installation on Engine `staging` automatically reads the matching catalog and artifacts from Marinara-Agents `staging`. This lets Agent changes be tested end to end before the owner promotes both repositories to `main`.
-
 ## Prompt Leaf Content Is Verbatim (Decision + Threat Model)
 
 **Invariant:** what the model receives inside a prompt section equals what the user typed. Prompt *leaf* content — character card fields, persona, lorebook entries, memories, scene text, example dialogue — is passed to the model **verbatim**. Do not HTML-escape `<`, `>`, or `&` in this content. Users legitimately organize cards and lorebooks with angle-bracket / HTML-style tags (`<thinking>`, `<scenario>`, `<div>`), and those must reach the model as written.
