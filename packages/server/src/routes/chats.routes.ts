@@ -3646,11 +3646,6 @@ export async function chatsRoutes(app: FastifyInstance) {
       if (branchedId) sourceToBranchedMessageId.set(msg.id, branchedId);
     });
     const forkSourceMessage = copiedSourceMessages.at(-1);
-    await storage.patchMetadata(newChat.id, {
-      branchParentChatId: sourceChat.id,
-      branchParentMessageId: forkSourceMessage?.id ?? null,
-      branchMessageId: forkSourceMessage ? sourceToBranchedMessageId.get(forkSourceMessage.id) ?? null : null,
-    });
 
     const inheritedEntries = inheritedSourceEntries.map((entry) => ({
       ...entry,
@@ -3669,6 +3664,9 @@ export async function chatsRoutes(app: FastifyInstance) {
     await storage.updateMetadata(newChat.id, {
       ...settingsToKeep,
       branchName: "New Branch",
+      branchParentChatId: sourceChat.id,
+      branchParentMessageId: forkSourceMessage?.id ?? null,
+      branchMessageId: forkSourceMessage ? sourceToBranchedMessageId.get(forkSourceMessage.id) ?? null : null,
       summary: compileChatSummaryEntries(inheritedEntries),
       summaryEntries: inheritedEntries,
       ...(inheritedLastAutomaticSummaryMessageId
