@@ -1277,6 +1277,7 @@ export function ConversationView({
                 chatCharacterIds={chatCharIds}
                 messageIndex={item.index + 1}
                 messageOrderIndex={item.index}
+                messageDepth={Math.max(0, totalMessageCount - 1 - item.index)}
                 multiSelectMode={multiSelectMode}
                 isSelected={selectedMessageIds?.has(msg.id)}
                 onToggleSelect={onToggleSelectMessage}
