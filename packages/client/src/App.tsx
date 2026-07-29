@@ -496,10 +496,7 @@ export function App() {
     [activeCustomTheme?.css],
   );
   const pauseChromeEffectsForAppearance =
-    appearanceSettingsActive &&
-    !appAccentRgbMode &&
-    !appAccentPulseMode &&
-    !themeAccentPulseConfig.enabled;
+    appearanceSettingsActive && !appAccentRgbMode && !appAccentPulseMode && !themeAccentPulseConfig.enabled;
   useLegacyThemeMigration();
   useSettingsSync();
   const showDownloadModal = useSidecarStore((s) => s.showDownloadModal);
@@ -593,13 +590,21 @@ export function App() {
       root.style.removeProperty("--marinara-app-background-paint");
     }
 
-    // iOS paints the safe-area/overscroll backing from the literal html/body
-    // background-color, not from resolved custom properties (see index.html).
-    // Keep that literal color tracking the active theme/custom background so
-    // it doesn't stay stuck on the dark-theme default baked into the HTML.
-    root.style.setProperty("background-color", resolvedBackground, "important");
-    document.body.style.setProperty("background-color", resolvedBackground, "important");
-  }, [appBackgroundColor, theme]);
+    const syncLiteralBackground = () => {
+      // iOS paints the safe-area/overscroll backing from the literal html/body
+      // background-color, not from resolved custom properties (see index.html).
+      // Read the rendered variable so visual themes and injected custom theme
+      // CSS are reflected instead of falling back to the stock scheme.
+      const computedBackground = getComputedStyle(root).getPropertyValue("--background").trim();
+      const literalBackground = getCssColorFallback(computedBackground, resolvedBackground);
+      root.style.setProperty("background-color", literalBackground, "important");
+      document.body.style.setProperty("background-color", literalBackground, "important");
+    };
+
+    syncLiteralBackground();
+    const frame = requestAnimationFrame(syncLiteralBackground);
+    return () => cancelAnimationFrame(frame);
+  }, [activeCustomTheme?.css, appBackgroundColor, theme, visualTheme]);
 
   useEffect(() => {
     const root = document.documentElement;

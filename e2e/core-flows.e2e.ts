@@ -1459,7 +1459,7 @@ test("Connection image captioning defaults persist with a dedicated captioning c
       .getByText("Use custom defaults for this connection", { exact: true })
       .evaluate((element) => (element as HTMLElement).click());
     await expect(editor.getByRole("checkbox", { name: "Use custom defaults for this connection" })).toBeChecked();
-    await editor.getByText("Image Captioning", { exact: true }).evaluate((element) => (element as HTMLElement).click());
+    await editor.getByText("Image Captioning", { exact: true }).click();
     await expect(editor.getByRole("checkbox", { name: "Image Captioning" })).toBeChecked();
     const captioningSelect = editor
       .getByText("Captioning Connection", { exact: true })
@@ -10827,6 +10827,7 @@ test("mobile chat composer follows the visual viewport above the software keyboa
         useUIStore: {
           getState: () => {
             setAppBackgroundColor: (color: string) => void;
+            setVisualTheme: (theme: "default" | "sillytavern") => void;
           };
         };
       };
@@ -10840,6 +10841,32 @@ test("mobile chat composer follows the visual viewport above the software keyboa
         })),
       )
       .toEqual({ html: "rgb(18, 52, 86)", body: "rgb(18, 52, 86)" });
+
+    await page.evaluate(async () => {
+      const storePath = "/src/stores/ui.store.ts";
+      const { useUIStore } = (await import(/* @vite-ignore */ storePath)) as {
+        useUIStore: {
+          getState: () => {
+            setAppBackgroundColor: (color: string) => void;
+            setVisualTheme: (theme: "default" | "sillytavern") => void;
+          };
+        };
+      };
+      const style = document.createElement("style");
+      style.id = "marinara-safe-area-theme-smoke";
+      style.textContent = 'html[data-visual-theme="sillytavern"][data-theme] { --background: rgb(101, 67, 33); }';
+      document.head.appendChild(style);
+      useUIStore.getState().setAppBackgroundColor("");
+      useUIStore.getState().setVisualTheme("sillytavern");
+    });
+    await expect
+      .poll(() =>
+        page.evaluate(() => ({
+          html: document.documentElement.style.getPropertyValue("background-color"),
+          body: document.body.style.getPropertyValue("background-color"),
+        })),
+      )
+      .toEqual({ html: "rgb(101, 67, 33)", body: "rgb(101, 67, 33)" });
 
     await page.evaluate(() => {
       Object.defineProperty(window, "scrollY", {
@@ -10858,6 +10885,20 @@ test("mobile chat composer follows the visual viewport above the software keyboa
     await expect
       .poll(() => page.evaluate(() => getComputedStyle(document.querySelector<HTMLElement>(".mari-app")!).transform))
       .toContain("64");
+
+    await page.evaluate(async () => {
+      const storePath = "/src/stores/ui.store.ts";
+      const { useUIStore } = (await import(/* @vite-ignore */ storePath)) as {
+        useUIStore: {
+          getState: () => {
+            openBotBrowser: () => void;
+          };
+        };
+      };
+      useUIStore.getState().openBotBrowser();
+    });
+    await expect(shell).not.toHaveAttribute("data-chat-surface-active");
+    await expect.poll(() => shell.evaluate((element) => getComputedStyle(element).transform)).toBe("none");
   } finally {
     await page.request.delete(`/api/chats/${chat.id}`).catch(() => undefined);
   }
@@ -10916,6 +10957,7 @@ test("focused mobile composers stay open while history scrolls in Conversation a
       await expect
         .poll(() => transcript.evaluate((element) => element.scrollHeight - element.scrollTop - element.clientHeight))
         .toBeGreaterThan(180);
+      await expect(textarea).toBeFocused();
       await expect(textarea).toBeVisible();
     }
   } finally {
@@ -11066,7 +11108,11 @@ test("media pickers persist and surface recently used items", async ({ page }, t
     const kaomojiPicker = mediaPicker.getByRole("dialog", { name: "Kaomoji picker" });
     const recentKaomoji = kaomojiPicker.locator('[data-recent-media="kaomoji"]');
     await expect(recentKaomoji).toContainText("(づ｡◕‿‿◕｡)づ");
-    const newKaomoji = kaomojiPicker.locator("[data-kaomoji-results] > div.grid button").first();
+    const kaomojiOptions = kaomojiPicker.locator("[data-kaomoji-results] > div.grid button");
+    const kaomojiValues = (await kaomojiOptions.allTextContents()).map((value) => value.trim());
+    const newKaomojiIndex = kaomojiValues.findIndex((value) => value !== "(づ｡◕‿‿◕｡)づ");
+    expect(newKaomojiIndex).toBeGreaterThanOrEqual(0);
+    const newKaomoji = kaomojiOptions.nth(newKaomojiIndex);
     const newKaomojiValue = (await newKaomoji.textContent())?.trim();
     expect(newKaomojiValue).toBeTruthy();
     await newKaomoji.click();
@@ -11088,6 +11134,12 @@ test("media pickers persist and surface recently used items", async ({ page }, t
     const stored = await page.evaluate(() => JSON.parse(localStorage.getItem("marinara-recent-media-v1") ?? "{}"));
     expect(stored.emoji[0].value).toBe("🧪");
     expect(stored.kaomoji[0].value).toBe(newKaomojiValue);
+
+    await page.evaluate(() => {
+      localStorage.removeItem("marinara-recent-media-v1");
+      window.dispatchEvent(new StorageEvent("storage", { key: null }));
+    });
+    await expect(recentStickerSection).toHaveCount(0);
   } finally {
     await page.request.delete(`/api/custom-stickers/${sticker.id}`).catch(() => undefined);
     await page.request.delete(`/api/chats/${chat.id}`).catch(() => undefined);

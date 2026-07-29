@@ -93,7 +93,7 @@ function notifyListeners(): void {
 }
 
 function handleStorage(event: StorageEvent): void {
-  if (event.key !== STORAGE_KEY) return;
+  if (event.key !== STORAGE_KEY && event.key !== null) return;
   cachedRaw = undefined;
   readState();
   notifyListeners();
