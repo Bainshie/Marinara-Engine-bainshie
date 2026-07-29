@@ -20,6 +20,12 @@ export interface CapabilityChatRecord {
   personaId: string | null;
   connectionId: string | null;
   metadata: unknown;
+  branch: {
+    title: string | null;
+    parentChatId: string | null;
+    parentMessageId: string | null;
+    childMessageId: string | null;
+  } | null;
   lastMessageAt: string | null;
   updatedAt: string;
 }

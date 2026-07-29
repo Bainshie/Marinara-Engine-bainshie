@@ -37,6 +37,48 @@ function parseStringArray(value: unknown): string[] {
   }
 }
 
+function parseMetadata(value: unknown): Record<string, unknown> | null {
+  if (typeof value === "string") {
+    try {
+      const parsed = JSON.parse(value) as unknown;
+      return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+        ? (parsed as Record<string, unknown>)
+        : null;
+    } catch {
+      return null;
+    }
+  }
+  return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
+}
+
+function readTrimmedString(value: unknown): string | null {
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+}
+
+function mapBranchMetadata(value: unknown): CapabilityChatRecord["branch"] {
+  const metadata = parseMetadata(value);
+  if (!metadata) return null;
+
+  const hasBranchMetadata = ["branchName", "branchParentChatId", "branchParentMessageId", "branchMessageId"].some(
+    (key) => Object.prototype.hasOwnProperty.call(metadata, key),
+  );
+  if (!hasBranchMetadata) return null;
+  const title = readTrimmedString(metadata.branchName);
+  const parentChatId = readTrimmedString(metadata.branchParentChatId);
+  const rawParentMessageId = readTrimmedString(metadata.branchParentMessageId);
+  const rawChildMessageId = readTrimmedString(metadata.branchMessageId);
+  const hasMessagePair = rawParentMessageId !== null && rawChildMessageId !== null;
+  const isEmptyBranch = rawParentMessageId === null && rawChildMessageId === null;
+  const hasKnownLineage = parentChatId !== null && (hasMessagePair || isEmptyBranch);
+
+  return {
+    title,
+    parentChatId: hasKnownLineage ? parentChatId : null,
+    parentMessageId: hasKnownLineage && hasMessagePair ? rawParentMessageId : null,
+    childMessageId: hasKnownLineage && hasMessagePair ? rawChildMessageId : null,
+  };
+}
+
 function mapChat(row: typeof chats.$inferSelect): CapabilityChatRecord {
   return {
     id: row.id,
@@ -47,6 +89,7 @@ function mapChat(row: typeof chats.$inferSelect): CapabilityChatRecord {
     personaId: row.personaId,
     connectionId: row.connectionId,
     metadata: row.metadata,
+    branch: mapBranchMetadata(row.metadata),
     lastMessageAt: row.lastMessageAt,
     updatedAt: row.updatedAt,
   };

@@ -236,6 +236,14 @@ export interface ChatMetadata {
   >;
   /** Compiled enabled rolling summary text for context injection. Derived from summaryEntries when present. */
   summary: string | null;
+  /** Display label for a branch; absent on root chats and older branches. */
+  branchName?: string;
+  /** Immediate source chat for Engine-created branches. */
+  branchParentChatId?: string | null;
+  /** Source message at which an Engine-created branch was forked. */
+  branchParentMessageId?: string | null;
+  /** Copied message corresponding to branchParentMessageId. */
+  branchMessageId?: string | null;
   /** Structured rolling summary entries. Missing means legacy summary-only metadata. */
   summaryEntries?: ChatSummaryEntry[];
   /** Recent message count used by manual rolling summary generation and automatic summaries. */
