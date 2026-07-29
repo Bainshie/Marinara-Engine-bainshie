@@ -42,8 +42,8 @@ function safeEntityIds(ids: string[] | undefined): string[] {
 
 /**
  * Copy one chat-gallery image into every explicitly depicted character/persona
- * gallery. Each destination owns its copy, so deleting one gallery item cannot
- * break the chat attachment or another entity's gallery.
+ * gallery. Entity-gallery deletion remains independent; explicit deletion of
+ * the originating chat image uses provenance to remove its generated copies.
  */
 export async function persistGeneratedImageToEntityGalleries(
   input: GeneratedImageEntityGalleryInput,

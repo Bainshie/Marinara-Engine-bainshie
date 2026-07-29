@@ -50,6 +50,7 @@ import { buildBackgroundProviderPrompt } from "../services/game/game-asset-gener
 import { runImageGenerationRequest } from "../services/image/image-generation-queue.js";
 import { generateIllustratorImageVariants } from "../services/image/illustrator-image-variants.js";
 import { persistGeneratedImageToEntityGalleries } from "../services/image/generated-image-entity-gallery.js";
+import { deleteChatGalleryImageEverywhere } from "../services/image/chat-gallery-cascade-deletion.js";
 import {
   resolveImageConnectionFallback,
   resolveVideoConnectionFallback,
@@ -1653,26 +1654,7 @@ export async function galleryRoutes(app: FastifyInstance) {
       return reply.status(404).send({ error: "Not found" });
     }
 
-    const filename = getStoredFilename(image.filePath);
-    const fallbackFilePath = `${image.chatId}/${filename}`;
-    const filePathCandidates = new Set([image.filePath, fallbackFilePath]);
-
-    for (const candidate of filePathCandidates) {
-      try {
-        const filePath = assertInsideDir(GALLERY_DIR, join(GALLERY_DIR, candidate));
-        if (existsSync(filePath)) {
-          unlinkSync(filePath);
-        }
-      } catch (err) {
-        logger.warn(err, "Skipped gallery file unlink for %s (%s): path escapes gallery dir", id, candidate);
-      }
-    }
-
-    await storage.removeByChatAndFilePath(image.chatId, image.filePath);
-    if (fallbackFilePath !== image.filePath) {
-      await storage.removeByChatAndFilePath(image.chatId, fallbackFilePath);
-    }
-    await storage.remove(id);
-    return { success: true };
+    const deleted = await deleteChatGalleryImageEverywhere({ db: app.db, image });
+    return { success: true, ...deleted };
   });
 }
