@@ -1,5 +1,6 @@
 > [!IMPORTANT]
 > Contributions target `staging`. Only `SpicyMarinara` may promote this repository's `staging` branch or a same-repository `hotfix/*` branch to `main`.
+> Outside and first-time contributors also require an approving review from `SpicyMarinara`.
 <!-- See CONTRIBUTING.md § Branches. -->
 
 ## Linked issue

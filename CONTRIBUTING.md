@@ -57,7 +57,7 @@ Guidelines:
 - **Open PRs against `staging`**. The GitHub web UI defaults to `main` (the repo's default branch); change the base to `staging` when filing the PR.
 - Every PR must pass the required GitHub checks and complete its CodeRabbit review before merge. These gates cannot be bypassed by developers.
 - Pasta-Devs members in the `@Pasta-Devs/developers` team may merge a ready PR into `staging` after those automated gates pass; a separate human approval is not required.
-- Outside and first-time contributors may submit only to `staging` and need at least one approving review from `@Pasta-Devs/developers` in addition to the automated gates.
+- Outside and first-time contributors may submit only to `staging` and need an approving review from repository owner `SpicyMarinara` in addition to the automated gates. Approval from another Pasta-Devs member does not satisfy this gate.
 - Only `SpicyMarinara` may update or merge into `main`. Normal releases are promoted from the same repository's tested `staging` branch; direct mainline work is reserved for an owner-owned `hotfix/*` branch in this repository.
 - Update checks and installation guides continue to track `main`, since end users install from released versions.
 
@@ -182,7 +182,7 @@ The overlay is not a substitute for this guide. When instructions conflict, foll
 ## Pull Request Expectations
 
 - Target the `staging` branch. The GitHub UI defaults to `main`; change the base before submitting. See [Branches](#branches).
-- Wait for every required check and the CodeRabbit review to complete. Outside and first-time contributors must also obtain approval from a Pasta-Devs developer.
+- Wait for every required check and the CodeRabbit review to complete. Outside and first-time contributors must also obtain an approving review from `SpicyMarinara`.
 - Link the issue or feature request your PR addresses. If there isn't one yet, open one first (see [Before You Open a Pull Request](#before-you-open-a-pull-request)).
 - Keep PRs focused. Separate unrelated refactors from user-facing fixes or documentation work.
 - Explain the why clearly in the PR description. Reviewers should understand the user problem, regression, or tradeoff being addressed, not just the implementation summary.
