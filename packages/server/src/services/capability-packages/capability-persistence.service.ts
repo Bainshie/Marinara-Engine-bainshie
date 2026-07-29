@@ -3,6 +3,8 @@ import {
   type CapabilityChatMetadataUpdate,
   type CapabilityChatRecord,
   type CapabilityCreateMessageWithSwipeInput,
+  type CapabilityDocumentRecord,
+  type CapabilityDocumentStore,
   type CapabilityMessageRecord,
   type CapabilityPersistenceHost,
   type CapabilityPersistenceSession,
@@ -15,6 +17,7 @@ import { and, desc, eq, inArray, ne, or } from "../../db/file-query.js";
 import { ensureTimestampAfter } from "../import/import-timestamps.js";
 import {
   chats,
+  capabilityDocuments,
   gameStateSnapshots,
   lorebookEntries,
   messages,
@@ -117,6 +120,103 @@ function mapSnapshot(row: typeof spatialContextSnapshots.$inferSelect): SpatialC
     transitionCommandId: row.transitionCommandId,
     transitionPayloadHash: row.transitionPayloadHash,
     createdAt: row.createdAt,
+  };
+}
+
+function parseDocumentData(value: unknown): unknown {
+  if (typeof value !== "string") return value;
+  try {
+    return JSON.parse(value) as unknown;
+  } catch {
+    return null;
+  }
+}
+
+function mapDocument(row: typeof capabilityDocuments.$inferSelect): CapabilityDocumentRecord {
+  return {
+    id: row.id,
+    packageId: row.packageId,
+    kind: row.kind,
+    name: row.name,
+    description: row.description,
+    data: parseDocumentData(row.data),
+    revision: row.revision,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  };
+}
+
+function createDocumentStore(db: DB): CapabilityDocumentStore {
+  return {
+    async list(packageId, kind) {
+      const rows = await db
+        .select()
+        .from(capabilityDocuments)
+        .where(and(eq(capabilityDocuments.packageId, packageId), eq(capabilityDocuments.kind, kind)))
+        .orderBy(desc(capabilityDocuments.updatedAt), desc(capabilityDocuments.id));
+      return rows.map(mapDocument);
+    },
+    async getById(packageId, id) {
+      const rows = await db
+        .select()
+        .from(capabilityDocuments)
+        .where(and(eq(capabilityDocuments.packageId, packageId), eq(capabilityDocuments.id, id)))
+        .limit(1);
+      return rows[0] ? mapDocument(rows[0]) : null;
+    },
+    async create(input) {
+      const row: typeof capabilityDocuments.$inferInsert = {
+        ...input,
+        data: JSON.stringify(input.data),
+        revision: 1,
+      };
+      await db.insert(capabilityDocuments).values(row);
+      return mapDocument(row as typeof capabilityDocuments.$inferSelect);
+    },
+    async update(input) {
+      return db.transaction(async (transaction) => {
+        const rows = await transaction
+          .select()
+          .from(capabilityDocuments)
+          .where(and(eq(capabilityDocuments.packageId, input.packageId), eq(capabilityDocuments.id, input.id)))
+          .limit(1);
+        const current = rows[0];
+        if (!current || current.revision !== input.expectedRevision) return null;
+        const next = {
+          ...current,
+          name: input.name,
+          description: input.description,
+          data: JSON.stringify(input.data),
+          revision: current.revision + 1,
+          updatedAt: input.updatedAt,
+        };
+        await transaction
+          .update(capabilityDocuments)
+          .set({
+            name: next.name,
+            description: next.description,
+            data: next.data,
+            revision: next.revision,
+            updatedAt: next.updatedAt,
+          })
+          .where(and(eq(capabilityDocuments.packageId, input.packageId), eq(capabilityDocuments.id, input.id)));
+        return mapDocument(next);
+      });
+    },
+    async remove(packageId, id, expectedRevision) {
+      return db.transaction(async (transaction) => {
+        const rows = await transaction
+          .select({ revision: capabilityDocuments.revision })
+          .from(capabilityDocuments)
+          .where(and(eq(capabilityDocuments.packageId, packageId), eq(capabilityDocuments.id, id)))
+          .limit(1);
+        if (!rows[0] || rows[0].revision !== expectedRevision) return false;
+        await transaction
+          .delete(capabilityDocuments)
+          .where(and(eq(capabilityDocuments.packageId, packageId), eq(capabilityDocuments.id, id)));
+        return true;
+      });
+    },
   };
 }
 
@@ -314,6 +414,7 @@ function createPersistenceSession(db: DB): CapabilityPersistenceSession {
         })
         .where(eq(chats.id, input.chatId));
     },
+    documents: createDocumentStore(db),
     spatialSnapshots: createSpatialSnapshotStore(db),
   };
 }

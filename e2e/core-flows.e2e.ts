@@ -7518,6 +7518,17 @@ test("Game setup only shows features owned by installed agents", async ({ page, 
     await expect(dialog.getByRole("heading", { name: "Features", exact: true })).toBeVisible();
     await dialog.getByRole("button", { name: /^Enable Agents\b/u }).click();
     await expect(dialog.getByText("Hierarchical world map", { exact: true })).toBeVisible();
+    const manualMapButton = dialog.getByRole("button", { name: /^Create manually\b/u });
+    const aiMapButton = dialog.getByRole("button", { name: /^Draft with AI\b/u });
+    await expect(manualMapButton).toBeVisible();
+    await expect(manualMapButton).toHaveAttribute("aria-pressed", "false");
+    await manualMapButton.click();
+    await expect(manualMapButton).toHaveAttribute("aria-pressed", "true");
+    await expect(aiMapButton).toHaveAttribute("aria-pressed", "false");
+    await aiMapButton.click();
+    await expect(aiMapButton).toHaveAttribute("aria-pressed", "true");
+    await expect(manualMapButton).toHaveAttribute("aria-pressed", "false");
+    await expect(dialog.getByText("Map size", { exact: true })).toBeVisible();
     expect(errors).toEqual([]);
   } finally {
     await request.delete(`/api/chats/${chat.id}`, { timeout: 10_000 });
@@ -7764,7 +7775,7 @@ test("Roleplay and Game chat settings link empty agent libraries to Download Age
   }
 });
 
-test("Illustrator owns conditional media subsections and agent removal stays away from collapse", async ({
+test("Illustrator owns the merged scene-video and Storyboard subsections while agent removal stays away from collapse", async ({
   page,
   request,
 }, testInfo) => {
@@ -7789,9 +7800,9 @@ test("Illustrator owns conditional media subsections and agent removal stays awa
       gameSessionNumber: 1,
       gameIntroPresented: true,
       enableAgents: true,
-      activeAgentIds: ["illustrator"],
+      activeAgentIds: ["illustrator", "storyboard"],
+      enableSpriteGeneration: true,
       gameSceneVideosEnabled: false,
-      gameStoryboardsEnabled: false,
     },
   });
   expect(gameMetadataResponse.ok()).toBeTruthy();
@@ -7811,12 +7822,24 @@ test("Illustrator owns conditional media subsections and agent removal stays awa
     modeAllowlist: ["roleplay", "game"],
     defaultPromptTemplate: "Return a scene image prompt.",
   };
+  const storyboardManifest = {
+    id: "storyboard",
+    name: "Storyboard",
+    description: "Plans still and animated Game keyframes.",
+    author: "Pasta Devs",
+    phase: "post_processing",
+    execution: "host",
+    enabledByDefault: false,
+    category: "misc",
+    modeAllowlist: ["game"],
+    defaultPromptTemplate: "Plan storyboard keyframes.",
+  };
 
   await page.route("**/api/capability-packages/agents", async (route) => {
     await route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify([illustratorManifest]),
+      body: JSON.stringify([illustratorManifest, storyboardManifest]),
     });
   });
   await page.route("**/api/capability-packages/installed", async (route) => {
@@ -7901,13 +7924,51 @@ test("Illustrator owns conditional media subsections and agent removal stays awa
 
     const gameIllustratorCard = drawer.locator(`#chat-settings-agent-menu-${gameChat.id}-illustrator`);
     const featureToggles = gameIllustratorCard.locator('[data-agent-settings-feature-toggles="illustrator"]');
+    const storyboardFeatureToggles = gameIllustratorCard.locator('[data-agent-settings-feature-toggles="storyboard"]');
     const sceneVideosToggle = featureToggles.getByRole("checkbox", { name: /Enable Scene Videos/ });
-    const storyboardsToggle = featureToggles.getByRole("checkbox", { name: /Enable Storyboards/ });
+    const storyboardsToggle = storyboardFeatureToggles.getByRole("checkbox", { name: /Enable Storyboards/ });
     await expect(gameIllustratorCard).toBeVisible();
     await expect(sceneVideosToggle).not.toBeChecked();
-    await expect(storyboardsToggle).not.toBeChecked();
+    await expect(storyboardsToggle).toBeChecked();
     await expect(gameIllustratorCard.locator('[data-agent-settings-subsection="scene-videos"]')).toHaveCount(0);
-    await expect(gameIllustratorCard.locator('[data-agent-settings-subsection="storyboards"]')).toHaveCount(0);
+    const storyboardsSubsection = gameIllustratorCard.locator('[data-agent-settings-subsection="storyboards"]');
+    await expect(storyboardsSubsection).toBeVisible();
+    await expect(storyboardsSubsection.getByRole("heading", { name: "Storyboards" })).toBeVisible();
+    await expect(
+      storyboardsSubsection.getByRole("checkbox", { name: /Automatic Storyboard Illustrations/ }),
+    ).toBeChecked();
+    const automaticAnimationsToggle = storyboardsSubsection.getByRole("checkbox", {
+      name: /Automatic Storyboard Animations/,
+    });
+    await expect(automaticAnimationsToggle).not.toBeChecked();
+    const keyframeSlider = storyboardsSubsection.getByRole("slider", { name: "Keyframes per Turn" });
+    const keyframeControl = storyboardsSubsection
+      .locator("label")
+      .filter({ hasText: "Keyframes per Turn" })
+      .locator("..");
+    await expect(keyframeSlider).toHaveValue("3");
+    await keyframeSlider.fill("5");
+    await expect(keyframeSlider).toHaveValue("5");
+    await keyframeControl.getByRole("button", { name: "Use agent default" }).click();
+    await expect(keyframeSlider).toHaveValue("3");
+    await expect(keyframeControl.getByText("Using agent default", { exact: true })).toBeVisible();
+    const durationInput = storyboardsSubsection.getByRole("spinbutton", { name: "Animation Clip Duration" });
+    const durationControl = storyboardsSubsection
+      .locator("label")
+      .filter({ hasText: "Animation Clip Duration" })
+      .locator("..");
+    await expect(durationInput).toBeDisabled();
+    await storyboardsSubsection.getByText("Automatic Storyboard Animations", { exact: true }).click();
+    await expect(automaticAnimationsToggle).toBeChecked();
+    await expect(durationInput).toBeEnabled();
+    await durationInput.fill("9");
+    await durationInput.blur();
+    await expect(durationInput).toHaveValue("9");
+    await durationControl.getByRole("button", { name: "Use agent default" }).click();
+    await expect(durationInput).toHaveValue("6");
+    await expect(durationControl.getByText("Using agent default", { exact: true })).toBeVisible();
+    await expect(gameIllustratorCard.getByText("Attach Card Appearance", { exact: true })).toHaveCount(1);
+    await expect(gameIllustratorCard.getByText("Send Avatar References", { exact: true })).toHaveCount(1);
 
     await featureToggles.getByText("Enable Scene Videos", { exact: true }).click();
     const gameSceneVideosSubsection = gameIllustratorCard.locator('[data-agent-settings-subsection="scene-videos"]');
@@ -7915,13 +7976,6 @@ test("Illustrator owns conditional media subsections and agent removal stays awa
     await expect(gameSceneVideosSubsection).toBeVisible();
     await expect(gameSceneVideosSubsection.getByRole("heading", { name: "Scene Videos" })).toBeVisible();
     await expect(gameSceneVideosSubsection.locator("[data-agent-settings-subsection-header] > svg")).toHaveCount(0);
-
-    await featureToggles.getByText("Enable Storyboards", { exact: true }).click();
-    const gameStoryboardsSubsection = gameIllustratorCard.locator('[data-agent-settings-subsection="storyboards"]');
-    await expect(storyboardsToggle).toBeChecked();
-    await expect(gameStoryboardsSubsection).toBeVisible();
-    await expect(gameStoryboardsSubsection.getByRole("heading", { name: "Storyboards" })).toBeVisible();
-    await expect(gameStoryboardsSubsection.locator("[data-agent-settings-subsection-header] > svg")).toHaveCount(0);
     expect(errors).toEqual([]);
   } finally {
     await Promise.all([chat.id, gameChat.id].map((chatId) => request.delete(`/api/chats/${chatId}`)));

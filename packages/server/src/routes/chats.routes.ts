@@ -119,6 +119,7 @@ import {
   resolveChatSummaryPrompt,
 } from "../services/generation/roleplay-summary-runtime.js";
 import { resolveLorebookTokenBudget } from "../services/generation/lorebook-generation-runtime.js";
+import { resolveGameGmPromptTemplate } from "../services/generation/game-gm-prompt-runtime.js";
 
 type TrackerWrapFormat = "xml" | "markdown" | "none";
 type EntryStateOverrides = Record<string, { ephemeral?: number | null; enabled?: boolean }>;
@@ -2089,7 +2090,7 @@ export async function chatsRoutes(app: FastifyInstance) {
     const ownerSpatialProjection = await resolveOwnerSpatialProjection(req.params.id, {}, chat.metadata);
     if (manual && body.location !== undefined && ownerSpatialProjection?.ownerMode === "game") {
       return reply.status(409).send({
-        error: "Story location is controlled by the hierarchical map.",
+        error: "Story location is controlled by the world map.",
         code: "spatial_location_authoritative",
         field: "location",
         location: formatOwnerSpatialBreadcrumb(ownerSpatialProjection),
@@ -2538,10 +2539,13 @@ export async function chatsRoutes(app: FastifyInstance) {
             };
           }
           if (chatMode === "game") {
-            const customPrompt =
-              typeof chatMeta.gameSystemPrompt === "string" && chatMeta.gameSystemPrompt.trim()
-                ? (chatMeta.gameSystemPrompt as string).trim()
+            const setupConfig =
+              chatMeta.gameSetupConfig &&
+              typeof chatMeta.gameSetupConfig === "object" &&
+              !Array.isArray(chatMeta.gameSetupConfig)
+                ? (chatMeta.gameSetupConfig as Record<string, unknown>)
                 : null;
+            const customPrompt = resolveGameGmPromptTemplate(chatMeta, setupConfig);
             const selectedGamePrompt = presetStringField(preset as Record<string, unknown> | null, "gamePrompt");
             const gamePromptTemplate = customPrompt ?? (selectedGamePrompt || DEFAULT_GAME_SYSTEM_PROMPT);
             const renderedGamePrompt = resolveMacros(gamePromptTemplate, promptMacroContext);

@@ -527,6 +527,8 @@ export interface ChatMetadata {
   gameMaps?: import("./game.js").GameMap[];
   /** ID of the map the party is currently on. */
   activeGameMapId?: string | null;
+  /** Inactive recovery map retained only until an initial hierarchical map is saved or Game start falls back. */
+  gameInitialMapFallback?: import("./game.js").GameMap | null;
   /** Summaries of all previous sessions */
   gamePreviousSessionSummaries?: import("./game.js").SessionSummary[];
   /** GM-only: overarching story arc and plot (never sent to party agent) */
