@@ -3483,6 +3483,16 @@ try {
     /role="checkbox"[\s\S]{0,100}aria-checked=\{effectiveValue\}/u,
     "Memory Recall must expose its switch state to assistive technology",
   );
+  assert.match(
+    chatSettingsSource,
+    /const openLorebookFromSettings = useCallback\([\s\S]{0,220}onClose\(\);[\s\S]{0,80}openLorebookDetail\(lorebookId\);/u,
+    "Opening linked Maps lore from Chat Settings must close the drawer before navigating",
+  );
+  assert.equal(
+    chatSettingsSource.match(/onOpenLorebook: openLorebookFromSettings/gu)?.length,
+    2,
+    "Every Chat Settings Maps host must use the close-and-open lorebook callback",
+  );
 
   const generateHookSource = readFileSync(join(REPOSITORY_ROOT, "packages/client/src/hooks/use-generate.ts"), "utf8");
   const clearStreamIndex = generateHookSource.indexOf("clearStreamBuffer(params.chatId);");

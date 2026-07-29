@@ -142,6 +142,46 @@ const summaryPopoverSource = readFileSync(
   new URL("../../packages/client/src/components/chat/SummaryPopover.tsx", import.meta.url),
   "utf8",
 );
+const spatialTransitionEventSource =
+  useGenerateSource.match(/case "spatial_transition_committed": \{[\s\S]*?case "token":/u)?.[0] ?? "";
+assert.match(
+  spatialTransitionEventSource,
+  /dispatchCapabilityClientEvent\(\{[\s\S]*?packageId: "hierarchical-maps",[\s\S]*?type: event\.type,[\s\S]*?chatId: params\.chatId,[\s\S]*?data: event\.data,[\s\S]*?\}\)/u,
+  "the spatial transition SSE should immediately notify the downloaded Maps client cache",
+);
+assert.match(
+  spatialTransitionEventSource,
+  /invalidateQueries\(\{ queryKey: spatialContextKeys\.detail\(params\.chatId\) \}\)/u,
+  "the spatial transition SSE should immediately refresh the Engine spatial cache",
+);
+const generationCleanupSource =
+  useGenerateSource.match(/\/\/ Stream has terminated[\s\S]*?const completedReply =/u)?.[0] ?? "";
+const missedSpatialRefreshBlock =
+  generationCleanupSource.match(
+    /if \(\s*\(chatModeForGeneration === "roleplay" \|\| chatModeForGeneration === "game"\) &&\s*!spatialCapabilityRefreshDispatched\s*\) \{[\s\S]*?\n        \}/u,
+  )?.[0] ?? "";
+assert.notEqual(missedSpatialRefreshBlock, "", "generation cleanup should contain the missed spatial refresh block");
+assert.match(
+  missedSpatialRefreshBlock,
+  /dispatchCapabilityClientEvent\(\{[\s\S]*?packageId: "hierarchical-maps",[\s\S]*?type: "spatial_context_refresh",[\s\S]*?chatId: params\.chatId,[\s\S]*?data: null,[\s\S]*?\}\)/u,
+  "missed spatial transition cleanup should notify the downloaded Maps client cache",
+);
+assert.match(
+  missedSpatialRefreshBlock,
+  /void qc\.invalidateQueries\(\{[\s\S]*?queryKey: spatialContextKeys\.detail\(params\.chatId\),[\s\S]*?exact: true,[\s\S]*?refetchType: "active",[\s\S]*?\}\)/u,
+  "missed spatial transition cleanup should refresh the Engine spatial cache without blocking teardown",
+);
+const ownerCleanupBlock =
+  generationCleanupSource.match(/if \(stillOwnerAtCleanupStart\) \{[\s\S]*?\n        \}/u)?.[0] ?? "";
+assert.match(
+  ownerCleanupBlock,
+  /clearPerChatState\(params\.chatId\)/u,
+  "the generation owner should clear per-chat state after spatial reconciliation is dispatched",
+);
+assert.ok(
+  generationCleanupSource.indexOf(missedSpatialRefreshBlock) < generationCleanupSource.indexOf(ownerCleanupBlock),
+  "spatial reconciliation should be dispatched before generation-owner cleanup",
+);
 assert.match(
   echoChamberPanelSource,
   /activeChatId \? \(s\.echoChamberSizeByChatId\[activeChatId\] \?\? null\) : null/u,
