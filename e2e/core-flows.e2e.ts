@@ -11970,3 +11970,88 @@ test("persona editor preserves unsaved fields across responsive layout changes",
     await request.delete(`/api/characters/personas/${persona.id}`).catch(() => undefined);
   }
 });
+
+test("image prompt review preserves edits through rerenders and submits the edited prompt", async ({
+  page,
+  request,
+}) => {
+  const chatResponse = await request.post("/api/chats", {
+    data: {
+      name: "Image Prompt Review Draft Smoke",
+      mode: "roleplay",
+      characterIds: [],
+    },
+  });
+  expect(chatResponse.ok()).toBeTruthy();
+  const chat = (await chatResponse.json()) as { id: string };
+  const originalPrompt = "Original illustration prompt";
+  const editedPrompt = "Edited illustration prompt with deliberate composition";
+  const releaseRetry = createDeferred();
+  let submittedPrompt = "";
+
+  await page.route("**/api/generate/retry-agents", async (route) => {
+    const body = route.request().postDataJSON() as {
+      illustratorPromptReviewOverride?: { prompt?: string };
+    };
+    submittedPrompt = body.illustratorPromptReviewOverride?.prompt ?? "";
+    await releaseRetry.promise;
+    await route.fulfill({
+      status: 200,
+      contentType: "text/event-stream",
+      body: 'data: {"type":"done","data":null}\n\n',
+    });
+  });
+  await page.addInitScript((chatId) => localStorage.setItem("marinara-active-chat-id", chatId), chat.id);
+
+  try {
+    await page.goto("/");
+    await expect(page.getByRole("textbox", { name: /^Write/u })).toBeVisible();
+    await page.evaluate(
+      ({ chatId, prompt }) => {
+        window.dispatchEvent(
+          new CustomEvent("marinara:image-prompt-review", {
+            detail: {
+              chatId,
+              item: {
+                id: "illustration",
+                kind: "illustration",
+                title: "Scene illustration",
+                prompt,
+              },
+              resultData: { shouldGenerate: true },
+            },
+          }),
+        );
+      },
+      { chatId: chat.id, prompt: originalPrompt },
+    );
+
+    const dialog = page.getByRole("dialog", { name: "Review Image Prompt" });
+    const promptEditor = dialog.locator("textarea").first();
+    await expect(promptEditor).toHaveValue(originalPrompt);
+    await promptEditor.fill(editedPrompt);
+
+    await page.evaluate(async (chatId) => {
+      const { useAgentStore } = (await import("/src/stores/agent.store.ts")) as {
+        useAgentStore: {
+          getState: () => {
+            setProcessing: (processing: boolean, activeChatId?: string | null) => void;
+          };
+        };
+      };
+      useAgentStore.getState().setProcessing(true, chatId);
+    }, chat.id);
+    await expect(promptEditor).toHaveValue(editedPrompt);
+
+    await dialog.getByRole("button", { name: "Generate", exact: true }).click();
+    await expect.poll(() => submittedPrompt).toBe(editedPrompt);
+    await expect(promptEditor).toHaveValue(editedPrompt);
+    await expect(dialog.getByRole("button", { name: "Generate", exact: true })).toBeDisabled();
+
+    releaseRetry.resolve();
+    await expect(dialog).toBeHidden();
+  } finally {
+    releaseRetry.resolve();
+    await request.delete(`/api/chats/${chat.id}`).catch(() => undefined);
+  }
+});
