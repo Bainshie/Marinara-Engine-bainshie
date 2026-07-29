@@ -80,6 +80,7 @@ assert.deepEqual(getCurrentStatus(overnightSchedule, mondayAtTwo), {
   activity: "Sunday night shift",
 });
 assert.equal(getAdjacentScheduleBlocks(overnightSchedule, mondayAtTwo).current?.activity, "Sunday night shift");
+assert.equal(getAdjacentScheduleBlocks(overnightSchedule, mondayAtTwo).next?.activity, "Monday night shift");
 const mondayAtTwentyThreeThirty = new Date(2026, 6, 13, 23, 30, 0);
 assert.deepEqual(getCurrentStatus(overnightSchedule, mondayAtTwentyThreeThirty), {
   status: "dnd",
@@ -88,6 +89,10 @@ assert.deepEqual(getCurrentStatus(overnightSchedule, mondayAtTwentyThreeThirty),
 assert.equal(
   getAdjacentScheduleBlocks(overnightSchedule, mondayAtTwentyThreeThirty).current?.activity,
   "Monday night shift",
+);
+assert.equal(
+  getAdjacentScheduleBlocks(overnightSchedule, mondayAtTwentyThreeThirty).previous?.activity,
+  "Sunday night shift",
 );
 
 assert.equal(

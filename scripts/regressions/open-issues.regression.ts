@@ -3681,8 +3681,17 @@ try {
   );
   assert.match(
     conversationViewSource,
-    /messageDepth=\{Math\.max\(0, totalMessageCount - 1 - item\.index\)\}/u,
-    "Conversation regex depth must be derived for every rendered transcript message",
+    /const messageDepth = Math\.max\(0, totalMessageCount - 1 - item\.index\);/u,
+    "Conversation regex depth must be derived for every rendered transcript item",
+  );
+  assert.ok(
+    (conversationViewSource.match(/messageDepth=\{messageDepth\}/gu)?.length ?? 0) >= 2,
+    "Stored and regenerating Conversation messages must share their transcript depth",
+  );
+  assert.match(
+    conversationViewSource,
+    /liveStreamMessage[\s\S]{0,900}messageDepth=\{0\}/u,
+    "A live Conversation stream must apply depth-scoped regex as the newest message",
   );
 
   const { normalizeVideoGenerationProfile } = await import(
