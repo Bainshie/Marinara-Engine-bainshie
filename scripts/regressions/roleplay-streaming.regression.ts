@@ -1,13 +1,14 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
-  getRoleplayTypewriterRevealCharsPerSecond,
-  getTypewriterRevealCharsPerSecond,
+  getStreamingCharsPerSecond,
+  getTypewriterFrameBudget,
   isGenerationSendBlocked,
   isGenerationStartBlocked,
   isMessageShadowedByLiveStream,
   reconcileTypewriterReplacement,
   shouldKeepStreamLiveThroughPostProcessing,
+  takeTypewriterCharacters,
 } from "../../packages/client/src/lib/generation-stream-policy.js";
 import { resolveMessageRewriteVersions } from "../../packages/client/src/lib/message-rewrite-versions.js";
 import { shouldFormatTextareaQuotes } from "../../packages/client/src/lib/textarea-quotes.js";
@@ -181,6 +182,21 @@ assert.match(
 assert.ok(
   generationCleanupSource.indexOf(missedSpatialRefreshBlock) < generationCleanupSource.indexOf(ownerCleanupBlock),
   "spatial reconciliation should be dispatched before generation-owner cleanup",
+);
+assert.doesNotMatch(
+  useGenerateSource,
+  /observedArrivalCharsPerSecond|pendingCharacters \/ ROLEPLAY_QUEUE_RESERVE_SECONDS/u,
+  "the visible typewriter cadence must not follow provider bursts or queue depth",
+);
+assert.match(
+  useGenerateSource,
+  /STREAM_TYPEWRITER_PREBUFFER_MS = 320/u,
+  "visible streaming should build a short initial reserve before starting its continuous reveal",
+);
+assert.match(
+  useGenerateSource,
+  /getStreamingCharsPerSecond\(speed, reducedMotionMedia\?\.matches === true\)/u,
+  "streaming speed and reduced-motion preference should be the only reveal-rate inputs",
 );
 assert.match(
   echoChamberPanelSource,
@@ -523,8 +539,8 @@ assert.match(
 );
 assert.match(
   chatRoleplaySurfaceSource,
-  /generationVisualsPaused \|\| \(isMobileToolbarViewport && \(keyboardOpen \|\| hasMobileDraftInput\)\)/u,
-  "Roleplay should pause ambient rendering while the mobile keyboard or draft is active",
+  /generationVisualsPaused \|\| \(isMobileToolbarViewport && \(keyboardOpen \|\| composerFocused \|\| hasMobileDraftInput\)\)/u,
+  "Roleplay should pause ambient rendering while the mobile keyboard, composer, or draft is active",
 );
 assert.match(
   chatRoleplaySurfaceSource,
@@ -710,92 +726,32 @@ assert.equal(
 );
 assert.equal(trackerEditableText({ nested: true }), '{"nested":true}');
 
+assert.equal(getStreamingCharsPerSecond(30), 30, "streaming speed 30 should reveal exactly 30 characters per second");
+assert.equal(getStreamingCharsPerSecond(1), 1, "the slowest streaming speed should remain a true read-along pace");
+assert.equal(getStreamingCharsPerSecond(99), 99, "finite streaming speeds should map directly to reveal cadence");
+assert.equal(getStreamingCharsPerSecond(100), Infinity, "the final streaming-speed setting should reveal instantly");
 assert.equal(
-  getTypewriterRevealCharsPerSecond({
-    selectedCharsPerSecond: 90,
-    pendingCharacters: 45,
-    observedArrivalCharsPerSecond: null,
-    streamComplete: false,
-  }),
-  42.75,
-  "the first provider burst should be spread across roughly one second instead of draining immediately",
-);
-assert.equal(
-  getTypewriterRevealCharsPerSecond({
-    selectedCharsPerSecond: 90,
-    pendingCharacters: 20,
-    observedArrivalCharsPerSecond: 40,
-    streamComplete: false,
-  }),
-  38,
-  "an open stream should reveal slightly behind its observed arrival rate to absorb chunk gaps",
-);
-assert.equal(
-  getTypewriterRevealCharsPerSecond({
-    selectedCharsPerSecond: 90,
-    pendingCharacters: 200,
-    observedArrivalCharsPerSecond: 40,
-    streamComplete: true,
-  }),
-  90,
-  "a completed stream should drain at the user's selected speed",
-);
-
-assert.ok(
-  Math.abs(
-    getRoleplayTypewriterRevealCharsPerSecond({
-      selectedCharsPerSecond: 90,
-      pendingCharacters: 45,
-      previousCharsPerSecond: null,
-      elapsedMs: 16,
-      streamComplete: false,
-    }) - 50,
-  ) < 0.001,
-  "Roleplay should turn the first provider burst into a buffered reveal rate",
-);
-const roleplayAcceleratedRate = getRoleplayTypewriterRevealCharsPerSecond({
-  selectedCharsPerSecond: 90,
-  pendingCharacters: 90,
-  previousCharsPerSecond: 20,
-  elapsedMs: 16,
-  streamComplete: false,
-});
-assert.ok(
-  roleplayAcceleratedRate > 20 && roleplayAcceleratedRate < 23,
-  "Roleplay should ease into a faster reveal instead of copying a newly arrived provider burst",
-);
-const roleplayDeceleratedRate = getRoleplayTypewriterRevealCharsPerSecond({
-  selectedCharsPerSecond: 90,
-  pendingCharacters: 5,
-  previousCharsPerSecond: 60,
-  elapsedMs: 16,
-  streamComplete: false,
-});
-assert.ok(
-  roleplayDeceleratedRate > 52 && roleplayDeceleratedRate < 54,
-  "Roleplay should slow promptly as its buffered reserve shrinks",
-);
-const roleplayCompletionRate = getRoleplayTypewriterRevealCharsPerSecond({
-  selectedCharsPerSecond: 90,
-  pendingCharacters: 200,
-  previousCharsPerSecond: 30,
-  elapsedMs: 16,
-  streamComplete: true,
-});
-assert.ok(
-  roleplayCompletionRate > 31 && roleplayCompletionRate < 33,
-  "Roleplay completion should ease toward the selected speed instead of jumping to it",
-);
-assert.equal(
-  getRoleplayTypewriterRevealCharsPerSecond({
-    selectedCharsPerSecond: Infinity,
-    pendingCharacters: 200,
-    previousCharsPerSecond: 30,
-    elapsedMs: 16,
-    streamComplete: false,
-  }),
+  getStreamingCharsPerSecond(30, true),
   Infinity,
-  "the instant streaming-speed setting should still flush Roleplay immediately",
+  "reduced-motion preferences should disable the typewriter animation",
+);
+assert.deepEqual(
+  takeTypewriterCharacters("A👩‍🔬B", 2),
+  { visibleText: "A👩‍🔬", pendingText: "B", characterCount: 2 },
+  "the typewriter should never reveal a partial emoji grapheme",
+);
+let simulatedThirtyFpsRemainder = 0;
+let simulatedThirtyFpsCharacters = 0;
+for (let frame = 0; frame < 30; frame += 1) {
+  const budget = getTypewriterFrameBudget(50, 1000 / 30, simulatedThirtyFpsRemainder);
+  const revealedCharacters = Math.min(Math.floor(budget.accruedCharacters), budget.maxCharacters);
+  simulatedThirtyFpsRemainder = budget.accruedCharacters - revealedCharacters;
+  simulatedThirtyFpsCharacters += revealedCharacters;
+}
+assert.equal(
+  simulatedThirtyFpsCharacters,
+  50,
+  "a 30 FPS animation cadence must preserve the configured 50 characters-per-second reveal rate",
 );
 
 assert.equal(
