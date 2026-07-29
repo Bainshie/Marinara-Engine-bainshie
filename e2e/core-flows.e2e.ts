@@ -1437,15 +1437,12 @@ test("Connection image captioning defaults persist with a dedicated captioning c
   const captionConnection = (await captionConnectionResponse.json()) as { id: string };
 
   try {
-    const invalidDefaultsResponse = await request.put(
-      `/api/connections/${chatConnection.id}/default-parameters`,
-      {
-        data: {
-          imageCaptioningEnabled: true,
-          imageCaptioningConnectionId: "",
-        },
+    const invalidDefaultsResponse = await request.put(`/api/connections/${chatConnection.id}/default-parameters`, {
+      data: {
+        imageCaptioningEnabled: true,
+        imageCaptioningConnectionId: "",
       },
-    );
+    });
     expect(invalidDefaultsResponse.status()).toBe(400);
 
     await page.goto("/");
@@ -1462,9 +1459,7 @@ test("Connection image captioning defaults persist with a dedicated captioning c
       .getByText("Use custom defaults for this connection", { exact: true })
       .evaluate((element) => (element as HTMLElement).click());
     await expect(editor.getByRole("checkbox", { name: "Use custom defaults for this connection" })).toBeChecked();
-    await editor
-      .getByText("Image Captioning", { exact: true })
-      .evaluate((element) => (element as HTMLElement).click());
+    await editor.getByText("Image Captioning", { exact: true }).click();
     await expect(editor.getByRole("checkbox", { name: "Image Captioning" })).toBeChecked();
     const captioningSelect = editor
       .getByText("Captioning Connection", { exact: true })
@@ -2163,10 +2158,7 @@ test("Matched full-body sprites approve a neutral anchor before using portrait r
     await page.goto("/");
     await page.locator('[data-tour="panel-characters"]').click();
     const rightPanel = page.locator('[data-component="RightPanelDesktop"]');
-    await rightPanel
-      .locator('[data-touch-drag-card="character"]')
-      .filter({ hasText: characterName })
-      .click();
+    await rightPanel.locator('[data-touch-drag-card="character"]').filter({ hasText: characterName }).click();
 
     const editor = page.locator(".mari-editor-shell");
     await editor
@@ -2710,20 +2702,14 @@ test("desktop Roleplay composition keeps ambient work off the input path and gro
     await page.evaluate(() => {
       const measurementWindow = window as Window & { __lastKeyboardOpen?: boolean };
       window.addEventListener("marinara:chat-visual-viewport-change", (event) => {
-        measurementWindow.__lastKeyboardOpen = (
-          event as CustomEvent<{ keyboardOpen?: boolean }>
-        ).detail?.keyboardOpen;
+        measurementWindow.__lastKeyboardOpen = (event as CustomEvent<{ keyboardOpen?: boolean }>).detail?.keyboardOpen;
       });
     });
     await page.setViewportSize({ width: 1440, height: 700 });
     await input.focus();
 
     await expect
-      .poll(() =>
-        page.evaluate(
-          () => (window as Window & { __lastKeyboardOpen?: boolean }).__lastKeyboardOpen,
-        ),
-      )
+      .poll(() => page.evaluate(() => (window as Window & { __lastKeyboardOpen?: boolean }).__lastKeyboardOpen))
       .toBe(false);
     await expect(root).not.toHaveAttribute("data-marinara-accent-animation");
 
@@ -2754,31 +2740,29 @@ test("desktop Roleplay composition keeps ambient work off the input path and gro
 
     const resizeStability = await input.evaluate(
       (element) =>
-        new Promise<{ heightDelta: number; delayedStyleMutations: number; overflowY: string }>(
-          (resolve) => {
-            const heights: number[] = [];
-            let delayedStyleMutations = 0;
-            const observer = new MutationObserver((records) => {
-              delayedStyleMutations += records.length;
-            });
-            observer.observe(element, { attributes: true, attributeFilter: ["style"] });
+        new Promise<{ heightDelta: number; delayedStyleMutations: number; overflowY: string }>((resolve) => {
+          const heights: number[] = [];
+          let delayedStyleMutations = 0;
+          const observer = new MutationObserver((records) => {
+            delayedStyleMutations += records.length;
+          });
+          observer.observe(element, { attributes: true, attributeFilter: ["style"] });
 
-            const sample = () => {
-              heights.push(element.getBoundingClientRect().height);
-              if (heights.length < 18) {
-                requestAnimationFrame(sample);
-                return;
-              }
-              observer.disconnect();
-              resolve({
-                heightDelta: Math.max(...heights) - Math.min(...heights),
-                delayedStyleMutations,
-                overflowY: element.style.overflowY,
-              });
-            };
-            requestAnimationFrame(sample);
-          },
-        ),
+          const sample = () => {
+            heights.push(element.getBoundingClientRect().height);
+            if (heights.length < 18) {
+              requestAnimationFrame(sample);
+              return;
+            }
+            observer.disconnect();
+            resolve({
+              heightDelta: Math.max(...heights) - Math.min(...heights),
+              delayedStyleMutations,
+              overflowY: element.style.overflowY,
+            });
+          };
+          requestAnimationFrame(sample);
+        }),
     );
     expect(resizeStability.heightDelta).toBeLessThanOrEqual(1);
     expect(resizeStability.delayedStyleMutations).toBe(0);
@@ -10890,8 +10874,167 @@ test("mobile chat composer follows the visual viewport above the software keyboa
     expect(Math.abs(iosShellBox!.height - 360)).toBeLessThanOrEqual(1);
     expect(iosComposerBox!.y).toBeGreaterThanOrEqual(0);
     expect(iosComposerBox!.y + iosComposerBox!.height).toBeLessThanOrEqual(360);
+
+    await page.evaluate(async () => {
+      const storePath = "/src/stores/ui.store.ts";
+      const { useUIStore } = (await import(/* @vite-ignore */ storePath)) as {
+        useUIStore: {
+          getState: () => {
+            setAppBackgroundColor: (color: string) => void;
+            setVisualTheme: (theme: "default" | "sillytavern") => void;
+          };
+        };
+      };
+      useUIStore.getState().setAppBackgroundColor("#123456");
+    });
+    await expect
+      .poll(() =>
+        page.evaluate(() => ({
+          html: document.documentElement.style.getPropertyValue("background-color"),
+          body: document.body.style.getPropertyValue("background-color"),
+        })),
+      )
+      .toEqual({ html: "rgb(18, 52, 86)", body: "rgb(18, 52, 86)" });
+
+    await page.evaluate(async () => {
+      const storePath = "/src/stores/ui.store.ts";
+      const { useUIStore } = (await import(/* @vite-ignore */ storePath)) as {
+        useUIStore: {
+          getState: () => {
+            setAppBackgroundColor: (color: string) => void;
+            setVisualTheme: (theme: "default" | "sillytavern") => void;
+          };
+        };
+      };
+      const style = document.createElement("style");
+      style.id = "marinara-safe-area-theme-smoke";
+      style.textContent = 'html[data-visual-theme="sillytavern"][data-theme] { --background: rgb(101, 67, 33); }';
+      document.head.appendChild(style);
+      useUIStore.getState().setAppBackgroundColor("");
+      useUIStore.getState().setVisualTheme("sillytavern");
+    });
+    await expect
+      .poll(() =>
+        page.evaluate(() => ({
+          html: document.documentElement.style.getPropertyValue("background-color"),
+          body: document.body.style.getPropertyValue("background-color"),
+        })),
+      )
+      .toEqual({ html: "rgb(101, 67, 33)", body: "rgb(101, 67, 33)" });
+
+    await page.evaluate(() => {
+      Object.defineProperty(window, "scrollY", {
+        configurable: true,
+        get: () => 64,
+      });
+      window.visualViewport?.dispatchEvent(new Event("scroll"));
+    });
+    await expect
+      .poll(() =>
+        page.evaluate(() =>
+          getComputedStyle(document.documentElement).getPropertyValue("--mari-app-scroll-compensate").trim(),
+        ),
+      )
+      .toBe("64px");
+    await expect
+      .poll(() => page.evaluate(() => getComputedStyle(document.querySelector<HTMLElement>(".mari-app")!).transform))
+      .toContain("64");
+
+    await page.evaluate(async () => {
+      const storePath = "/src/stores/ui.store.ts";
+      const { useUIStore } = (await import(/* @vite-ignore */ storePath)) as {
+        useUIStore: {
+          getState: () => {
+            openBotBrowser: () => void;
+          };
+        };
+      };
+      useUIStore.getState().openBotBrowser();
+    });
+    await expect(shell).not.toHaveAttribute("data-chat-surface-active");
+    await expect.poll(() => shell.evaluate((element) => getComputedStyle(element).transform)).toBe("none");
+
+    await page.evaluate(async (chatId) => {
+      const storePath = "/src/stores/ui.store.ts";
+      const { useUIStore } = (await import(/* @vite-ignore */ storePath)) as {
+        useUIStore: {
+          getState: () => {
+            closeBotBrowser: () => void;
+            setTrackerPanelEnabled: (enabled: boolean) => void;
+            setTrackerPanelOpen: (open: boolean, chatId?: string | null) => void;
+          };
+        };
+      };
+      const store = useUIStore.getState();
+      store.closeBotBrowser();
+      store.setTrackerPanelEnabled(true);
+      store.setTrackerPanelOpen(true, chatId);
+    }, chat.id);
+    await expect(shell).not.toHaveAttribute("data-chat-surface-active");
+    await expect.poll(() => shell.evaluate((element) => getComputedStyle(element).transform)).toBe("none");
   } finally {
     await page.request.delete(`/api/chats/${chat.id}`).catch(() => undefined);
+  }
+});
+
+test("focused mobile composers stay open while history scrolls in Conversation and Roleplay", async ({
+  page,
+}, testInfo) => {
+  test.skip(!testInfo.project.name.includes("mobile"), "Focused composer history behavior is mobile-only.");
+
+  const chatIds: string[] = [];
+  try {
+    await page.goto("/");
+    for (const mode of ["conversation", "roleplay"] as const) {
+      const response = await page.request.post("/api/chats", {
+        data: {
+          name: `${mode} focused composer smoke`,
+          mode,
+          characterIds: [],
+        },
+      });
+      expect(response.ok()).toBeTruthy();
+      const chat = (await response.json()) as { id: string };
+      chatIds.push(chat.id);
+      for (let index = 0; index < 18; index += 1) {
+        const messageResponse = await page.request.post(`/api/chats/${chat.id}/messages`, {
+          data: {
+            role: index % 2 === 0 ? "user" : "assistant",
+            content: `${mode} focused composer history ${index + 1}. ${"Scrollable context. ".repeat(4)}`,
+          },
+        });
+        expect(messageResponse.ok()).toBeTruthy();
+      }
+
+      await page.evaluate((chatId) => {
+        localStorage.setItem("marinara-active-chat-id", chatId);
+      }, chat.id);
+      await page.reload();
+
+      const transcript = page.locator(".mari-messages-scroll:visible").first();
+      const textarea = page.locator('[data-chat-composer="true"]:visible');
+      await expect(page.locator(`[data-chat-mode="${mode}"]`)).toBeVisible();
+      await expect(transcript).toBeVisible();
+      await expect
+        .poll(() => transcript.evaluate((element) => element.scrollHeight - element.clientHeight))
+        .toBeGreaterThan(400);
+      await transcript.evaluate((element) => {
+        element.scrollTop = element.scrollHeight;
+      });
+      await textarea.focus();
+      await expect(textarea).toBeFocused();
+
+      await transcript.evaluate((element) => {
+        element.scrollTop = Math.max(0, element.scrollTop - 320);
+      });
+      await expect
+        .poll(() => transcript.evaluate((element) => element.scrollHeight - element.scrollTop - element.clientHeight))
+        .toBeGreaterThan(180);
+      await expect(textarea).toBeFocused();
+      await expect(textarea).toBeVisible();
+    }
+  } finally {
+    await Promise.all(chatIds.map((chatId) => page.request.delete(`/api/chats/${chatId}`).catch(() => undefined)));
   }
 });
 
@@ -10912,7 +11055,8 @@ test("Conversation media searches match GIFs and internal presses keep the picke
     }, chat.id);
     await page.goto("/");
 
-    await page.getByRole("button", { name: /Emoji, GIFs/u }).click();
+    const mediaButton = page.getByRole("button", { name: /Emoji, GIFs/u });
+    await mediaButton.click();
     const mediaPicker = page.locator("[data-conversation-media-picker]:visible");
     await expect(mediaPicker).toBeVisible();
     const emojiSearchInput = page.locator('input[placeholder="Search emojis..."]:visible');
@@ -10969,6 +11113,108 @@ test("Conversation media searches match GIFs and internal presses keep the picke
     expect(emojiSearchStyle).toEqual(gifSearchStyle);
     expect(kaomojiSearchStyle).toEqual(gifSearchStyle);
   } finally {
+    await page.request.delete(`/api/chats/${chat.id}`).catch(() => undefined);
+  }
+});
+
+test("media pickers persist and surface recently used items", async ({ page }, testInfo) => {
+  const projectSuffix = testInfo.project.name.includes("mobile") ? "mobile" : "desktop";
+  const stickerName = `recent_${projectSuffix}_${Date.now().toString(36)}`.slice(0, 32);
+  const stickerResponse = await page.request.post("/api/custom-stickers/upload", {
+    multipart: {
+      file: {
+        name: `${stickerName}.gif`,
+        mimeType: "image/gif",
+        buffer: Buffer.from(TRANSPARENT_GIF_BASE64, "base64"),
+      },
+      name: stickerName,
+    },
+  });
+  expect(stickerResponse.ok()).toBeTruthy();
+  const sticker = (await stickerResponse.json()) as { id: string; name: string; url: string };
+
+  const response = await page.request.post("/api/chats", {
+    data: {
+      name: "Recent media smoke",
+      mode: "conversation",
+      characterIds: [],
+    },
+  });
+  expect(response.ok()).toBeTruthy();
+  const chat = (await response.json()) as { id: string };
+  const recentGif = `data:image/gif;base64,${TRANSPARENT_GIF_BASE64}`;
+
+  try {
+    await page.addInitScript(
+      ({ chatId, gifUrl, stickerValue, stickerUrl }) => {
+        localStorage.setItem("marinara-active-chat-id", chatId);
+        localStorage.setItem(
+          "marinara-recent-media-v1",
+          JSON.stringify({
+            emoji: [{ value: "🌶️", label: "hot pepper" }],
+            kaomoji: [{ value: "(づ｡◕‿‿◕｡)づ", label: "(づ｡◕‿‿◕｡)づ" }],
+            gif: [{ value: gifUrl, label: "Recent GIF", previewUrl: gifUrl }],
+            sticker: [{ value: stickerValue, label: stickerValue, previewUrl: stickerUrl }],
+          }),
+        );
+      },
+      { chatId: chat.id, gifUrl: recentGif, stickerValue: sticker.name, stickerUrl: sticker.url },
+    );
+    await page.goto("/");
+
+    const mediaButton = page.getByRole("button", { name: /Emoji, GIFs/u });
+    await mediaButton.click();
+    const mediaPicker = page.locator("[data-conversation-media-picker]:visible");
+    await expect(mediaPicker).toBeVisible();
+
+    const recentEmoji = mediaPicker.locator('[data-recent-media="emoji"]');
+    await expect(recentEmoji).toContainText("Recently used");
+    await expect(recentEmoji.getByRole("button", { name: "hot pepper" })).toBeVisible();
+    const emojiSearch = mediaPicker.getByRole("textbox", { name: "Search emojis" });
+    await emojiSearch.fill("test tube");
+    await mediaPicker.getByRole("button", { name: /test tube/i }).click();
+    await expect(mediaPicker).toBeHidden();
+    await mediaButton.click();
+    await expect(recentEmoji.getByRole("button", { name: /test tube/i })).toBeVisible();
+
+    await mediaPicker.getByRole("button", { name: "Kaomoji", exact: true }).click();
+    const kaomojiPicker = mediaPicker.getByRole("dialog", { name: "Kaomoji picker" });
+    const recentKaomoji = kaomojiPicker.locator('[data-recent-media="kaomoji"]');
+    await expect(recentKaomoji).toContainText("(づ｡◕‿‿◕｡)づ");
+    const kaomojiOptions = kaomojiPicker.locator("[data-kaomoji-results] > div.grid button");
+    const kaomojiValues = (await kaomojiOptions.allTextContents()).map((value) => value.trim());
+    const newKaomojiIndex = kaomojiValues.findIndex((value) => value !== "(づ｡◕‿‿◕｡)づ");
+    expect(newKaomojiIndex).toBeGreaterThanOrEqual(0);
+    const newKaomoji = kaomojiOptions.nth(newKaomojiIndex);
+    const newKaomojiValue = (await newKaomoji.textContent())?.trim();
+    expect(newKaomojiValue).toBeTruthy();
+    await newKaomoji.click();
+    await expect(mediaPicker).toBeHidden();
+    await mediaButton.click();
+    await mediaPicker.getByRole("button", { name: "Kaomoji", exact: true }).click();
+    await expect(recentKaomoji.locator("button").first()).toContainText(newKaomojiValue!);
+
+    await mediaPicker.getByRole("button", { name: "GIFs", exact: true }).click();
+    const recentGifSection = mediaPicker.locator('[data-recent-media="gif"]');
+    await expect(recentGifSection).toContainText("Recently used");
+    await expect(recentGifSection.locator('[title="Recent GIF"]')).toBeVisible();
+
+    await mediaPicker.getByRole("button", { name: "Stickers", exact: true }).click();
+    const recentStickerSection = mediaPicker.locator('[data-recent-media="sticker"]');
+    await expect(recentStickerSection).toContainText("Recently used");
+    await expect(recentStickerSection.locator(`[title="Send sticker:${stickerName}:"]`)).toBeVisible();
+
+    const stored = await page.evaluate(() => JSON.parse(localStorage.getItem("marinara-recent-media-v1") ?? "{}"));
+    expect(stored.emoji[0].value).toBe("🧪");
+    expect(stored.kaomoji[0].value).toBe(newKaomojiValue);
+
+    await page.evaluate(() => {
+      localStorage.removeItem("marinara-recent-media-v1");
+      window.dispatchEvent(new StorageEvent("storage", { key: null }));
+    });
+    await expect(recentStickerSection).toHaveCount(0);
+  } finally {
+    await page.request.delete(`/api/custom-stickers/${sticker.id}`).catch(() => undefined);
     await page.request.delete(`/api/chats/${chat.id}`).catch(() => undefined);
   }
 });
@@ -11286,9 +11532,10 @@ test("Background cards keep names readable and load thumbnails", async ({ page }
   await expect(page.getByRole("dialog", { name: "Background Library" })).toBeHidden();
   await page.getByRole("button", { name: "Browse library" }).click();
   await expect(page.getByRole("dialog", { name: "Background Library" })).toBeVisible();
-  await expect(
-    page.locator('[data-background-id="user:collapsible-background-tags.png"]'),
-  ).toHaveAttribute("data-background-selected", "true");
+  await expect(page.locator('[data-background-id="user:collapsible-background-tags.png"]')).toHaveAttribute(
+    "data-background-selected",
+    "true",
+  );
 });
 
 test("Roleplay displays a selected background when its file route is GET-only", async ({ page }, testInfo) => {
@@ -11643,5 +11890,83 @@ test("Background library organization works with desktop drag and touch drag", a
   } finally {
     if (folderId) await page.request.delete(`/api/backgrounds/folders/${encodeURIComponent(folderId)}`);
     await page.request.delete(`/api/backgrounds/${encodeURIComponent(currentFilename)}`);
+  }
+});
+
+test("character editor preserves unsaved fields across responsive layout changes", async ({
+  page,
+  request,
+}, testInfo) => {
+  test.skip(!testInfo.project.name.includes("desktop"), "Responsive editor regression starts in desktop layout.");
+
+  const characterName = `Responsive Character ${Date.now().toString(36)}`;
+  const response = await request.post("/api/characters", {
+    data: {
+      data: {
+        name: characterName,
+        description: "Saved description",
+      },
+    },
+  });
+  expect(response.ok()).toBeTruthy();
+  const character = (await response.json()) as { id: string };
+
+  try {
+    await page.goto("/");
+    await page.locator('[data-tour="panel-characters"]').click();
+    await page.locator(`[data-touch-drag-card="character"][data-character-id="${character.id}"]`).click();
+
+    const desktopEditor = page.locator('[data-component="DetailEditor"]');
+    const unsavedName = `${characterName} unsaved`;
+    await desktopEditor.locator(".mari-editor-title-input").fill(unsavedName);
+
+    await page.setViewportSize({ width: 760, height: 900 });
+    const mobileEditor = page.locator('[data-component="MobileDetailSheet"]');
+    await expect(mobileEditor).toBeVisible();
+    await expect(mobileEditor.locator(".mari-editor-title-input")).toHaveValue(unsavedName);
+
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await expect(desktopEditor).toBeVisible();
+    await expect(desktopEditor.locator(".mari-editor-title-input")).toHaveValue(unsavedName);
+  } finally {
+    await request.delete(`/api/characters/${character.id}`).catch(() => undefined);
+  }
+});
+
+test("persona editor preserves unsaved fields across responsive layout changes", async ({
+  page,
+  request,
+}, testInfo) => {
+  test.skip(!testInfo.project.name.includes("desktop"), "Responsive editor regression starts in desktop layout.");
+
+  const personaName = `Responsive Persona ${Date.now().toString(36)}`;
+  const response = await request.post("/api/characters/personas", {
+    data: {
+      name: personaName,
+      description: "Saved description",
+    },
+  });
+  expect(response.ok()).toBeTruthy();
+  const persona = (await response.json()) as { id: string };
+
+  try {
+    await page.goto("/");
+    await page.locator('[data-tour="panel-personas"]').click();
+    await page.locator('[data-touch-drag-card="persona"]').filter({ hasText: personaName }).click();
+
+    const desktopEditor = page.locator('[data-component="DetailEditor"]');
+    const unsavedName = `${personaName} unsaved`;
+    await desktopEditor.locator(".mari-editor-title-input").fill(unsavedName);
+
+    await page.setViewportSize({ width: 760, height: 900 });
+    const mobileEditor = page.locator('[data-component="MobileDetailSheet"]');
+    await expect(mobileEditor).toBeVisible();
+    await expect(mobileEditor.locator(".mari-editor-title-input")).toHaveValue(unsavedName);
+
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await expect(desktopEditor).toBeVisible();
+    await expect(desktopEditor.locator(".mari-editor-title-input")).toHaveValue(unsavedName);
+  } finally {
+    await request.delete(`/api/characters/personas/${persona.id}`).catch(() => undefined);
   }
 });
