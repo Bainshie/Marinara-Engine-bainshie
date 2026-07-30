@@ -34,6 +34,8 @@ import {
 } from "../services/extensions/personal-extension-policy.service.js";
 
 const ID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
+const CONTEXT_MAX_ID_LENGTH = 256;
+const CONTEXT_MAX_CHARACTER_IDS = 256;
 const CONTEXT_TEXT_BUDGET = 256_000;
 const CONTEXT_FIELD_LENGTH = 32_000;
 const CONTEXT_TAG_COUNT = 100;
@@ -125,7 +127,9 @@ export function createPersonalExtensionRecordContext(options: {
   const budget = { remaining: CONTEXT_TEXT_BUDGET };
   return {
     characters: capabilities.has("read_active_characters")
-      ? options.characters.slice(0, 256).map((character) => characterContextSnapshot(character, budget))
+      ? options.characters
+          .slice(0, CONTEXT_MAX_CHARACTER_IDS)
+          .map((character) => characterContextSnapshot(character, budget))
       : [],
     persona:
       capabilities.has("read_active_persona") && options.persona
@@ -150,7 +154,7 @@ function parseContextCharacterIds(value: unknown) {
         (candidate): candidate is string => typeof candidate === "string" && ID_PATTERN.test(candidate),
       ),
     ),
-  ).slice(0, 256);
+  ).slice(0, CONTEXT_MAX_CHARACTER_IDS);
 }
 
 function parseContextCharacter(row: { id: string; data: string } | null): ContextCharacterSource | null {
@@ -207,8 +211,8 @@ export function browserWorkerSource(extension: PersonalExtension) {
   const cleanupFns = [];
   let requestId = 0;
   const pending = new Map();
-  const MAX_CONTEXT_ID_LENGTH = 256;
-  const MAX_CONTEXT_CHARACTER_IDS = 256;
+  const MAX_CONTEXT_ID_LENGTH = ${CONTEXT_MAX_ID_LENGTH};
+  const MAX_CONTEXT_CHARACTER_IDS = ${CONTEXT_MAX_CHARACTER_IDS};
   const MAX_CONTEXT_TEXT = ${CONTEXT_TEXT_BUDGET};
   const MAX_CONTEXT_FIELD = ${CONTEXT_FIELD_LENGTH};
   const MAX_CONTEXT_TAGS = ${CONTEXT_TAG_COUNT};
