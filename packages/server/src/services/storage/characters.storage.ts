@@ -391,7 +391,7 @@ export function createCharactersStorage(db: DB) {
     ) {
       const existing = await this.getById(characterId);
       if (!existing) return null;
-      const currentData = parseCharacterData(existing.data);
+      const currentData = normalizeCharacterData(parseCharacterData(existing.data));
       const timestamp = options?.createdAt ?? existing.updatedAt ?? now();
       const id = newId();
       await db.insert(characterCardVersions).values({

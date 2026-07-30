@@ -97,6 +97,7 @@ import {
   normalizeAgentPromptTemplateOptions,
   normalizeStoryboardAgentSettings,
   parseAgentSettingsRecord,
+  CUSTOM_AGENT_CONTEXT_SOURCE_IDS,
   type AgentPhase,
   type AgentPromptTemplateOption,
   type AgentResultType,
@@ -359,6 +360,15 @@ const CUSTOM_AGENT_CONTEXT_SOURCE_META: Array<{
     requiredCapability: "access_vectors",
   },
 ];
+
+if (import.meta.env.DEV) {
+  const sourceIds = CUSTOM_AGENT_CONTEXT_SOURCE_META.map((source) => source.id);
+  const uniqueSourceIds = new Set(sourceIds);
+  const hasEverySource = CUSTOM_AGENT_CONTEXT_SOURCE_IDS.every((source) => uniqueSourceIds.has(source));
+  if (!hasEverySource || uniqueSourceIds.size !== sourceIds.length) {
+    throw new Error("Custom agent context source metadata must contain every source exactly once.");
+  }
+}
 
 const CUSTOM_AGENT_RESULT_TYPE_OPTIONS: Array<{
   id: CustomAgentResultType;

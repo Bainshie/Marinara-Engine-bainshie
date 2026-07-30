@@ -172,10 +172,15 @@ try {
   const originalLine = "Original assistant wording that must be forgotten.";
   const editedLine = "Edited assistant wording that must replace it.";
   const messageRows = [
-    { role: "user" as const, content: "First user message." },
-    { role: "assistant" as const, content: "First assistant message." },
+    { role: "user" as const, content: "Earlier user message one." },
+    { role: "assistant" as const, content: "Earlier assistant message one." },
+    { role: "user" as const, content: "Earlier user message two." },
+    { role: "assistant" as const, content: "Earlier assistant message two." },
+    { role: "user" as const, content: "Earlier user message three." },
+    { role: "assistant" as const, content: "Recent assistant message one." },
+    { role: "user" as const, content: "Recent user message one." },
     { role: "assistant" as const, content: originalLine },
-    { role: "user" as const, content: "Second user message." },
+    { role: "user" as const, content: "Recent user message two." },
     { role: "assistant" as const, content: "Final assistant message." },
   ];
   const createdMessages = [];
@@ -195,9 +200,12 @@ try {
   }
 
   await db.insert(memoryChunks).values({
-    id: "stale-edited-memory",
+    id: "unaffected-earlier-memory",
     chatId: editedChat.id,
-    content: messageRows.map((message) => message.content).join("\n\n"),
+    content: messageRows
+      .slice(0, 5)
+      .map((message) => message.content)
+      .join("\n\n"),
     embedding: JSON.stringify([1, 0]),
     messageCount: 5,
     sourceChatId: null,
@@ -205,10 +213,28 @@ try {
     lastMessageAt: "2026-07-30T10:04:00.000Z",
     createdAt: "2026-07-30T10:04:00.000Z",
   });
+  await db.insert(memoryChunks).values({
+    id: "stale-edited-memory",
+    chatId: editedChat.id,
+    content: messageRows
+      .slice(5)
+      .map((message) => message.content)
+      .join("\n\n"),
+    embedding: JSON.stringify([1, 0]),
+    messageCount: 5,
+    sourceChatId: null,
+    firstMessageAt: "2026-07-30T10:05:00.000Z",
+    lastMessageAt: "2026-07-30T10:09:00.000Z",
+    createdAt: "2026-07-30T10:09:00.000Z",
+  });
 
-  await chatStorage.updateMessageContent(createdMessages[2]!.id, editedLine);
+  await chatStorage.updateMessageContent(createdMessages[7]!.id, editedLine);
   const afterEdit = (await db.select().from(memoryChunks)).filter((chunk) => chunk.chatId === editedChat.id);
-  assert.equal(afterEdit.length, 0, "editing a message must invalidate every native chunk that covers it");
+  assert.deepEqual(
+    afterEdit.map((chunk) => chunk.id),
+    ["unaffected-earlier-memory"],
+    "editing a message must invalidate its native chunk without deleting unaffected earlier chunks",
+  );
 
   await chunkAndEmbedMessages(
     db,
@@ -217,10 +243,12 @@ try {
     { embeddingSource, readBehindMessageCount: 0 },
   );
   const rebuilt = (await db.select().from(memoryChunks)).filter((chunk) => chunk.chatId === editedChat.id);
-  assert.equal(rebuilt.length, 1, "the next memory refresh must rebuild the invalidated chunk");
-  assert.match(rebuilt[0]!.content, new RegExp(editedLine.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "u"));
+  assert.equal(rebuilt.length, 2, "the next memory refresh must rebuild only the invalidated chunk");
+  const rebuiltEditedChunk = rebuilt.find((chunk) => chunk.id !== "unaffected-earlier-memory");
+  assert.ok(rebuiltEditedChunk);
+  assert.match(rebuiltEditedChunk.content, new RegExp(editedLine.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "u"));
   assert.doesNotMatch(
-    rebuilt[0]!.content,
+    rebuiltEditedChunk.content,
     new RegExp(originalLine.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "u"),
     "rebuilt Memory Recall context must not contain the superseded message version",
   );

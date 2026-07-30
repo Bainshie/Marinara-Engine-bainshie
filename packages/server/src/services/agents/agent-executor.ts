@@ -2641,13 +2641,13 @@ function buildAgentExtras(
 
   if (sources.chatSummary && context.chatSummary) {
     parts.push(`<chat_summary>`);
-    parts.push(context.chatSummary);
+    parts.push(escapeXml(context.chatSummary));
     parts.push(`</chat_summary>`);
   }
 
   if (sources.authorNotes && context.authorNotes) {
     parts.push(`<author_notes>`);
-    parts.push(context.authorNotes);
+    parts.push(escapeXml(context.authorNotes));
     parts.push(`</author_notes>`);
   }
 

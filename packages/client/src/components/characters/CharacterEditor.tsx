@@ -1508,6 +1508,10 @@ function MetadataTab({
           <input
             value={formData.name}
             onChange={(e) => updateField("name", e.target.value)}
+            onBlur={() => {
+              const trimmedName = formData.name.trim();
+              if (trimmedName !== formData.name) updateField("name", trimmedName);
+            }}
             className="w-full rounded-xl border border-[var(--border)] bg-[var(--secondary)] px-3 py-2 text-sm outline-none focus:border-[var(--primary)]/40 focus:ring-1 focus:ring-[var(--primary)]/20"
           />
         </label>

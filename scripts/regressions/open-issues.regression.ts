@@ -7,6 +7,8 @@ import AdmZip from "adm-zip";
 import type { Chat, Message } from "../../packages/shared/src/types/chat.js";
 import playwrightConfig from "../../playwright.config.js";
 import { resolveDevSharedBuildScript } from "../dev-shared-build.mjs";
+import { characterCardVersions, characters } from "../../packages/server/src/db/schema/index.js";
+import { eq } from "../../packages/server/src/db/file-query.js";
 
 const REPOSITORY_ROOT = fileURLToPath(new URL("../../", import.meta.url));
 import {
@@ -526,6 +528,54 @@ try {
     "Storage trim fixture",
     "Character storage must normalize names even when a caller bypasses route validation",
   );
+  const storageTrimFixtureData = JSON.parse(storageTrimFixture.data) as Record<string, unknown>;
+  await db
+    .update(characters)
+    .set({ data: JSON.stringify({ ...storageTrimFixtureData, name: "  Version snapshot fixture  " }) })
+    .where(eq(characters.id, storageTrimFixture.id));
+  const normalizedSnapshot = await characterStorage.createVersionSnapshot(storageTrimFixture.id);
+  assert.equal(
+    normalizedSnapshot?.data.name,
+    "Version snapshot fixture",
+    "Character version snapshots must normalize legacy padded names",
+  );
+  const resetTrimFixture = await characterStorage.resetVersions(storageTrimFixture.id);
+  assert.equal(
+    (JSON.parse(resetTrimFixture?.data ?? "{}") as { name?: string }).name,
+    "Version snapshot fixture",
+    "Resetting Character versions must normalize legacy padded names",
+  );
+  await db
+    .update(characters)
+    .set({ data: JSON.stringify({ ...storageTrimFixtureData, name: "  Duplicate fixture  " }) })
+    .where(eq(characters.id, storageTrimFixture.id));
+  const duplicateTrimFixture = await characterStorage.duplicateCharacter(storageTrimFixture.id);
+  assert.equal(
+    (JSON.parse(duplicateTrimFixture?.data ?? "{}") as { name?: string }).name,
+    "Duplicate fixture (Copy)",
+    "Duplicating a Character must normalize legacy padded names",
+  );
+
+  const restoreTrimFixture = await characterStorage.create(characterDataSchema.parse({ name: "Restore source" }));
+  const restoreVersionId = "padded-name-restore-version";
+  await db.insert(characterCardVersions).values({
+    id: restoreVersionId,
+    characterId: restoreTrimFixture.id,
+    data: JSON.stringify({ ...JSON.parse(restoreTrimFixture.data), name: "  Restored fixture  " }),
+    comment: "",
+    avatarPath: null,
+    version: "1.0",
+    source: "regression",
+    reason: "Padded legacy fixture",
+    createdAt: "2026-07-30T12:00:00.000Z",
+  });
+  const restoredTrimFixture = await characterStorage.restoreVersion(restoreTrimFixture.id, restoreVersionId);
+  assert.equal(
+    (JSON.parse(restoredTrimFixture?.data ?? "{}") as { name?: string }).name,
+    "Restored fixture",
+    "Restoring a Character version must normalize legacy padded names",
+  );
+
   const patchFixture = characterDataSchema.parse({
     name: "Nested patch fixture",
     extensions: {
