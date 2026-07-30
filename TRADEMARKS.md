@@ -61,6 +61,10 @@ operator and prominently display a disclosure substantially similar to:
 > **[Service name] is independently operated by [operator] and is not
 > affiliated with, endorsed by, or supported by Pasta-Devs.**
 
+Displaying this disclosure does not authorize use of a Project Mark. It is
+required in addition to any prior written permission applicable under
+[Uses That Require Written Permission](#uses-that-require-written-permission).
+
 The disclosure must be visible wherever customers choose, purchase, or first
 access the service. It must not be hidden only in general terms, a privacy
 policy, or another page that customers would not ordinarily see.
@@ -85,10 +89,11 @@ Pasta-Devs may be described as an **official Marinara Engine build**.
 
 A mirror, repackaged image, preconfigured image, deployment template, hosted
 instance, or service deployment is not an official build, even when its
-application files are unchanged. A third party may truthfully state that it
-deploys an unmodified copy of a specific official release, provided that it
-identifies the release, links to the Pasta-Devs source, and includes the
-independent-service disclosure.
+application files are unchanged. A third-party distributor may truthfully
+state that its artifact contains or deploys an unmodified copy of a specific
+official release, provided that it identifies the release and links to the
+Pasta-Devs source. If that artifact is used to operate a hosted service, the
+service must also include the independent-service disclosure.
 
 Only a service operated by Pasta-Devs, or a service with prior written
 authorization from Pasta-Devs, may be presented as an official Marinara Engine
@@ -96,7 +101,8 @@ or Pasta-Devs service.
 
 ## Uses That Require Written Permission
 
-Prior written permission from Pasta-Devs is required to:
+The independent-service disclosure does not grant any of the permissions in
+this section. Prior written permission from Pasta-Devs is required to:
 
 - use a Project Mark as the name or dominant branding of a company, product,
   paid service, domain, application, package, or social account;
