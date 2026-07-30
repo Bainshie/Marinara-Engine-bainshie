@@ -22,6 +22,11 @@ function parseStoredJson(value: unknown): unknown {
 function containsExactReference(value: unknown, referenceId: string): boolean {
   const pending: unknown[] = [parseStoredJson(value)];
   let scanned = 0;
+  const enqueue = (nested: unknown): boolean => {
+    if (scanned + pending.length >= MAX_SCANNED_VALUES) return false;
+    pending.push(nested);
+    return true;
+  };
   while (pending.length > 0) {
     const current = pending.pop();
     scanned += 1;
@@ -32,11 +37,16 @@ function containsExactReference(value: unknown, referenceId: string): boolean {
     }
     if (current === referenceId) return true;
     if (Array.isArray(current)) {
-      pending.push(...current);
+      for (const nested of current) {
+        if (!enqueue(nested)) return true;
+      }
       continue;
     }
     if (current && typeof current === "object") {
-      pending.push(...Object.values(current as Record<string, unknown>));
+      for (const key in current) {
+        if (!Object.prototype.hasOwnProperty.call(current, key)) continue;
+        if (!enqueue((current as Record<string, unknown>)[key])) return true;
+      }
     }
   }
   return false;

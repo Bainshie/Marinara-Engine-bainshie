@@ -104,6 +104,16 @@ try {
     createdAt: timestamp,
     updatedAt: timestamp,
   });
+  await persistence.documents.create({
+    id: "near-match-shared-world-reference",
+    packageId: "hierarchical-maps",
+    kind: "shared-world-map",
+    name: "Near-match shared world",
+    description: "",
+    data: { definition: { locations: [{ referenceImageId: `${globalReferenceId}-suffix` }] } },
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  });
   await db.insert(chats).values({
     id: "chat-with-map-reference",
     name: "Chat map draft",
@@ -133,6 +143,17 @@ try {
     chatCount: 1,
     totalCount: 1,
   });
+
+  rmSync(globalPath);
+  assert.equal(
+    await spatialReference.resolveSpatialLocationReferenceImage({
+      db,
+      chatId: "chat-1",
+      projection: projection(globalReferenceId),
+    }),
+    null,
+    "Global Gallery references must fail closed when the stored file is missing",
+  );
 
   assert.equal(
     await spatialReference.resolveSpatialLocationReferenceImage({
