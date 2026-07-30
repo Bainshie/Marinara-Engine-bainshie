@@ -441,6 +441,8 @@ function renderRoleplayAgentMenuIcon(agentId: string, variant: "card" | "chip" =
       return <Music2 size={size} className={className} />;
     case "haptic":
       return <Vibrate size={size} className={className} />;
+    case "hierarchical-maps":
+      return <MapIcon size={size} className={className} />;
     case "custom-agents":
       return <Bot size={size} className={className} />;
     default:
@@ -1914,6 +1916,8 @@ export function ChatSettingsDrawer({
     () => customAgents.filter((agent) => !activeAgentIds.includes(agent.id)),
     [activeAgentIds, customAgents],
   );
+  const mapsAgent = availableAgents.find((agent) => agent.id === mapsPackage?.id);
+  const [pendingAgentMenuTargetId, setPendingAgentMenuTargetId] = useState<string | null>(null);
   const roleplayAgentMenuLinks = useMemo(() => {
     if (!metadata.enableAgents || !isRoleplayMode || isGame) return [];
     const links: Array<{
@@ -1945,6 +1949,7 @@ export function ChatSettingsDrawer({
     addLink("illustrator", illustratorActive, illustratorAgentMeta.name);
     addLink("spotify", spotifyActive, musicDjAgentMeta.name);
     addLink("haptic", hapticActive, hapticAgentMeta.name);
+    if (mapsAgent && mapsPackage) addLink(mapsPackage.id, mapsPackageEnabledForChat, mapsAgent.name);
     if (activeCustomAgents.length > 0) {
       links.push({
         id: "custom-agents",
@@ -1982,18 +1987,41 @@ export function ChatSettingsDrawer({
     knowledgeRouterAgentMeta.name,
     lorebookKeeperActive,
     lorebookKeeperAgentMeta.name,
+    mapsAgent,
+    mapsPackage,
+    mapsPackageEnabledForChat,
     metadata.enableAgents,
     musicDjAgentMeta.name,
     proseGuardianActive,
     proseGuardianAgentMeta.name,
     spotifyActive,
   ]);
-  const scrollToAgentMenu = useCallback((targetId: string) => {
+  const focusAgentMenu = useCallback((targetId: string) => {
     const target = document.getElementById(targetId);
-    if (!target) return;
+    if (!target) return false;
     target.scrollIntoView({ behavior: "smooth", block: "start" });
     if (target instanceof HTMLElement) target.focus({ preventScroll: true });
+    return true;
   }, []);
+  const scrollToAgentMenu = useCallback(
+    (targetId: string) => {
+      if (!focusAgentMenu(targetId)) setPendingAgentMenuTargetId(targetId);
+    },
+    [focusAgentMenu],
+  );
+  useEffect(() => {
+    if (!pendingAgentMenuTargetId) return;
+    let secondFrame = 0;
+    const firstFrame = window.requestAnimationFrame(() => {
+      secondFrame = window.requestAnimationFrame(() => {
+        if (focusAgentMenu(pendingAgentMenuTargetId)) setPendingAgentMenuTargetId(null);
+      });
+    });
+    return () => {
+      window.cancelAnimationFrame(firstFrame);
+      if (secondFrame) window.cancelAnimationFrame(secondFrame);
+    };
+  }, [focusAgentMenu, pendingAgentMenuTargetId]);
   const gameAgentFeatureCount =
     (metadata.enableAgents ? 1 : 0) +
     (gameLorebookKeeperEnabled ? 1 : 0) +
@@ -8092,8 +8120,7 @@ export function ChatSettingsDrawer({
                                           capabilityProps={{
                                             chatId: chat.id,
                                             enabledForChat:
-                                              metadata.enableAgents === true &&
-                                              activeAgentIds.includes(ltmPackage.id),
+                                              metadata.enableAgents === true && activeAgentIds.includes(ltmPackage.id),
                                             chatSettings: {
                                               longTermMemoryRecallStyle: metadata.longTermMemoryRecallStyle,
                                               longTermMemoryBudgetTokens: metadata.longTermMemoryBudgetTokens,
@@ -8310,6 +8337,9 @@ export function ChatSettingsDrawer({
                                 icon={cat.icon}
                                 description={cat.description}
                                 count={activeInCat.length}
+                                openRequest={catAgents.some(
+                                  (agent) => getAgentSettingsMenuId(chat.id, agent.id) === pendingAgentMenuTargetId,
+                                )}
                               >
                                 {/* Active agents in this category */}
                                 {activeInCat.length > 0 && (
@@ -8319,8 +8349,14 @@ export function ChatSettingsDrawer({
                                       return (
                                         <div
                                           key={agent.id}
+                                          id={
+                                            agent.id === "hierarchical-maps"
+                                              ? getAgentSettingsMenuId(chat.id, agent.id)
+                                              : undefined
+                                          }
+                                          tabIndex={agent.id === "hierarchical-maps" ? -1 : undefined}
                                           data-chat-agent-entry={agent.id}
-                                          className="rounded-lg bg-[var(--primary)]/10 px-3 py-2 ring-1 ring-[var(--primary)]/30"
+                                          className="scroll-mt-3 rounded-lg bg-[var(--primary)]/10 px-3 py-2 ring-1 ring-[var(--primary)]/30 focus:outline-none focus:ring-1 focus:ring-[var(--primary)]/60"
                                         >
                                           <div className="flex items-start gap-2.5">
                                             <Sparkles
@@ -8390,7 +8426,9 @@ export function ChatSettingsDrawer({
                                               view="settings"
                                               capabilityProps={{
                                                 chatId: chat.id,
-                                                enabledForChat: metadata.enableAgents === true && activeAgentIds.includes(ltmPackage.id),
+                                                enabledForChat:
+                                                  metadata.enableAgents === true &&
+                                                  activeAgentIds.includes(ltmPackage.id),
                                                 chatSettings: {
                                                   longTermMemoryRecallStyle: metadata.longTermMemoryRecallStyle,
                                                   longTermMemoryBudgetTokens: metadata.longTermMemoryBudgetTokens,
@@ -8411,7 +8449,8 @@ export function ChatSettingsDrawer({
                                                 },
                                                 onOpenAgentSettings: () => {
                                                   void requestClose().then((closed) => {
-                                                    if (closed) useUIStore.getState().openAgentDetail("long-term-memory");
+                                                    if (closed)
+                                                      useUIStore.getState().openAgentDetail("long-term-memory");
                                                   });
                                                 },
                                                 onDirtyChange: setEditorDirty,

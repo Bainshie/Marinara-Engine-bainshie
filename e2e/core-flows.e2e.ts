@@ -8289,11 +8289,16 @@ test("Hierarchical Maps settings stay inside the active agent entry", async ({ p
       const agentsSection = drawer.locator('[role="button"][aria-expanded]').filter({ hasText: /^Agents/ });
       await agentsSection.click();
       if (chat.mode === "roleplay") {
-        await drawer.getByRole("button", { name: /Tracker Agents/ }).click();
+        const mapsMenuLink = drawer.locator('button[title="Jump to Hierarchical Maps"]');
+        await expect(mapsMenuLink).toBeVisible();
+        await mapsMenuLink.click();
+      } else {
+        await expect(drawer.locator('button[title="Jump to Hierarchical Maps"]')).toHaveCount(0);
       }
 
       const agentEntry = drawer.locator('[data-chat-agent-entry="hierarchical-maps"]');
       await expect(agentEntry, `${chat.mode} Hierarchical Maps agent entry`).toBeVisible();
+      if (chat.mode === "roleplay") await expect(agentEntry).toBeFocused();
       await expect(agentEntry.getByTestId("hierarchical-maps-controls")).toBeVisible();
       await expect(drawer.locator("marinara-capability-hierarchical-maps")).toHaveCount(1);
       await expect(agentEntry.locator("marinara-capability-hierarchical-maps")).toHaveCount(1);

@@ -13,7 +13,7 @@ export type StoredGalleryFile = {
   filename: string;
 };
 
-const galleryFileLifecycleQueues = new Map<string, Promise<void>>();
+const galleryLifecycleQueues = new Map<string, Promise<void>>();
 
 function normalizedGalleryPath(filePath: string): string {
   return filePath.replace(/\\/g, "/");
@@ -120,24 +120,45 @@ export async function withGalleryFileLifecycleLock<T>(
   operation: () => Promise<T> | T,
   galleryRoot?: string,
 ): Promise<T> {
-  const key = galleryFileLifecycleKey(filePath, galleryRoot);
-  const previous = galleryFileLifecycleQueues.get(key) ?? Promise.resolve();
+  return withGalleryLifecycleLock(`file\0${galleryFileLifecycleKey(filePath, galleryRoot)}`, operation);
+}
+
+async function withGalleryLifecycleLock<T>(key: string, operation: () => Promise<T> | T): Promise<T> {
+  const previous = galleryLifecycleQueues.get(key) ?? Promise.resolve();
   let releaseCurrent!: () => void;
   const current = new Promise<void>((resolveCurrent) => {
     releaseCurrent = resolveCurrent;
   });
   const tail = previous.catch(() => undefined).then(() => current);
-  galleryFileLifecycleQueues.set(key, tail);
+  galleryLifecycleQueues.set(key, tail);
 
   await previous.catch(() => undefined);
   try {
     return await operation();
   } finally {
     releaseCurrent();
-    if (galleryFileLifecycleQueues.get(key) === tail) {
-      galleryFileLifecycleQueues.delete(key);
+    if (galleryLifecycleQueues.get(key) === tail) {
+      galleryLifecycleQueues.delete(key);
     }
   }
+}
+
+/**
+ * Serialize durable-reference creation and metadata deletion for Global Gallery
+ * image ids. Sorting makes multi-image writes acquire locks deterministically.
+ */
+export async function withGlobalGalleryImageLifecycleLocks<T>(
+  imageIds: readonly string[],
+  operation: () => Promise<T> | T,
+): Promise<T> {
+  const ids = Array.from(new Set(imageIds.filter((imageId) => imageId.length > 0))).sort();
+  const acquire = (index: number): Promise<T> => {
+    const imageId = ids[index];
+    return imageId === undefined
+      ? Promise.resolve(operation())
+      : withGalleryLifecycleLock(`global-image\0${imageId}`, () => acquire(index + 1));
+  };
+  return acquire(0);
 }
 
 /**

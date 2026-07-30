@@ -10,7 +10,11 @@ import { newId } from "../utils/id-generator.js";
 import { DATA_DIR } from "../utils/data-dir.js";
 import { assertInsideDir, isAllowedImageBuffer } from "../utils/security.js";
 import { logger } from "../lib/logger.js";
-import { unlinkGalleryFileIfUnreferenced } from "../services/image/gallery-file-lifecycle.js";
+import { findGlobalGalleryCapabilityReferences } from "../services/image/global-gallery-capability-references.js";
+import {
+  unlinkGalleryFileIfUnreferenced,
+  withGlobalGalleryImageLifecycleLocks,
+} from "../services/image/gallery-file-lifecycle.js";
 
 const GLOBAL_GALLERY_ROOT = join(DATA_DIR, "gallery", "global");
 const ALLOWED_EXTS = new Set([".jpg", ".jpeg", ".png", ".gif", ".webp", ".avif"]);
@@ -233,13 +237,33 @@ export async function globalGalleryRoutes(app: FastifyInstance) {
   });
 
   app.delete<{ Params: { id: string } }>("/:id", async (req, reply) => {
-    const image = await storage.getImageById(req.params.id);
-    if (!image) {
+    const deletion = await app.db.transaction(async (transaction) =>
+      withGlobalGalleryImageLifecycleLocks([req.params.id], async () => {
+        const transactionStorage = createGlobalGalleryStorage(transaction);
+        const currentImage = await transactionStorage.getImageById(req.params.id);
+        if (!currentImage) return { status: "missing" as const };
+        const references = await findGlobalGalleryCapabilityReferences(transaction, req.params.id);
+        if (references.totalCount > 0) return { status: "referenced" as const, references };
+        await transactionStorage.removeImage(req.params.id);
+        return { status: "deleted" as const, filePath: currentImage.filePath };
+      }),
+    );
+
+    if (deletion.status === "missing") {
       return reply.status(404).send({ error: "Not found" });
     }
+    if (deletion.status === "referenced") {
+      return reply.status(409).send({
+        error:
+          "This image is used by a saved map, shared world, or chat map. Remove those artwork links before deleting it.",
+        code: "global_gallery_image_in_use",
+        referenceCount: deletion.references.totalCount,
+        documentReferenceCount: deletion.references.documentCount,
+        chatReferenceCount: deletion.references.chatCount,
+      });
+    }
 
-    await storage.removeImage(req.params.id);
-    await unlinkGalleryFileIfUnreferenced({ db: app.db, filePath: image.filePath });
+    await unlinkGalleryFileIfUnreferenced({ db: app.db, filePath: deletion.filePath });
     return { success: true };
   });
 }
