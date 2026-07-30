@@ -6158,6 +6158,60 @@ test("Browser labels and the Persona full library stay available across viewport
   expect(errors.filter((error) => !error.includes("status of 503 (Service Unavailable)"))).toEqual([]);
 });
 
+test("Character and Persona sidebars find cards by creator", async ({ page, request }, testInfo) => {
+  const suffix = `${testInfo.project.name}-${Date.now().toString(36)}`;
+  const characterName = `Sidebar Character ${suffix}`;
+  const characterCreator = `Character Author ${suffix}`;
+  const personaName = `Sidebar Persona ${suffix}`;
+  const personaCreator = `Persona Author ${suffix}`;
+
+  const characterResponse = await request.post("/api/characters", {
+    data: {
+      data: {
+        name: characterName,
+        creator: characterCreator,
+        description: "The name deliberately does not contain the creator.",
+      },
+    },
+  });
+  expect(characterResponse.ok()).toBeTruthy();
+  const character = (await characterResponse.json()) as { id: string };
+
+  const personaResponse = await request.post("/api/characters/personas", {
+    data: {
+      name: personaName,
+      creator: personaCreator,
+      description: "The name deliberately does not contain the creator.",
+    },
+  });
+  expect(personaResponse.ok()).toBeTruthy();
+  const persona = (await personaResponse.json()) as { id: string };
+
+  const mobile = testInfo.project.name.includes("mobile");
+  const rightPanel = page.locator(`[data-component="${mobile ? "RightPanelMobile" : "RightPanelDesktop"}"]`);
+
+  try {
+    await page.goto("/");
+
+    await page.locator('[data-tour="panel-characters"]').click();
+    await expect(rightPanel).toBeVisible();
+    await rightPanel.getByPlaceholder('Search characters or -tag:"tag name"').fill(characterCreator);
+    await expect(
+      rightPanel.locator(`[data-touch-drag-card="character"][data-character-id="${character.id}"]`),
+    ).toContainText(characterName);
+
+    await page.locator('[data-tour="panel-personas"]').click();
+    await expect(rightPanel).toBeVisible();
+    await rightPanel.getByPlaceholder("Search personas").fill(personaCreator);
+    await expect(rightPanel.locator('[data-touch-drag-card="persona"]').filter({ hasText: personaName })).toBeVisible();
+  } finally {
+    await Promise.all([
+      request.delete(`/api/characters/${character.id}`).catch(() => undefined),
+      request.delete(`/api/characters/personas/${persona.id}`).catch(() => undefined),
+    ]);
+  }
+});
+
 test("downloadable agent catalog is usable on desktop and mobile", async ({ page }, testInfo) => {
   const errors = collectUnexpectedErrors(page);
   const catalogPackages = [

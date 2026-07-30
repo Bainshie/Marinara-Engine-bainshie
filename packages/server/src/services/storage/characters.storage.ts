@@ -624,6 +624,8 @@ export function createCharactersStorage(db: DB) {
             like(personas.name, pattern),
             like(personas.comment, pattern),
             like(personas.creator, pattern),
+            like(personas.personaVersion, pattern),
+            like(personas.creatorNotes, pattern),
             like(personas.description, pattern),
             like(personas.personality, pattern),
             like(personas.scenario, pattern),

@@ -12,7 +12,7 @@ import {
   Star,
   User,
 } from "lucide-react";
-import { includesTextForMatch, normalizeTextForMatch, type CharacterData } from "@marinara-engine/shared";
+import { type CharacterData } from "@marinara-engine/shared";
 import { useTranslation, useTranslation as useUiTranslation } from "react-i18next";
 import {
   flattenCharacterPages,
@@ -21,6 +21,12 @@ import {
   usePersonaPages,
 } from "../../hooks/use-characters";
 import { getCharacterTitle } from "../../lib/character-display";
+import {
+  formatCardLibraryMeta,
+  getCardLibrarySummary,
+  matchesCardLibrarySearch,
+  parseCardLibrarySearchQuery,
+} from "../../lib/card-library-search";
 import { estimateCharacterCardTokens, formatEstimatedTokens } from "../../lib/character-token-count";
 import { cn, getAvatarCropStyle, parseAvatarCropJson, type AvatarCropValue } from "../../lib/utils";
 import { useLocalizedUiText } from "../../localization/use-localized-ui-text";
@@ -146,49 +152,17 @@ function getPersonaTags(persona: PersonaRow): string[] {
   }
 }
 
-function parseLibrarySearchQuery(value: string) {
-  const excludedTags: string[] = [];
-  const text = value
-    .replace(/(?:^|\s)(?:-|!)(?:tag:|#)?(?:"([^"]+)"|(\S+))/gi, (_match, quoted: string, bare: string) => {
-      const tag = (quoted ?? bare ?? "").trim();
-      if (tag) excludedTags.push(normalizeTextForMatch(tag));
-      return " ";
-    })
-    .replace(/\s+/gu, " ")
-    .trim();
-
-  return {
-    text: normalizeTextForMatch(text),
-    excludedTags,
-  };
-}
-
 function getCharacterSummary(char: ParsedCharacterRow) {
-  return (
-    getText(char.parsed.creator_notes) ||
-    getText(char.parsed.description) ||
-    getText(char.parsed.personality) ||
-    "No creator notes yet."
-  );
+  return getCardLibrarySummary([char.parsed.creator_notes, char.parsed.description, char.parsed.personality]);
 }
 
 function getPersonaSummary(persona: PersonaRow) {
-  return (
-    getText(persona.creatorNotes) ||
-    getText(persona.description) ||
-    getText(persona.personality) ||
-    getText(persona.backstory) ||
-    "No creator notes yet."
-  );
-}
-
-function getCardMeta(creator: unknown, version: unknown): string | null {
-  const parts: string[] = [];
-  const creatorText = getText(creator);
-  const versionText = getText(version);
-  if (creatorText) parts.push(creatorText);
-  if (versionText) parts.push(`v${versionText}`);
-  return parts.join(" · ") || null;
+  return getCardLibrarySummary([
+    persona.creatorNotes,
+    persona.description,
+    persona.personality,
+    persona.backstory,
+  ]);
 }
 
 function truncateText(content: string, maxLength: number) {
@@ -235,7 +209,7 @@ function toCharacterLibraryCard(char: ParsedCharacterRow): LibraryCard {
     id: char.id,
     name,
     title: getCharacterTitle({ name, comment: char.comment }),
-    meta: getCardMeta(char.parsed.creator, char.parsed.character_version),
+    meta: formatCardLibraryMeta(char.parsed.creator, char.parsed.character_version),
     summary: getCharacterSummary(char),
     avatarPath: char.avatarPath,
     avatarCrop: char.parsed.extensions?.avatarCrop as AvatarCropValue | undefined,
@@ -255,7 +229,7 @@ function toPersonaLibraryCard(persona: PersonaRow): LibraryCard {
     id: persona.id,
     name: getText(persona.name) || "Unnamed",
     title: getText(persona.comment) || null,
-    meta: getCardMeta(persona.creator, persona.personaVersion),
+    meta: formatCardLibraryMeta(persona.creator, persona.personaVersion),
     summary: getPersonaSummary(persona),
     avatarPath: persona.avatarPath,
     avatarCrop: parsePersonaAvatarCrop(persona.avatarCrop),
@@ -428,7 +402,7 @@ export function CharacterLibraryView() {
   const selectedId = isPersonaLibrary ? personaSelectedId : characterSelectedId;
   const sort = isPersonaLibrary ? personaSort : characterSort;
   const [search, setSearch] = useState("");
-  const serverSearch = useMemo(() => parseLibrarySearchQuery(search).text, [search]);
+  const serverSearch = useMemo(() => parseCardLibrarySearchQuery(search).text, [search]);
   const characterPages = useCharacterPages({ enabled: !isPersonaLibrary, search: serverSearch, sort: characterSort });
   const personaPages = usePersonaPages({ enabled: isPersonaLibrary, search: serverSearch, sort: personaSort });
   const characters = useMemo(() => flattenCharacterPages(characterPages.data), [characterPages.data]);
@@ -447,22 +421,8 @@ export function CharacterLibraryView() {
   }, [characters, isPersonaLibrary, personas]);
 
   const filteredCards = useMemo(() => {
-    const query = parseLibrarySearchQuery(search);
-    return cards.filter((card) => {
-      const tagSet = new Set(card.tags.map((tag) => normalizeTextForMatch(tag)));
-      if (query.excludedTags.some((tag) => tagSet.has(tag))) return false;
-      if (!query.text) return true;
-      return [
-        card.name,
-        card.title,
-        card.meta,
-        card.summary,
-        ...card.tags,
-        ...card.sections.map((section) => section.content),
-      ]
-        .filter((value): value is string => typeof value === "string")
-        .some((value) => includesTextForMatch(value, query.text));
-    });
+    const query = parseCardLibrarySearchQuery(search);
+    return cards.filter((card) => matchesCardLibrarySearch(card, query));
   }, [cards, search]);
 
   const sortedCards = useMemo(() => {
