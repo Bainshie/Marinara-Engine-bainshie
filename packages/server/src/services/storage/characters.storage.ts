@@ -505,7 +505,7 @@ export function createCharactersStorage(db: DB) {
         const rows = await tx.select().from(characters).where(eq(characters.id, characterId));
         const existing = rows[0];
         if (!existing) return false;
-        const currentData = parseCharacterData(existing.data);
+        const currentData = normalizeCharacterData(parseCharacterData(existing.data));
         const restoredData = normalizeCharacterData(version.data);
         const alreadyMatches =
           !characterDataChanged(currentData, restoredData) &&

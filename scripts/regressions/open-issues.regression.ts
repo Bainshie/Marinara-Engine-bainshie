@@ -557,6 +557,10 @@ try {
   );
 
   const restoreTrimFixture = await characterStorage.create(characterDataSchema.parse({ name: "Restore source" }));
+  await db
+    .update(characters)
+    .set({ data: JSON.stringify({ ...JSON.parse(restoreTrimFixture.data), name: "  Current legacy  " }) })
+    .where(eq(characters.id, restoreTrimFixture.id));
   const restoreVersionId = "padded-name-restore-version";
   await db.insert(characterCardVersions).values({
     id: restoreVersionId,
@@ -570,6 +574,16 @@ try {
     createdAt: "2026-07-30T12:00:00.000Z",
   });
   const restoredTrimFixture = await characterStorage.restoreVersion(restoreTrimFixture.id, restoreVersionId);
+  const restoreSnapshots = await db
+    .select()
+    .from(characterCardVersions)
+    .where(eq(characterCardVersions.characterId, restoreTrimFixture.id));
+  const preRestoreSnapshot = restoreSnapshots.find((row) => row.source === "restore");
+  assert.equal(
+    (JSON.parse(preRestoreSnapshot?.data ?? "{}") as { name?: string }).name,
+    "Current legacy",
+    "Restoring a Character version must normalize the pre-restore snapshot",
+  );
   assert.equal(
     (JSON.parse(restoredTrimFixture?.data ?? "{}") as { name?: string }).name,
     "Restored fixture",

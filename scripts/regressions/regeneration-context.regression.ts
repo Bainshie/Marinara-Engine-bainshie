@@ -246,10 +246,9 @@ try {
   assert.equal(rebuilt.length, 2, "the next memory refresh must rebuild only the invalidated chunk");
   const rebuiltEditedChunk = rebuilt.find((chunk) => chunk.id !== "unaffected-earlier-memory");
   assert.ok(rebuiltEditedChunk);
-  assert.match(rebuiltEditedChunk.content, new RegExp(editedLine.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "u"));
-  assert.doesNotMatch(
-    rebuiltEditedChunk.content,
-    new RegExp(originalLine.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "u"),
+  assert.ok(rebuiltEditedChunk.content.includes(editedLine));
+  assert.ok(
+    !rebuiltEditedChunk.content.includes(originalLine),
     "rebuilt Memory Recall context must not contain the superseded message version",
   );
 } finally {

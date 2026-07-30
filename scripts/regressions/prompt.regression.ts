@@ -683,6 +683,7 @@ function makeRegressionAgentConfig(overrides: Record<string, unknown> = {}) {
     id: `builtin:${type}`,
     type,
     name,
+    isCustomAgent: false,
     phase: "post_processing",
     promptTemplate: 'Return JSON: {"chosen": null}',
     connectionId: null,

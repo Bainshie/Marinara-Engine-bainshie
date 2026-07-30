@@ -80,7 +80,7 @@ export interface AgentExecConfig {
   anthropicExtendedCacheTtl?: boolean;
   cachingAtDepth?: number;
   /** Distinguishes user-created agents from built-ins when selecting prompt context. */
-  isCustomAgent?: boolean;
+  isCustomAgent: boolean;
 }
 
 const ALL_AGENT_CONTEXT_SOURCES: CustomAgentContextSources = {
