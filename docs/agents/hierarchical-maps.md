@@ -21,9 +21,10 @@ lore can ground the next response. Maps can also follow a completed narrated
 journey to a known place or add a newly discovered place when the story truly
 arrives there.
 
-Each chat receives its own working copy of a map. Account-wide templates let you
-prepare an original or fandom world once and then add a clean copy to any
-Roleplay or Game chat.
+Maps can be independent per chat or linked to one account-owned shared world.
+Templates create clean copies that can diverge. A shared world instead keeps one
+canonical hierarchy and artwork set while each linked chat retains its own
+current location, travel history, snapshots, and Game bindings.
 
 ## Feature overview
 
@@ -34,6 +35,8 @@ World Maps 1.2.1 provides:
 - list, positioned-map, and ordered-layer views for child locations;
 - parent/child travel, direct links, and multi-turn route planning;
 - validated movement from completed narration and discovery of new locations;
+- account-owned shared worlds that can be linked across Roleplay and Game chats;
+- reviewed per-chat drafts with publish, discard, conflict, and independent-fork controls;
 - account-wide map templates created manually, with AI, or by import;
 - AI-assisted map drafts and expansions grounded in setup or selected lore;
 - public location descriptions, private model memory, and exact-location lore;
@@ -78,7 +81,7 @@ then offers **Update**, install that too. Follow the restart prompt before using
 the package.
 
 The World Maps page reports the installed package version and readiness,
-offers the account-wide template library, and shows the current chat's map
+offers the account-wide world map library, and shows the current chat's map
 status. Installing the package makes it available but does not enable it in
 every chat.
 
@@ -88,11 +91,11 @@ every chat.
 2. Open **Chat Settings** with the gear button.
 3. Turn on **Enable Agents**.
 4. Under **Tracker Agents**, enable **World Maps**.
-5. Open **Edit world map** or the **Map templates** library.
+5. Open **Edit world map** or the **World map library**.
 
-The template library behaves the same whether it is opened from the main Agents
-page or from Roleplay Chat Settings. Use **Add to chat** to copy a template into
-the active chat.
+The library behaves the same whether it is opened from the main Agents page or
+from Roleplay Chat Settings. Use **Add to chat** for an independent template
+copy, or **Link to chat** for a durable shared world.
 
 ### Game
 
@@ -138,6 +141,42 @@ without creating another Gallery copy.
 
 Only the artwork is shared. Each applied map definition is still an independent
 working copy; editing the template does not update maps already added to chats.
+
+## Link chats to one shared world
+
+Use **Shared worlds** in the World map library when several Roleplay or Game
+chats should read the same canonical hierarchy. Create a blank shared world,
+import one, promote an existing template with **Make shared**, or open a saved
+chat map and choose **Make shared**. The last option promotes its referenced
+chat artwork to Global Gallery, creates the account-owned world, and links the
+original chat back to it.
+
+Choose **Link to chat** to attach an open chat. The current location and any
+location IDs already used by campaign history must exist in the shared world.
+Otherwise, use **Independent copy** or first migrate the chat's current map into
+a new shared world.
+
+Linked chats share only the map definition and Global Gallery artwork. They do
+not share messages, current locations, travel snapshots, Game state, Game map
+bindings, provider connections, or credentials.
+
+Edits and discoveries made inside a linked chat are saved as an unpublished
+draft for that chat. They do not change the canonical world or other chats until
+you choose **Publish changes**. You can instead **Discard** the draft or **Fork
+independent** to detach the chat while keeping its current version. If the
+canonical world changes while a draft is pending, Maps reports a conflict and
+requires a fork or discard instead of silently overwriting either version.
+
+Editing a shared world from the library updates the canonical definition
+directly. Locations used by linked chats cannot be deleted; archive them so
+their stable IDs remain available. A shared world also cannot be deleted until
+all linked chats are forked or relinked.
+
+Shared worlds and templates retain Global Gallery artwork references without
+copying the image file into every chat. Marinara blocks deletion of a Global
+Gallery image while a saved template, shared world, independent chat map, or
+linked-chat draft still references it. Remove the artwork links first when you
+intend to delete the asset itself.
 
 ## Understand the map editor
 
@@ -501,12 +540,14 @@ variables and use the resolved previews before saving.
 
 ## Import, export, and archive safely
 
-Use **Export** to download the working hierarchy as a `.world-map.json` file.
+Use **Export** from a chat, template, or shared-world editor to download the
+working hierarchy as a `.world-map.json` file.
 Leave **Include map artwork** enabled to bundle referenced location images and
 child-map backgrounds in the same file. Disable it when you want a smaller,
 definition-only backup. Older `.hierarchical-map.json` files remain importable.
 
-Use **Import** to load a hierarchy into the working copy. Bundled artwork is
+Use **Import** to load a hierarchy into a chat working copy, independent
+template, or shared world. Bundled artwork is
 restored and its image links are remapped. Chat-owned artwork returns to the
 destination chat's Gallery. Shared artwork is reused from the Global Gallery
 when the same image already exists, or added there once when a template or

@@ -10,6 +10,7 @@ import { newId } from "../utils/id-generator.js";
 import { DATA_DIR } from "../utils/data-dir.js";
 import { assertInsideDir, isAllowedImageBuffer } from "../utils/security.js";
 import { logger } from "../lib/logger.js";
+import { findGlobalGalleryCapabilityReferences } from "../services/image/global-gallery-capability-references.js";
 
 const GLOBAL_GALLERY_ROOT = join(DATA_DIR, "gallery", "global");
 const ALLOWED_EXTS = new Set([".jpg", ".jpeg", ".png", ".gif", ".webp", ".avif"]);
@@ -235,6 +236,18 @@ export async function globalGalleryRoutes(app: FastifyInstance) {
     const image = await storage.getImageById(req.params.id);
     if (!image) {
       return reply.status(404).send({ error: "Not found" });
+    }
+
+    const references = await findGlobalGalleryCapabilityReferences(app.db, req.params.id);
+    if (references.totalCount > 0) {
+      return reply.status(409).send({
+        error:
+          "This image is used by a saved map, shared world, or chat map. Remove those artwork links before deleting it.",
+        code: "global_gallery_image_in_use",
+        referenceCount: references.totalCount,
+        documentReferenceCount: references.documentCount,
+        chatReferenceCount: references.chatCount,
+      });
     }
 
     // Remove file from disk (assertInsideDir guards a poisoned stored filePath)
