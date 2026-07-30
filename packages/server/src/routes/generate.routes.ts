@@ -8562,7 +8562,9 @@ export async function generateRoutes(app: FastifyInstance) {
 
                       for (const [variantIndex, imageResult] of imageResults.entries()) {
                         // Save to disk
-                        const filePath = saveImageToDisk(input.chatId, imageResult.base64, imageResult.ext);
+                        const filePath = saveImageToDisk(input.chatId, imageResult.base64, imageResult.ext, {
+                          shared: true,
+                        });
 
                         // A fallback connection may have rendered this variant;
                         // record the connection that actually produced it.
@@ -8582,6 +8584,7 @@ export async function generateRoutes(app: FastifyInstance) {
                         });
                         await persistGeneratedImageToEntityGalleries({
                           sourceFilePath: filePath,
+                          sourceChatImageId: galleryEntry?.id,
                           characterIds: referenceResolution.characterIds,
                           personaIds: referenceResolution.personaId ? [referenceResolution.personaId] : [],
                           characterGallery,

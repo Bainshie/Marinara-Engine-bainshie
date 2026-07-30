@@ -15,9 +15,10 @@ const [
   { createGalleryStorage },
   { createGlobalGalleryStorage },
   { createCapabilityPersistenceHost },
-  { chats },
+  { capabilityDocuments, chats },
   spatialReference,
   capabilityReferences,
+  { withGlobalGalleryImageLifecycleLocks },
 ] = await Promise.all([
   import("../../packages/server/src/db/file-backed-store.js"),
   import("../../packages/server/src/services/storage/gallery.storage.js"),
@@ -26,6 +27,7 @@ const [
   import("../../packages/server/src/db/schema/index.js"),
   import("../../packages/server/src/services/image/spatial-location-reference.js"),
   import("../../packages/server/src/services/image/global-gallery-capability-references.js"),
+  import("../../packages/server/src/services/image/gallery-file-lifecycle.js"),
 ]);
 
 const db = await createFileNativeDB();
@@ -104,13 +106,14 @@ try {
     createdAt: timestamp,
     updatedAt: timestamp,
   });
-  await persistence.documents.create({
+  await db.insert(capabilityDocuments).values({
     id: "near-match-shared-world-reference",
     packageId: "hierarchical-maps",
     kind: "shared-world-map",
     name: "Near-match shared world",
     description: "",
-    data: { definition: { locations: [{ referenceImageId: `${globalReferenceId}-suffix` }] } },
+    data: JSON.stringify({ definition: { locations: [{ referenceImageId: `${globalReferenceId}-suffix` }] } }),
+    revision: 1,
     createdAt: timestamp,
     updatedAt: timestamp,
   });
@@ -143,6 +146,98 @@ try {
     chatCount: 1,
     totalCount: 1,
   });
+
+  const writerFirstImage = await createGlobalGalleryStorage(db).createImage({
+    filePath: "global/writer-first.png",
+  });
+  assert.ok(writerFirstImage);
+  const writerFirstReferenceId = spatialReference.globalGallerySpatialReferenceId(writerFirstImage.id);
+  let releaseWriter!: () => void;
+  const writerMayFinish = new Promise<void>((resolve) => {
+    releaseWriter = resolve;
+  });
+  let signalWriterStarted!: () => void;
+  const writerStarted = new Promise<void>((resolve) => {
+    signalWriterStarted = resolve;
+  });
+  const writerFirst = db.transaction((transaction) =>
+    capabilityReferences.withNewGlobalGalleryCapabilityReferences(
+      transaction,
+      null,
+      { referenceImageId: writerFirstReferenceId },
+      async () => {
+        signalWriterStarted();
+        await writerMayFinish;
+        await transaction.insert(capabilityDocuments).values({
+          id: "writer-first-document",
+          packageId: "hierarchical-maps",
+          kind: "shared-world-map",
+          name: "Writer first",
+          description: "",
+          data: JSON.stringify({ referenceImageId: writerFirstReferenceId }),
+          revision: 1,
+          createdAt: timestamp,
+          updatedAt: timestamp,
+        });
+      },
+    ),
+  );
+  await writerStarted;
+  const writerFirstDeletion = db.transaction((transaction) =>
+    withGlobalGalleryImageLifecycleLocks([writerFirstImage.id], async () => {
+      const references = await capabilityReferences.findGlobalGalleryCapabilityReferences(
+        transaction,
+        writerFirstImage.id,
+      );
+      if (references.totalCount === 0) {
+        await createGlobalGalleryStorage(transaction).removeImage(writerFirstImage.id);
+      }
+      return references.totalCount;
+    }),
+  );
+  releaseWriter();
+  await writerFirst;
+  assert.equal(await writerFirstDeletion, 1, "a committed capability reference must make concurrent deletion fail");
+  assert.ok(await createGlobalGalleryStorage(db).getImageById(writerFirstImage.id));
+
+  const deletionFirstImage = await createGlobalGalleryStorage(db).createImage({
+    filePath: "global/deletion-first.png",
+  });
+  assert.ok(deletionFirstImage);
+  const deletionFirstReferenceId = spatialReference.globalGallerySpatialReferenceId(deletionFirstImage.id);
+  let releaseDeletion!: () => void;
+  const deletionMayFinish = new Promise<void>((resolve) => {
+    releaseDeletion = resolve;
+  });
+  let signalDeletionStarted!: () => void;
+  const deletionStarted = new Promise<void>((resolve) => {
+    signalDeletionStarted = resolve;
+  });
+  const deletionFirst = db.transaction((transaction) =>
+    withGlobalGalleryImageLifecycleLocks([deletionFirstImage.id], async () => {
+      signalDeletionStarted();
+      await deletionMayFinish;
+      await createGlobalGalleryStorage(transaction).removeImage(deletionFirstImage.id);
+    }),
+  );
+  await deletionStarted;
+  const lateWriter = persistence.documents.create({
+    id: "deletion-first-document",
+    packageId: "hierarchical-maps",
+    kind: "shared-world-map",
+    name: "Deletion first",
+    description: "",
+    data: { referenceImageId: deletionFirstReferenceId },
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  });
+  releaseDeletion();
+  await deletionFirst;
+  await assert.rejects(
+    lateWriter,
+    capabilityReferences.GlobalGalleryCapabilityReferenceUnavailableError,
+    "a writer that loses the deletion race must not persist a dangling Global Gallery reference",
+  );
 
   rmSync(globalPath);
   assert.equal(

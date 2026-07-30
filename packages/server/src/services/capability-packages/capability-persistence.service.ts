@@ -25,6 +25,7 @@ import {
   spatialContextSnapshots,
 } from "../../db/schema/index.js";
 import { withChatMetadataPatchQueue } from "../storage/chats.storage.js";
+import { withNewGlobalGalleryCapabilityReferences } from "../image/global-gallery-capability-references.js";
 
 function parseStringArray(value: unknown): string[] {
   if (Array.isArray(value)) return value.filter((entry): entry is string => typeof entry === "string");
@@ -165,13 +166,17 @@ function createDocumentStore(db: DB): CapabilityDocumentStore {
       return rows[0] ? mapDocument(rows[0]) : null;
     },
     async create(input) {
-      const row: typeof capabilityDocuments.$inferInsert = {
-        ...input,
-        data: JSON.stringify(input.data),
-        revision: 1,
-      };
-      await db.insert(capabilityDocuments).values(row);
-      return mapDocument(row as typeof capabilityDocuments.$inferSelect);
+      return db.transaction(async (transaction) =>
+        withNewGlobalGalleryCapabilityReferences(transaction, null, input.data, async () => {
+          const row: typeof capabilityDocuments.$inferInsert = {
+            ...input,
+            data: JSON.stringify(input.data),
+            revision: 1,
+          };
+          await transaction.insert(capabilityDocuments).values(row);
+          return mapDocument(row as typeof capabilityDocuments.$inferSelect);
+        }),
+      );
     },
     async update(input) {
       return db.transaction(async (transaction) => {
@@ -182,25 +187,27 @@ function createDocumentStore(db: DB): CapabilityDocumentStore {
           .limit(1);
         const current = rows[0];
         if (!current || current.revision !== input.expectedRevision) return null;
-        const next = {
-          ...current,
-          name: input.name,
-          description: input.description,
-          data: JSON.stringify(input.data),
-          revision: current.revision + 1,
-          updatedAt: input.updatedAt,
-        };
-        await transaction
-          .update(capabilityDocuments)
-          .set({
-            name: next.name,
-            description: next.description,
-            data: next.data,
-            revision: next.revision,
-            updatedAt: next.updatedAt,
-          })
-          .where(and(eq(capabilityDocuments.packageId, input.packageId), eq(capabilityDocuments.id, input.id)));
-        return mapDocument(next);
+        return withNewGlobalGalleryCapabilityReferences(transaction, current.data, input.data, async () => {
+          const next = {
+            ...current,
+            name: input.name,
+            description: input.description,
+            data: JSON.stringify(input.data),
+            revision: current.revision + 1,
+            updatedAt: input.updatedAt,
+          };
+          await transaction
+            .update(capabilityDocuments)
+            .set({
+              name: next.name,
+              description: next.description,
+              data: next.data,
+              revision: next.revision,
+              updatedAt: next.updatedAt,
+            })
+            .where(and(eq(capabilityDocuments.packageId, input.packageId), eq(capabilityDocuments.id, input.id)));
+          return mapDocument(next);
+        });
       });
     },
     async remove(packageId, id, expectedRevision) {
@@ -396,23 +403,43 @@ function createPersistenceSession(db: DB): CapabilityPersistenceSession {
         .where(and(eq(gameStateSnapshots.id, snapshotId), eq(gameStateSnapshots.chatId, chatId)));
     },
     async updateChatActivity(input: CapabilityChatActivityUpdate) {
-      await db
-        .update(chats)
-        .set({
-          lastMessageAt: input.lastMessageAt,
-          updatedAt: input.updatedAt,
-          ...(input.metadata ? { metadata: JSON.stringify(input.metadata) } : {}),
-        })
-        .where(eq(chats.id, input.chatId));
+      await db.transaction(async (transaction) => {
+        const rows = input.metadata
+          ? await transaction
+              .select({ metadata: chats.metadata })
+              .from(chats)
+              .where(eq(chats.id, input.chatId))
+              .limit(1)
+          : [];
+        await withNewGlobalGalleryCapabilityReferences(transaction, rows[0]?.metadata, input.metadata, () =>
+          transaction
+            .update(chats)
+            .set({
+              lastMessageAt: input.lastMessageAt,
+              updatedAt: input.updatedAt,
+              ...(input.metadata ? { metadata: JSON.stringify(input.metadata) } : {}),
+            })
+            .where(eq(chats.id, input.chatId)),
+        );
+      });
     },
     async updateChatMetadata(input: CapabilityChatMetadataUpdate) {
-      await db
-        .update(chats)
-        .set({
-          metadata: JSON.stringify(input.metadata),
-          updatedAt: input.updatedAt,
-        })
-        .where(eq(chats.id, input.chatId));
+      await db.transaction(async (transaction) => {
+        const rows = await transaction
+          .select({ metadata: chats.metadata })
+          .from(chats)
+          .where(eq(chats.id, input.chatId))
+          .limit(1);
+        await withNewGlobalGalleryCapabilityReferences(transaction, rows[0]?.metadata, input.metadata, () =>
+          transaction
+            .update(chats)
+            .set({
+              metadata: JSON.stringify(input.metadata),
+              updatedAt: input.updatedAt,
+            })
+            .where(eq(chats.id, input.chatId)),
+        );
+      });
     },
     documents: createDocumentStore(db),
     spatialSnapshots: createSpatialSnapshotStore(db),

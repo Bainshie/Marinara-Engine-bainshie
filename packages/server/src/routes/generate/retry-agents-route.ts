@@ -3433,7 +3433,7 @@ async function applyRetryResultEffects(args: {
             });
 
             for (const [variantIndex, imageResult] of imageResults.entries()) {
-              const filePath = saveImageToDisk(chatId, imageResult.base64, imageResult.ext);
+              const filePath = saveImageToDisk(chatId, imageResult.base64, imageResult.ext, { shared: true });
               // A fallback connection may have rendered this variant; record
               // the connection that actually produced it.
               const effectiveImageProvider =
@@ -3450,6 +3450,7 @@ async function applyRetryResultEffects(args: {
               });
               await persistGeneratedImageToEntityGalleries({
                 sourceFilePath: filePath,
+                sourceChatImageId: galleryEntry?.id,
                 characterIds: referenceResolution.characterIds,
                 personaIds: referenceResolution.personaId ? [referenceResolution.personaId] : [],
                 characterGallery: createCharacterGalleryStorage(app.db),

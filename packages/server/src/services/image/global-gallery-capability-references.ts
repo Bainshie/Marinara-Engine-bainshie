@@ -1,8 +1,20 @@
 import type { DB } from "../../db/connection.js";
-import { capabilityDocuments, chats } from "../../db/schema/index.js";
+import { inArray } from "../../db/file-query.js";
+import { capabilityDocuments, chats, globalImages } from "../../db/schema/index.js";
+import { withGlobalGalleryImageLifecycleLocks } from "./gallery-file-lifecycle.js";
 
 const GLOBAL_GALLERY_REFERENCE_PREFIX = "global-gallery:";
 const MAX_SCANNED_VALUES = 200_000;
+
+export class GlobalGalleryCapabilityReferenceUnavailableError extends Error {
+  readonly imageIds: string[];
+
+  constructor(imageIds: string[]) {
+    super("One or more new Global Gallery references are unavailable.");
+    this.name = "GlobalGalleryCapabilityReferenceUnavailableError";
+    this.imageIds = imageIds;
+  }
+}
 
 export interface GlobalGalleryCapabilityReferenceSummary {
   documentCount: number;
@@ -50,6 +62,70 @@ function containsExactReference(value: unknown, referenceId: string): boolean {
     }
   }
   return false;
+}
+
+function collectReferenceImageIds(value: unknown): Set<string> {
+  const imageIds = new Set<string>();
+  const pending: unknown[] = [parseStoredJson(value)];
+  let scanned = 0;
+  const enqueue = (nested: unknown) => {
+    if (scanned + pending.length >= MAX_SCANNED_VALUES) {
+      throw new Error("Capability record exceeds the Global Gallery reference scan limit.");
+    }
+    pending.push(nested);
+  };
+  while (pending.length > 0) {
+    const current = pending.pop();
+    scanned += 1;
+    if (scanned > MAX_SCANNED_VALUES) {
+      throw new Error("Capability record exceeds the Global Gallery reference scan limit.");
+    }
+    if (typeof current === "string") {
+      if (current.startsWith(GLOBAL_GALLERY_REFERENCE_PREFIX)) {
+        const imageId = current.slice(GLOBAL_GALLERY_REFERENCE_PREFIX.length);
+        if (imageId.length > 0) imageIds.add(imageId);
+      }
+      continue;
+    }
+    if (Array.isArray(current)) {
+      for (const nested of current) enqueue(nested);
+      continue;
+    }
+    if (current && typeof current === "object") {
+      for (const key in current) {
+        if (Object.prototype.hasOwnProperty.call(current, key)) {
+          enqueue((current as Record<string, unknown>)[key]);
+        }
+      }
+    }
+  }
+  return imageIds;
+}
+
+/**
+ * Keep newly-created durable references atomic with Global Gallery deletion.
+ * Existing dangling references remain editable, but a write cannot introduce a
+ * new reference unless its image still exists while the write is committed.
+ */
+export async function withNewGlobalGalleryCapabilityReferences<T>(
+  db: DB,
+  previousValue: unknown,
+  nextValue: unknown,
+  operation: () => Promise<T> | T,
+): Promise<T> {
+  const previousIds = collectReferenceImageIds(previousValue);
+  const addedIds = Array.from(collectReferenceImageIds(nextValue)).filter((imageId) => !previousIds.has(imageId));
+  if (addedIds.length === 0) return operation();
+
+  return withGlobalGalleryImageLifecycleLocks(addedIds, async () => {
+    const rows = await db.select({ id: globalImages.id }).from(globalImages).where(inArray(globalImages.id, addedIds));
+    const existingIds = new Set(rows.map((row) => row.id));
+    const missingIds = addedIds.filter((imageId) => !existingIds.has(imageId));
+    if (missingIds.length > 0) {
+      throw new GlobalGalleryCapabilityReferenceUnavailableError(missingIds);
+    }
+    return operation();
+  });
 }
 
 /**

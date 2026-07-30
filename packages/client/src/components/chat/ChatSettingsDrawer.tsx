@@ -6919,19 +6919,14 @@ export function ChatSettingsDrawer({
                                       {localizeUi("ui.agents.agenteditor.runInterval")}
                                     </span>
                                     <div className="flex items-center gap-2">
-                                      <input
-                                        type="number"
+                                      <DraftNumberInput
+                                        value={narrativeDirectorSecretPlotRunInterval}
                                         min={1}
                                         max={100}
-                                        value={narrativeDirectorSecretPlotRunInterval}
-                                        onChange={(event) =>
+                                        onCommit={(value) =>
                                           updateMeta.mutate({
                                             id: chat.id,
-                                            narrativeDirectorSecretPlotRunInterval: normalizePositiveInteger(
-                                              event.target.value,
-                                              narrativeDirectorSecretPlotRunInterval,
-                                              100,
-                                            ),
+                                            narrativeDirectorSecretPlotRunInterval: value,
                                           })
                                         }
                                         className="w-24 rounded-lg border border-[var(--border)] bg-[var(--background)] px-2.5 py-2 text-xs tabular-nums text-[var(--foreground)] outline-none transition-colors focus:border-[var(--ring)] focus:ring-1 focus:ring-[var(--ring)]"

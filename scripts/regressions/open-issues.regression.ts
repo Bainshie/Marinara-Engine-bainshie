@@ -3755,6 +3755,22 @@ try {
   );
 }
 
+// Issue #4277 — the Secret Plot interval remains editable after Narrative
+// Director is installed instead of passing a string through a number-only
+// normalizer and immediately restoring the previous value.
+{
+  assert.match(
+    chatSettingsDrawerSource,
+    /<DraftNumberInput\s+value=\{narrativeDirectorSecretPlotRunInterval\}\s+min=\{1\}\s+max=\{100\}\s+onCommit=\{\(value\) =>\s+updateMeta\.mutate\(\{\s+id: chat\.id,\s+narrativeDirectorSecretPlotRunInterval: value,/u,
+    "Secret Plot run interval must use a draft number input that commits the edited numeric value",
+  );
+  assert.doesNotMatch(
+    chatSettingsDrawerSource,
+    /narrativeDirectorSecretPlotRunInterval:\s*normalizePositiveInteger\(\s*event\.target\.value/u,
+    "Secret Plot run interval must not reject the browser's string input value",
+  );
+}
+
 // Issue #4002 — Character Tavern stores card JSON in zTXt (zlib-compressed)
 // PNG chunks; every card-parsing path must read them, and export must strip
 // stale ones so re-exported cards cannot carry outdated compressed data.
