@@ -7624,63 +7624,65 @@ test("Conversation Chat Settings can attach and retain custom agents", async ({ 
 test("Secret Plot run interval stays editable across repeated commits", async ({ page, request }, testInfo) => {
   test.skip(!testInfo.project.name.includes("desktop"), "Secret Plot interval editing is covered on desktop.");
 
-  const chatResponse = await request.post("/api/chats", {
-    data: { name: "Secret Plot Interval Smoke", mode: "roleplay", characterIds: [] },
-  });
-  expect(chatResponse.ok()).toBeTruthy();
-  const chat = (await chatResponse.json()) as { id: string };
-  const metadataResponse = await request.patch(`/api/chats/${chat.id}/metadata`, {
-    data: {
-      enableAgents: true,
-      activeAgentIds: ["director"],
-      narrativeDirectorSecretPlotEnabled: true,
-      narrativeDirectorSecretPlotRunInterval: 8,
-    },
-  });
-  expect(metadataResponse.ok()).toBeTruthy();
-
-  const readRunInterval = async () => {
-    const response = await request.get(`/api/chats/${chat.id}`);
-    if (!response.ok()) return null;
-    const current = (await response.json()) as { metadata?: unknown };
-    const metadata =
-      typeof current.metadata === "string"
-        ? (JSON.parse(current.metadata) as Record<string, unknown>)
-        : ((current.metadata ?? {}) as Record<string, unknown>);
-    return metadata.narrativeDirectorSecretPlotRunInterval;
-  };
-
-  await page.route("**/api/capability-packages/agents", async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify([
-        {
-          id: "director",
-          name: "Narrative Director",
-          description: "Creates one-shot story directions.",
-          author: "Pasta Devs",
-          phase: "pre_generation",
-          execution: "host",
-          enabledByDefault: false,
-          category: "writer",
-          modeAllowlist: ["roleplay"],
-          defaultPromptTemplate: "Return the next story direction.",
-        },
-      ]),
-    });
-  });
-  await page.route("**/api/capability-packages/installed", async (route) => {
-    await route.fulfill({ status: 200, contentType: "application/json", body: "[]" });
-  });
-  await page.route("**/api/agents", async (route) => {
-    await route.fulfill({ status: 200, contentType: "application/json", body: "[]" });
-  });
-  await page.addInitScript((chatId) => {
-    localStorage.setItem("marinara-active-chat-id", chatId);
-  }, chat.id);
-
+  let chatId: string | undefined;
   try {
+    const chatResponse = await request.post("/api/chats", {
+      data: { name: "Secret Plot Interval Smoke", mode: "roleplay", characterIds: [] },
+    });
+    expect(chatResponse.ok()).toBeTruthy();
+    const chat = (await chatResponse.json()) as { id: string };
+    chatId = chat.id;
+    const metadataResponse = await request.patch(`/api/chats/${chat.id}/metadata`, {
+      data: {
+        enableAgents: true,
+        activeAgentIds: ["director"],
+        narrativeDirectorSecretPlotEnabled: true,
+        narrativeDirectorSecretPlotRunInterval: 8,
+      },
+    });
+    expect(metadataResponse.ok()).toBeTruthy();
+
+    const readRunInterval = async () => {
+      const response = await request.get(`/api/chats/${chat.id}`);
+      if (!response.ok()) return null;
+      const current = (await response.json()) as { metadata?: unknown };
+      const metadata =
+        typeof current.metadata === "string"
+          ? (JSON.parse(current.metadata) as Record<string, unknown>)
+          : ((current.metadata ?? {}) as Record<string, unknown>);
+      return metadata.narrativeDirectorSecretPlotRunInterval;
+    };
+
+    await page.route("**/api/capability-packages/agents", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify([
+          {
+            id: "director",
+            name: "Narrative Director",
+            description: "Creates one-shot story directions.",
+            author: "Pasta Devs",
+            phase: "pre_generation",
+            execution: "host",
+            enabledByDefault: false,
+            category: "writer",
+            modeAllowlist: ["roleplay"],
+            defaultPromptTemplate: "Return the next story direction.",
+          },
+        ]),
+      });
+    });
+    await page.route("**/api/capability-packages/installed", async (route) => {
+      await route.fulfill({ status: 200, contentType: "application/json", body: "[]" });
+    });
+    await page.route("**/api/agents", async (route) => {
+      await route.fulfill({ status: 200, contentType: "application/json", body: "[]" });
+    });
+    await page.addInitScript((chatId) => {
+      localStorage.setItem("marinara-active-chat-id", chatId);
+    }, chat.id);
+
     await page.goto("/");
     await page.getByRole("button", { name: "Chat Settings" }).click();
     const drawer = page.locator(".mari-chat-settings-drawer");
@@ -7728,7 +7730,7 @@ test("Secret Plot run interval stays editable across repeated commits", async ({
         .locator("input"),
     ).toHaveValue("100");
   } finally {
-    await request.delete(`/api/chats/${chat.id}`, { timeout: 10_000 });
+    if (chatId) await request.delete(`/api/chats/${chatId}`, { timeout: 10_000 });
   }
 });
 
