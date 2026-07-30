@@ -98,10 +98,11 @@ export function isLlamaRuntimeRecordCurrent(
   if (!entry || record.build !== LLAMA_CPP_RUNTIME_MANIFEST.releaseTag) return false;
   if (record.assetName !== entry.asset.name || record.assetSha256 !== entry.asset.sha256) return false;
   const expectedDependencies = (entry.dependencyAssets ?? []).map((asset) => asset.sha256);
-  return (
-    record.dependencyAssetSha256.length === expectedDependencies.length &&
-    record.dependencyAssetSha256.every((sha256, index) => sha256 === expectedDependencies[index])
-  );
+  return dependencyAssetDigestsMatch(record.dependencyAssetSha256, expectedDependencies);
+}
+
+export function dependencyAssetDigestsMatch(recorded: readonly string[], expected: readonly string[]): boolean {
+  return recorded.length === expected.length && recorded.every((sha256, index) => sha256 === expected[index]);
 }
 
 async function commandSucceeds(command: string, args: string[] = []): Promise<boolean> {

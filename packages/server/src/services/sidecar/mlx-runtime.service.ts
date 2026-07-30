@@ -1,4 +1,5 @@
 import { execFileSync, spawn, type ChildProcess } from "child_process";
+import { createHash } from "crypto";
 import {
   chmodSync,
   copyFileSync,
@@ -10,6 +11,7 @@ import {
   writeFileSync,
 } from "fs";
 import { join } from "path";
+import { fileURLToPath } from "url";
 import type { SidecarDownloadProgress, SidecarRuntimeInfo } from "@marinara-engine/shared";
 import { getDataDir } from "../../utils/data-dir.js";
 import { assertInsideDir } from "../../utils/security.js";
@@ -28,6 +30,9 @@ const MLX_VENV_DIR = join(MLX_RUNTIME_DIR, ".venv");
 const MLX_HF_HOME = join(MLX_RUNTIME_DIR, "hf-home");
 const MLX_LM_PACKAGE_STAMP_PATH = join(MLX_RUNTIME_DIR, "mlx-lm-package.txt");
 const MLX_UV_STAMP_PATH = join(MLX_RUNTIME_DIR, "uv-package.txt");
+const MLX_REQUIREMENTS_LOCK_PATH = fileURLToPath(
+  new URL("../../assets/mlx-runtime-requirements.lock", import.meta.url),
+);
 const UV_BIN = process.platform === "win32" ? join(MLX_UV_DIR, "uv.exe") : join(MLX_UV_DIR, "uv");
 const VENV_PYTHON =
   process.platform === "win32" ? join(MLX_VENV_DIR, "Scripts", "python.exe") : join(MLX_VENV_DIR, "bin", "python");
@@ -119,6 +124,17 @@ function isInstalledPackageCurrent(): boolean {
 function writeInstalledPackageSpec(): void {
   mkdirSync(MLX_RUNTIME_DIR, { recursive: true });
   writeFileSync(MLX_LM_PACKAGE_STAMP_PATH, `${serializeMlxRuntimeManifestStamp()}\n`, "utf-8");
+}
+
+function verifyRequirementsLock(): void {
+  const actualSha256 = createHash("sha256")
+    .update(readFileSync(MLX_REQUIREMENTS_LOCK_PATH))
+    .digest("hex");
+  if (actualSha256 !== MLX_RUNTIME_MANIFEST.mlxLm.requirementsLockSha256) {
+    throw new Error(
+      "The bundled MLX dependency lock failed integrity verification. Update or reinstall Marinara Engine before retrying; do not bypass the runtime integrity check.",
+    );
+  }
 }
 
 function findFileRecursive(directoryPath: string, filename: string): string | null {
@@ -324,6 +340,7 @@ class MlxRuntimeService {
     const mlxArchivePath = join(MLX_RUNTIME_DIR, MLX_RUNTIME_MANIFEST.mlxLm.archive.name);
 
     try {
+      verifyRequirementsLock();
       await this.downloadVerifiedAsset(
         MLX_RUNTIME_MANIFEST.mlxLm.archive,
         mlxArchivePath,
@@ -336,10 +353,22 @@ class MlxRuntimeService {
         env: this.getUvEnv(),
       });
       this.emitProgress(onProgress, "downloading", "MLX runtime dependencies");
-      await this.runCommand(UV_BIN, ["pip", "install", "--python", VENV_PYTHON, "--upgrade", mlxArchivePath], {
-        cwd: MLX_RUNTIME_DIR,
-        env: this.getUvEnv(),
-      });
+      await this.runCommand(
+        UV_BIN,
+        ["pip", "sync", "--python", VENV_PYTHON, "--require-hashes", MLX_REQUIREMENTS_LOCK_PATH],
+        {
+          cwd: MLX_RUNTIME_DIR,
+          env: this.getUvEnv(),
+        },
+      );
+      await this.runCommand(
+        UV_BIN,
+        ["pip", "install", "--python", VENV_PYTHON, "--no-deps", "--no-build-isolation", mlxArchivePath],
+        {
+          cwd: MLX_RUNTIME_DIR,
+          env: this.getUvEnv(),
+        },
+      );
       writeInstalledPackageSpec();
       this.emitProgress(onProgress, "downloading", "Verifying MLX runtime");
     } catch (error) {
@@ -444,33 +473,46 @@ class MlxRuntimeService {
     label: string,
     onProgress?: (progress: SidecarDownloadProgress) => void,
   ): Promise<void> {
-    await retry(
-      async () => {
-        const abortController = new AbortController();
-        this.activeFetchAbort = abortController;
-        try {
-          await downloadFileWithProgress({
-            url: asset.browser_download_url,
-            destPath: destinationPath,
-            signal: abortController.signal,
-            expectedBytes: asset.size,
-            expectedSha256: asset.sha256,
-            progress: {
-              phase: "runtime",
-              label,
-            },
-            onProgress,
-          });
-        } finally {
-          this.activeFetchAbort = null;
-        }
-      },
-      {
-        retries: 2,
-        baseDelayMs: 500,
-        shouldRetry: (error) => !isAbortError(error),
-      },
-    );
+    try {
+      await retry(
+        async () => {
+          if (this.cancelRequested) {
+            throw new Error("Install aborted");
+          }
+          const abortController = new AbortController();
+          this.activeFetchAbort = abortController;
+          try {
+            await downloadFileWithProgress({
+              url: asset.browser_download_url,
+              destPath: destinationPath,
+              signal: abortController.signal,
+              expectedBytes: asset.size,
+              expectedSha256: asset.sha256,
+              progress: {
+                phase: "runtime",
+                label,
+              },
+              onProgress,
+            });
+          } finally {
+            this.activeFetchAbort = null;
+          }
+        },
+        {
+          retries: 2,
+          baseDelayMs: 500,
+          shouldRetry: (error) => !isAbortError(error),
+        },
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (/(?:file size|SHA-256) mismatch/iu.test(message)) {
+        throw new Error(
+          `The ${label} download no longer matches the Engine-approved runtime manifest. Update or reinstall Marinara Engine before retrying; do not bypass the integrity check. Original verification error: ${message}`,
+        );
+      }
+      throw error;
+    }
   }
 
   private async runCommand(

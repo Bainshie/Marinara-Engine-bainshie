@@ -57,7 +57,7 @@ If you are not ready to finish, click **Skip for Now**. Once a model exists, tha
 
 Installing or reinstalling the runtime is a protected action. On Windows one-click installs it is turned on for you automatically. On macOS, Linux, and Docker you may need to allow it. See the **Troubleshooting** section below.
 
-Marinara downloads only the llama.cpp, MLX, and uv versions approved for your Engine release. It verifies the exact file size and SHA-256 checksum before extracting or executing anything. Runtime upgrades therefore arrive through reviewed Marinara updates rather than silently following an upstream “latest” build.
+Marinara downloads only the llama.cpp, MLX, and uv versions approved for your Engine release. It verifies the exact file size and SHA-256 checksum before extracting or executing anything. The MLX Python dependency set is also version-locked and hash-verified before the reviewed mlx-lm source is installed without resolving extra packages. Runtime upgrades therefore arrive through reviewed Marinara updates rather than silently following an upstream “latest” build.
 
 ## Downloading a model
 

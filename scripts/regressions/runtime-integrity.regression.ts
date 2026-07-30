@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   LLAMA_CPP_RUNTIME_MANIFEST,
   MLX_RUNTIME_MANIFEST,
@@ -16,7 +17,10 @@ import {
   downloadFileWithProgress,
   retry,
 } from "../../packages/server/src/services/sidecar/sidecar-download.js";
-import { isLlamaRuntimeRecordCurrent } from "../../packages/server/src/services/sidecar/sidecar-runtime.service.js";
+import {
+  dependencyAssetDigestsMatch,
+  isLlamaRuntimeRecordCurrent,
+} from "../../packages/server/src/services/sidecar/sidecar-runtime.service.js";
 
 function digest(value: Buffer): string {
   return createHash("sha256").update(value).digest("hex");
@@ -63,11 +67,59 @@ assert.equal(
   "a different runtime digest must invalidate the installed stamp",
 );
 
+const dependencySample = LLAMA_CPP_RUNTIME_MANIFEST.entries.find(
+  (entry) => (entry.dependencyAssets?.length ?? 0) > 0,
+);
+assert.ok(dependencySample, "the runtime manifest must retain a dependency-bearing regression fixture");
+const dependencyDigests = dependencySample.dependencyAssets.map((asset) => asset.sha256);
+const dependencyRecord = {
+  build: LLAMA_CPP_RUNTIME_MANIFEST.releaseTag,
+  variant: dependencySample.variant,
+  assetName: dependencySample.asset.name,
+  assetSha256: dependencySample.asset.sha256,
+  dependencyAssetSha256: dependencyDigests,
+};
+assert.equal(isLlamaRuntimeRecordCurrent(dependencyRecord), true);
+assert.equal(
+  isLlamaRuntimeRecordCurrent({
+    ...dependencyRecord,
+    dependencyAssetSha256: dependencyDigests.map((sha256, index) => (index === 0 ? "0".repeat(64) : sha256)),
+  }),
+  false,
+  "a changed dependency digest must invalidate the installed stamp",
+);
+assert.equal(
+  isLlamaRuntimeRecordCurrent({ ...dependencyRecord, dependencyAssetSha256: dependencyDigests.slice(1) }),
+  false,
+  "a removed dependency digest must invalidate the installed stamp",
+);
+assert.equal(
+  dependencyAssetDigestsMatch(["dependency-a", "dependency-b"], ["dependency-b", "dependency-a"]),
+  false,
+  "dependency digest order must remain part of the installed-runtime identity",
+);
+
 assertAsset(MLX_RUNTIME_MANIFEST.mlxLm.archive, MLX_RUNTIME_MANIFEST.mlxLm.revision);
 assertAsset(MLX_RUNTIME_MANIFEST.uv.archive, MLX_RUNTIME_MANIFEST.uv.version);
+const mlxRequirementsLock = readFileSync(
+  fileURLToPath(new URL("../../packages/server/src/assets/mlx-runtime-requirements.lock", import.meta.url)),
+);
+assert.equal(
+  digest(mlxRequirementsLock),
+  MLX_RUNTIME_MANIFEST.mlxLm.requirementsLockSha256,
+  "the checked-in MLX dependency lock must match its manifest digest",
+);
+const mlxRequirementsText = mlxRequirementsLock.toString("utf8");
+for (const requirementBlock of mlxRequirementsText.split(/(?=^[a-z0-9])/gimu).slice(1)) {
+  assert.match(requirementBlock, /==[^\s\\]+/u, "every MLX dependency must be pinned exactly");
+  assert.match(requirementBlock, /--hash=sha256:[a-f0-9]{64}/u, "every MLX dependency must carry a SHA-256");
+}
+assert.match(mlxRequirementsText, /^mlx==0\.31\.2\b/mu);
+assert.match(mlxRequirementsText, /^transformers==/mu);
 const mlxStamp = serializeMlxRuntimeManifestStamp();
 assert.match(mlxStamp, new RegExp(MLX_RUNTIME_MANIFEST.mlxLm.revision, "u"));
 assert.match(mlxStamp, new RegExp(MLX_RUNTIME_MANIFEST.mlxLm.archive.sha256, "u"));
+assert.match(mlxStamp, new RegExp(MLX_RUNTIME_MANIFEST.mlxLm.requirementsLockSha256, "u"));
 assert.match(mlxStamp, new RegExp(MLX_RUNTIME_MANIFEST.uv.archive.sha256, "u"));
 assert.notEqual(
   mlxStamp,

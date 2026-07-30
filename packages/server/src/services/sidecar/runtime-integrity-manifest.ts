@@ -171,6 +171,7 @@ export const MLX_RUNTIME_MANIFEST = {
     revision: "e5baded8c1d286754edb479ffbde4655a68e2758",
     packageSpec:
       "mlx-lm @ https://github.com/ml-explore/mlx-lm/archive/e5baded8c1d286754edb479ffbde4655a68e2758.zip",
+    requirementsLockSha256: "e77db61b3f9fac368bd654b1625789c7ee59acee5ea1508fb3b61f52014caecc",
     archive: {
       name: "mlx-lm-e5baded8c1d286754edb479ffbde4655a68e2758.zip",
       browser_download_url:
@@ -204,6 +205,7 @@ export function serializeMlxRuntimeManifestStamp(): string {
       revision: MLX_RUNTIME_MANIFEST.mlxLm.revision,
       packageSpec: MLX_RUNTIME_MANIFEST.mlxLm.packageSpec,
       sha256: MLX_RUNTIME_MANIFEST.mlxLm.archive.sha256,
+      requirementsLockSha256: MLX_RUNTIME_MANIFEST.mlxLm.requirementsLockSha256,
     },
     uv: {
       version: MLX_RUNTIME_MANIFEST.uv.version,
