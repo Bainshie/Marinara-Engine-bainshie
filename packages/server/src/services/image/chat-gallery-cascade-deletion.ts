@@ -4,11 +4,10 @@ import { basename, join } from "node:path";
 import type { DB } from "../../db/connection.js";
 import { logger } from "../../lib/logger.js";
 import { DATA_DIR } from "../../utils/data-dir.js";
-import { assertInsideDir } from "../../utils/security.js";
 import { createCharacterGalleryStorage } from "../storage/character-gallery.storage.js";
 import { createGalleryStorage } from "../storage/gallery.storage.js";
 import { createPersonaGalleryStorage } from "../storage/persona-gallery.storage.js";
-import { unlinkGalleryFileIfUnreferenced } from "./gallery-file-lifecycle.js";
+import { resolveStoredGalleryFile, unlinkGalleryFileIfUnreferenced } from "./gallery-file-lifecycle.js";
 
 const LEGACY_COPY_CREATION_WINDOW_MS = 60_000;
 
@@ -43,12 +42,7 @@ export type ChatGalleryCascadeDeletionResult = {
 };
 
 function resolveSafeGalleryPath(galleryRoot: string, relativePath: string): string | null {
-  if (!relativePath || relativePath.includes("\0")) return null;
-  try {
-    return assertInsideDir(galleryRoot, join(galleryRoot, relativePath.replace(/\\/g, "/")));
-  } catch {
-    return null;
-  }
+  return resolveStoredGalleryFile(relativePath, galleryRoot)?.absolutePath ?? null;
 }
 
 function legacyCandidateWindow(source: ChatGalleryImage) {
