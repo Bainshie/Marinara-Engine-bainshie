@@ -45,10 +45,24 @@ export type ChatGalleryCascadeDeletionResult = {
 function resolveSafeGalleryPath(galleryRoot: string, relativePath: string): string | null {
   if (!relativePath || relativePath.includes("\0")) return null;
   try {
-    return assertInsideDir(galleryRoot, join(galleryRoot, relativePath));
+    return assertInsideDir(galleryRoot, join(galleryRoot, relativePath.replace(/\\/g, "/")));
   } catch {
     return null;
   }
+}
+
+function legacyCandidateWindow(source: ChatGalleryImage) {
+  const createdAt = Date.parse(source.createdAt);
+  if (!Number.isFinite(createdAt)) return null;
+  return {
+    createdAfter: new Date(createdAt - LEGACY_COPY_CREATION_WINDOW_MS).toISOString(),
+    createdBefore: new Date(createdAt + LEGACY_COPY_CREATION_WINDOW_MS).toISOString(),
+    prompt: source.prompt,
+    provider: source.provider,
+    model: source.model,
+    width: source.width,
+    height: source.height,
+  };
 }
 
 function matchingLegacyMetadata(source: ChatGalleryImage, candidate: EntityGalleryImage): boolean {
@@ -136,22 +150,23 @@ export async function deleteChatGalleryImageEverywhere(input: {
   const galleryRoot = input.galleryRoot ?? join(DATA_DIR, "gallery");
   const characterGallery = createCharacterGalleryStorage(input.db);
   const personaGallery = createPersonaGalleryStorage(input.db);
-  const [linkedCharacterCopies, linkedPersonaCopies, allCharacterImages, allPersonaImages] = await Promise.all([
+  const legacyWindow = legacyCandidateWindow(input.image);
+  const [linkedCharacterCopies, linkedPersonaCopies, legacyCharacterImages, legacyPersonaImages] = await Promise.all([
     characterGallery.listBySourceChatImageId(input.image.id),
     personaGallery.listBySourceChatImageId(input.image.id),
-    characterGallery.listAll(),
-    personaGallery.listAll(),
+    legacyWindow ? characterGallery.listLegacyCandidates(legacyWindow) : [],
+    legacyWindow ? personaGallery.listLegacyCandidates(legacyWindow) : [],
   ]);
 
   const chatFiles = existingChatGalleryFiles(galleryRoot, input.image);
   const sourcePath = chatFiles[0]?.absolutePath;
   const characterCopies = uniqueRows([
     ...linkedCharacterCopies,
-    ...legacyExactCopies(galleryRoot, input.image, sourcePath, allCharacterImages),
+    ...legacyExactCopies(galleryRoot, input.image, sourcePath, legacyCharacterImages),
   ]);
   const personaCopies = uniqueRows([
     ...linkedPersonaCopies,
-    ...legacyExactCopies(galleryRoot, input.image, sourcePath, allPersonaImages),
+    ...legacyExactCopies(galleryRoot, input.image, sourcePath, legacyPersonaImages),
   ]);
 
   const filePaths = new Set(chatFiles.map((file) => file.relativePath));

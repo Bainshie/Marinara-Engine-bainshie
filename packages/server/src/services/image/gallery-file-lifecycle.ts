@@ -1,5 +1,5 @@
-import { unlinkSync } from "node:fs";
-import { basename, dirname, join } from "node:path";
+import { existsSync, unlinkSync } from "node:fs";
+import { basename, dirname, join, resolve } from "node:path";
 import type { DB } from "../../db/connection.js";
 import { eq } from "../../db/file-query.js";
 import { characterImages, chatImages, globalImages, personaImages } from "../../db/schema/index.js";
@@ -13,17 +13,47 @@ export type StoredGalleryFile = {
   filename: string;
 };
 
-export function storedGalleryFilename(filePath: string): string {
-  return basename(filePath.replace(/\\/g, "/"));
+const galleryFileLifecycleQueues = new Map<string, Promise<void>>();
+
+function normalizedGalleryPath(filePath: string): string {
+  return filePath.replace(/\\/g, "/");
 }
 
+/** Decode one URL path segment while rejecting separators and traversal names. */
+export function decodeSafePathSegment(value: string | undefined): string | null {
+  if (!value) return null;
+  try {
+    const decoded = decodeURIComponent(value);
+    return decoded &&
+      !decoded.includes("/") &&
+      !decoded.includes("\\") &&
+      !decoded.includes("\0") &&
+      decoded !== "." &&
+      decoded !== ".."
+      ? decoded
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function galleryFileLifecycleKey(filePath: string, galleryRoot?: string): string {
+  return `${resolve(galleryRoot ?? join(DATA_DIR, "gallery"))}\0${normalizedGalleryPath(filePath)}`;
+}
+
+/** Return the filename portion of a platform-neutral stored gallery path. */
+export function storedGalleryFilename(filePath: string): string {
+  return basename(normalizedGalleryPath(filePath));
+}
+
+/** Resolve a stored gallery-relative path without permitting root escape. */
 export function resolveStoredGalleryFile(
   filePath: string,
   galleryRoot = join(DATA_DIR, "gallery"),
 ): StoredGalleryFile | null {
   if (!filePath || filePath.includes("\0")) return null;
   try {
-    const absolutePath = assertInsideDir(galleryRoot, join(galleryRoot, filePath));
+    const absolutePath = assertInsideDir(galleryRoot, join(galleryRoot, normalizedGalleryPath(filePath)));
     return {
       absolutePath,
       directory: dirname(absolutePath),
@@ -34,6 +64,19 @@ export function resolveStoredGalleryFile(
   }
 }
 
+/**
+ * Prefer an owner-local gallery file while supporting canonical shared files
+ * referenced by owner-scoped URLs.
+ */
+export function resolveOwnedGalleryPath(galleryRoot: string, ownerRoot: string, filename: string): string {
+  const ownedPath = assertInsideDir(ownerRoot, join(ownerRoot, filename));
+  if (existsSync(ownedPath)) return ownedPath;
+  const sharedRoot = assertInsideDir(galleryRoot, join(galleryRoot, "shared"));
+  const sharedPath = assertInsideDir(sharedRoot, join(sharedRoot, filename));
+  return existsSync(sharedPath) ? sharedPath : ownedPath;
+}
+
+/** Find the metadata row represented by an owner-scoped filename URL. */
 export function findGalleryRowByFilename<T extends { filePath: string }>(
   rows: readonly T[],
   filename: string,
@@ -41,6 +84,7 @@ export function findGalleryRowByFilename<T extends { filePath: string }>(
   return rows.find((row) => storedGalleryFilename(row.filePath) === filename) ?? null;
 }
 
+/** Check every gallery metadata table for a live reference to one file path. */
 export async function galleryFileHasReferences(db: DB, filePath: string): Promise<boolean> {
   const chatReference = await db
     .select({ id: chatImages.id })
@@ -68,6 +112,35 @@ export async function galleryFileHasReferences(db: DB, filePath: string): Promis
 }
 
 /**
+ * Serialize reference creation and final-release cleanup for one physical
+ * gallery path. The optional root keeps isolated regression files independent.
+ */
+export async function withGalleryFileLifecycleLock<T>(
+  filePath: string,
+  operation: () => Promise<T> | T,
+  galleryRoot?: string,
+): Promise<T> {
+  const key = galleryFileLifecycleKey(filePath, galleryRoot);
+  const previous = galleryFileLifecycleQueues.get(key) ?? Promise.resolve();
+  let releaseCurrent!: () => void;
+  const current = new Promise<void>((resolveCurrent) => {
+    releaseCurrent = resolveCurrent;
+  });
+  const tail = previous.catch(() => undefined).then(() => current);
+  galleryFileLifecycleQueues.set(key, tail);
+
+  await previous.catch(() => undefined);
+  try {
+    return await operation();
+  } finally {
+    releaseCurrent();
+    if (galleryFileLifecycleQueues.get(key) === tail) {
+      galleryFileLifecycleQueues.delete(key);
+    }
+  }
+}
+
+/**
  * Remove the physical file only after every gallery has released its metadata
  * reference. Invalid paths and cleanup failures leave at worst an orphan file,
  * never a broken live reference.
@@ -78,20 +151,26 @@ export async function unlinkGalleryFileIfUnreferenced(input: {
   /** Test-only filesystem override. */
   galleryRoot?: string;
 }): Promise<boolean> {
-  if (await galleryFileHasReferences(input.db, input.filePath)) return false;
+  return withGalleryFileLifecycleLock(
+    input.filePath,
+    async () => {
+      if (await galleryFileHasReferences(input.db, input.filePath)) return false;
 
-  const storedFile = resolveStoredGalleryFile(input.filePath, input.galleryRoot);
-  if (!storedFile) {
-    logger.warn("[image-gallery] Skipped cleanup for unsafe gallery path %s", input.filePath);
-    return false;
-  }
+      const storedFile = resolveStoredGalleryFile(input.filePath, input.galleryRoot);
+      if (!storedFile) {
+        logger.warn("[image-gallery] Skipped cleanup for unsafe gallery path %s", input.filePath);
+        return false;
+      }
 
-  try {
-    unlinkSync(storedFile.absolutePath);
-    return true;
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
-    logger.warn(error, "[image-gallery] Could not remove unreferenced gallery file %s", input.filePath);
-    return false;
-  }
+      try {
+        unlinkSync(storedFile.absolutePath);
+        return true;
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
+        logger.warn(error, "[image-gallery] Could not remove unreferenced gallery file %s", input.filePath);
+        return false;
+      }
+    },
+    input.galleryRoot,
+  );
 }

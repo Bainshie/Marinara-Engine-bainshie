@@ -1,7 +1,7 @@
 // ──────────────────────────────────────────────
 // Storage: Persona Gallery Images
 // ──────────────────────────────────────────────
-import { eq, desc } from "../../db/file-query.js";
+import { and, desc, eq, gte, isNull, lte } from "../../db/file-query.js";
 import type { DB } from "../../db/connection.js";
 import { personaImages } from "../../db/schema/index.js";
 import { newId, now } from "../../utils/id-generator.js";
@@ -17,6 +17,16 @@ export interface CreatePersonaImageInput {
   height?: number;
 }
 
+export interface LegacyPersonaImageCandidateInput {
+  createdAfter: string;
+  createdBefore: string;
+  prompt: string;
+  provider: string;
+  model: string;
+  width: number | null;
+  height: number | null;
+}
+
 export function createPersonaGalleryStorage(db: DB) {
   return {
     async listByPersonaId(personaId: string) {
@@ -27,8 +37,23 @@ export function createPersonaGalleryStorage(db: DB) {
         .orderBy(desc(personaImages.createdAt));
     },
 
-    async listAll() {
-      return db.select().from(personaImages).orderBy(desc(personaImages.createdAt));
+    async listLegacyCandidates(input: LegacyPersonaImageCandidateInput) {
+      return db
+        .select()
+        .from(personaImages)
+        .where(
+          and(
+            isNull(personaImages.sourceChatImageId),
+            gte(personaImages.createdAt, input.createdAfter),
+            lte(personaImages.createdAt, input.createdBefore),
+            eq(personaImages.prompt, input.prompt),
+            eq(personaImages.provider, input.provider),
+            eq(personaImages.model, input.model),
+            input.width === null ? isNull(personaImages.width) : eq(personaImages.width, input.width),
+            input.height === null ? isNull(personaImages.height) : eq(personaImages.height, input.height),
+          ),
+        )
+        .orderBy(desc(personaImages.createdAt));
     },
 
     async listBySourceChatImageId(sourceChatImageId: string) {

@@ -24,7 +24,11 @@ import { createChatsStorage } from "../storage/chats.storage.js";
 import { buildAssetManifest } from "../game/asset-manifest.service.js";
 import type { MariDbCommandResult } from "@marinara-engine/shared";
 import { deleteChatGalleryImageEverywhere } from "../image/chat-gallery-cascade-deletion.js";
-import { unlinkGalleryFileIfUnreferenced } from "../image/gallery-file-lifecycle.js";
+import {
+  decodeSafePathSegment,
+  resolveOwnedGalleryPath,
+  unlinkGalleryFileIfUnreferenced,
+} from "../image/gallery-file-lifecycle.js";
 
 type Json = Record<string, unknown>;
 
@@ -464,28 +468,17 @@ function safeUrlPath(value: string) {
   }
 }
 
-function decodePathSegment(value: string | undefined) {
-  return decodeURIComponent(value ?? "");
-}
-
-function resolveOwnedGalleryPath(ownerRoot: string, filename: string): string {
-  const ownedPath = assertInsideDir(ownerRoot, join(ownerRoot, filename));
-  if (existsSync(ownedPath)) return ownedPath;
-  const sharedRoot = join(GALLERY_DIR, "shared");
-  const sharedPath = assertInsideDir(sharedRoot, join(sharedRoot, filename));
-  return existsSync(sharedPath) ? sharedPath : ownedPath;
-}
-
 function appImagePathFromUrl(value: string): { path: string; label: string; url: string } | null {
   const pathname = safeUrlPath(value);
   const parts = pathname.split("/").filter(Boolean);
   if (parts[0] !== "api") return null;
 
   if (parts[1] === "gallery" && parts[2] === "file" && parts[3] && parts[4]) {
-    const chatId = decodePathSegment(parts[3]);
-    const filename = decodePathSegment(parts[4]);
+    const chatId = decodeSafePathSegment(parts[3]);
+    const filename = decodeSafePathSegment(parts[4]);
+    if (!chatId || !filename) return null;
     return {
-      path: resolveOwnedGalleryPath(join(GALLERY_DIR, chatId), filename),
+      path: resolveOwnedGalleryPath(GALLERY_DIR, join(GALLERY_DIR, chatId), filename),
       label: `gallery:${chatId}/${filename}`,
       url: pathname,
     };
@@ -498,40 +491,46 @@ function appImagePathFromUrl(value: string): { path: string; label: string; url:
     parts[5] === "file" &&
     parts[6]
   ) {
-    const personaId = decodePathSegment(parts[3]);
-    const filename = decodePathSegment(parts[6]);
+    const personaId = decodeSafePathSegment(parts[3]);
+    const filename = decodeSafePathSegment(parts[6]);
+    if (!personaId || !filename) return null;
     const root = join(GALLERY_DIR, "personas", personaId);
     return {
-      path: resolveOwnedGalleryPath(root, filename),
+      path: resolveOwnedGalleryPath(GALLERY_DIR, root, filename),
       label: `persona-gallery:${personaId}/${filename}`,
       url: pathname,
     };
   }
   if (parts[1] === "characters" && parts[3] === "gallery" && parts[4] === "file" && parts[2] && parts[5]) {
-    const characterId = decodePathSegment(parts[2]);
-    const filename = decodePathSegment(parts[5]);
+    const characterId = decodeSafePathSegment(parts[2]);
+    const filename = decodeSafePathSegment(parts[5]);
+    if (!characterId || !filename) return null;
     const root = join(GALLERY_DIR, "characters", characterId);
     return {
-      path: resolveOwnedGalleryPath(root, filename),
+      path: resolveOwnedGalleryPath(GALLERY_DIR, root, filename),
       label: `character-gallery:${characterId}/${filename}`,
       url: pathname,
     };
   }
   if (parts[1] === "avatars" && parts[2] === "file" && parts[3]) {
-    const filename = decodePathSegment(parts[3]);
+    const filename = decodeSafePathSegment(parts[3]);
+    if (!filename) return null;
     return { path: assertInsideDir(AVATAR_DIR, join(AVATAR_DIR, filename)), label: `avatar:${filename}`, url: pathname };
   }
   if (parts[1] === "lorebooks" && parts[2] === "images" && parts[3] === "file" && parts[4]) {
-    const filename = decodePathSegment(parts[4]);
+    const filename = decodeSafePathSegment(parts[4]);
+    if (!filename) return null;
     return { path: assertInsideDir(LOREBOOK_IMAGE_DIR, join(LOREBOOK_IMAGE_DIR, filename)), label: `lorebook-image:${filename}`, url: pathname };
   }
   if (parts[1] === "backgrounds" && parts[2] === "file" && parts[3]) {
-    const filename = decodePathSegment(parts[3]);
+    const filename = decodeSafePathSegment(parts[3]);
+    if (!filename) return null;
     return { path: assertInsideDir(BACKGROUND_DIR, join(BACKGROUND_DIR, filename)), label: `background:${filename}`, url: pathname };
   }
   if (parts[1] === "sprites" && parts[2] && parts[3] === "file" && parts[4]) {
-    const ownerId = decodePathSegment(parts[2]);
-    const filename = decodePathSegment(parts[4]);
+    const ownerId = decodeSafePathSegment(parts[2]);
+    const filename = decodeSafePathSegment(parts[4]);
+    if (!ownerId || !filename) return null;
     const root = join(SPRITES_DIR, ownerId);
     return { path: assertInsideDir(root, join(root, filename)), label: `sprite:${ownerId}/${filename}`, url: pathname };
   }

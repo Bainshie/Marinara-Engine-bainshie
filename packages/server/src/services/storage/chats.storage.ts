@@ -435,6 +435,29 @@ export function createChatsStorage(db: DB) {
     return sharedSchedules;
   }
 
+  async function cleanupChatGallery(chatId: string): Promise<void> {
+    const chatGalleryFiles = await db
+      .select({ filePath: chatImages.filePath })
+      .from(chatImages)
+      .where(eq(chatImages.chatId, chatId));
+
+    await db.delete(chatImages).where(eq(chatImages.chatId, chatId));
+    for (const image of chatGalleryFiles) {
+      await unlinkGalleryFileIfUnreferenced({ db, filePath: image.filePath });
+    }
+
+    const localPathPrefix = `${chatId}/`;
+    const hasSharedLocalFile = (
+      await Promise.all(
+        chatGalleryFiles
+          .filter((image) => image.filePath.replace(/\\/g, "/").startsWith(localPathPrefix))
+          .map((image) => galleryFileHasReferences(db, image.filePath)),
+      )
+    ).some(Boolean);
+    const galleryDir = join(GALLERY_DIR, chatId);
+    if (!hasSharedLocalFile && existsSync(galleryDir)) rmSync(galleryDir, { recursive: true, force: true });
+  }
+
   return {
     async list() {
       await ensureChatLastMessageAtBackfilled();
@@ -734,11 +757,6 @@ export function createChatsStorage(db: DB) {
     },
 
     async remove(id: string) {
-      const chatGalleryFiles = await db
-        .select({ filePath: chatImages.filePath })
-        .from(chatImages)
-        .where(eq(chatImages.chatId, id));
-
       // Clean up agent data referencing this chat
       await db.delete(agentRuns).where(eq(agentRuns.chatId, id));
       await db.delete(agentMemory).where(eq(agentMemory.chatId, id));
@@ -759,20 +777,7 @@ export function createChatsStorage(db: DB) {
       await db.delete(gameSceneVideos).where(eq(gameSceneVideos.chatId, id));
 
       // Clean up gallery images (DB records + files on disk)
-      await db.delete(chatImages).where(eq(chatImages.chatId, id));
-      for (const image of chatGalleryFiles) {
-        await unlinkGalleryFileIfUnreferenced({ db, filePath: image.filePath });
-      }
-      const localPathPrefix = `${id}/`;
-      const hasSharedLocalFile = (
-        await Promise.all(
-          chatGalleryFiles
-            .filter((image) => image.filePath.replace(/\\/g, "/").startsWith(localPathPrefix))
-            .map((image) => galleryFileHasReferences(db, image.filePath)),
-        )
-      ).some(Boolean);
-      const galleryDir = join(GALLERY_DIR, id);
-      if (!hasSharedLocalFile && existsSync(galleryDir)) rmSync(galleryDir, { recursive: true, force: true });
+      await cleanupChatGallery(id);
       const videoDir = join(GAME_SCENE_VIDEOS_DIR, id);
       if (existsSync(videoDir)) rmSync(videoDir, { recursive: true, force: true });
 
@@ -784,10 +789,6 @@ export function createChatsStorage(db: DB) {
       // Find all chat IDs in this group, then clean up their data
       const groupChats = await db.select({ id: chats.id }).from(chats).where(eq(chats.groupId, groupId));
       for (const chat of groupChats) {
-        const chatGalleryFiles = await db
-          .select({ filePath: chatImages.filePath })
-          .from(chatImages)
-          .where(eq(chatImages.chatId, chat.id));
         await db.delete(agentRuns).where(eq(agentRuns.chatId, chat.id));
         await db.delete(agentMemory).where(eq(agentMemory.chatId, chat.id));
         await db.delete(gameCheckpoints).where(eq(gameCheckpoints.chatId, chat.id));
@@ -807,20 +808,7 @@ export function createChatsStorage(db: DB) {
         }
         await db.delete(gameTurnStoryboards).where(eq(gameTurnStoryboards.chatId, chat.id));
         await db.delete(gameSceneVideos).where(eq(gameSceneVideos.chatId, chat.id));
-        await db.delete(chatImages).where(eq(chatImages.chatId, chat.id));
-        for (const image of chatGalleryFiles) {
-          await unlinkGalleryFileIfUnreferenced({ db, filePath: image.filePath });
-        }
-        const localPathPrefix = `${chat.id}/`;
-        const hasSharedLocalFile = (
-          await Promise.all(
-            chatGalleryFiles
-              .filter((image) => image.filePath.replace(/\\/g, "/").startsWith(localPathPrefix))
-              .map((image) => galleryFileHasReferences(db, image.filePath)),
-          )
-        ).some(Boolean);
-        const galleryDir = join(GALLERY_DIR, chat.id);
-        if (!hasSharedLocalFile && existsSync(galleryDir)) rmSync(galleryDir, { recursive: true, force: true });
+        await cleanupChatGallery(chat.id);
         const videoDir = join(GAME_SCENE_VIDEOS_DIR, chat.id);
         if (existsSync(videoDir)) rmSync(videoDir, { recursive: true, force: true });
       }

@@ -6,6 +6,7 @@ import { createFileNativeDB } from "../../packages/server/src/db/file-backed-sto
 import { characterImages } from "../../packages/server/src/db/schema/index.js";
 import { deleteChatGalleryImageEverywhere } from "../../packages/server/src/services/image/chat-gallery-cascade-deletion.js";
 import {
+  decodeSafePathSegment,
   findGalleryRowByFilename,
   resolveStoredGalleryFile,
   unlinkGalleryFileIfUnreferenced,
@@ -72,6 +73,14 @@ try {
   assert.equal(existsSync(join(galleryRoot, "characters")), false, "character references must not copy image bytes");
   assert.equal(existsSync(join(galleryRoot, "personas")), false, "persona references must not copy image bytes");
 
+  const windowsRelativePath = "shared\\windows-path.png";
+  const windowsFile = writeGalleryFile("shared/windows-path.png", "windows-path");
+  assert.equal(resolveStoredGalleryFile(windowsRelativePath, galleryRoot)?.absolutePath, windowsFile);
+  for (const unsafeSegment of ["%2F", "%5C", ".", "..", "%00", "%E0%A4%A"]) {
+    assert.equal(decodeSafePathSegment(unsafeSegment), null, `unsafe URL segment must be rejected: ${unsafeSegment}`);
+  }
+  assert.equal(decodeSafePathSegment("generated%20image.png"), "generated image.png");
+
   const servedCharacter = findGalleryRowByFilename(
     await characterGallery.listByCharacterId("character-1"),
     "generated.png",
@@ -90,6 +99,56 @@ try {
     false,
   );
   assert.equal(existsSync(sourceFile), true, "deleting one gallery reference must preserve the shared file");
+
+  const creationFirstPath = "shared/creation-first.png";
+  const creationFirstFile = writeGalleryFile(creationFirstPath, "creation-first");
+  let releaseCreation!: () => void;
+  const creationMayFinish = new Promise<void>((resolveCreation) => {
+    releaseCreation = resolveCreation;
+  });
+  let signalCreationStarted!: () => void;
+  const creationStarted = new Promise<void>((resolveStarted) => {
+    signalCreationStarted = resolveStarted;
+  });
+  const creationFirstPersistence = persistGeneratedImageToEntityGalleries({
+    sourceFilePath: creationFirstPath,
+    characterIds: ["race-character"],
+    characterGallery: {
+      create: async (input) => {
+        signalCreationStarted();
+        await creationMayFinish;
+        return characterGallery.create(input);
+      },
+    },
+    personaGallery,
+    galleryRoot,
+    ...sourceMetadata,
+  });
+  await creationStarted;
+  const creationFirstCleanup = unlinkGalleryFileIfUnreferenced({
+    db,
+    filePath: creationFirstPath,
+    galleryRoot,
+  });
+  releaseCreation();
+  assert.deepEqual(await creationFirstPersistence, { characterCount: 1, personaCount: 0 });
+  assert.equal(await creationFirstCleanup, false);
+  assert.equal(existsSync(creationFirstFile), true, "concurrent reference creation must win before final-file cleanup");
+
+  const cleanupFirstPath = "shared/cleanup-first.png";
+  const cleanupFirstFile = writeGalleryFile(cleanupFirstPath, "cleanup-first");
+  const cleanupFirst = unlinkGalleryFileIfUnreferenced({ db, filePath: cleanupFirstPath, galleryRoot });
+  const latePersistence = persistGeneratedImageToEntityGalleries({
+    sourceFilePath: cleanupFirstPath,
+    characterIds: ["late-character"],
+    characterGallery,
+    personaGallery,
+    galleryRoot,
+    ...sourceMetadata,
+  });
+  assert.equal(await cleanupFirst, true);
+  assert.deepEqual(await latePersistence, { characterCount: 0, personaCount: 0 });
+  assert.equal(existsSync(cleanupFirstFile), false, "late reference creation must not point at a deleted file");
 
   const legacyCharacterPath = "characters/legacy-character/generated.png";
   const legacyPersonaPath = "personas/legacy-persona/generated.png";
@@ -192,7 +251,11 @@ try {
   for (const removed of [linkedPersonas[1]!, legacyPersona]) {
     assert.equal(await personaGallery.getById(removed.id), null);
   }
-  for (const removedFile of [sourceFile, join(galleryRoot, legacyCharacter.filePath), join(galleryRoot, legacyPersona.filePath)]) {
+  for (const removedFile of [
+    sourceFile,
+    join(galleryRoot, legacyCharacter.filePath),
+    join(galleryRoot, legacyPersona.filePath),
+  ]) {
     assert.equal(existsSync(removedFile), false);
   }
 
@@ -204,7 +267,11 @@ try {
   assert.equal(existsSync(join(galleryRoot, differentContentPath)), true);
   assert.equal(existsSync(join(galleryRoot, otherSourcePath)), true);
   assert.equal(existsSync(join(galleryRoot, oldLegacyPath)), true);
-  assert.equal(existsSync(outsideFile), true, "an unsafe stored path must never delete a file outside the gallery root");
+  assert.equal(
+    existsSync(outsideFile),
+    true,
+    "an unsafe stored path must never delete a file outside the gallery root",
+  );
 } finally {
   await db._fileStore.close();
   if (previousStorageRoot === undefined) delete process.env.FILE_STORAGE_DIR;
