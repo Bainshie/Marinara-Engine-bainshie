@@ -1,4 +1,4 @@
-import { useId, useState, type ReactNode } from "react";
+import { useEffect, useId, useState, type ReactNode } from "react";
 import { ChevronDown, ChevronRight, Settings2, Trash2 } from "lucide-react";
 import { useTranslation as useUiTranslation } from "react-i18next";
 import type { AgentPromptTemplateOption } from "@marinara-engine/shared";
@@ -10,19 +10,26 @@ export function AgentCategorySection({
   icon,
   description,
   count,
+  openRequest = false,
   children,
 }: {
   label: string;
   icon: ReactNode;
   description: string;
   count?: number;
+  openRequest?: boolean;
   children: ReactNode;
 }) {
   const [open, setOpen] = useState(false);
+  useEffect(() => {
+    if (openRequest) setOpen(true);
+  }, [openRequest]);
   return (
     <div className="overflow-hidden rounded-lg border border-[var(--border)]">
       <button
+        type="button"
         onClick={() => setOpen((value) => !value)}
+        aria-expanded={open}
         className="flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-[var(--accent)]/50"
       >
         <span className="text-[var(--muted-foreground)]">{icon}</span>
