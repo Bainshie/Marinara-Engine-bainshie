@@ -251,6 +251,7 @@ Marinara Engine source code is licensed under the [GNU AGPLv3](LICENSE).
 
 The software license does not grant permission to imply that a third-party
 product or hosted service is official, endorsed, certified, or supported by
-Pasta-Devs. Truthful references to Marinara Engine remain welcome when the
-operator and independent status are clear. See the
-[Trademark and Branding Policy](TRADEMARKS.md) for the complete guidelines.
+Pasta-Devs. Ordinary truthful descriptive and nominative references to Marinara
+Engine remain welcome. When a reference is used to market or operate a hosted
+service, its operator and independent status must be clear. See the [Trademark
+and Branding Policy](TRADEMARKS.md) for the complete guidelines.

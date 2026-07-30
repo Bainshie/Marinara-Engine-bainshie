@@ -61,6 +61,12 @@ operator and prominently display a disclosure substantially similar to:
 > **[Service name] is independently operated by [operator] and is not
 > affiliated with, endorsed by, or supported by Pasta-Devs.**
 
+This non-affiliation disclosure is not required for a service operated by
+Pasta-Devs or for a third-party service whose written authorization expressly
+permits presentation as an official Marinara Engine or Pasta-Devs service. An
+authorized service must instead follow the branding and disclosure terms in
+that authorization.
+
 Displaying this disclosure does not authorize use of a Project Mark. It is
 required in addition to any prior written permission applicable under
 [Uses That Require Written Permission](#uses-that-require-written-permission).
@@ -95,9 +101,9 @@ official release, provided that it identifies the release and links to the
 Pasta-Devs source. If that artifact is used to operate a hosted service, the
 service must also include the independent-service disclosure.
 
-Only a service operated by Pasta-Devs, or a service with prior written
-authorization from Pasta-Devs, may be presented as an official Marinara Engine
-or Pasta-Devs service.
+Only a service operated by Pasta-Devs, or a service with written authorization
+that expressly permits presentation as an official Marinara Engine or
+Pasta-Devs service, may be presented as official.
 
 ## Uses That Require Written Permission
 
