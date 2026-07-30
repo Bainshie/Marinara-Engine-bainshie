@@ -6,6 +6,8 @@ This file is the release-notes source of truth for Marinara Engine. Reuse these 
 
 ### Added
 
+- Added per-agent context controls for custom agents, allowing each agent to request only the chat history, Character, Persona, lorebook, summary, Author's Note, tracker, and recalled-memory context it needs (#4305).
+- Rendered Markdown in read-only Character, Persona, and lorebook content views while keeping editing fields as plain source text (#4306).
 - Added the **Russian** documentation language pack, covering all 123 in-app guides (developer docs included) in natural Russian (the "вы" address of mainstream Russian software with gender-neutral phrasing, product names kept in Latin script and undeclined so search always matches, standard Cyrillic loanword declension), with English UI control names preserved for following instructions against the interface and Russian sidebar category labels in the docs viewer. Select it under **Settings → General → Documentation Language** via **Download & Replace** (#4281).
 - Added the **Polish** documentation language pack, covering all 123 in-app guides (developer docs included) in natural Polish (informal address with gender-neutral phrasing, product names kept undeclined so search always matches, standard Polish loanword declension), with English UI control names preserved for following instructions against the interface and Polish sidebar category labels in the docs viewer. Select it under **Settings → General → Documentation Language** via **Download & Replace** (#4235).
 
@@ -41,6 +43,8 @@ This file is the release-notes source of truth for Marinara Engine. Reuse these 
 
 ### Fixed
 
+- Trimmed leading and trailing whitespace from Character names when cards are saved or imported (#4303).
+- Made Memory Recall discard superseded message revisions and inject only the current edited message text (#4304).
 - Made the right-side Character and Persona searches use the same creator, version, notes, profile fields, tags, and Unicode-safe matching as their full libraries, so author searches no longer discard valid results (#4299).
 - Made Dynamic LLM Prompt generation for Game backgrounds read the latest completed GM turn as its primary scene source for both scene-analysis and Gallery requests, instead of merely rewriting the deterministic fallback prompt (#4300).
 - Corrected small factual defects in the guides found during translation review: the **Text & Scale** chat-text section now says four controls (not three), the chat-backgrounds save-location list now says three settings (not two), a link to the Card Browser guide no longer uses the tab's pre-rename "Browser" title, and six occurrences across five quoted button labels (**Search models…**, **Creating backup…**, **Switching…**, **Checking…**, **Refreshing…**) now use the same ellipsis character the app actually renders, so copying them into the docs search matches the interface. Mirrored across every language pack on `docs-i18n` (#4282).
