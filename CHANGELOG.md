@@ -34,6 +34,7 @@ This file is the release-notes source of truth for Marinara Engine. Reuse these 
 ### Security
 
 - Required normal authorization for proxy-forwarded Docker traffic by default while retaining `REQUIRE_AUTH_FOR_DOCKER_PROXY=false` as an explicit legacy opt-out for fully trusted upstream clients. Direct same-host Docker bridge/gateway traffic remains compatible with `BYPASS_AUTH_DOCKER`.
+- Pinned bundled llama.cpp, MLX, and uv runtime inputs to reviewed revisions and release assets with repository-owned sizes and SHA-256 digests. Downloads now fail before extraction or execution when their content differs, and installed runtime stamps force explicit Engine-reviewed upgrades instead of following upstream `latest` or `main`.
 
 ### Fixed
 

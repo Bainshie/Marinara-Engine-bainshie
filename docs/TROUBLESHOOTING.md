@@ -128,6 +128,7 @@ The **Local Model** is an AI model that runs on your own machine with no API key
 
 - If installing a runtime fails with **Sidecar runtime install is disabled**, the server has that action turned off for safety. On your own machine, set `SIDECAR_RUNTIME_INSTALL_ENABLED=true` in `.env`. From another device, paste your admin secret into **Settings** > **Advanced** > **Admin Access** first.
 - If the model download or setup fails from another device (a network address or Docker), it may also need the admin secret. On your own machine, no admin secret is needed. See the point above for where to paste the secret.
+- If a bundled llama.cpp, MLX, or uv download reports a file-size or SHA-256 mismatch, Marinara has discarded it before extraction. Update Marinara and retry; do not manually run or unpack the rejected file.
 
 For full setup, see [Local Model Setup](connections/local-model.md).
 
