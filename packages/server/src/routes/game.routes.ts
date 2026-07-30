@@ -1340,7 +1340,10 @@ export function selectLatestGameTurnNarration(
   for (let index = messages.length - 1; index >= 0; index -= 1) {
     const message = messages[index];
     if (message?.role !== "assistant" && message?.role !== "narrator") continue;
-    const narration = compactGameTurnNarration(message.content ?? "");
+    const content = message.content ?? "";
+    if (message.role === "assistant" && content.trimStart().startsWith("[party-turn]")) continue;
+    if (message.role === "narrator" && isSessionConclusionMessage(content)) continue;
+    const narration = compactGameTurnNarration(content);
     if (narration) return narration;
   }
   return null;
@@ -11768,6 +11771,12 @@ export async function gameRoutes(app: FastifyInstance) {
     const latestImageState = await createGameStateStorage(app.db)
       .getLatest(input.chatId)
       .catch(() => null);
+    const requestDebug = input.debugMode === true;
+    const debugOverrideEnabled = requestDebug || isDebugAgentsEnabled();
+    const debugLogsEnabled = debugOverrideEnabled || logger.isLevelEnabled("debug");
+    const debugLog = (message: string, ...args: any[]) => {
+      logDebugOverride(debugOverrideEnabled, message, ...args);
+    };
     const latestTurnNarration =
       meta.gameImageDynamicPromptEnabled === true
         ? selectLatestGameTurnNarration(await chats.listMessages(input.chatId))
@@ -11780,6 +11789,7 @@ export async function gameRoutes(app: FastifyInstance) {
       setupConfig: setupCfg,
       latestState: latestImageState,
       latestTurnNarration,
+      debugLog: debugLogsEnabled ? debugLog : undefined,
     });
 
     const items: Array<{

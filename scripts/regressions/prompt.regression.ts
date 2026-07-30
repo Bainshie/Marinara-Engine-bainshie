@@ -4940,6 +4940,8 @@ Use HTML sparingly and diegetically. Do not replace normal prose/dialogue unless
           content:
             "[bg: storm-station] Rain lashes the glass-roofed station while blue signal lamps flicker over the abandoned platforms.",
         },
+        { role: "assistant", content: "[party-turn] Lyra shields her face from the rain." },
+        { role: "narrator", content: "**Session 4 Concluded**\nThe next arc is ready." },
         { role: "system", content: "Internal state update after the visible turn." },
       ]);
       assert.equal(
@@ -4966,6 +4968,49 @@ Use HTML sparingly and diegetically. Do not replace normal prose/dialogue unless
       assert.doesNotMatch(userPrompt, /\[bg:/);
       assert.match(userPrompt, /latest GM turn as the primary source/i);
       assert.ok(userPrompt.indexOf("<latest_gm_turn>") < userPrompt.indexOf("<draft_prompt>"));
+
+      const override = [
+        "Direct the current background from this completed turn:",
+        "${latestTurnBlock}",
+        "Keep the result under ${maxCharacters} characters.",
+      ].join("\n");
+      const promptOverridesStorage = {
+        async get(key: string) {
+          return key === "game.imagePromptDirector"
+            ? { key, template: override, enabled: true, updatedAt: "2026-07-30T00:00:00.000Z" }
+            : null;
+        },
+        async list() {
+          return [];
+        },
+        async upsert(input) {
+          return {
+            key: input.key,
+            template: input.template,
+            enabled: input.enabled,
+            updatedAt: "2026-07-30T00:00:00.000Z",
+          };
+        },
+        async remove() {},
+      } satisfies PromptOverridesStorage;
+      const overriddenMessages = await buildDynamicGameImagePromptMessages({
+        promptOverridesStorage,
+        request: {
+          kind: "background",
+          title: "storm-station",
+          sourcePrompt: "scenery, station, wide shot",
+          assetContext: ["Location slug: storm-station"],
+          maxCharacters: 1000,
+        },
+        meta: {},
+        setupConfig: null,
+        latestState: null,
+        latestTurnNarration,
+      });
+      const overriddenSystemPrompt = overriddenMessages[0]?.content ?? "";
+      assert.match(overriddenSystemPrompt, /<latest_gm_turn>/);
+      assert.match(overriddenSystemPrompt, /glass-roofed station/);
+      assert.doesNotMatch(overriddenSystemPrompt, /\$\{latestTurnBlock\}/);
     },
   },
   {
