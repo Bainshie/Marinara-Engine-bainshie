@@ -42,16 +42,18 @@ assert.match(
   localizationSource,
   /Ask Professor Mari to create an extension for you\. Nothing runs until you enable it and approve the exact code hash\./u,
 );
-assert.match(
-  localizationSource,
-  /read-only active chat and Character IDs\. It cannot read messages, cards, or chat metadata\./u,
-);
+assert.match(localizationSource, /read-only active chat and Character IDs\./u);
+assert.match(localizationSource, /It also requests: \{\{permissions\}\}\./u);
+assert.match(localizationSource, /Read active Character cards/u);
+assert.match(localizationSource, /Read active Persona/u);
 assert.match(clientSettingsSource, /mode="personal"/u);
 assert.match(clientSettingsSource, /mode="external"/u);
 assert.match(clientSettingsSource, /isExternal && \(/u);
 assert.match(clientSettingsSource, /settings\.externalExtensions\.formats\.title/u);
 assert.match(localizationSource, /"settings\.externalExtensions\.formats\.title": "Supported local formats"/u);
 assert.match(clientSettingsSource, /const fingerprint = extension\.contentHash/u);
+assert.match(clientSettingsSource, /settings\.personalExtensions\.capabilities\.title/u);
+assert.match(clientSettingsSource, /PERSONAL_EXTENSION_CAPABILITIES\.map/u);
 assert.doesNotMatch(clientSettingsSource, /\+ New Draft/u);
 assert.match(settingsPanelSource, /extensionPolicy\?\.externalExtensionsEnabled && <ExternalExtensionsSettings/u);
 assert.match(settingsPanelSource, /settings\.externalExtensions\.warning/u);
@@ -67,7 +69,8 @@ assert.match(clientInjectorSource, /useChatStore\.subscribe/u);
 assert.match(clientInjectorSource, /type:\s*"context-update"/u);
 assert.match(clientInjectorSource, /contentHash:\s*active\.contentHash/u);
 assert.doesNotMatch(clientInjectorSource, /activeChat\.messages|activeChat\.personaId/u);
-assert.doesNotMatch(clientContextSource, /\bmessages?\b|\bpersona\b|\bcard\b|\bfetch\b/iu);
+assert.doesNotMatch(clientContextSource, /\bmessages?\b|\bfetch\b/iu);
+assert.match(clientInjectorSource, /extensionFetch\(active\.extension\.id,\s*"context"/u);
 assert.match(clientContributionSource, /PERSONAL_EXTENSION_UI_LIMITS/u);
 assert.doesNotMatch(clientContributionPanelSource, /dangerouslySetInnerHTML|innerHTML/u);
 assert.match(clientContributionPanelSource, /aria-label=\{element\.label \? undefined :/u);
@@ -82,6 +85,10 @@ assert.match(routeSource, /sandbox became unresponsive/u);
 assert.match(routeSource, /canExecutePersonalExtension/u);
 assert.match(routeSource, /ENABLE_EXTERNAL_EXTENSIONS=true/u);
 assert.match(routeSource, /panel control id contains unsupported characters/u);
+assert.match(routeSource, /read_active_characters/u);
+assert.match(routeSource, /read_active_persona/u);
+assert.match(routeSource, /parseContextCharacterIds\(chat\.characterIds\)/u);
+assert.match(routeSource, /allowedIds\.has\(id\)/u);
 
 assert.match(schemaSource, /acknowledgeSandboxedCode:\s*z\.literal\(true\)/u);
 assert.doesNotMatch(schemaSource, /acknowledgeFullTrust/u);
@@ -155,6 +162,34 @@ try {
   );
   assert.ok(externalDraft);
   assert.equal(externalDraft.enabled, false);
+  assert.deepEqual(externalDraft.capabilities, []);
+
+  const capabilityDraft = await storage.create(
+    {
+      name: "Scoped context extension",
+      runtime: "client",
+      capabilities: ["read_active_characters"],
+      js: "marinara.log.info('scoped');",
+    },
+    { source: "professor_mari" },
+  );
+  assert.ok(capabilityDraft);
+  assert.deepEqual(capabilityDraft.capabilities, ["read_active_characters"]);
+  const approvedCapabilityDraft = await storage.approve(capabilityDraft.id, capabilityDraft.contentHash);
+  assert.equal(approvedCapabilityDraft?.enabled, true);
+  const changedCapabilityDraft = await storage.update(capabilityDraft.id, {
+    capabilities: ["read_active_persona"],
+  });
+  assert.ok(changedCapabilityDraft);
+  assert.notEqual(changedCapabilityDraft.contentHash, capabilityDraft.contentHash);
+  assert.equal(changedCapabilityDraft.enabled, false);
+  assert.equal(changedCapabilityDraft.approvedHash, null);
+  assert.deepEqual(changedCapabilityDraft.capabilities, ["read_active_persona"]);
+  assert.deepEqual(changedCapabilityDraft.revisions[0]?.capabilities, ["read_active_characters"]);
+  const rolledBackCapabilityDraft = await storage.rollback(capabilityDraft.id, capabilityDraft.contentHash);
+  assert.deepEqual(rolledBackCapabilityDraft?.capabilities, ["read_active_characters"]);
+  assert.equal(rolledBackCapabilityDraft?.enabled, false);
+  assert.equal(rolledBackCapabilityDraft?.approvedHash, null);
 
   await createAppSettingsStorage(db).set("external-extensions-enabled", "true");
   let policy = await getPersonalExtensionPolicy(db);
@@ -346,6 +381,7 @@ try {
     name: "UI Demo",
     contentHash: "sha256:demo",
     runtime: "client" as const,
+    capabilities: ["read_active_characters", "read_active_persona"] as const,
     css: "",
     js: `
       marinara.ui.showWindow({ title: "Bunny", elements: [{ kind: "pre", text: "(\\u2022_\\u2022)" }] });
@@ -376,8 +412,11 @@ try {
   };
   const worker = browserWorkerSource(uiExtension);
   assert.match(worker, /version:\s*5/u, "Worker must advertise context-capable API version 5");
+  assert.match(worker, /capabilities:\s*Object\.freeze/u, "Worker must expose its approved capabilities");
   assert.match(worker, /context:\s*Object\.freeze\(\{\s*get:/u);
   assert.match(worker, /"context-update"/u, "Worker must receive bounded context snapshots");
+  assert.match(worker, /allowedIds\.has\(id\)/u, "Worker must reject Character records outside the active ID set");
+  assert.match(worker, /MAX_CONTEXT_TEXT/u, "Worker must bound active-record context");
   assert.match(worker, /await initialContextReady/u, "Extension startup must wait for its initial context snapshot");
   assert.match(worker, /ui:\s*Object\.freeze\(\{\s*showWindow,\s*registerContribution/u);
   assert.match(worker, /"ui-show"/u, "Worker must send a ui-show descriptor message");
@@ -409,6 +448,97 @@ try {
     doc.includes("new Worker(") && doc.includes("marinara.ui.showWindow"),
     "Extension JS must run in the worker embedded by the bootstrap, not in the document",
   );
+
+  const { createPersonalExtensionRecordContext } =
+    await import("../../packages/server/src/routes/personal-extensions.routes.js");
+  const recordContext = createPersonalExtensionRecordContext({
+    capabilities: ["read_active_characters", "read_active_persona"],
+    characters: [
+      {
+        id: "character-1",
+        data: {
+          name: "Aster",
+          description: "x".repeat(40_000),
+          personality: "Patient",
+          scenario: "A laboratory",
+          first_mes: "Welcome",
+          mes_example: "Example",
+          creator_notes: "private creator notes",
+          system_prompt: "private system prompt",
+          post_history_instructions: "private post-history instructions",
+          tags: ["scientist"],
+          creator: "Pasta-Devs",
+          character_version: "1.0",
+          alternate_greetings: [],
+          extensions: {
+            talkativeness: 0.5,
+            fav: false,
+            world: "",
+            depth_prompt: { prompt: "", depth: 4, role: "system" },
+            backstory: "History",
+            appearance: "Blue hair",
+            aboutMe: "Researcher",
+            convoDisplayName: "Doctor Aster",
+          },
+          character_book: null,
+        },
+      },
+    ],
+    persona: {
+      id: "persona-1",
+      name: "Mari",
+      description: "Engineer",
+      personality: "Curious",
+      scenario: "A laboratory",
+      backstory: "History",
+      appearance: "Red hair",
+      tags: ["maintainer"],
+      aboutMe: "Builds Marinara",
+      convoDisplayName: "Mari",
+      creatorNotes: "private creator notes",
+      avatarPath: "/private/avatar.png",
+    },
+  });
+  assert.equal(recordContext.characters[0]?.description.length, 32_000);
+  assert.equal("creator_notes" in recordContext.characters[0]!, false);
+  assert.equal("system_prompt" in recordContext.characters[0]!, false);
+  assert.equal("post_history_instructions" in recordContext.characters[0]!, false);
+  assert.equal("creatorNotes" in recordContext.persona!, false);
+  assert.equal("avatarPath" in recordContext.persona!, false);
+  assert.deepEqual(
+    createPersonalExtensionRecordContext({
+      capabilities: [],
+      characters: recordContext.characters.map((character) => ({
+        id: character.id,
+        data: {
+          name: character.name,
+          description: character.description,
+          personality: character.personality,
+          scenario: character.scenario,
+          first_mes: character.firstMessage,
+          mes_example: character.exampleDialogue,
+          creator_notes: "",
+          system_prompt: "",
+          post_history_instructions: "",
+          tags: [...character.tags],
+          creator: character.creator,
+          character_version: character.characterVersion,
+          alternate_greetings: [],
+          extensions: {
+            talkativeness: 0.5,
+            fav: false,
+            world: "",
+            depth_prompt: { prompt: "", depth: 4, role: "system" },
+            backstory: character.backstory,
+            appearance: character.appearance,
+          },
+          character_book: null,
+        },
+      })),
+      persona: null,
+    }),
+    { characters: [], persona: null },
+  );
 }
 
 {
@@ -419,6 +549,8 @@ try {
     chatId: "chat-1",
     characterId: "character-1",
     characterIds: ["character-1"],
+    characters: [],
+    persona: null,
   });
   assert.equal(Object.isFrozen(single), true);
   assert.equal(Object.isFrozen(single.characterIds), true);
@@ -431,6 +563,8 @@ try {
     chatId: null,
     characterId: null,
     characterIds: [],
+    characters: [],
+    persona: null,
   });
 
   const bounded = createPersonalExtensionContextSnapshot("chat-3", [

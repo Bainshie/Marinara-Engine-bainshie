@@ -35,6 +35,8 @@ export function createPersonalExtensionContextSnapshot(
     chatId,
     characterId: characterIds.length === 1 ? (characterIds[0] ?? null) : null,
     characterIds,
+    characters: Object.freeze([]),
+    persona: null,
   });
 }
 

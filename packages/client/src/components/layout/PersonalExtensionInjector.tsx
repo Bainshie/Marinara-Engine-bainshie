@@ -3,7 +3,9 @@ import {
   CSRF_HEADER,
   CSRF_HEADER_VALUE,
   type PersonalClientExtensionRuntime,
+  type PersonalExtensionCharacterSnapshot,
   type PersonalExtensionContextSnapshot,
+  type PersonalExtensionPersonaSnapshot,
 } from "@marinara-engine/shared";
 import { usePersonalExtensionRuntime } from "../../hooks/use-personal-extensions";
 import {
@@ -116,7 +118,7 @@ function readPersonalExtensionContext(): PersonalExtensionContextSnapshot {
   return createPersonalExtensionContextSnapshot(activeChatId, characterIds);
 }
 
-function postSandboxContext(active: ActiveClientExtension, context = readPersonalExtensionContext()) {
+function sendSandboxContext(active: ActiveClientExtension, context: PersonalExtensionContextSnapshot) {
   active.iframe.contentWindow?.postMessage(
     {
       channel: "marinara-personal-extension",
@@ -126,6 +128,42 @@ function postSandboxContext(active: ActiveClientExtension, context = readPersona
     },
     "*",
   );
+}
+
+async function postSandboxContext(active: ActiveClientExtension, context = readPersonalExtensionContext()) {
+  sendSandboxContext(active, context);
+  if (
+    !context.chatId ||
+    !active.extension.capabilities.some(
+      (capability) => capability === "read_active_characters" || capability === "read_active_persona",
+    )
+  ) {
+    return;
+  }
+  try {
+    const response = await extensionFetch(active.extension.id, "context", {
+      method: "POST",
+      body: JSON.stringify({ chatId: context.chatId }),
+    });
+    if (!response.ok) throw new Error(`Context read failed (${response.status})`);
+    const records = (await response.json()) as {
+      characters?: PersonalExtensionCharacterSnapshot[];
+      persona?: PersonalExtensionPersonaSnapshot | null;
+    };
+    if (
+      activeExtensions.get(active.extension.id) !== active ||
+      personalExtensionContextKey(readPersonalExtensionContext()) !== personalExtensionContextKey(context)
+    ) {
+      return;
+    }
+    sendSandboxContext(active, {
+      ...context,
+      characters: Array.isArray(records.characters) ? records.characters : [],
+      persona: records.persona && typeof records.persona === "object" ? records.persona : null,
+    });
+  } catch (error) {
+    console.warn(`[Personal Extension ${active.extension.name}] active record context could not be loaded`, error);
+  }
 }
 
 const activeExtensions = new Map<string, ActiveClientExtension>();
@@ -292,7 +330,7 @@ export function PersonalExtensionInjector() {
       const nextContextKey = personalExtensionContextKey(context);
       if (nextContextKey === previousContextKey) return;
       previousContextKey = nextContextKey;
-      for (const active of activeExtensions.values()) postSandboxContext(active, context);
+      for (const active of activeExtensions.values()) void postSandboxContext(active, context);
     });
   }, []);
 
@@ -320,7 +358,7 @@ export function PersonalExtensionInjector() {
         iframe,
       };
       activeExtensions.set(extension.id, nextActive);
-      iframe.addEventListener("load", () => postSandboxContext(nextActive), { once: true });
+      iframe.addEventListener("load", () => void postSandboxContext(nextActive), { once: true });
       document.body.appendChild(iframe);
       setPersonalExtensionContributionDispatcher(extension, (message) => {
         iframe.contentWindow?.postMessage({ channel: "marinara-personal-extension", ...message }, "*");
