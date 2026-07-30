@@ -36,6 +36,8 @@ This file is the release-notes source of truth for Marinara Engine. Reuse these 
 - Required normal authorization for proxy-forwarded Docker traffic by default while retaining `REQUIRE_AUTH_FOR_DOCKER_PROXY=false` as an explicit legacy opt-out for fully trusted upstream clients. Direct same-host Docker bridge/gateway traffic remains compatible with `BYPASS_AUTH_DOCKER`.
 - Pinned bundled llama.cpp, MLX, and uv runtime inputs to reviewed revisions and release assets with repository-owned sizes and SHA-256 digests, and locked every MLX Python dependency to hash-verified packages. Downloads now fail before extraction or execution when their content differs, cancellation remains effective between retries, and installed runtime stamps force explicit Engine-reviewed upgrades instead of following upstream `latest` or `main`.
 - Bounded NovelAI ZIP image decompression to 64 MiB, rejected oversized declared output before inflation, and required actual output to match the archive metadata so malformed or highly expanding provider responses fail safely.
+- Imported webhook functions now arrive disabled with hidden chat context access removed. The Functions panel shows the destination origin and requested privileges so users can inspect the full configuration before deliberately enabling it.
+- Restricted private generated-image result URLs to the configured provider's exact scheme, hostname, and port. Public CDN results remain supported, while redirects from a trusted local image provider can no longer reach another private service.
 
 ### Fixed
 
@@ -52,10 +54,6 @@ This file is the release-notes source of truth for Marinara Engine. Reuse these 
 - Enforced case-insensitive, globally unique public Noodle handles across Personas and Characters, including deterministic suffixes for auto-created profiles and reconciliation of older collisions (#4056).
 - Routed Krea models through OpenRouter's dedicated Images API while retaining image-only modality detection for every current `krea/` model (#4061).
 - Rewrote incomplete legacy UI-settings blobs with newly synced preferences, preserving an explicitly disabled Game Text Effects setting across staging updates (#4062).
-
-### Security
-
-- Imported webhook functions now arrive disabled with hidden chat context access removed. The Functions panel shows the destination origin and requested privileges so users can inspect the full configuration before deliberately enabling it.
 
 ## [2.3.5]
 

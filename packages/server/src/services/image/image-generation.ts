@@ -100,6 +100,8 @@ export interface ImageGenRequest {
   imageDefaults?: ImageGenerationDefaultsProfile | null;
   /** Allow this explicit image-generation connection to call local/private URLs. */
   allowLocalUrls?: boolean;
+  /** Internal exact provider origin allowed to serve a private generated-image result. */
+  privateImageResultOrigin?: string;
   /** Optional base64-encoded reference image for img2img / character consistency. */
   referenceImage?: string;
   /** Optional array of base64-encoded reference images (avatars). Providers that support multiple refs use all; others use the first. */
@@ -210,12 +212,14 @@ export async function generateImage(
 
   try {
     return await withImageGenerationDeadline(request, generationTimeoutMs, async (signal) => {
+      const allowLocalUrls =
+        request.allowLocalUrls ?? (await shouldAllowLocalUrlsForImageConnection(normalizedBaseUrl, resolvedSource));
       const scopedRequest = {
         ...request,
         fallback: undefined,
         signal,
-        allowLocalUrls:
-          request.allowLocalUrls ?? (await shouldAllowLocalUrlsForImageConnection(normalizedBaseUrl, resolvedSource)),
+        allowLocalUrls,
+        privateImageResultOrigin: allowLocalUrls ? imageProviderOrigin(normalizedBaseUrl) : undefined,
       };
 
       switch (resolvedSource) {
@@ -479,6 +483,14 @@ function normalizeImageUrl(url: string | URL): string {
   }
 }
 
+function imageProviderOrigin(baseUrl: string): string | undefined {
+  try {
+    return new URL(normalizeImageUrl(baseUrl)).origin;
+  } catch {
+    return undefined;
+  }
+}
+
 async function shouldAllowLocalUrlsForImageConnection(baseUrl: string, resolvedSource: string): Promise<boolean> {
   if (isImageLocalUrlsEnabled() || LOCAL_IMAGE_BACKENDS.has(resolvedSource)) return true;
 
@@ -494,12 +506,19 @@ async function shouldAllowLocalUrlsForImageConnection(baseUrl: string, resolvedS
   }
 }
 
-function imageFetch(url: string | URL, init?: RequestInit, options: { allowLocal?: boolean } = {}) {
+type ImageFetchOptions = {
+  allowLocal?: boolean;
+  allowLoopback?: boolean;
+  allowedOrigins?: string[];
+};
+
+function imageFetch(url: string | URL, init?: RequestInit, options: ImageFetchOptions = {}) {
   return safeFetch(url, {
     ...(init ?? {}),
     policy: {
       allowLocal: options.allowLocal ?? isImageLocalUrlsEnabled(),
-      allowLoopback: true,
+      allowLoopback: options.allowLoopback ?? true,
+      allowedOrigins: options.allowedOrigins,
       allowedProtocols: ["https:", "http:"],
       flagName: "IMAGE_LOCAL_URLS_ENABLED",
     },
@@ -809,7 +828,7 @@ async function readOpenAIImageResult(
   };
   const item = data.data?.[0];
   const b64 = item?.b64_json ?? item?.image_base64;
-  if (!b64 && item?.url) return downloadImageUrl(item.url, request.allowLocalUrls, request.signal);
+  if (!b64 && item?.url) return downloadImageUrl(item.url, request.privateImageResultOrigin, request.signal);
   if (!b64) {
     const fields = item
       ? Object.keys(item).join(", ")
@@ -824,18 +843,23 @@ async function readOpenAIImageResult(
 
 async function downloadImageUrl(
   imageUrl: string,
-  allowLocalUrls = false,
+  privateProviderOrigin?: string,
   signal?: AbortSignal,
 ): Promise<ImageGenResult> {
   if (imageUrl.trim().startsWith("data:")) {
     return decodeImageDataUrl(imageUrl);
   }
 
-  const normalizedImageUrl = normalizeImageUrl(imageUrl);
+  const resultPolicy = await resolveImageResultUrlPolicy(imageUrl, privateProviderOrigin);
+  const normalizedImageUrl = resultPolicy.url;
   const imgResp = await imageFetch(
     normalizedImageUrl,
     { signal: imageRequestSignal({ signal }) },
-    { allowLocal: allowLocalUrls },
+    {
+      allowLocal: resultPolicy.allowLocal,
+      allowLoopback: resultPolicy.allowLoopback,
+      allowedOrigins: resultPolicy.allowedOrigins,
+    },
   );
   if (!imgResp.ok) {
     throw new Error(`Failed to download generated image (${imgResp.status})`);
@@ -859,6 +883,52 @@ async function downloadImageUrl(
   }
 
   return { base64, mimeType, ext: imageExtensionFromMimeType(mimeType) };
+}
+
+export type ImageResultUrlPolicy = {
+  url: string;
+  allowLocal: boolean;
+  allowLoopback: boolean;
+  allowedOrigins?: string[];
+};
+
+/**
+ * Public provider results retain ordinary CDN redirect support. Private
+ * results are accepted only from the exact configured provider origin.
+ */
+export async function resolveImageResultUrlPolicy(
+  imageUrl: string,
+  privateProviderOrigin?: string,
+): Promise<ImageResultUrlPolicy> {
+  const normalizedImageUrl = normalizeImageUrl(imageUrl);
+  try {
+    await validateOutboundUrl(normalizedImageUrl, {
+      allowLocal: false,
+      allowLoopback: false,
+      allowedProtocols: ["https:", "http:"],
+    });
+    return {
+      url: normalizedImageUrl,
+      allowLocal: false,
+      allowLoopback: false,
+    };
+  } catch (publicPolicyError) {
+    let allowedOrigin: string | undefined;
+    let resultOrigin: string | undefined;
+    try {
+      allowedOrigin = privateProviderOrigin ? new URL(normalizeImageUrl(privateProviderOrigin)).origin : undefined;
+      resultOrigin = new URL(normalizedImageUrl).origin;
+    } catch {
+      throw publicPolicyError;
+    }
+    if (!allowedOrigin || resultOrigin !== allowedOrigin) throw publicPolicyError;
+    return {
+      url: normalizedImageUrl,
+      allowLocal: true,
+      allowLoopback: true,
+      allowedOrigins: [allowedOrigin],
+    };
+  }
 }
 
 function openAITextPrompt(request: ImageGenRequest): string {
@@ -1004,7 +1074,7 @@ async function generateXAI(baseUrl: string, apiKey: string, request: ImageGenReq
   const data = (await resp.json()) as { data?: Array<{ b64_json?: string; url?: string }> };
   const result = data.data?.[0];
   if (result?.b64_json) return { base64: result.b64_json, mimeType: "image/png", ext: "png" };
-  if (result?.url) return downloadImageUrl(result.url, request.allowLocalUrls, request.signal);
+  if (result?.url) return downloadImageUrl(result.url, request.privateImageResultOrigin, request.signal);
 
   throw new Error("No image data in xAI response");
 }
@@ -1069,7 +1139,7 @@ async function generateAtlasCloudImage(
     body,
     signal: imageRequestSignal(request),
   });
-  return downloadImageUrl(outputUrl, false, request.signal);
+  return downloadImageUrl(outputUrl, request.privateImageResultOrigin, request.signal);
 }
 
 async function generateNanoGPT(baseUrl: string, apiKey: string, request: ImageGenRequest): Promise<ImageGenResult> {
@@ -1118,7 +1188,7 @@ async function generateNanoGPT(baseUrl: string, apiKey: string, request: ImageGe
   const data = (await resp.json()) as { data?: Array<{ b64_json?: string; url?: string }> };
   const result = data.data?.[0];
   if (result?.b64_json) return { base64: result.b64_json, mimeType: "image/png", ext: "png" };
-  if (result?.url) return downloadImageUrl(result.url, request.allowLocalUrls, request.signal);
+  if (result?.url) return downloadImageUrl(result.url, request.privateImageResultOrigin, request.signal);
 
   throw new Error("No image data in NanoGPT response");
 }
@@ -1279,7 +1349,9 @@ async function generateHorde(baseUrl: string, apiKey: string, request: ImageGenR
 
   const image = generation.img.trim();
   if (image.startsWith("data:")) return decodeImageDataUrl(image);
-  if (/^https?:\/\//i.test(image)) return downloadImageUrl(image, request.allowLocalUrls, request.signal);
+  if (/^https?:\/\//i.test(image)) {
+    return downloadImageUrl(image, request.privateImageResultOrigin, request.signal);
+  }
 
   const mimeType = detectImageMimeType(image) ?? "image/png";
   return { base64: image, mimeType, ext: imageExtensionFromMimeType(mimeType) };
@@ -2286,7 +2358,7 @@ async function generateOpenRouterImageApi(
     const mimeType = normalizeImageMimeType(result?.media_type) ?? detectImageMimeType(base64) ?? "image/png";
     return { base64, mimeType, ext: imageExtensionFromMimeType(mimeType) };
   }
-  if (result?.url) return downloadImageUrl(result.url, request.allowLocalUrls, request.signal);
+  if (result?.url) return downloadImageUrl(result.url, request.privateImageResultOrigin, request.signal);
   throw new Error("No image data in OpenRouter Images API response");
 }
 
@@ -2387,7 +2459,7 @@ async function generateOpenRouter(baseUrl: string, apiKey: string, request: Imag
     );
   }
 
-  return downloadImageUrl(imageUrl, request.allowLocalUrls, request.signal);
+  return downloadImageUrl(imageUrl, request.privateImageResultOrigin, request.signal);
 }
 
 /**
@@ -2441,7 +2513,7 @@ async function generateViaChatCompletions(
     throw new Error(`No image URL found in proxy response: ${content.slice(0, 200)}`);
   }
 
-  return downloadImageUrl(imageUrl, request.allowLocalUrls, request.signal);
+  return downloadImageUrl(imageUrl, request.privateImageResultOrigin, request.signal);
 }
 
 // ── ComfyUI ──
