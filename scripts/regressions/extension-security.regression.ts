@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { runInNewContext } from "node:vm";
 import { createPersonalExtensionSchema } from "../../packages/shared/src/schemas/personal-extension.schema.js";
 import type { DB } from "../../packages/server/src/db/connection.js";
 import { createFileNativeDB } from "../../packages/server/src/db/file-backed-store.js";
@@ -422,7 +423,7 @@ try {
   assert.match(worker, /MAX_CONTEXT_TEXT/u, "Worker must bound active-record context");
   assert.match(
     worker,
-    /if \(!contextListeners\.has\(listener\)\) return/u,
+    /if \(!contextSubscriptions\.has\(subscription\)\) return/u,
     "Worker must cancel queued context callbacks after unsubscribe",
   );
   assert.match(worker, /await initialContextReady/u, "Extension startup must wait for its initial context snapshot");
@@ -433,6 +434,99 @@ try {
   assert.match(worker, /"ui-contribution-activate"/u, "Worker must receive host contribution activation");
   assert.match(worker, /"ui-contribution-event"/u, "Worker must receive host-rendered control events");
   assert.doesNotMatch(worker, /\bdocument\b/u, "Worker source must never touch the DOM");
+
+  const lifecycleMessages: Array<{ type?: string; level?: string; args?: unknown[] }> = [];
+  let dispatchLifecycleMessage: ((event: { data: unknown }) => void) | undefined;
+  const lifecycleWorker = browserWorkerSource({
+    ...uiExtension,
+    id: "context-lifecycle",
+    name: "Context Lifecycle",
+    capabilities: [],
+    js: `
+      const resubscribeCalls = [];
+      const resubscribeListener = (context) => resubscribeCalls.push(context.chatId);
+      const unsubscribeFirst = marinara.context.subscribe(resubscribeListener);
+      unsubscribeFirst();
+      const unsubscribeReplacement = marinara.context.subscribe(resubscribeListener);
+      await Promise.resolve();
+      unsubscribeReplacement();
+
+      const duplicateCalls = [];
+      const duplicateListener = (context) => duplicateCalls.push(context.chatId);
+      const unsubscribeDuplicateFirst = marinara.context.subscribe(duplicateListener);
+      const unsubscribeDuplicateSecond = marinara.context.subscribe(duplicateListener);
+      unsubscribeDuplicateFirst();
+      await Promise.resolve();
+      unsubscribeDuplicateSecond();
+
+      const updateListener = (context) => marinara.log.info("context-update-delivery", context.chatId);
+      marinara.context.subscribe(updateListener);
+      await Promise.resolve();
+
+      marinara.log.info(
+        "context-subscription-proof",
+        resubscribeCalls.length,
+        duplicateCalls.length,
+      );
+    `,
+  });
+  const lifecycleSelf = {
+    postMessage: (message: { type?: string; level?: string; args?: unknown[] }) => lifecycleMessages.push(message),
+    setTimeout,
+    clearTimeout,
+    setInterval: () => 0,
+    clearInterval: () => undefined,
+    addEventListener: (type: string, listener: (event: { data: unknown }) => void) => {
+      if (type === "message") dispatchLifecycleMessage = listener;
+    },
+    close: () => undefined,
+  };
+  runInNewContext(lifecycleWorker, { self: lifecycleSelf });
+  assert.ok(dispatchLifecycleMessage, "Worker must register its host message listener");
+  dispatchLifecycleMessage({
+    data: {
+      type: "context-update",
+      context: { chatId: "chat-1", characterIds: ["character-1"] },
+    },
+  });
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  const lifecycleProof = lifecycleMessages.find(
+    (message) => message.type === "log" && message.args?.[0] === "context-subscription-proof",
+  );
+  assert.deepEqual(
+    Array.from(lifecycleProof?.args ?? []),
+    ["context-subscription-proof", 1, 1],
+    "Cancelled subscriptions must stay cancelled across re-subscribe and duplicate callback identities",
+  );
+  dispatchLifecycleMessage({
+    data: {
+      type: "context-update",
+      context: { chatId: "chat-2", characterIds: ["character-1"] },
+    },
+  });
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.deepEqual(
+    lifecycleMessages
+      .filter((message) => message.type === "log" && message.args?.[0] === "context-update-delivery")
+      .map((message) => message.args?.[1]),
+    ["chat-1", "chat-2"],
+    "Active subscription records must receive initial and changed context exactly once",
+  );
+  dispatchLifecycleMessage({ data: { type: "stop" } });
+  dispatchLifecycleMessage({
+    data: {
+      type: "context-update",
+      context: { chatId: "chat-3", characterIds: ["character-1"] },
+    },
+  });
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.equal(
+    lifecycleMessages.filter(
+      (message) => message.type === "log" && message.args?.[0] === "context-update-delivery",
+    ).length,
+    2,
+    "Stopping the worker must cancel every remaining context subscription",
+  );
 
   const doc = sandboxDocument(uiExtension, "test-nonce");
   assert.match(doc, /textContent/u, "Sandbox bootstrap must render window text via textContent");

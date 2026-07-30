@@ -218,7 +218,7 @@ export function browserWorkerSource(extension: PersonalExtension) {
   const MAX_CONTEXT_TAGS = ${CONTEXT_TAG_COUNT};
   const MAX_CONTEXT_TAG = ${CONTEXT_TAG_LENGTH};
   const capabilities = new Set(extension.capabilities);
-  const contextListeners = new Set();
+  const contextSubscriptions = new Set();
   const freezeContext = (chatId, characterIds, personaId = null, characters = [], persona = null) => Object.freeze({
     chatId,
     characterId: characterIds.length === 1 ? characterIds[0] : null,
@@ -328,11 +328,11 @@ export function browserWorkerSource(extension: PersonalExtension) {
     return freezeContext(chatId, characterIds, personaId, characters, persona);
   };
   const contextKey = (value) => JSON.stringify(value);
-  const notifyContextListener = (listener) => {
+  const notifyContextSubscription = (subscription) => {
     Promise.resolve()
       .then(() => {
-        if (!contextListeners.has(listener)) return;
-        listener(currentContext);
+        if (!contextSubscriptions.has(subscription)) return;
+        subscription.listener(currentContext);
       })
       .catch((error) => log("error", [error instanceof Error ? error.message : String(error)]));
   };
@@ -622,9 +622,10 @@ export function browserWorkerSource(extension: PersonalExtension) {
       get: () => currentContext,
       subscribe: (listener) => {
         if (typeof listener !== "function") throw new Error("context.subscribe requires a function");
-        contextListeners.add(listener);
-        notifyContextListener(listener);
-        return () => contextListeners.delete(listener);
+        const subscription = { listener };
+        contextSubscriptions.add(subscription);
+        notifyContextSubscription(subscription);
+        return () => contextSubscriptions.delete(subscription);
       },
     }),
     ui: Object.freeze({
@@ -649,7 +650,7 @@ export function browserWorkerSource(extension: PersonalExtension) {
       self.clearTimeout(initialContextTimer);
       markInitialContextReady();
       if (changed) {
-        for (const listener of contextListeners) notifyContextListener(listener);
+        for (const subscription of contextSubscriptions) notifyContextSubscription(subscription);
       }
     }
     if (message?.type === "storage-result") {
@@ -708,7 +709,7 @@ export function browserWorkerSource(extension: PersonalExtension) {
       uiContributions.clear();
       uiContributionActivateHandlers.clear();
       uiContributionEventHandlers.clear();
-      contextListeners.clear();
+      contextSubscriptions.clear();
       for (const cleanup of [...cleanupFns].reverse()) {
         try { cleanup(); } catch {}
       }
