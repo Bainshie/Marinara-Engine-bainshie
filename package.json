@@ -44,7 +44,7 @@
     "regression:backup": "pnpm --filter @marinara-engine/server exec tsx ../../scripts/regressions/automatic-backup-retention.regression.ts",
     "regression:notification-sound": "pnpm --filter @marinara-engine/server exec tsx ../../scripts/regressions/notification-sound.regression.ts",
     "regression:agent-import-security": "pnpm build:shared && pnpm --filter @marinara-engine/server exec tsx ../../scripts/regressions/agent-import-security.regression.ts",
-    "regression:request-security": "pnpm build:shared && pnpm --filter @marinara-engine/server exec tsx ../../scripts/regressions/request-host-security.regression.ts",
+    "regression:request-security": "pnpm build:shared && pnpm --filter @marinara-engine/server exec tsx ../../scripts/regressions/request-host-security.regression.ts && pnpm --filter @marinara-engine/server exec tsx ../../scripts/regressions/docker-proxy-auth.regression.ts",
     "regression:expression-tools": "pnpm build:shared && pnpm --filter @marinara-engine/server exec tsx ../../scripts/regressions/expression-tool-retirement.regression.ts",
     "regression:regeneration-context": "pnpm build:shared && pnpm --filter @marinara-engine/server exec tsx ../../scripts/regressions/regeneration-context.regression.ts",
     "regression:extensions-security": "pnpm build:shared && pnpm --filter @marinara-engine/server exec tsx ../../scripts/regressions/extension-security.regression.ts",
