@@ -2031,12 +2031,7 @@ export const MAX_NOVELAI_ZIP_OUTPUT_BYTES = 64 * 1024 * 1024;
 
 function readZipUint32Le(zip: Uint8Array, offset: number): number | null {
   if (offset < 0 || offset + 4 > zip.length) return null;
-  return (
-    zip[offset]! +
-    zip[offset + 1]! * 0x100 +
-    zip[offset + 2]! * 0x1_0000 +
-    zip[offset + 3]! * 0x100_0000
-  );
+  return new DataView(zip.buffer, zip.byteOffset, zip.byteLength).getUint32(offset, true);
 }
 
 export function extractFirstFileFromZip(
