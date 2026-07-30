@@ -420,6 +420,11 @@ try {
   assert.match(worker, /allowedIds\.has\(id\)/u, "Worker must reject Character records outside the active ID set");
   assert.match(worker, /id !== expectedId/u, "Worker must reject Persona records outside the active ID");
   assert.match(worker, /MAX_CONTEXT_TEXT/u, "Worker must bound active-record context");
+  assert.match(
+    worker,
+    /if \(!contextListeners\.has\(listener\)\) return/u,
+    "Worker must cancel queued context callbacks after unsubscribe",
+  );
   assert.match(worker, /await initialContextReady/u, "Extension startup must wait for its initial context snapshot");
   assert.match(worker, /ui:\s*Object\.freeze\(\{\s*showWindow,\s*registerContribution/u);
   assert.match(worker, /"ui-show"/u, "Worker must send a ui-show descriptor message");

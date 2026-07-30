@@ -330,7 +330,10 @@ export function browserWorkerSource(extension: PersonalExtension) {
   const contextKey = (value) => JSON.stringify(value);
   const notifyContextListener = (listener) => {
     Promise.resolve()
-      .then(() => listener(currentContext))
+      .then(() => {
+        if (!contextListeners.has(listener)) return;
+        listener(currentContext);
+      })
       .catch((error) => log("error", [error instanceof Error ? error.message : String(error)]));
   };
   for (const name of ["fetch", "WebSocket", "EventSource", "XMLHttpRequest", "Worker", "SharedWorker", "WebTransport", "importScripts"]) {
