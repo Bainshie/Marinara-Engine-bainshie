@@ -28,6 +28,7 @@ import {
   parseCardLibrarySearchQuery,
 } from "../../lib/card-library-search";
 import { estimateCharacterCardTokens, formatEstimatedTokens } from "../../lib/character-token-count";
+import { applyInlineMarkdown, renderMarkdownBlocks } from "../../lib/markdown";
 import { cn, getAvatarCropStyle, parseAvatarCropJson, type AvatarCropValue } from "../../lib/utils";
 import { useLocalizedUiText } from "../../localization/use-localized-ui-text";
 import {
@@ -157,12 +158,7 @@ function getCharacterSummary(char: ParsedCharacterRow) {
 }
 
 function getPersonaSummary(persona: PersonaRow) {
-  return getCardLibrarySummary([
-    persona.creatorNotes,
-    persona.description,
-    persona.personality,
-    persona.backstory,
-  ]);
+  return getCardLibrarySummary([persona.creatorNotes, persona.description, persona.personality, persona.backstory]);
 }
 
 function truncateText(content: string, maxLength: number) {
@@ -325,9 +321,9 @@ function CardLibraryDetailCard({
             </div>
 
             {card.creatorNotes && (
-              <p className="mt-4 rounded-[1.5rem] border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--marinara-chat-chrome-highlight-bg)] px-4 py-3 text-sm leading-6 text-[var(--marinara-chat-chrome-panel-text)]">
-                {card.creatorNotes}
-              </p>
+              <div className="mari-message-content mt-4 whitespace-pre-wrap rounded-[1.5rem] border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--marinara-chat-chrome-highlight-bg)] px-4 py-3 text-sm leading-6 text-[var(--marinara-chat-chrome-panel-text)]">
+                {renderMarkdownBlocks(card.creatorNotes, applyInlineMarkdown, `creator-notes-${card.id}`)}
+              </div>
             )}
 
             <div className={cn("mt-4 gap-2", onChat ? "grid grid-cols-2" : "flex flex-wrap")}>
@@ -366,9 +362,13 @@ function CardLibraryDetailCard({
               <h3 className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--marinara-chat-chrome-panel-muted)]">
                 {section.title}
               </h3>
-              <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-[var(--marinara-chat-chrome-panel-text)]">
-                {truncateText(section.content, section.title === "Opening Message" ? 420 : 620)}
-              </p>
+              <div className="mari-message-content mt-3 whitespace-pre-wrap text-sm leading-6 text-[var(--marinara-chat-chrome-panel-text)]">
+                {renderMarkdownBlocks(
+                  truncateText(section.content, section.title === "Opening Message" ? 420 : 620),
+                  applyInlineMarkdown,
+                  `card-${card.id}-${section.title}`,
+                )}
+              </div>
             </section>
           ))}
         </div>

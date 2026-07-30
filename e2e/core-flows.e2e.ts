@@ -12105,6 +12105,47 @@ test("character editor preserves unsaved fields across responsive layout changes
   }
 });
 
+test("character card fields can preview Markdown without changing their source", async ({
+  page,
+  request,
+}, testInfo) => {
+  test.skip(!testInfo.project.name.includes("desktop"), "The shared field preview needs one desktop browser proof.");
+
+  const characterName = `Markdown Character ${Date.now().toString(36)}`;
+  const response = await request.post("/api/characters", {
+    data: {
+      data: {
+        name: characterName,
+        description: "Saved description",
+      },
+    },
+  });
+  expect(response.ok()).toBeTruthy();
+  const character = (await response.json()) as { id: string };
+
+  try {
+    await page.goto("/");
+    await page.locator('[data-tour="panel-characters"]').click();
+    await page.locator(`[data-touch-drag-card="character"][data-character-id="${character.id}"]`).click();
+
+    const editor = page.locator('[data-component="DetailEditor"]');
+    await editor.getByRole("button", { name: "Card", exact: true }).click();
+    const description = editor.locator("#character-card-description");
+    const source = "**Bold detail**\n\n- First point";
+    await description.locator("textarea").fill(source);
+    await description.getByRole("button", { name: "Preview Markdown", exact: true }).click();
+
+    const preview = description.getByRole("region", { name: "Markdown preview", exact: true });
+    await expect(preview.locator("strong")).toHaveText("Bold detail");
+    await expect(preview.locator("li")).toHaveText("First point");
+
+    await description.getByRole("button", { name: "Edit Markdown source", exact: true }).click();
+    await expect(description.locator("textarea")).toHaveValue(source);
+  } finally {
+    await request.delete(`/api/characters/${character.id}`).catch(() => undefined);
+  }
+});
+
 test("persona editor preserves unsaved fields across responsive layout changes", async ({
   page,
   request,

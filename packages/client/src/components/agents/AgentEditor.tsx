@@ -80,6 +80,7 @@ import {
   DEFAULT_AGENT_MAX_TOKENS,
   DEFAULT_AGENT_AUTHOR,
   CUSTOM_AGENT_CAPABILITY_IDS,
+  DEFAULT_CUSTOM_AGENT_CONTEXT_SOURCES,
   CUSTOM_AGENT_IMPORT_SOURCE_SETTING,
   CUSTOM_AGENT_PERMISSIONS_EXPLICIT_SETTING,
   DEFAULT_CUSTOM_AGENT_ACTIVATION_SCAN_DEPTH,
@@ -92,15 +93,19 @@ import {
   mergeBuiltInAgentSettings,
   normalizeAgentPhaseForType,
   normalizeCustomAgentCapabilities,
+  normalizeCustomAgentContextSources,
   normalizeAgentPromptTemplateOptions,
   normalizeStoryboardAgentSettings,
   parseAgentSettingsRecord,
+  CUSTOM_AGENT_CONTEXT_SOURCE_IDS,
   type AgentPhase,
   type AgentPromptTemplateOption,
   type AgentResultType,
   type StoryboardAgentSettings,
   type CustomAgentCapability,
   type CustomAgentCapabilityMap,
+  type CustomAgentContextSource,
+  type CustomAgentContextSources,
   type ToolDefinition,
 } from "@marinara-engine/shared";
 import {
@@ -306,6 +311,64 @@ const CUSTOM_AGENT_CAPABILITY_META: Array<{
     description: "Allow prompt patch output to edit the prompt sent to the main generation model.",
   },
 ];
+
+const CUSTOM_AGENT_CONTEXT_SOURCE_META: Array<{
+  id: CustomAgentContextSource;
+  label: string;
+  description: string;
+  requiredCapability?: CustomAgentCapability;
+}> = [
+  {
+    id: "chatHistory",
+    label: "ui.agents.agenteditor.contextSource.chatHistory.label",
+    description: "ui.agents.agenteditor.contextSource.chatHistory.description",
+  },
+  {
+    id: "characters",
+    label: "ui.agents.agenteditor.contextSource.characters.label",
+    description: "ui.agents.agenteditor.contextSource.characters.description",
+  },
+  {
+    id: "persona",
+    label: "ui.agents.agenteditor.contextSource.persona.label",
+    description: "ui.agents.agenteditor.contextSource.persona.description",
+  },
+  {
+    id: "activatedLorebookEntries",
+    label: "ui.agents.agenteditor.contextSource.activatedLorebookEntries.label",
+    description: "ui.agents.agenteditor.contextSource.activatedLorebookEntries.description",
+  },
+  {
+    id: "chatSummary",
+    label: "ui.agents.agenteditor.contextSource.chatSummary.label",
+    description: "ui.agents.agenteditor.contextSource.chatSummary.description",
+  },
+  {
+    id: "authorNotes",
+    label: "ui.agents.agenteditor.contextSource.authorNotes.label",
+    description: "ui.agents.agenteditor.contextSource.authorNotes.description",
+  },
+  {
+    id: "trackerData",
+    label: "ui.agents.agenteditor.contextSource.trackerData.label",
+    description: "ui.agents.agenteditor.contextSource.trackerData.description",
+  },
+  {
+    id: "recalledMemories",
+    label: "ui.agents.agenteditor.contextSource.recalledMemories.label",
+    description: "ui.agents.agenteditor.contextSource.recalledMemories.description",
+    requiredCapability: "access_vectors",
+  },
+];
+
+if (import.meta.env.DEV) {
+  const sourceIds = CUSTOM_AGENT_CONTEXT_SOURCE_META.map((source) => source.id);
+  const uniqueSourceIds = new Set(sourceIds);
+  const hasEverySource = CUSTOM_AGENT_CONTEXT_SOURCE_IDS.every((source) => uniqueSourceIds.has(source));
+  if (!hasEverySource || uniqueSourceIds.size !== sourceIds.length) {
+    throw new Error("Custom agent context source metadata must contain every source exactly once.");
+  }
+}
 
 const CUSTOM_AGENT_RESULT_TYPE_OPTIONS: Array<{
   id: CustomAgentResultType;
@@ -614,6 +677,9 @@ export function AgentEditor() {
   const [localPromptTemplates, setLocalPromptTemplates] = useState<AgentPromptTemplateOption[]>([]);
   const [localResultType, setLocalResultType] = useState<CustomAgentResultType>("context_injection");
   const [localCustomCapabilities, setLocalCustomCapabilities] = useState<CustomAgentCapabilityMap>({});
+  const [localContextSources, setLocalContextSources] = useState<CustomAgentContextSources>(() => ({
+    ...DEFAULT_CUSTOM_AGENT_CONTEXT_SOURCES,
+  }));
   const [localInjectAsSection, setLocalInjectAsSection] = useState(false);
   const [localIncludePreGenInjections, setLocalIncludePreGenInjections] = useState(false);
   const [localIncludeParallelResults, setLocalIncludeParallelResults] = useState(false);
@@ -786,6 +852,7 @@ export function AgentEditor() {
         normalizePositiveInteger(settings.secretPlotRunInterval ?? defaultSettings.secretPlotRunInterval, 8, 100),
       );
       setLocalCustomCapabilities(normalizeCustomAgentCapabilities(settings));
+      setLocalContextSources(normalizeCustomAgentContextSources(settings));
       setLocalResultType(normalizeCustomResultType(settings.resultType));
       setLocalIncludePreGenInjections(settings.includePreGenInjections === true);
       setLocalIncludeParallelResults(settings.includeParallelResults === true);
@@ -827,6 +894,7 @@ export function AgentEditor() {
       setLocalSecretPlotEnabled(defaultSettings.secretPlotEnabled === true);
       setLocalSecretPlotRunInterval(normalizePositiveInteger(defaultSettings.secretPlotRunInterval, 8, 100));
       setLocalCustomCapabilities({});
+      setLocalContextSources({ ...DEFAULT_CUSTOM_AGENT_CONTEXT_SOURCES });
       setLocalResultType("context_injection");
       setLocalIncludePreGenInjections(false);
       setLocalIncludeParallelResults(false);
@@ -879,6 +947,7 @@ export function AgentEditor() {
       setLocalSecretPlotEnabled(false);
       setLocalSecretPlotRunInterval(8);
       setLocalCustomCapabilities({});
+      setLocalContextSources({ ...DEFAULT_CUSTOM_AGENT_CONTEXT_SOURCES });
       setLocalResultType("context_injection");
       setLocalIncludePreGenInjections(false);
       setLocalIncludeParallelResults(false);
@@ -1140,6 +1209,7 @@ export function AgentEditor() {
         author: savedAuthor,
         promptTemplates: savedPromptTemplates,
         ...(isEditingCustomAgent ? { customCapabilities } : {}),
+        ...(isEditingCustomAgent ? { contextSources: localContextSources } : {}),
         ...(isEditingCustomAgent ? { resultType: localResultType } : {}),
         ...(isEditingCustomAgent ? { triggerLorebooksForAgentCalls: localTriggerLorebooksForAgentCalls } : {}),
         ...(activationKeywords.length > 0
@@ -1243,6 +1313,7 @@ export function AgentEditor() {
     localPhase,
     localResultType,
     localCustomCapabilities,
+    localContextSources,
     localConnectionId,
     localImageConnectionId,
     localIncludePreGenInjections,
@@ -1337,6 +1408,7 @@ export function AgentEditor() {
       author: savedAuthor,
       promptTemplates: savedPromptTemplates,
       ...(isEditingCustomAgent ? { customCapabilities } : {}),
+      ...(isEditingCustomAgent ? { contextSources: localContextSources } : {}),
       ...(isEditingCustomAgent ? { resultType: localResultType } : {}),
       ...(isEditingCustomAgent ? { triggerLorebooksForAgentCalls: localTriggerLorebooksForAgentCalls } : {}),
       ...(activationKeywords.length > 0 ? { activationKeywords, activationScanDepth } : {}),
@@ -1489,6 +1561,9 @@ export function AgentEditor() {
           }
           if (capability === "edit_lorebooks") {
             setLocalLorebookWriteEnabled(false);
+          }
+          if (capability === "access_vectors") {
+            setLocalContextSources((sources) => ({ ...sources, recalledMemories: false }));
           }
         }
         return customCapabilityMapFromLocal(next);
@@ -1851,6 +1926,34 @@ export function AgentEditor() {
                     markDirty();
                   }}
                 />
+              </div>
+            </FieldGroup>
+          )}
+
+          {(isCustomAgent || isNewCustomAgent) && (
+            <FieldGroup
+              label={localizeUi("ui.agents.agenteditor.contextSources")}
+              icon={<Layers size="0.875rem" className="text-[var(--primary)]" />}
+              help={localizeUi("ui.agents.agenteditor.contextSourcesHelp")}
+            >
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                {CUSTOM_AGENT_CONTEXT_SOURCE_META.map((source) => {
+                  const allowed =
+                    !source.requiredCapability || localCustomCapabilities[source.requiredCapability] === true;
+                  return (
+                    <EditorSwitchRow
+                      key={source.id}
+                      label={localizeUi(source.label)}
+                      description={localizeUi(source.description)}
+                      checked={allowed && localContextSources[source.id]}
+                      disabled={!allowed}
+                      onChange={(checked) => {
+                        setLocalContextSources((current) => ({ ...current, [source.id]: checked }));
+                        markDirty();
+                      }}
+                    />
+                  );
+                })}
               </div>
             </FieldGroup>
           )}

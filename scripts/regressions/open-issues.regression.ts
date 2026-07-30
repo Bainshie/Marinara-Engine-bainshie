@@ -7,6 +7,8 @@ import AdmZip from "adm-zip";
 import type { Chat, Message } from "../../packages/shared/src/types/chat.js";
 import playwrightConfig from "../../playwright.config.js";
 import { resolveDevSharedBuildScript } from "../dev-shared-build.mjs";
+import { characterCardVersions, characters } from "../../packages/server/src/db/schema/index.js";
+import { eq } from "../../packages/server/src/db/file-query.js";
 
 const REPOSITORY_ROOT = fileURLToPath(new URL("../../", import.meta.url));
 import {
@@ -475,6 +477,16 @@ assert.deepEqual(
   },
   "Character PATCH parsing must not materialize omitted nested defaults",
 );
+assert.equal(
+  characterDataSchema.parse({ name: "  Trimmed Character  " }).name,
+  "Trimmed Character",
+  "Character validation must trim leading and trailing name whitespace",
+);
+assert.equal(
+  updateCharacterSchema.parse({ data: { name: "  Renamed Character  " } }).data.name,
+  "Renamed Character",
+  "Character rename validation must trim leading and trailing whitespace",
+);
 
 assert.equal(
   normalizeNativeCharacterData({}),
@@ -507,6 +519,77 @@ try {
   const db = await getDB();
   const characterStorage = createCharactersStorage(db);
   const noodleStorage = createNoodleStorage(db);
+  const storageTrimFixture = await characterStorage.create({
+    ...characterDataSchema.parse({ name: "Storage trim fixture" }),
+    name: "  Storage trim fixture  ",
+  });
+  assert.equal(
+    (JSON.parse(storageTrimFixture.data) as { name: string }).name,
+    "Storage trim fixture",
+    "Character storage must normalize names even when a caller bypasses route validation",
+  );
+  const storageTrimFixtureData = JSON.parse(storageTrimFixture.data) as Record<string, unknown>;
+  await db
+    .update(characters)
+    .set({ data: JSON.stringify({ ...storageTrimFixtureData, name: "  Version snapshot fixture  " }) })
+    .where(eq(characters.id, storageTrimFixture.id));
+  const normalizedSnapshot = await characterStorage.createVersionSnapshot(storageTrimFixture.id);
+  assert.equal(
+    normalizedSnapshot?.data.name,
+    "Version snapshot fixture",
+    "Character version snapshots must normalize legacy padded names",
+  );
+  const resetTrimFixture = await characterStorage.resetVersions(storageTrimFixture.id);
+  assert.equal(
+    (JSON.parse(resetTrimFixture?.data ?? "{}") as { name?: string }).name,
+    "Version snapshot fixture",
+    "Resetting Character versions must normalize legacy padded names",
+  );
+  await db
+    .update(characters)
+    .set({ data: JSON.stringify({ ...storageTrimFixtureData, name: "  Duplicate fixture  " }) })
+    .where(eq(characters.id, storageTrimFixture.id));
+  const duplicateTrimFixture = await characterStorage.duplicateCharacter(storageTrimFixture.id);
+  assert.equal(
+    (JSON.parse(duplicateTrimFixture?.data ?? "{}") as { name?: string }).name,
+    "Duplicate fixture (Copy)",
+    "Duplicating a Character must normalize legacy padded names",
+  );
+
+  const restoreTrimFixture = await characterStorage.create(characterDataSchema.parse({ name: "Restore source" }));
+  await db
+    .update(characters)
+    .set({ data: JSON.stringify({ ...JSON.parse(restoreTrimFixture.data), name: "  Current legacy  " }) })
+    .where(eq(characters.id, restoreTrimFixture.id));
+  const restoreVersionId = "padded-name-restore-version";
+  await db.insert(characterCardVersions).values({
+    id: restoreVersionId,
+    characterId: restoreTrimFixture.id,
+    data: JSON.stringify({ ...JSON.parse(restoreTrimFixture.data), name: "  Restored fixture  " }),
+    comment: "",
+    avatarPath: null,
+    version: "1.0",
+    source: "regression",
+    reason: "Padded legacy fixture",
+    createdAt: "2026-07-30T12:00:00.000Z",
+  });
+  const restoredTrimFixture = await characterStorage.restoreVersion(restoreTrimFixture.id, restoreVersionId);
+  const restoreSnapshots = await db
+    .select()
+    .from(characterCardVersions)
+    .where(eq(characterCardVersions.characterId, restoreTrimFixture.id));
+  const preRestoreSnapshot = restoreSnapshots.find((row) => row.source === "restore");
+  assert.equal(
+    (JSON.parse(preRestoreSnapshot?.data ?? "{}") as { name?: string }).name,
+    "Current legacy",
+    "Restoring a Character version must normalize the pre-restore snapshot",
+  );
+  assert.equal(
+    (JSON.parse(restoredTrimFixture?.data ?? "{}") as { name?: string }).name,
+    "Restored fixture",
+    "Restoring a Character version must normalize legacy padded names",
+  );
+
   const patchFixture = characterDataSchema.parse({
     name: "Nested patch fixture",
     extensions: {
@@ -3704,9 +3787,8 @@ try {
     "A live Conversation stream must apply depth-scoped regex as the newest message",
   );
 
-  const { normalizeVideoGenerationProfile } = await import(
-    "../../packages/shared/src/constants/video-generation-defaults.js"
-  );
+  const { normalizeVideoGenerationProfile } =
+    await import("../../packages/shared/src/constants/video-generation-defaults.js");
   assert.equal(
     normalizeVideoGenerationProfile({
       service: "comfyui",

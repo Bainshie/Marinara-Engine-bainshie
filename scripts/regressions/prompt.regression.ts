@@ -683,6 +683,7 @@ function makeRegressionAgentConfig(overrides: Record<string, unknown> = {}) {
     id: `builtin:${type}`,
     type,
     name,
+    isCustomAgent: false,
     phase: "post_processing",
     promptTemplate: 'Return JSON: {"chosen": null}',
     connectionId: null,
@@ -1489,10 +1490,7 @@ const cases: RegressionCase[] = [
     name: "Spotify does not report a repeated Music DJ selection before context repeat is confirmed",
     async run() {
       const originalFetch = globalThis.fetch;
-      const selectedUris = [
-        "spotify:track:EEEEEEEEEEEEEEEEEEEEEE",
-        "spotify:track:FFFFFFFFFFFFFFFFFFFFFF",
-      ];
+      const selectedUris = ["spotify:track:EEEEEEEEEEEEEEEEEEEEEE", "spotify:track:FFFFFFFFFFFFFFFFFFFFFF"];
       let activeUri = "spotify:track:ZZZZZZZZZZZZZZZZZZZZZZ";
       let repeatRequests = 0;
 
@@ -1733,7 +1731,10 @@ const cases: RegressionCase[] = [
 
       const processed = processActivatedEntries(activated);
       assert.equal(processed.worldInfoBefore, "Automatic before");
-      assert.deepEqual(processed.depthEntries.map((entry) => entry.content), ["Depth entry"]);
+      assert.deepEqual(
+        processed.depthEntries.map((entry) => entry.content),
+        ["Depth entry"],
+      );
       assert.deepEqual(processed.outlets, {
         rules: "First rule\nSecond rule",
         Rules: "Different case",
@@ -2343,10 +2344,7 @@ const cases: RegressionCase[] = [
     name: "regex editor examples use direct-entry escaping that works in Live Test",
     run() {
       const locale = JSON.parse(
-        readFileSync(
-          new URL("../../packages/client/src/localization/locales/en.json", import.meta.url),
-          "utf8",
-        ),
+        readFileSync(new URL("../../packages/client/src/localization/locales/en.json", import.meta.url), "utf8"),
       ) as Record<string, string>;
       const editorSource = readFileSync(
         new URL("../../packages/client/src/components/agents/RegexScriptEditor.tsx", import.meta.url),
@@ -2510,10 +2508,7 @@ const cases: RegressionCase[] = [
         setupSource,
         /gameGmPromptTemplateId:\s*gamePresentation === "anime" \? ANIME_GAME_PROMPT_TEMPLATE_ID : null/u,
       );
-      assert.match(
-        chatsRouteSource,
-        /const customPrompt = resolveGameGmPromptTemplate\(chatMeta, setupConfig\);/u,
-      );
+      assert.match(chatsRouteSource, /const customPrompt = resolveGameGmPromptTemplate\(chatMeta, setupConfig\);/u);
       assert.match(editorSource, /StoryboardAgentSettingsPanel/u);
       assert.match(editorSource, /\{!isStoryboardAgent && \(\s*<FieldGroup[\s\S]*?agentBudget/u);
       assert.doesNotMatch(
@@ -2889,9 +2884,15 @@ const cases: RegressionCase[] = [
       for (const profile of styleProfiles.profiles) {
         const styleBlock = buildIllustratorImageStyleInstructionBlock(profile.styleText);
         if (profile.styleText.trim()) {
-          assert.match(styleBlock, /selected Illustrator prompt template and this visual style instruction are cumulative/iu);
+          assert.match(
+            styleBlock,
+            /selected Illustrator prompt template and this visual style instruction are cumulative/iu,
+          );
           assert.match(styleBlock, /style instruction controls only the visual treatment/iu);
-          assert.match(styleBlock, /Never replace Comic Page or manga panels and lettering with a single illustration/iu);
+          assert.match(
+            styleBlock,
+            /Never replace Comic Page or manga panels and lettering with a single illustration/iu,
+          );
         } else {
           assert.equal(styleBlock, "");
         }
@@ -2915,10 +2916,7 @@ const cases: RegressionCase[] = [
           );
         }
 
-        const mergedNegative = mergeIllustratorNegativePrompt(
-          compiled.prompt,
-          compiled.negativePrompt,
-        );
+        const mergedNegative = mergeIllustratorNegativePrompt(compiled.prompt, compiled.negativePrompt);
         assert.equal(
           mergedNegative
             .split(",")
@@ -2961,11 +2959,7 @@ const cases: RegressionCase[] = [
       assert.equal(comicNegative, "unreadable text, broken lettering, watermark, logo, signature");
       assert.doesNotMatch(comicNegative, /dialogue boxes|word balloons|captions|SFX lettering|subtitles/iu);
       assert.equal(
-        mergeIllustratorNegativePrompt(
-          comicPrompt,
-          "text, low quality, unreadable text, watermark",
-          "unreadable text",
-        ),
+        mergeIllustratorNegativePrompt(comicPrompt, "text, low quality, unreadable text, watermark", "unreadable text"),
         "low quality, unreadable text, watermark, logo, signature",
       );
 
@@ -3499,10 +3493,7 @@ const cases: RegressionCase[] = [
           styleInstruction: sharedStyleProfiles.profiles.find((profile) => profile.id === "cinematic")!.styleText,
         },
       );
-      assert.equal(
-        resolveIllustratorStyleProfile({}, {}, " anime ", sharedStyleProfiles).styleProfileId,
-        "anime",
-      );
+      assert.equal(resolveIllustratorStyleProfile({}, {}, " anime ", sharedStyleProfiles).styleProfileId, "anime");
 
       const manualIllustrationMessages = buildManualIllustratorPromptMessages({
         context: {
@@ -3552,10 +3543,7 @@ const cases: RegressionCase[] = [
       assert.match(manualIllustrationPrompt, /Mari steps inside out of the rain/u);
       assert.match(manualIllustrationPrompt, /Blue hair, red eyes, dark coat/u);
       assert.match(manualIllustrationPrompt, /Long auburn hair and a rain-soaked travel coat/u);
-      assert.match(
-        manualIllustrationPrompt,
-        /<character name="Dottore &amp; &quot;Mari&quot; &lt;\/character&gt;">/u,
-      );
+      assert.match(manualIllustrationPrompt, /<character name="Dottore &amp; &quot;Mari&quot; &lt;\/character&gt;">/u);
       assert.doesNotMatch(manualIllustrationPrompt, /name="Dottore & "Mari" <\/character>"/u);
       assert.match(manualIllustrationPrompt, /Infer a consistent visual style from the character/u);
       assert.match(manualIllustrationPrompt, /Style target: colored comic page, 2-6 panels/u);
@@ -3597,10 +3585,7 @@ const cases: RegressionCase[] = [
         },
       });
       const escapedManualPrompt = macroCapture.calls[0]!.map((message) => message.content).join("\n");
-      assert.match(
-        escapedManualPrompt,
-        /Mari &lt;\/selected_illustrator_prompt_mode&gt;&lt;override&gt;/u,
-      );
+      assert.match(escapedManualPrompt, /Mari &lt;\/selected_illustrator_prompt_mode&gt;&lt;override&gt;/u);
       assert.match(escapedManualPrompt, /Dottore &amp; &lt;observer&gt;/u);
       assert.doesNotMatch(
         escapedManualPrompt,
@@ -3681,7 +3666,10 @@ const cases: RegressionCase[] = [
           .map((message) => message.content)
           .join("\n");
         if (profile.styleText) {
-          assert.ok(styleSystemPrompt.includes(profile.styleText), `${profile.id} background style guidance was omitted`);
+          assert.ok(
+            styleSystemPrompt.includes(profile.styleText),
+            `${profile.id} background style guidance was omitted`,
+          );
           assert.ok(
             styleIllustrationPrompt.includes(profile.styleText),
             `${profile.id} illustration style guidance was omitted`,
@@ -3779,10 +3767,7 @@ const cases: RegressionCase[] = [
         retryAgentsRouteSource,
         /const cachedStyleInstruction = args\.agentContext\.memory\._illustratorImageStyleInstruction/u,
       );
-      assert.match(
-        retryAgentsRouteSource,
-        /typeof cachedStyleInstruction === "string"\s*\?\s*cachedStyleInstruction/u,
-      );
+      assert.match(retryAgentsRouteSource, /typeof cachedStyleInstruction === "string"\s*\?\s*cachedStyleInstruction/u);
       assert.doesNotMatch(backgroundsRoutesSource, /getByType\("background"\)/u);
       assert.match(
         backgroundsRoutesSource,
@@ -4332,12 +4317,14 @@ Use HTML sparingly and diegetically. Do not replace normal prose/dialogue unless
         id: "custom:vector-reader",
         type: "custom-vector-reader",
         name: "Vector Reader",
+        isCustomAgent: true,
         promptTemplate: "Summarize the relevant prior context.",
         settings: {
           contextSize: 5,
           maxTokens: 256,
           resultType: "context_injection",
           customCapabilities: { access_vectors: true },
+          contextSources: { recalledMemories: true },
         },
       });
 
@@ -4359,6 +4346,7 @@ Use HTML sparingly and diegetically. Do not replace normal prose/dialogue unless
         id: "custom:ordinary-reader",
         type: "custom-ordinary-reader",
         name: "Ordinary Reader",
+        isCustomAgent: true,
         promptTemplate: "Summarize the recent context.",
         settings: {
           contextSize: 5,
@@ -4376,6 +4364,185 @@ Use HTML sparingly and diegetically. Do not replace normal prose/dialogue unless
       assert.doesNotMatch(disabledSystem, /<vector_context>/u);
       assert.doesNotMatch(disabledSystem, /hidden laboratory/u);
       assert.doesNotMatch(disabledSystem, /silver key/u);
+    },
+  },
+  {
+    name: "custom-agent context selectors default to chat history and batches use the requested union",
+    async run() {
+      const richContext = makeRegressionAgentContext({
+        recentMessages: [
+          { role: "user", content: "CHAT_HISTORY_CONTEXT_SENTINEL" },
+          { role: "assistant", content: "The recent response." },
+        ],
+        characters: [
+          {
+            id: "char-context",
+            name: "Context Character",
+            description: "CHARACTER_CONTEXT_SENTINEL",
+          },
+        ],
+        persona: {
+          name: "Context Persona",
+          description: "PERSONA_CONTEXT_SENTINEL",
+        },
+        gameState: {
+          id: "state-context",
+          chatId: "chat-agent-output-format",
+          messageId: "message-context",
+          swipeIndex: 0,
+          date: null,
+          time: null,
+          location: "TRACKER_CONTEXT_SENTINEL",
+          weather: null,
+          temperature: null,
+          presentCharacters: [],
+          recentEvents: [],
+          playerStats: null,
+          personaStats: null,
+          createdAt: "2026-07-30T12:00:00.000Z",
+        },
+        chatSummary: "SUMMARY_CONTEXT_SENTINEL",
+        authorNotes: "AUTHOR_NOTES_CONTEXT_SENTINEL",
+        activatedLorebookEntries: [
+          {
+            id: "activated-context",
+            content: "ACTIVATED_LOREBOOK_CONTEXT_SENTINEL",
+          },
+        ],
+        vectorContext: {
+          semanticLorebookEntries: [],
+          recalledMemories: ["RECALLED_MEMORY_CONTEXT_SENTINEL"],
+        },
+        memory: {
+          _availableBackgrounds: [
+            {
+              filename: "UNRELATED_BACKGROUND_CONTEXT_SENTINEL.png",
+              tags: [],
+            },
+          ],
+        },
+      });
+
+      const defaultCapture = makeCapturingProvider("Context checked.");
+      await executeAgent(
+        makeRegressionAgentConfig({
+          id: "custom:default-context",
+          type: "custom-default-context",
+          name: "Default Context",
+          isCustomAgent: true,
+          promptTemplate: "Return a short context check.",
+          settings: {
+            contextSize: 5,
+            maxTokens: 256,
+            resultType: "context_injection",
+          },
+        }) as any,
+        richContext,
+        defaultCapture.provider as any,
+        "regression-model",
+      );
+      const defaultRequest = defaultCapture.calls[0]!.map((message) => message.content).join("\n");
+      assert.match(defaultRequest, /CHAT_HISTORY_CONTEXT_SENTINEL/u);
+      for (const excluded of [
+        "CHARACTER_CONTEXT_SENTINEL",
+        "PERSONA_CONTEXT_SENTINEL",
+        "TRACKER_CONTEXT_SENTINEL",
+        "SUMMARY_CONTEXT_SENTINEL",
+        "AUTHOR_NOTES_CONTEXT_SENTINEL",
+        "ACTIVATED_LOREBOOK_CONTEXT_SENTINEL",
+        "RECALLED_MEMORY_CONTEXT_SENTINEL",
+        "UNRELATED_BACKGROUND_CONTEXT_SENTINEL",
+      ]) {
+        assert.doesNotMatch(defaultRequest, new RegExp(excluded, "u"));
+      }
+
+      const selectedCapture = makeCapturingProvider("Selected context checked.");
+      await executeAgent(
+        makeRegressionAgentConfig({
+          id: "custom:selected-context",
+          type: "custom-selected-context",
+          name: "Selected Context",
+          isCustomAgent: true,
+          promptTemplate: "Return a short context check.",
+          settings: {
+            contextSize: 5,
+            maxTokens: 256,
+            resultType: "context_injection",
+            customCapabilities: { access_vectors: true },
+            contextSources: {
+              chatHistory: true,
+              characters: true,
+              persona: true,
+              activatedLorebookEntries: true,
+              chatSummary: true,
+              authorNotes: true,
+              trackerData: true,
+              recalledMemories: true,
+            },
+          },
+        }) as any,
+        richContext,
+        selectedCapture.provider as any,
+        "regression-model",
+      );
+      const selectedRequest = selectedCapture.calls[0]!.map((message) => message.content).join("\n");
+      for (const included of [
+        "CHAT_HISTORY_CONTEXT_SENTINEL",
+        "CHARACTER_CONTEXT_SENTINEL",
+        "PERSONA_CONTEXT_SENTINEL",
+        "TRACKER_CONTEXT_SENTINEL",
+        "SUMMARY_CONTEXT_SENTINEL",
+        "AUTHOR_NOTES_CONTEXT_SENTINEL",
+        "ACTIVATED_LOREBOOK_CONTEXT_SENTINEL",
+        "RECALLED_MEMORY_CONTEXT_SENTINEL",
+      ]) {
+        assert.match(selectedRequest, new RegExp(included, "u"));
+      }
+      assert.doesNotMatch(selectedRequest, /UNRELATED_BACKGROUND_CONTEXT_SENTINEL/u);
+
+      const batchCapture = makeCapturingProvider(
+        `{"custom-batch-character":"character context read","custom-batch-author":"author context read"}`,
+      );
+      const characterReader = makeRegressionAgentConfig({
+        id: "custom:batch-character",
+        type: "custom-batch-character",
+        name: "Character Reader",
+        isCustomAgent: true,
+        promptTemplate: "Read character context.",
+        settings: {
+          contextSize: 5,
+          maxTokens: 256,
+          resultType: "context_injection",
+          contextSources: { chatHistory: false, characters: true },
+        },
+      });
+      const authorReader = makeRegressionAgentConfig({
+        id: "custom:batch-author",
+        type: "custom-batch-author",
+        name: "Author Notes Reader",
+        isCustomAgent: true,
+        promptTemplate: "Read author notes.",
+        settings: {
+          contextSize: 5,
+          maxTokens: 256,
+          resultType: "context_injection",
+          contextSources: { chatHistory: false, authorNotes: true },
+        },
+      });
+      await executeAgentBatch(
+        [characterReader, authorReader] as any,
+        richContext,
+        batchCapture.provider as any,
+        "regression-model",
+      );
+      const batchRequest = batchCapture.calls[0]!.map((message) => message.content).join("\n");
+      assert.match(batchRequest, /CHARACTER_CONTEXT_SENTINEL/u);
+      assert.match(batchRequest, /AUTHOR_NOTES_CONTEXT_SENTINEL/u);
+      assert.doesNotMatch(batchRequest, /CHAT_HISTORY_CONTEXT_SENTINEL/u);
+      assert.doesNotMatch(batchRequest, /PERSONA_CONTEXT_SENTINEL/u);
+      assert.doesNotMatch(batchRequest, /TRACKER_CONTEXT_SENTINEL/u);
+      assert.doesNotMatch(batchRequest, /SUMMARY_CONTEXT_SENTINEL/u);
+      assert.doesNotMatch(batchRequest, /ACTIVATED_LOREBOOK_CONTEXT_SENTINEL/u);
     },
   },
   {
@@ -4590,7 +4757,10 @@ Use HTML sparingly and diegetically. Do not replace normal prose/dialogue unless
       assert.match(requestText, /COMIC_PAGE_TEMPLATE_SENTINEL/u);
       assert.match(requestText, /<illustrator_image_style>/u);
       assert.match(requestText, /Infer a consistent visual style from the character/u);
-      assert.match(requestText, /selected Illustrator prompt template and this visual style instruction are cumulative/iu);
+      assert.match(
+        requestText,
+        /selected Illustrator prompt template and this visual style instruction are cumulative/iu,
+      );
 
       const gameCapture = makeCapturingProvider(
         `{"shouldGenerate":false,"prompt":"","style":"","characters":[],"reason":"quiet beat"}`,
@@ -5268,7 +5438,8 @@ Use HTML sparingly and diegetically. Do not replace normal prose/dialogue unless
     name: "automatic map artwork uses the global Maps template and keeps positive prose out of negatives",
     async run() {
       const campaignStyle = "luminous violet campaign brushwork";
-      const scenePrompt = "Wide establishing image of Moonwell Floor. A quiet tiled bath beneath blue crystals. No text.";
+      const scenePrompt =
+        "Wide establishing image of Moonwell Floor. A quiet tiled bath beneath blue crystals. No text.";
       const defaultRawPrompt = MAPS_LOCATION_ARTWORK.defaultBuilder({
         locationName: "Moonwell Floor",
         locationDescription: "A quiet tiled bath beneath blue crystals.",
@@ -5327,7 +5498,10 @@ Use HTML sparingly and diegetically. Do not replace normal prose/dialogue unless
       assert.match(withCampaignStyle.prompt, /Fantasy dungeon crawler/u);
       assert.match(withCampaignStyle.prompt, /Use blue crystal reflections/u);
       assert.doesNotMatch(withoutCampaignStyle.negativePrompt, /Style:|Fantasy dungeon crawler|quiet tiled bath/u);
-      assert.doesNotMatch(withCampaignStyle.negativePrompt, /Style:|luminous violet campaign brushwork|quiet tiled bath/u);
+      assert.doesNotMatch(
+        withCampaignStyle.negativePrompt,
+        /Style:|luminous violet campaign brushwork|quiet tiled bath/u,
+      );
 
       const promptOverridesStorage = {
         get: async (key: string) =>
@@ -5372,7 +5546,10 @@ Use HTML sparingly and diegetically. Do not replace normal prose/dialogue unless
       });
       assert.match(customized.prompt, /Moonwell Floor/u);
       assert.match(customized.prompt, /Location type: Floor/u);
-      assert.doesNotMatch(customized.prompt, /Fantasy dungeon crawler|luminous violet campaign brushwork|blue crystal reflections/u);
+      assert.doesNotMatch(
+        customized.prompt,
+        /Fantasy dungeon crawler|luminous violet campaign brushwork|blue crystal reflections/u,
+      );
 
       const reviewed = resolveReviewedImagePromptSubmission({
         generatedPrompt: withCampaignStyle.prompt,

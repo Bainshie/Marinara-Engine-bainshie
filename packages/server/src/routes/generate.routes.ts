@@ -3383,6 +3383,11 @@ export async function generateRoutes(app: FastifyInstance) {
           memory: {},
           writableLorebookIds: null,
           chatSummary: activeChatSummary,
+          authorNotes: authorNotes || null,
+          activatedLorebookEntries: lorebookScanSnapshot.activatedEntries.map((entry) => ({
+            id: entry.id,
+            content: entry.content,
+          })),
           ...(customAgentVectorAccessEnabled
             ? {
                 vectorContext: {
@@ -4268,6 +4273,7 @@ export async function generateRoutes(app: FastifyInstance) {
                     id: knowledgeRetrievalAgent!.id,
                     type: knowledgeRetrievalAgent!.type,
                     name: knowledgeRetrievalAgent!.name,
+                    isCustomAgent: knowledgeRetrievalAgent!.isCustomAgent,
                     phase: knowledgeRetrievalAgent!.phase,
                     promptTemplate: knowledgeRetrievalAgent!.promptTemplate,
                     connectionId: knowledgeRetrievalAgent!.connectionId,
@@ -4319,6 +4325,7 @@ export async function generateRoutes(app: FastifyInstance) {
                     id: knowledgeRouterAgent!.id,
                     type: knowledgeRouterAgent!.type,
                     name: knowledgeRouterAgent!.name,
+                    isCustomAgent: knowledgeRouterAgent!.isCustomAgent,
                     phase: knowledgeRouterAgent!.phase,
                     promptTemplate: knowledgeRouterAgent!.promptTemplate,
                     connectionId: knowledgeRouterAgent!.connectionId,
@@ -8528,8 +8535,7 @@ export async function generateRoutes(app: FastifyInstance) {
                         styleProfileId,
                         imageDefaults,
                         generatedStyle: style,
-                        omitProfileStyleText:
-                          typeof agentContext.memory._illustratorImageStyleInstruction === "string",
+                        omitProfileStyleText: typeof agentContext.memory._illustratorImageStyleInstruction === "string",
                         omitProfileSubjectTags: true,
                       });
                       fullPrompt = compiledPrompt.prompt;
