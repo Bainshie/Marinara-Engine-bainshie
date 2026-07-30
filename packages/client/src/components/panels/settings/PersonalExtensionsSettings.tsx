@@ -201,7 +201,7 @@ function ExtensionSettings({ showIntro, mode }: { showIntro: boolean; mode: Exte
   const [importing, setImporting] = useState(false);
 
   const editingExtension = useMemo(
-    () => (editorId ? extensions.find((extension) => extension.id === editorId) ?? null : null),
+    () => (editorId ? (extensions.find((extension) => extension.id === editorId) ?? null) : null),
     [editorId, extensions],
   );
   const busy =
@@ -246,12 +246,17 @@ function ExtensionSettings({ showIntro, mode }: { showIntro: boolean; mode: Exte
       const updated = await updateExtension.mutateAsync({ id: editingExtension.id, ...payload });
       toast.success(
         updated.approvedHash === updated.contentHash
-          ?localizeUi("ui.panels.extensionsettings.value1Saved", { value1: updated.name })
-          :localizeUi("ui.panels.extensionsettings.value1SavedAsADisabledDraftReviewAndRun", { value1: updated.name }),
+          ? localizeUi("ui.panels.extensionsettings.value1Saved", { value1: updated.name })
+          : localizeUi("ui.panels.extensionsettings.value1SavedAsADisabledDraftReviewAndRun", { value1: updated.name }),
       );
       setDraft(extensionDraft(updated));
     } catch (saveError) {
-      toast.error(getPrivilegedActionErrorMessage(saveError,localizeUi("ui.panels.extensionsettings.failedToSavePersonalExtension")));
+      toast.error(
+        getPrivilegedActionErrorMessage(
+          saveError,
+          localizeUi("ui.panels.extensionsettings.failedToSavePersonalExtension"),
+        ),
+      );
     }
   }, [draft, editingExtension, updateExtension, localizeUi]);
 
@@ -277,9 +282,19 @@ function ExtensionSettings({ showIntro, mode }: { showIntro: boolean; mode: Exte
           contentHash: extension.contentHash,
           acknowledgeFullPageAccess: fullPageAccess,
         });
-        toast.success(localizeUi("ui.panels.extensionsettings.value1IsEnabledForHashValue2", { value1: extension.name, value2: shortHash(extension.contentHash) }));
+        toast.success(
+          localizeUi("ui.panels.extensionsettings.value1IsEnabledForHashValue2", {
+            value1: extension.name,
+            value2: shortHash(extension.contentHash),
+          }),
+        );
       } catch (runError) {
-        toast.error(getPrivilegedActionErrorMessage(runError,localizeUi("ui.panels.extensionsettings.failedToEnablePersonalExtension")));
+        toast.error(
+          getPrivilegedActionErrorMessage(
+            runError,
+            localizeUi("ui.panels.extensionsettings.failedToEnablePersonalExtension"),
+          ),
+        );
       }
     },
     [approveExtension, t, localizeUi],
@@ -291,7 +306,12 @@ function ExtensionSettings({ showIntro, mode }: { showIntro: boolean; mode: Exte
         await updateExtension.mutateAsync({ id: extension.id, enabled: false });
         toast.success(localizeUi("ui.panels.extensionsettings.value1Disabled", { value1: extension.name }));
       } catch (disableError) {
-        toast.error(getPrivilegedActionErrorMessage(disableError,localizeUi("ui.panels.extensionsettings.failedToDisablePersonalExtension")));
+        toast.error(
+          getPrivilegedActionErrorMessage(
+            disableError,
+            localizeUi("ui.panels.extensionsettings.failedToDisablePersonalExtension"),
+          ),
+        );
       }
     },
     [updateExtension, localizeUi],
@@ -300,9 +320,11 @@ function ExtensionSettings({ showIntro, mode }: { showIntro: boolean; mode: Exte
   const removeExtension = useCallback(
     async (extension: PersonalExtension) => {
       const confirmed = await showConfirmDialog({
-        title:localizeUi("ui.panels.extensionsettings.deletePersonalExtension"),
-        message:localizeUi("ui.panels.extensionsettings.deleteValue1AndItsPrivateExtensionStorageThisCannot", { value1: extension.name }),
-        confirmLabel:localizeUi("lorebook.editor.batch.delete"),
+        title: localizeUi("ui.panels.extensionsettings.deletePersonalExtension"),
+        message: localizeUi("ui.panels.extensionsettings.deleteValue1AndItsPrivateExtensionStorageThisCannot", {
+          value1: extension.name,
+        }),
+        confirmLabel: localizeUi("lorebook.editor.batch.delete"),
       });
       if (!confirmed) return;
       try {
@@ -310,7 +332,12 @@ function ExtensionSettings({ showIntro, mode }: { showIntro: boolean; mode: Exte
         if (editorId === extension.id) closeEditor();
         toast.success(localizeUi("ui.panels.extensionsettings.value1Deleted", { value1: extension.name }));
       } catch (deleteError) {
-        toast.error(getPrivilegedActionErrorMessage(deleteError,localizeUi("ui.panels.extensionsettings.failedToDeletePersonalExtension")));
+        toast.error(
+          getPrivilegedActionErrorMessage(
+            deleteError,
+            localizeUi("ui.panels.extensionsettings.failedToDeletePersonalExtension"),
+          ),
+        );
       }
     },
     [closeEditor, deleteExtension, editorId, localizeUi],
@@ -319,17 +346,26 @@ function ExtensionSettings({ showIntro, mode }: { showIntro: boolean; mode: Exte
   const restoreRevision = useCallback(
     async (extension: PersonalExtension, contentHash: string) => {
       const confirmed = await showConfirmDialog({
-        title:localizeUi("ui.panels.extensionsettings.restoreThisRevision"),
-        message:localizeUi("ui.panels.extensionsettings.restoreHashValue1AsADisabledDraftYouWill", { value1: shortHash(contentHash) }),
-        confirmLabel:localizeUi("ui.panels.extensionsettings.restoreDraft"),
+        title: localizeUi("ui.panels.extensionsettings.restoreThisRevision"),
+        message: localizeUi("ui.panels.extensionsettings.restoreHashValue1AsADisabledDraftYouWill", {
+          value1: shortHash(contentHash),
+        }),
+        confirmLabel: localizeUi("ui.panels.extensionsettings.restoreDraft"),
       });
       if (!confirmed) return;
       try {
         const restored = await rollbackExtension.mutateAsync({ id: extension.id, contentHash });
         setDraft(extensionDraft(restored));
-        toast.success(localizeUi("ui.panels.extensionsettings.restoredValue1AsADisabledDraft", { value1: restored.name }));
+        toast.success(
+          localizeUi("ui.panels.extensionsettings.restoredValue1AsADisabledDraft", { value1: restored.name }),
+        );
       } catch (rollbackError) {
-        toast.error(getPrivilegedActionErrorMessage(rollbackError,localizeUi("ui.panels.extensionsettings.failedToRestoreRevision")));
+        toast.error(
+          getPrivilegedActionErrorMessage(
+            rollbackError,
+            localizeUi("ui.panels.extensionsettings.failedToRestoreRevision"),
+          ),
+        );
       }
     },
     [rollbackExtension, localizeUi],
@@ -343,16 +379,22 @@ function ExtensionSettings({ showIntro, mode }: { showIntro: boolean; mode: Exte
       if (!existing) return createExtension.mutateAsync(imported);
       if (comparePersonalExtensionVersions(imported.version, existing.version) === -1) {
         const allowDowngrade = await showConfirmDialog({
-          title:localizeUi("ui.panels.extensionsettings.importOlderRevision"),
-          message:localizeUi("ui.panels.extensionsettings.theLocalFileContainsValue1ButValue2IsValue3", { value1: imported.version, value2: existing.name, value3: existing.version }),
-          confirmLabel:localizeUi("ui.panels.extensionsettings.importOlderRevision_f929d0b"),
+          title: localizeUi("ui.panels.extensionsettings.importOlderRevision"),
+          message: localizeUi("ui.panels.extensionsettings.theLocalFileContainsValue1ButValue2IsValue3", {
+            value1: imported.version,
+            value2: existing.name,
+            value3: existing.version,
+          }),
+          confirmLabel: localizeUi("ui.panels.extensionsettings.importOlderRevision_f929d0b"),
         });
         if (!allowDowngrade) return existing;
       }
       const confirmed = await showConfirmDialog({
-        title:localizeUi("ui.panels.extensionsettings.updatePersonalExtension"),
-        message:localizeUi("ui.panels.extensionsettings.replaceTheSavedCodeForValue1WithThisLocal", { value1: existing.name }),
-        confirmLabel:localizeUi("ui.panels.extensionsettings.saveDisabledUpdate"),
+        title: localizeUi("ui.panels.extensionsettings.updatePersonalExtension"),
+        message: localizeUi("ui.panels.extensionsettings.replaceTheSavedCodeForValue1WithThisLocal", {
+          value1: existing.name,
+        }),
+        confirmLabel: localizeUi("ui.panels.extensionsettings.saveDisabledUpdate"),
       });
       if (!confirmed) return existing;
       return updateExtension.mutateAsync({ id: existing.id, ...imported });
@@ -379,7 +421,12 @@ function ExtensionSettings({ showIntro, mode }: { showIntro: boolean; mode: Exte
       }
       if (installed === 0 && skipped === 0) throw new Error("No Personal Extensions were found.");
       if (installed > 0) {
-        toast.success(localizeUi("ui.panels.extensionsettings.value1PersonalExtensionValue2SavedAsDisabledDrafts", { value1: installed, value2: installed === 1 ? "" :localizeUi("ui.noodle.stageprofileview.s") }));
+        toast.success(
+          localizeUi("ui.panels.extensionsettings.value1PersonalExtensionValue2SavedAsDisabledDrafts", {
+            value1: installed,
+            value2: installed === 1 ? "" : localizeUi("ui.noodle.stageprofileview.s"),
+          }),
+        );
       }
       if (skipped > 0) {
         toast.warning(localizeUi("ui.panels.extensionsettings.invalidExtensionEntriesSkipped", { count: skipped }));
@@ -411,7 +458,12 @@ function ExtensionSettings({ showIntro, mode }: { showIntro: boolean; mode: Exte
           await importEntries([entry], fallbackName);
         }
       } catch (importError) {
-        toast.error(getPrivilegedActionErrorMessage(importError,localizeUi("ui.panels.extensionsettings.failedToImportPersonalExtension")));
+        toast.error(
+          getPrivilegedActionErrorMessage(
+            importError,
+            localizeUi("ui.panels.extensionsettings.failedToImportPersonalExtension"),
+          ),
+        );
       } finally {
         setImporting(false);
       }
@@ -425,7 +477,9 @@ function ExtensionSettings({ showIntro, mode }: { showIntro: boolean; mode: Exte
       try {
         const textFiles = await readTextFilesFromFileList(files);
         const firstPath = textFiles[0]?.path ?? "Personal Extension";
-        const fallbackName = firstPath.includes("/") ? firstPath.slice(0, firstPath.indexOf("/")) : "Personal Extension";
+        const fallbackName = firstPath.includes("/")
+          ? firstPath.slice(0, firstPath.indexOf("/"))
+          : "Personal Extension";
         const entries = collectFolderPackageEntries(textFiles, {
           rootFilenames: ["marinara-extensions.json", "marinara-extension.json", "marinara-personal-extensions.json"],
           collectionKeys: ["extensions", "personalExtensions"],
@@ -435,7 +489,12 @@ function ExtensionSettings({ showIntro, mode }: { showIntro: boolean; mode: Exte
           fallbackName,
         );
       } catch (importError) {
-        toast.error(getPrivilegedActionErrorMessage(importError,localizeUi("ui.panels.extensionsettings.failedToImportPersonalExtensionFolder")));
+        toast.error(
+          getPrivilegedActionErrorMessage(
+            importError,
+            localizeUi("ui.panels.extensionsettings.failedToImportPersonalExtensionFolder"),
+          ),
+        );
       } finally {
         setImporting(false);
       }
@@ -458,7 +517,9 @@ function ExtensionSettings({ showIntro, mode }: { showIntro: boolean; mode: Exte
             className="flex min-h-9 items-center gap-1.5 rounded-md px-2 text-xs text-[var(--muted-foreground)] transition-colors hover:bg-[var(--secondary)] hover:text-[var(--foreground)]"
           >
             <ChevronLeft size="0.875rem" />
-            {isExternal ? t("settings.externalExtensions.title") :localizeUi("settings.sections.personalExtensions.title")}
+            {isExternal
+              ? t("settings.externalExtensions.title")
+              : localizeUi("settings.sections.personalExtensions.title")}
           </button>
           <div className="flex flex-wrap items-center gap-1.5">
             {current && (
@@ -478,7 +539,11 @@ function ExtensionSettings({ showIntro, mode }: { showIntro: boolean; mode: Exte
                 ) : (
                   <Power size="0.75rem" className="shrink-0" />
                 )}
-                <span>{current.enabled ?localizeUi("ui.panels.extensionsettings.disable") :localizeUi("ui.panels.extensionsettings.reviewAndRun")}</span>
+                <span>
+                  {current.enabled
+                    ? localizeUi("ui.panels.extensionsettings.disable")
+                    : localizeUi("ui.panels.extensionsettings.reviewAndRun")}
+                </span>
               </button>
             )}
             {isExternal && (
@@ -488,7 +553,9 @@ function ExtensionSettings({ showIntro, mode }: { showIntro: boolean; mode: Exte
                 disabled={busy}
                 className="flex min-h-9 items-center gap-1.5 rounded-md bg-[var(--primary)] px-3 text-xs font-semibold text-[var(--primary-foreground)] transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {busy ? <Loader2 size="0.75rem" className="animate-spin" /> : <Save size="0.75rem" />}{localizeUi("ui.panels.extensionsettings.saveDraft")}</button>
+                {busy ? <Loader2 size="0.75rem" className="animate-spin" /> : <Save size="0.75rem" />}
+                {localizeUi("ui.panels.extensionsettings.saveDraft")}
+              </button>
             )}
           </div>
         </div>
@@ -513,9 +580,15 @@ function ExtensionSettings({ showIntro, mode }: { showIntro: boolean; mode: Exte
             )}
             <div className="min-w-0">
               <div className="font-semibold">
-                {current.enabled ?localizeUi("ui.panels.extensionsettings.runningApprovedCode") : approvalChanged ?localizeUi("ui.panels.extensionsettings.disabledPendingApproval") :localizeUi("ui.agents.agenteditor.disabled")}
+                {current.enabled
+                  ? localizeUi("ui.panels.extensionsettings.runningApprovedCode")
+                  : approvalChanged
+                    ? localizeUi("ui.panels.extensionsettings.disabledPendingApproval")
+                    : localizeUi("ui.agents.agenteditor.disabled")}
               </div>
-              <div className="mt-0.5 break-all text-[0.625rem] opacity-80">{localizeUi("ui.panels.extensionsettings.hash")} {current.contentHash}{localizeUi("ui.panels.extensionsettings.source")} {sourceLabel(current.source, t)}
+              <div className="mt-0.5 break-all text-[0.625rem] opacity-80">
+                {localizeUi("ui.panels.extensionsettings.hash")} {current.contentHash}
+                {localizeUi("ui.panels.extensionsettings.source")} {sourceLabel(current.source, t)}
               </div>
               {current.serverError && <div className="mt-1 text-[var(--destructive)]">{current.serverError}</div>}
             </div>
@@ -523,14 +596,18 @@ function ExtensionSettings({ showIntro, mode }: { showIntro: boolean; mode: Exte
         )}
 
         <div className="grid gap-2">
-          <label className="flex flex-col gap-1 text-[0.625rem] font-medium text-[var(--muted-foreground)]">{localizeUi("ui.panels.imagestyleprofileseditor.name")}<input
+          <label className="flex flex-col gap-1 text-[0.625rem] font-medium text-[var(--muted-foreground)]">
+            {localizeUi("ui.panels.imagestyleprofileseditor.name")}
+            <input
               value={draft.name}
               readOnly={!isExternal}
               onChange={(event) => setDraft((value) => ({ ...value, name: event.target.value }))}
               className="min-h-10 rounded-lg border border-[var(--border)] bg-[var(--secondary)] px-3 text-xs text-[var(--foreground)] outline-none focus:border-[var(--primary)]/60"
             />
           </label>
-          <label className="flex flex-col gap-1 text-[0.625rem] font-medium text-[var(--muted-foreground)]">{localizeUi("ui.panels.extensionsettings.version")}<input
+          <label className="flex flex-col gap-1 text-[0.625rem] font-medium text-[var(--muted-foreground)]">
+            {localizeUi("ui.panels.extensionsettings.version")}
+            <input
               value={draft.version ?? ""}
               readOnly={!isExternal}
               onChange={(event) => setDraft((value) => ({ ...value, version: event.target.value || null }))}
@@ -538,7 +615,9 @@ function ExtensionSettings({ showIntro, mode }: { showIntro: boolean; mode: Exte
               className="min-h-10 rounded-lg border border-[var(--border)] bg-[var(--secondary)] px-3 text-xs text-[var(--foreground)] outline-none focus:border-[var(--primary)]/60"
             />
           </label>
-          <label className="flex flex-col gap-1 text-[0.625rem] font-medium text-[var(--muted-foreground)]">{localizeUi("ui.panels.extensionsettings.runtime")}<select
+          <label className="flex flex-col gap-1 text-[0.625rem] font-medium text-[var(--muted-foreground)]">
+            {localizeUi("ui.panels.extensionsettings.runtime")}
+            <select
               value={draft.runtime}
               disabled={!isExternal}
               onChange={(event) =>
@@ -556,7 +635,9 @@ function ExtensionSettings({ showIntro, mode }: { showIntro: boolean; mode: Exte
           </label>
         </div>
 
-        <label className="flex flex-col gap-1 text-[0.625rem] font-medium text-[var(--muted-foreground)]">{localizeUi("chat.settings.inlineEditor.fields.description")}<textarea
+        <label className="flex flex-col gap-1 text-[0.625rem] font-medium text-[var(--muted-foreground)]">
+          {localizeUi("chat.settings.inlineEditor.fields.description")}
+          <textarea
             value={draft.description}
             readOnly={!isExternal}
             onChange={(event) => setDraft((value) => ({ ...value, description: event.target.value }))}
@@ -565,8 +646,21 @@ function ExtensionSettings({ showIntro, mode }: { showIntro: boolean; mode: Exte
           />
         </label>
 
-        <div className="flex items-start gap-2 rounded-lg border border-[var(--primary)]/30 bg-[var(--primary)]/[0.08] px-3 py-2.5 text-[0.6875rem] leading-relaxed text-[var(--foreground)]">
-          <AlertTriangle size="0.875rem" className="mt-0.5 shrink-0 text-[var(--primary)]" />
+        <div
+          className={cn(
+            "flex items-start gap-2 rounded-lg border px-3 py-2.5 text-[0.6875rem] leading-relaxed text-[var(--foreground)]",
+            fullPageAccess
+              ? "border-[var(--destructive)]/45 bg-[var(--destructive)]/[0.08]"
+              : "border-[var(--primary)]/30 bg-[var(--primary)]/[0.08]",
+          )}
+        >
+          <AlertTriangle
+            size="0.875rem"
+            className={cn(
+              "mt-0.5 shrink-0",
+              fullPageAccess ? "text-[var(--destructive)]" : "text-[var(--primary)]",
+            )}
+          />
           {draft.runtime === "server"
             ? t("settings.personalExtensions.sandbox.server")
             : fullPageAccess
@@ -635,7 +729,11 @@ function ExtensionSettings({ showIntro, mode }: { showIntro: boolean; mode: Exte
 
         {draft.runtime === "client" ? (
           <div className="grid gap-3">
-            <label className="flex min-w-0 flex-col gap-1 text-[0.625rem] font-medium text-[var(--muted-foreground)]">{localizeUi("ui.panels.extensionsettings.cssSanitizedBeforeUse")}<textarea
+            <label className="flex min-w-0 flex-col gap-1 text-[0.625rem] font-medium text-[var(--muted-foreground)]">
+              {fullPageAccess
+                ? t("settings.personalExtensions.fullPageCssLabel")
+                : localizeUi("ui.panels.extensionsettings.cssSanitizedBeforeUse")}
+              <textarea
                 value={draft.css ?? ""}
                 readOnly={!isExternal}
                 onChange={(event) => setDraft((value) => ({ ...value, css: event.target.value }))}
@@ -644,7 +742,9 @@ function ExtensionSettings({ showIntro, mode }: { showIntro: boolean; mode: Exte
                 className="min-h-72 resize-y rounded-lg border border-[var(--border)] bg-[var(--background)] p-3 font-mono text-[0.6875rem] leading-relaxed text-[var(--foreground)] outline-none focus:border-[var(--primary)]/60"
               />
             </label>
-            <label className="flex min-w-0 flex-col gap-1 text-[0.625rem] font-medium text-[var(--muted-foreground)]">{localizeUi("ui.panels.extensionsettings.browserJavascript")}<textarea
+            <label className="flex min-w-0 flex-col gap-1 text-[0.625rem] font-medium text-[var(--muted-foreground)]">
+              {localizeUi("ui.panels.extensionsettings.browserJavascript")}
+              <textarea
                 value={draft.js ?? ""}
                 readOnly={!isExternal}
                 onChange={(event) => setDraft((value) => ({ ...value, js: event.target.value }))}
@@ -655,7 +755,9 @@ function ExtensionSettings({ showIntro, mode }: { showIntro: boolean; mode: Exte
             </label>
           </div>
         ) : (
-          <label className="flex min-w-0 flex-col gap-1 text-[0.625rem] font-medium text-[var(--muted-foreground)]">{localizeUi("ui.panels.extensionsettings.serverJavascript")}<textarea
+          <label className="flex min-w-0 flex-col gap-1 text-[0.625rem] font-medium text-[var(--muted-foreground)]">
+            {localizeUi("ui.panels.extensionsettings.serverJavascript")}
+            <textarea
               value={draft.serverJs ?? ""}
               readOnly={!isExternal}
               onChange={(event) => setDraft((value) => ({ ...value, serverJs: event.target.value }))}
@@ -669,7 +771,9 @@ function ExtensionSettings({ showIntro, mode }: { showIntro: boolean; mode: Exte
         {current && current.revisions.length > 0 && (
           <details className="rounded-lg border border-[var(--border)] bg-[var(--secondary)]/35">
             <summary className="flex min-h-10 cursor-pointer items-center gap-2 px-3 text-xs font-semibold">
-              <History size="0.875rem" />{localizeUi("ui.panels.extensionsettings.revisionHistory")}{current.revisions.length})
+              <History size="0.875rem" />
+              {localizeUi("ui.panels.extensionsettings.revisionHistory")}
+              {current.revisions.length})
             </summary>
             <div className="flex flex-col gap-1.5 border-t border-[var(--border)] p-2">
               {current.revisions.map((revision) => (
@@ -680,8 +784,12 @@ function ExtensionSettings({ showIntro, mode }: { showIntro: boolean; mode: Exte
                   <Clock3 size="0.75rem" className="text-[var(--muted-foreground)]" />
                   <span className="font-mono">{shortHash(revision.contentHash)}</span>
                   <span className="text-[var(--muted-foreground)]">
-                    {revision.runtime === "server" ?localizeUi("ui.panels.extensionsettings.server") :localizeUi("settings.notifications.browser")}
-                    {revision.version ?localizeUi("ui.panels.extensionsettings.vValue1", { value1: revision.version }) : ""}
+                    {revision.runtime === "server"
+                      ? localizeUi("ui.panels.extensionsettings.server")
+                      : localizeUi("settings.notifications.browser")}
+                    {revision.version
+                      ? localizeUi("ui.panels.extensionsettings.vValue1", { value1: revision.version })
+                      : ""}
                   </span>
                   <button
                     type="button"
@@ -689,7 +797,9 @@ function ExtensionSettings({ showIntro, mode }: { showIntro: boolean; mode: Exte
                     disabled={busy}
                     className="ml-auto flex min-h-8 items-center gap-1 rounded-md px-2 text-[var(--primary)] transition-colors hover:bg-[var(--primary)]/10 disabled:opacity-50"
                   >
-                    <RotateCcw size="0.6875rem" />{localizeUi("ui.panels.extensionsettings.restoreDraft")}</button>
+                    <RotateCcw size="0.6875rem" />
+                    {localizeUi("ui.panels.extensionsettings.restoreDraft")}
+                  </button>
                 </div>
               ))}
             </div>
@@ -703,17 +813,15 @@ function ExtensionSettings({ showIntro, mode }: { showIntro: boolean; mode: Exte
     <div className="flex flex-col gap-3">
       {showIntro && (
         <SettingsIntro>
-          {isExternal
-            ? t("settings.externalExtensions.intro")
-            : t("settings.personalExtensions.empty.description")}
+          {isExternal ? t("settings.externalExtensions.intro") : t("settings.personalExtensions.empty.description")}
         </SettingsIntro>
       )}
       <SettingsSection
-        title={isExternal ? t("settings.externalExtensions.title") :localizeUi("settings.sections.personalExtensions.title")}
+        title={
+          isExternal ? t("settings.externalExtensions.title") : localizeUi("settings.sections.personalExtensions.title")
+        }
         description={
-          isExternal
-            ? t("settings.externalExtensions.description")
-            : t("settings.personalExtensions.empty.description")
+          isExternal ? t("settings.externalExtensions.description") : t("settings.personalExtensions.empty.description")
         }
         icon={isExternal ? <ShieldAlert size="0.875rem" /> : <Code2 size="0.875rem" />}
         anchorId={isExternal ? "settings-section-external-extensions" : "settings-section-personal-extensions"}
@@ -759,21 +867,22 @@ function ExtensionSettings({ showIntro, mode }: { showIntro: boolean; mode: Exte
 
           <div className="flex items-start gap-2 rounded-lg border border-[var(--border)] bg-[var(--background)]/45 px-3 py-2.5 text-[0.6875rem] leading-relaxed text-[var(--muted-foreground)]">
             <ShieldAlert size="0.875rem" className="mt-0.5 shrink-0 text-[var(--primary)]" />
-            {isExternal
-              ? t("settings.externalExtensions.safety")
-              : t("settings.personalExtensions.safety")}
+            {isExternal ? t("settings.externalExtensions.safety") : t("settings.personalExtensions.safety")}
           </div>
 
           {error && (
             <div className="rounded-lg border border-[var(--destructive)]/30 bg-[var(--destructive)]/8 px-3 py-2.5 text-xs text-[var(--destructive)]">
               {error instanceof ApiError && error.status === 403
-                ?localizeUi("ui.panels.extensionsettings.personalExtensionManagementNeedsLocalhostOrAdminAccessOn")
-                :localizeUi("ui.panels.extensionsettings.personalExtensionsCouldNotBeLoaded")}
+                ? localizeUi("ui.panels.extensionsettings.personalExtensionManagementNeedsLocalhostOrAdminAccessOn")
+                : localizeUi("ui.panels.extensionsettings.personalExtensionsCouldNotBeLoaded")}
             </div>
           )}
 
           {isLoading ? (
-            <div className="flex flex-col gap-2" aria-label={localizeUi("ui.panels.extensionsettings.loadingPersonalExtensions")}>
+            <div
+              className="flex flex-col gap-2"
+              aria-label={localizeUi("ui.panels.extensionsettings.loadingPersonalExtensions")}
+            >
               {[0, 1].map((index) => (
                 <div key={index} className="h-16 animate-pulse rounded-lg bg-[var(--secondary)]/60" />
               ))}
@@ -782,7 +891,9 @@ function ExtensionSettings({ showIntro, mode }: { showIntro: boolean; mode: Exte
             <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed border-[var(--border)] px-4 py-8 text-center">
               <Code2 size="1.25rem" className="text-[var(--muted-foreground)]" />
               <div className="text-xs font-semibold">
-                {isExternal ? t("settings.externalExtensions.empty.title") :localizeUi("ui.panels.extensionsettings.noPersonalExtensionsYet")}
+                {isExternal
+                  ? t("settings.externalExtensions.empty.title")
+                  : localizeUi("ui.panels.extensionsettings.noPersonalExtensionsYet")}
               </div>
               <p className="max-w-md text-[0.6875rem] leading-relaxed text-[var(--muted-foreground)]">
                 {isExternal
@@ -830,13 +941,25 @@ function ExtensionSettings({ showIntro, mode }: { showIntro: boolean; mode: Exte
                       </span>
                       <span className="min-w-0">
                         <span className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1">
-                          <span className="truncate text-xs font-semibold text-[var(--foreground)]">{extension.name}</span>
+                          <span className="truncate text-xs font-semibold text-[var(--foreground)]">
+                            {extension.name}
+                          </span>
                           {extension.version && (
-                            <span className="text-[0.5625rem] text-[var(--muted-foreground)]">{localizeUi("ui.panels.extensionsettings.v")}{extension.version}</span>
+                            <span className="text-[0.5625rem] text-[var(--muted-foreground)]">
+                              {localizeUi("ui.panels.extensionsettings.v")}
+                              {extension.version}
+                            </span>
                           )}
                           <span className="rounded px-1.5 py-0.5 text-[0.5625rem] font-semibold ring-1 ring-[var(--border)]">
-                            {extension.runtime === "server" ?localizeUi("ui.panels.extensionsettings.server") :localizeUi("settings.notifications.browser")}
+                            {extension.runtime === "server"
+                              ? localizeUi("ui.panels.extensionsettings.server")
+                              : localizeUi("settings.notifications.browser")}
                           </span>
+                          {extension.capabilities.includes(PERSONAL_EXTENSION_FULL_PAGE_CAPABILITY) && (
+                            <span className="rounded bg-[var(--destructive)]/10 px-1.5 py-0.5 text-[0.5625rem] font-semibold text-[var(--destructive)] ring-1 ring-[var(--destructive)]/30">
+                              {t("settings.personalExtensions.capabilities.full_page_access.label")}
+                            </span>
+                          )}
                           <span
                             className={cn(
                               "rounded px-1.5 py-0.5 text-[0.5625rem] font-semibold ring-1",
@@ -872,7 +995,11 @@ function ExtensionSettings({ showIntro, mode }: { showIntro: boolean; mode: Exte
                         onClick={() => void (extension.enabled ? disableExtension(extension) : runExtension(extension))}
                         disabled={busy}
                         className="rounded-md p-2 text-[var(--primary)] transition-colors hover:bg-[var(--primary)]/10 active:scale-90 disabled:opacity-50"
-                        title={extension.enabled ?localizeUi("ui.panels.extensionsettings.disable") :localizeUi("ui.panels.extensionsettings.reviewAndRun_c0b4a0e")}
+                        title={
+                          extension.enabled
+                            ? localizeUi("ui.panels.extensionsettings.disable")
+                            : localizeUi("ui.panels.extensionsettings.reviewAndRun_c0b4a0e")
+                        }
                       >
                         {extension.enabled ? <PowerOff size="0.75rem" /> : <Power size="0.75rem" />}
                       </button>
