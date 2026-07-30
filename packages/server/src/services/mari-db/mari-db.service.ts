@@ -560,6 +560,15 @@ function normalizeOffset(value: unknown) {
   return Math.floor(parsed);
 }
 
+function parseChatRangeInteger(value: string | undefined, flag: string, options: { minimum: number; maximum: number }) {
+  if (value === undefined) return null;
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed) || parsed < options.minimum || parsed > options.maximum) {
+    throw new Error(`--${flag} must be an integer from ${options.minimum} to ${options.maximum}`);
+  }
+  return parsed;
+}
+
 function validationFromIssues(issues: MariDbValidationIssue[]): MariDbValidationResult {
   const errors = issues.filter((issue) => issue.level === "error");
   const notices = issues.filter((issue) => issue.level === "notice");
@@ -3979,25 +3988,44 @@ export class MariDbService {
       }
       case "messages": {
         const chatId = parsed.positionals[0];
-        if (!chatId) throw new Error("Usage: mari chats messages <chat-id> [--limit <n>] [--offset <n>] [--tail]");
+        if (!chatId) {
+          throw new Error(
+            "Usage: mari chats messages <chat-id> [--last <n> | --after-post <n>] [--limit <n>] [--offset <n>] [--tail]",
+          );
+        }
         const limitFlag = flagString(flags, "limit");
         const limit = limitFlag !== undefined ? normalizeLimit(limitFlag, 20, 200) : null;
         const offset = normalizeOffset(flagString(flags, "offset"));
         const tail = hasFlag(flags, "tail");
+        const last = parseChatRangeInteger(flagString(flags, "last"), "last", { minimum: 1, maximum: 200 });
+        const afterPost = parseChatRangeInteger(flagString(flags, "after-post"), "after-post", {
+          minimum: 0,
+          maximum: Number.MAX_SAFE_INTEGER,
+        });
+        if (last !== null && afterPost !== null) throw new Error("Use either --last or --after-post, not both");
+        if (afterPost !== null && tail) throw new Error("--after-post cannot be combined with --tail");
         let messages = (await this.rawRows("messages")).filter((m) => m.chatId === chatId);
         messages.sort((a, b) => String(a.createdAt ?? "").localeCompare(String(b.createdAt ?? "")));
-        if (tail) {
-          const offsetMessages = offset > 0 ? messages.slice(0, Math.max(0, messages.length - offset)) : messages;
-          messages = limit !== null ? offsetMessages.slice(-limit) : offsetMessages;
+        const numberedMessages = messages.map((message, index) => ({ message, postNumber: index + 1 }));
+        let selectedMessages: typeof numberedMessages;
+        if (last !== null || afterPost !== null) {
+          const scopedMessages =
+            last !== null ? numberedMessages.slice(-last) : numberedMessages.slice(afterPost ?? 0);
+          selectedMessages = scopedMessages.slice(offset, limit !== null ? offset + limit : undefined);
+        } else if (tail) {
+          const offsetMessages =
+            offset > 0 ? numberedMessages.slice(0, Math.max(0, numberedMessages.length - offset)) : numberedMessages;
+          selectedMessages = limit !== null ? offsetMessages.slice(-limit) : offsetMessages;
         } else {
-          messages = messages.slice(offset, limit !== null ? offset + limit : undefined);
+          selectedMessages = numberedMessages.slice(offset, limit !== null ? offset + limit : undefined);
         }
-        const result = messages.map((row) => ({
-          id: row.id,
-          role: row.role,
-          characterId: row.characterId ?? null,
-          content: typeof row.content === "string" ? row.content : "",
-          createdAt: row.createdAt,
+        const result = selectedMessages.map(({ message, postNumber }) => ({
+          postNumber,
+          id: message.id,
+          role: message.role,
+          characterId: message.characterId ?? null,
+          content: typeof message.content === "string" ? message.content : "",
+          createdAt: message.createdAt,
         }));
         return { ok: true, mode: "read", command: context.command, output: result };
       }
@@ -5039,7 +5067,9 @@ export class MariDbService {
       "Usage: mari chats <command>",
       "Read:  list [--limit <n>] [--character <id>]",
       "Read:  get <id>",
-      "Read:  messages <chat-id> [--limit <n>] [--offset <n>] [--tail]",
+      "Read:  messages <chat-id> [--last <n> | --after-post <n>] [--limit <n>] [--offset <n>] [--tail]",
+      "       --last counts back from the newest post; --after-post uses the 1-indexed #post shown in chat.",
+      "       Add --limit and advance --offset to page within either requested range.",
       "Read:  search <query> [--limit <n>]",
       "All chat commands are read-only.",
     ].join("\n");
