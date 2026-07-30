@@ -501,6 +501,7 @@ import {
   resolveDynamicGameImagePromptConnection,
   resolveNpcPortraitAppearance,
   sanitizeNpcPortraitAppearanceText,
+  selectLatestGameTurnNarration,
   selectStoryboardAppearanceCharacterNames,
 } from "../../packages/server/src/routes/game.routes.js";
 import { buildLegacyDefaultAgentConfigUpdate } from "../../packages/server/src/services/agents/default-prompt-migration.js";
@@ -4915,15 +4916,56 @@ Use HTML sparingly and diegetically. Do not replace normal prose/dialogue unless
         meta: {},
         setupConfig: null,
         latestState: null,
+        latestTurnNarration: "This must not be added to a portrait prompt.",
       });
 
       assert.equal(messages[0]?.content, override);
       assert.match(messages[1]?.content ?? "", /Appearance traits: towering alien/);
+      assert.doesNotMatch(messages[1]?.content ?? "", /latest_gm_turn|must not be added/i);
       assert.doesNotMatch(messages[1]?.content ?? "", /copy the Required canonical NPC visual profile/i);
       assert.doesNotMatch(messages[1]?.content ?? "", /Return only JSON/i);
 
       const requestOptions = dynamicGameImagePromptRequestOptions("portrait");
       assert.equal("responseFormat" in requestOptions, false);
+    },
+  },
+  {
+    name: "dynamic Game backgrounds use the latest completed GM turn as primary scene context",
+    async run() {
+      const latestTurnNarration = selectLatestGameTurnNarration([
+        { role: "user", content: "I open the station doors." },
+        { role: "assistant", content: "An older scene in a dry mountain pass." },
+        {
+          role: "assistant",
+          content:
+            "[bg: storm-station] Rain lashes the glass-roofed station while blue signal lamps flicker over the abandoned platforms.",
+        },
+        { role: "system", content: "Internal state update after the visible turn." },
+      ]);
+      assert.equal(
+        latestTurnNarration,
+        "Rain lashes the glass-roofed station while blue signal lamps flicker over the abandoned platforms.",
+      );
+
+      const messages = await buildDynamicGameImagePromptMessages({
+        request: {
+          kind: "background",
+          title: "storm-station",
+          sourcePrompt: "scenery, station, wide shot",
+          assetContext: ["Location slug: storm-station"],
+          maxCharacters: 1000,
+        },
+        meta: {},
+        setupConfig: null,
+        latestState: null,
+        latestTurnNarration,
+      });
+      const userPrompt = messages[1]?.content ?? "";
+      assert.match(userPrompt, /<latest_gm_turn>/);
+      assert.match(userPrompt, /glass-roofed station/);
+      assert.doesNotMatch(userPrompt, /\[bg:/);
+      assert.match(userPrompt, /latest GM turn as the primary source/i);
+      assert.ok(userPrompt.indexOf("<latest_gm_turn>") < userPrompt.indexOf("<draft_prompt>"));
     },
   },
   {

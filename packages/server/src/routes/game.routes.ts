@@ -816,7 +816,7 @@ type SummarizedIllustrationPrompt = {
   slug?: string;
 };
 
-function compactIllustrationNarration(value: string): string {
+function compactGameTurnNarration(value: string): string {
   const clean = stripGmCommandTags(value)
     .replace(/\r\n/g, "\n")
     .replace(/\n{3,}/g, "\n\n")
@@ -938,7 +938,7 @@ export async function buildIllustrationNarrationSummaryMessages(args: {
   };
   const gameContextBlock = contextLines.length ? `<game_context>\n${contextLines.join("\n")}\n</game_context>` : "";
   const currentIllustrationRequestJson = JSON.stringify(currentRequest, null, 2);
-  const completedTurnNarration = compactIllustrationNarration(args.narration);
+  const completedTurnNarration = compactGameTurnNarration(args.narration);
   const summarizerVars = {
     gameContextBlock,
     currentIllustrationRequestJson,
@@ -1139,6 +1139,7 @@ export async function buildDynamicGameImagePromptMessages(args: {
   meta: Record<string, unknown>;
   setupConfig: Record<string, unknown> | null;
   latestState: { location?: string | null; weather?: string | null; time?: string | null } | null;
+  latestTurnNarration: string | null;
 }): Promise<ChatMessage[]> {
   const gameContextLines = [
     `Asset kind: ${gameDynamicImagePromptKindLabel(args.request.kind)}`,
@@ -1165,6 +1166,9 @@ export async function buildDynamicGameImagePromptMessages(args: {
     `Title: ${compactDynamicPromptLine(args.request.title, 180)}`,
     ...args.request.assetContext.map((line) => compactDynamicPromptLine(line, 1000)),
   ]);
+  const latestTurnNarration =
+    args.request.kind === "background" ? compactGameTurnNarration(args.latestTurnNarration ?? "") : "";
+  const latestTurnBlock = latestTurnNarration ? `<latest_gm_turn>\n${latestTurnNarration}\n</latest_gm_turn>` : "";
   const sourcePrompt = compactDynamicPromptText(
     args.request.sourcePrompt,
     Math.max(args.request.maxCharacters * 2, 2000),
@@ -1173,6 +1177,7 @@ export async function buildDynamicGameImagePromptMessages(args: {
     kindLabel: gameDynamicImagePromptKindLabel(args.request.kind),
     gameContextBlock,
     assetContextBlock,
+    latestTurnBlock,
     sourcePrompt,
     maxCharacters: args.request.maxCharacters,
   };
@@ -1185,10 +1190,14 @@ export async function buildDynamicGameImagePromptMessages(args: {
       role: "user",
       content: [
         gameContextBlock,
+        latestTurnBlock,
         assetContextBlock,
         `<draft_prompt>\n${sourcePrompt}\n</draft_prompt>`,
         [
           `Rewrite this into one positive prompt for a ${gameDynamicImagePromptKindLabel(args.request.kind)}.`,
+          latestTurnBlock
+            ? "Treat the latest GM turn as the primary source for the visible environment. Use the draft prompt only as supporting context, and keep the result background-only."
+            : "",
           `Maximum length: ${args.request.maxCharacters} characters.`,
         ]
           .filter(Boolean)
@@ -1259,6 +1268,7 @@ async function createDynamicGameImagePromptGenerator(args: {
   meta: Record<string, unknown>;
   setupConfig: Record<string, unknown> | null;
   latestState: { location?: string | null; weather?: string | null; time?: string | null } | null;
+  latestTurnNarration: string | null;
   debugLog?: (message: string, ...args: any[]) => void;
   signal?: AbortSignal;
 }): Promise<GameDynamicImagePromptGenerator | undefined> {
@@ -1281,6 +1291,7 @@ async function createDynamicGameImagePromptGenerator(args: {
         meta: args.meta,
         setupConfig: args.setupConfig,
         latestState: args.latestState,
+        latestTurnNarration: args.latestTurnNarration,
       });
       args.debugLog?.(
         "[debug/game/dynamic-image-prompt] request kind=%s model=%s sourceChars=%d maxChars=%d",
@@ -1321,6 +1332,18 @@ async function createDynamicGameImagePromptGenerator(args: {
     logger.warn(err, "[game/dynamic-image-prompt] Failed to initialise dynamic prompt generation");
     throw err;
   }
+}
+
+export function selectLatestGameTurnNarration(
+  messages: ReadonlyArray<{ role: string; content?: string | null }>,
+): string | null {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (message?.role !== "assistant" && message?.role !== "narrator") continue;
+    const narration = compactGameTurnNarration(message.content ?? "");
+    if (narration) return narration;
+  }
+  return null;
 }
 
 async function addGeneratedIllustrationToGallery(opts: {
@@ -11745,6 +11768,10 @@ export async function gameRoutes(app: FastifyInstance) {
     const latestImageState = await createGameStateStorage(app.db)
       .getLatest(input.chatId)
       .catch(() => null);
+    const latestTurnNarration =
+      meta.gameImageDynamicPromptEnabled === true
+        ? selectLatestGameTurnNarration(await chats.listMessages(input.chatId))
+        : null;
     const dynamicPromptGenerator = await createDynamicGameImagePromptGenerator({
       connections,
       promptOverridesStorage,
@@ -11752,6 +11779,7 @@ export async function gameRoutes(app: FastifyInstance) {
       meta,
       setupConfig: setupCfg,
       latestState: latestImageState,
+      latestTurnNarration,
     });
 
     const items: Array<{
@@ -12157,6 +12185,10 @@ export async function gameRoutes(app: FastifyInstance) {
       const latestImageState = await createGameStateStorage(app.db)
         .getLatest(input.chatId)
         .catch(() => null);
+      const latestTurnNarration =
+        meta.gameImageDynamicPromptEnabled === true
+          ? selectLatestGameTurnNarration(await chats.listMessages(input.chatId))
+          : null;
       const imageSettings = await loadImageGenerationUserSettings(app.db);
       const backgroundSize: ImageGenerationSize = input.imageSizes?.background ?? imageSettings.background;
       const portraitSize: ImageGenerationSize = input.imageSizes?.portrait ?? imageSettings.portrait;
@@ -12175,6 +12207,7 @@ export async function gameRoutes(app: FastifyInstance) {
         meta,
         setupConfig: setupCfg,
         latestState: latestImageState,
+        latestTurnNarration,
         debugLog: debugLogsEnabled ? debugLog : undefined,
         signal: assetAbortSignal,
       });
