@@ -32,6 +32,7 @@ function parseStoredJson(value: unknown): unknown {
 }
 
 function containsExactReference(value: unknown, referenceId: string): boolean {
+  if (typeof value === "string" && !value.includes(referenceId)) return false;
   const pending: unknown[] = [parseStoredJson(value)];
   let scanned = 0;
   const enqueue = (nested: unknown): boolean => {
@@ -66,6 +67,7 @@ function containsExactReference(value: unknown, referenceId: string): boolean {
 
 function collectReferenceImageIds(value: unknown): Set<string> {
   const imageIds = new Set<string>();
+  if (typeof value === "string" && !value.includes(GLOBAL_GALLERY_REFERENCE_PREFIX)) return imageIds;
   const pending: unknown[] = [parseStoredJson(value)];
   let scanned = 0;
   const enqueue = (nested: unknown) => {
