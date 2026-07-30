@@ -68,7 +68,9 @@ assert.match(clientInjectorSource, /message\.contentHash === active\.contentHash
 assert.match(clientInjectorSource, /useChatStore\.subscribe/u);
 assert.match(clientInjectorSource, /type:\s*"context-update"/u);
 assert.match(clientInjectorSource, /contentHash:\s*active\.contentHash/u);
-assert.doesNotMatch(clientInjectorSource, /activeChat\.messages|activeChat\.personaId/u);
+assert.doesNotMatch(clientInjectorSource, /activeChat\.messages/u);
+assert.match(clientInjectorSource, /activeChat\.personaId/u);
+assert.match(clientInjectorSource, /canReadPersona \? context\.personaId : null/u);
 assert.doesNotMatch(clientContextSource, /\bmessages?\b|\bfetch\b/iu);
 assert.match(clientInjectorSource, /extensionFetch\(active\.extension\.id,\s*"context"/u);
 assert.match(clientContributionSource, /PERSONAL_EXTENSION_UI_LIMITS/u);
@@ -416,6 +418,7 @@ try {
   assert.match(worker, /context:\s*Object\.freeze\(\{\s*get:/u);
   assert.match(worker, /"context-update"/u, "Worker must receive bounded context snapshots");
   assert.match(worker, /allowedIds\.has\(id\)/u, "Worker must reject Character records outside the active ID set");
+  assert.match(worker, /id !== expectedId/u, "Worker must reject Persona records outside the active ID");
   assert.match(worker, /MAX_CONTEXT_TEXT/u, "Worker must bound active-record context");
   assert.match(worker, /await initialContextReady/u, "Extension startup must wait for its initial context snapshot");
   assert.match(worker, /ui:\s*Object\.freeze\(\{\s*showWindow,\s*registerContribution/u);
@@ -508,33 +511,7 @@ try {
   assert.deepEqual(
     createPersonalExtensionRecordContext({
       capabilities: [],
-      characters: recordContext.characters.map((character) => ({
-        id: character.id,
-        data: {
-          name: character.name,
-          description: character.description,
-          personality: character.personality,
-          scenario: character.scenario,
-          first_mes: character.firstMessage,
-          mes_example: character.exampleDialogue,
-          creator_notes: "",
-          system_prompt: "",
-          post_history_instructions: "",
-          tags: [...character.tags],
-          creator: character.creator,
-          character_version: character.characterVersion,
-          alternate_greetings: [],
-          extensions: {
-            talkativeness: 0.5,
-            fav: false,
-            world: "",
-            depth_prompt: { prompt: "", depth: 4, role: "system" },
-            backstory: character.backstory,
-            appearance: character.appearance,
-          },
-          character_book: null,
-        },
-      })),
+      characters: [{ id: "character-1", data: {} as never }],
       persona: null,
     }),
     { characters: [], persona: null },
@@ -542,18 +519,23 @@ try {
 }
 
 {
-  const { createPersonalExtensionContextSnapshot } =
+  const { createPersonalExtensionContextSnapshot, personalExtensionContextKey } =
     await import("../../packages/client/src/lib/personal-extension-context.js");
   const single = createPersonalExtensionContextSnapshot("chat-1", ["character-1", "character-1", "", 42]);
   assert.deepEqual(single, {
     chatId: "chat-1",
     characterId: "character-1",
     characterIds: ["character-1"],
+    personaId: null,
     characters: [],
     persona: null,
   });
   assert.equal(Object.isFrozen(single), true);
   assert.equal(Object.isFrozen(single.characterIds), true);
+
+  const personaContext = createPersonalExtensionContextSnapshot("chat-1", ["character-1"], "persona-1");
+  assert.equal(personaContext.personaId, "persona-1");
+  assert.notEqual(personalExtensionContextKey(single), personalExtensionContextKey(personaContext));
 
   const group = createPersonalExtensionContextSnapshot("chat-2", ["character-1", "character-2"]);
   assert.equal(group.characterId, null);
@@ -563,6 +545,7 @@ try {
     chatId: null,
     characterId: null,
     characterIds: [],
+    personaId: null,
     characters: [],
     persona: null,
   });

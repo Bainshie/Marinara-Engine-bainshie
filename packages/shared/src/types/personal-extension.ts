@@ -125,6 +125,8 @@ export interface PersonalExtensionContextSnapshot {
   characterId: string | null;
   /** All Characters participating in the active chat, including group chats. */
   characterIds: readonly string[];
+  /** Selected Persona ID, present only with read_active_persona. */
+  personaId: string | null;
   /** Bounded active-card fields, present only with read_active_characters. */
   characters: readonly PersonalExtensionCharacterSnapshot[];
   /** Bounded active Persona fields, present only with read_active_persona. */

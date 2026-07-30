@@ -115,16 +115,22 @@ function postSandboxTheme(iframe: HTMLIFrameElement) {
 function readPersonalExtensionContext(): PersonalExtensionContextSnapshot {
   const { activeChatId, activeChat } = useChatStore.getState();
   const characterIds = activeChatId && activeChat?.id === activeChatId ? activeChat.characterIds : [];
-  return createPersonalExtensionContextSnapshot(activeChatId, characterIds);
+  const personaId = activeChatId && activeChat?.id === activeChatId ? activeChat.personaId : null;
+  return createPersonalExtensionContextSnapshot(activeChatId, characterIds, personaId);
 }
 
 function sendSandboxContext(active: ActiveClientExtension, context: PersonalExtensionContextSnapshot) {
+  const canReadPersona = active.extension.capabilities.includes("read_active_persona");
   active.iframe.contentWindow?.postMessage(
     {
       channel: "marinara-personal-extension",
       type: "context-update",
       contentHash: active.contentHash,
-      context,
+      context: {
+        ...context,
+        personaId: canReadPersona ? context.personaId : null,
+        persona: canReadPersona ? context.persona : null,
+      },
     },
     "*",
   );

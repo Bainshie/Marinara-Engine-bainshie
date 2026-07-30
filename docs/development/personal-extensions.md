@@ -71,14 +71,15 @@ Browser Extension API version 5 adds `marinara.context.get()` and `marinara.cont
   chatId: string | null;
   characterId: string | null;
   characterIds: readonly string[];
+  personaId: string | null;
   characters: readonly PersonalExtensionCharacterSnapshot[];
   persona: PersonalExtensionPersonaSnapshot | null;
 }
 ```
 
-The client derives the snapshot from `useChatStore` and posts it only when the active chat or its Character list changes. IDs are non-empty strings capped at 256 characters; the Character list is deduplicated and capped at 256 entries. The iframe accepts a context update only from its parent and only when its `contentHash` matches the exact extension revision, then the Worker normalizes and freezes the payload again. Extension startup waits for the first host snapshot, with a one-second null-context fallback so a failed bridge cannot stall the Worker indefinitely.
+The client derives the snapshot from `useChatStore` and posts it when the active chat, its Character list, or its selected Persona changes. IDs are non-empty strings capped at 256 characters; the Character list is deduplicated and capped at 256 entries. The iframe accepts a context update only from its parent and only when its `contentHash` matches the exact extension revision, then the Worker normalizes and freezes the payload again. Extension startup waits for the first host snapshot, with a one-second null-context fallback so a failed bridge cannot stall the Worker indefinitely.
 
-`characterId` is a single-chat convenience and remains `null` for group chats; `characterIds` contains every active participant. With no active chat, `chatId`, `characterId`, and `persona` are `null`, while `characterIds` and `characters` are empty. Extensions can safely use the identifiers as keys in their own private storage.
+`characterId` is a single-chat convenience and remains `null` for group chats; `characterIds` contains every active participant. `personaId` is available only with `read_active_persona`. With no active chat, `chatId`, `characterId`, `personaId`, and `persona` are `null`, while `characterIds` and `characters` are empty. Extensions can safely use the identifiers as keys in their own private storage.
 
 `read_active_characters` allows `characters` to contain only the active cards' `id`, `name`, `description`, `personality`, `scenario`, `firstMessage`, `exampleDialogue`, `creator`, `characterVersion`, `tags`, `backstory`, `appearance`, `aboutMe`, and `conversationDisplayName`. `read_active_persona` allows `persona` to contain only `id`, `name`, `description`, `personality`, `scenario`, `backstory`, `appearance`, `tags`, `aboutMe`, and `conversationDisplayName`. The server derives both sets from the active chat, applies per-field and aggregate bounds, and never accepts a client-supplied record ID as proof of scope.
 

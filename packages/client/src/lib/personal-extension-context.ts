@@ -17,8 +17,10 @@ function normalizeContextId(value: unknown): string | null {
 export function createPersonalExtensionContextSnapshot(
   chatIdValue: unknown,
   characterIdValues: unknown,
+  personaIdValue?: unknown,
 ): PersonalExtensionContextSnapshot {
   const chatId = normalizeContextId(chatIdValue);
+  const personaId = chatId ? normalizeContextId(personaIdValue) : null;
   const characterIds: string[] = [];
   if (chatId && Array.isArray(characterIdValues)) {
     const seen = new Set<string>();
@@ -35,11 +37,12 @@ export function createPersonalExtensionContextSnapshot(
     chatId,
     characterId: characterIds.length === 1 ? (characterIds[0] ?? null) : null,
     characterIds,
+    personaId,
     characters: Object.freeze([]),
     persona: null,
   });
 }
 
 export function personalExtensionContextKey(context: PersonalExtensionContextSnapshot): string {
-  return JSON.stringify([context.chatId, ...context.characterIds]);
+  return JSON.stringify([context.chatId, context.personaId, ...context.characterIds]);
 }

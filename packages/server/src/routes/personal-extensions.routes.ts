@@ -209,16 +209,17 @@ export function browserWorkerSource(extension: PersonalExtension) {
   const pending = new Map();
   const MAX_CONTEXT_ID_LENGTH = 256;
   const MAX_CONTEXT_CHARACTER_IDS = 256;
-  const MAX_CONTEXT_TEXT = 256000;
-  const MAX_CONTEXT_FIELD = 32000;
-  const MAX_CONTEXT_TAGS = 100;
-  const MAX_CONTEXT_TAG = 256;
+  const MAX_CONTEXT_TEXT = ${CONTEXT_TEXT_BUDGET};
+  const MAX_CONTEXT_FIELD = ${CONTEXT_FIELD_LENGTH};
+  const MAX_CONTEXT_TAGS = ${CONTEXT_TAG_COUNT};
+  const MAX_CONTEXT_TAG = ${CONTEXT_TAG_LENGTH};
   const capabilities = new Set(extension.capabilities);
   const contextListeners = new Set();
-  const freezeContext = (chatId, characterIds, characters = [], persona = null) => Object.freeze({
+  const freezeContext = (chatId, characterIds, personaId = null, characters = [], persona = null) => Object.freeze({
     chatId,
     characterId: characterIds.length === 1 ? characterIds[0] : null,
     characterIds: Object.freeze(characterIds),
+    personaId,
     characters: Object.freeze(characters),
     persona,
   });
@@ -272,9 +273,9 @@ export function browserWorkerSource(extension: PersonalExtension) {
       conversationDisplayName: boundedContextText(value.conversationDisplayName, budget),
     });
   };
-  const normalizePersonaContext = (value, budget) => {
+  const normalizePersonaContext = (value, expectedId, budget) => {
     const id = normalizeContextId(value?.id);
-    if (!id) return null;
+    if (!id || id !== expectedId) return null;
     return Object.freeze({
       id,
       name: boundedContextText(value.name, budget),
@@ -301,6 +302,8 @@ export function browserWorkerSource(extension: PersonalExtension) {
         if (characterIds.length >= MAX_CONTEXT_CHARACTER_IDS) break;
       }
     }
+    const personaId =
+      chatId && capabilities.has("read_active_persona") ? normalizeContextId(value?.personaId) : null;
     const budget = { remaining: MAX_CONTEXT_TEXT };
     const allowedIds = new Set(characterIds);
     const characters = [];
@@ -315,10 +318,10 @@ export function browserWorkerSource(extension: PersonalExtension) {
       }
     }
     const persona =
-      capabilities.has("read_active_persona") && value?.persona && typeof value.persona === "object"
-        ? normalizePersonaContext(value.persona, budget)
+      personaId && value?.persona && typeof value.persona === "object"
+        ? normalizePersonaContext(value.persona, personaId, budget)
         : null;
-    return freezeContext(chatId, characterIds, characters, persona);
+    return freezeContext(chatId, characterIds, personaId, characters, persona);
   };
   const contextKey = (value) => JSON.stringify(value);
   const notifyContextListener = (listener) => {
@@ -1247,13 +1250,9 @@ export async function personalExtensionsRoutes(app: FastifyInstance) {
     const capabilities = new Set(extension.capabilities);
     const characterIds = parseContextCharacterIds(chat.characterIds);
     const characters = capabilities.has("read_active_characters")
-      ? (
-          await Promise.all(
-            characterIds.map(async (characterId) =>
-              parseContextCharacter(await charactersStorage.getById(characterId)),
-            ),
-          )
-        ).filter((character): character is ContextCharacterSource => Boolean(character))
+      ? (await charactersStorage.getByIds(characterIds))
+          .map((row) => parseContextCharacter(row))
+          .filter((character): character is ContextCharacterSource => Boolean(character))
       : [];
     const personaRow =
       capabilities.has("read_active_persona") && chat.personaId && ID_PATTERN.test(chat.personaId)

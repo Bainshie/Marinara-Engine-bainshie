@@ -71,7 +71,7 @@ Complex tools can build multi-step interfaces by updating the panel elements aft
 Browser Extension API version 5 exposes opaque identifiers for the chat currently displayed in Marinara:
 
 ```js
-const renderForContext = async ({ chatId, characterId, characterIds, characters, persona }) => {
+const renderForContext = async ({ chatId, characterId, characterIds, personaId, characters, persona }) => {
   if (!chatId) return; // Home, a library, or another surface without an active chat.
 
   const storage = await marinara.storage.get();
@@ -83,6 +83,7 @@ const renderForContext = async ({ chatId, characterId, characterIds, characters,
     chatId,
     characterId,
     characterIds,
+    personaId,
     characterNames: characters.map((character) => character.name),
     personaName: persona?.name ?? null,
     tab,
@@ -93,7 +94,7 @@ const unsubscribe = marinara.context.subscribe(renderForContext);
 marinara.onCleanup(unsubscribe);
 ```
 
-`marinara.context.get()` returns the same current snapshot without subscribing. `chatId` is `null` and `characterIds` is empty when no chat is active. `characterId` is populated only when exactly one Character participates; group chats expose every participant through `characterIds` and leave `characterId` as `null`.
+`marinara.context.get()` returns the same current snapshot without subscribing. `chatId` is `null` and `characterIds` is empty when no chat is active. `characterId` is populated only when exactly one Character participates; group chats expose every participant through `characterIds` and leave `characterId` as `null`. `personaId` is populated only when `read_active_persona` is approved.
 
 Chat and Character IDs are always available and let an extension namespace its own private storage. Record fields require one or both optional permissions in the extension manifest:
 
@@ -111,7 +112,7 @@ Without a permission, its value remains `[]` or `null`. Marinara shows every req
 
 Character snapshots contain only `id`, `name`, `description`, `personality`, `scenario`, `firstMessage`, `exampleDialogue`, `creator`, `characterVersion`, `tags`, `backstory`, `appearance`, `aboutMe`, and `conversationDisplayName`. Persona snapshots contain only `id`, `name`, `description`, `personality`, `scenario`, `backstory`, `appearance`, `tags`, `aboutMe`, and `conversationDisplayName`. Text is bounded before it crosses the sandbox bridge.
 
-Marinara never sends messages, creator notes, system prompts, post-history instructions, comments, avatar paths, full Character or Persona libraries, undeclared fields, chat metadata, database handles, network access, or mutation operations. Context updates remain bound to the approved code hash and are delivered when the active chat or its Character list changes.
+Marinara never sends messages, creator notes, system prompts, post-history instructions, comments, avatar paths, full Character or Persona libraries, undeclared fields, chat metadata, database handles, network access, or mutation operations. Context updates remain bound to the approved code hash and are delivered when the active chat, its Character list, or its selected Persona changes.
 
 ### Legacy extension ports
 
