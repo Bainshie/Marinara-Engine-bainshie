@@ -6,6 +6,7 @@ This file is the release-notes source of truth for Marinara Engine. Reuse these 
 
 ### Added
 
+- Added the **Russian** documentation language pack, covering all 123 in-app guides (developer docs included) in natural Russian (the "вы" address of mainstream Russian software with gender-neutral phrasing, product names kept in Latin script and undeclined so search always matches, standard Cyrillic loanword declension), with English UI control names preserved for following instructions against the interface and Russian sidebar category labels in the docs viewer. Select it under **Settings → General → Documentation Language** via **Download & Replace** (#4281).
 - Added the **Polish** documentation language pack, covering all 123 in-app guides (developer docs included) in natural Polish (informal address with gender-neutral phrasing, product names kept undeclined so search always matches, standard Polish loanword declension), with English UI control names preserved for following instructions against the interface and Polish sidebar category labels in the docs viewer. Select it under **Settings → General → Documentation Language** via **Download & Replace** (#4235).
 
 - Added an optional radial-gauge layout for Persona and Character tracker stats, with editable icons, percentage readouts, subtle low-stat warnings, and improved featured-card spacing and thought placement.
@@ -32,6 +33,7 @@ This file is the release-notes source of truth for Marinara Engine. Reuse these 
 
 ### Fixed
 
+- Corrected small factual defects in the guides found during translation review: the **Text & Scale** chat-text section now says four controls (not three), the chat-backgrounds save-location list now says three settings (not two), a link to the Card Browser guide no longer uses the tab's pre-rename "Browser" title, and six occurrences across five quoted button labels (**Search models…**, **Creating backup…**, **Switching…**, **Checking…**, **Refreshing…**) now use the same ellipsis character the app actually renders, so copying them into the docs search matches the interface. Mirrored across every language pack on `docs-i18n` (#4282).
 - Made `CHAT_GENERATION_TIMEOUT_MS` govern the time-to-first-byte budget for background generation as well, so a slow local model no longer fails the Noodle timeline refresh with `HeadersTimeoutError` / "fetch failed" after a fixed five minutes. The default stays at five minutes; raise the variable to give slow local models more room (#4174).
 - Documented the **Documentation Language** control in the settings overview guide (in English, Spanish, and German), and made the **Fix documentation** toast report what actually happened — pack re-downloaded, guides reset to English, or leftovers cleaned up — instead of always claiming a reset (#4158).
 
