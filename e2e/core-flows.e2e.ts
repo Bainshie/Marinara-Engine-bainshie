@@ -7621,6 +7621,117 @@ test("Conversation Chat Settings can attach and retain custom agents", async ({ 
   }
 });
 
+test("Secret Plot run interval stays editable across repeated commits", async ({ page, request }, testInfo) => {
+  test.skip(!testInfo.project.name.includes("desktop"), "Secret Plot interval editing is covered on desktop.");
+
+  const chatResponse = await request.post("/api/chats", {
+    data: { name: "Secret Plot Interval Smoke", mode: "roleplay", characterIds: [] },
+  });
+  expect(chatResponse.ok()).toBeTruthy();
+  const chat = (await chatResponse.json()) as { id: string };
+  const metadataResponse = await request.patch(`/api/chats/${chat.id}/metadata`, {
+    data: {
+      enableAgents: true,
+      activeAgentIds: ["director"],
+      narrativeDirectorSecretPlotEnabled: true,
+      narrativeDirectorSecretPlotRunInterval: 8,
+    },
+  });
+  expect(metadataResponse.ok()).toBeTruthy();
+
+  const readRunInterval = async () => {
+    const response = await request.get(`/api/chats/${chat.id}`);
+    if (!response.ok()) return null;
+    const current = (await response.json()) as { metadata?: unknown };
+    const metadata =
+      typeof current.metadata === "string"
+        ? (JSON.parse(current.metadata) as Record<string, unknown>)
+        : ((current.metadata ?? {}) as Record<string, unknown>);
+    return metadata.narrativeDirectorSecretPlotRunInterval;
+  };
+
+  await page.route("**/api/capability-packages/agents", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify([
+        {
+          id: "director",
+          name: "Narrative Director",
+          description: "Creates one-shot story directions.",
+          author: "Pasta Devs",
+          phase: "pre_generation",
+          execution: "host",
+          enabledByDefault: false,
+          category: "writer",
+          modeAllowlist: ["roleplay"],
+          defaultPromptTemplate: "Return the next story direction.",
+        },
+      ]),
+    });
+  });
+  await page.route("**/api/capability-packages/installed", async (route) => {
+    await route.fulfill({ status: 200, contentType: "application/json", body: "[]" });
+  });
+  await page.route("**/api/agents", async (route) => {
+    await route.fulfill({ status: 200, contentType: "application/json", body: "[]" });
+  });
+  await page.addInitScript((chatId) => {
+    localStorage.setItem("marinara-active-chat-id", chatId);
+  }, chat.id);
+
+  try {
+    await page.goto("/");
+    await page.getByRole("button", { name: "Chat Settings" }).click();
+    const drawer = page.locator(".mari-chat-settings-drawer");
+    const agentsSection = drawer.locator('[role="button"][aria-expanded]').filter({ hasText: /^Agents/ });
+    if ((await agentsSection.getAttribute("aria-expanded")) !== "true") await agentsSection.click();
+
+    const directorCard = drawer.locator(`#chat-settings-agent-menu-${chat.id}-director`);
+    const intervalInput = directorCard.locator("label").filter({ hasText: "Run Interval" }).locator("input");
+    await expect(intervalInput).toHaveValue("8");
+
+    await intervalInput.fill("3");
+    await intervalInput.blur();
+    await expect.poll(readRunInterval).toBe(3);
+    await expect(intervalInput).toHaveValue("3");
+
+    await intervalInput.fill("11");
+    await intervalInput.press("Enter");
+    await expect.poll(readRunInterval).toBe(11);
+    await expect(intervalInput).toHaveValue("11");
+
+    await intervalInput.fill("0");
+    await intervalInput.blur();
+    await expect.poll(readRunInterval).toBe(1);
+    await expect(intervalInput).toHaveValue("1");
+
+    await intervalInput.fill("101");
+    await intervalInput.press("Enter");
+    await expect.poll(readRunInterval).toBe(100);
+    await expect(intervalInput).toHaveValue("100");
+
+    await page.reload();
+    await page.getByRole("button", { name: "Chat Settings" }).click();
+    const reloadedDrawer = page.locator(".mari-chat-settings-drawer");
+    const reloadedAgentsSection = reloadedDrawer
+      .locator('[role="button"][aria-expanded]')
+      .filter({ hasText: /^Agents/ });
+    if ((await reloadedAgentsSection.getAttribute("aria-expanded")) !== "true") {
+      await reloadedAgentsSection.click();
+    }
+    await expect(
+      reloadedDrawer
+        .locator(`#chat-settings-agent-menu-${chat.id}-director`)
+        .locator("label")
+        .filter({ hasText: "Run Interval" })
+        .locator("input"),
+    ).toHaveValue("100");
+  } finally {
+    await request.delete(`/api/chats/${chat.id}`, { timeout: 10_000 });
+  }
+});
+
 test("mobile Roleplay code formatting stays inside the message width", async ({ page, request }, testInfo) => {
   test.skip(!testInfo.project.name.includes("mobile"), "Mobile markdown containment regression.");
 
