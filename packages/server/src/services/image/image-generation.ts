@@ -2027,7 +2027,23 @@ function crc32(buf: Buffer): number {
  * Uses the central directory (at the end of the zip) to get reliable offset/size,
  * since local file headers may have zeroed-out sizes when a data descriptor is used.
  */
-function extractFirstFileFromZip(zip: Uint8Array): Uint8Array | null {
+export const MAX_NOVELAI_ZIP_OUTPUT_BYTES = 64 * 1024 * 1024;
+
+function readZipUint32Le(zip: Uint8Array, offset: number): number | null {
+  if (offset < 0 || offset + 4 > zip.length) return null;
+  return (
+    zip[offset]! +
+    zip[offset + 1]! * 0x100 +
+    zip[offset + 2]! * 0x1_0000 +
+    zip[offset + 3]! * 0x100_0000
+  );
+}
+
+export function extractFirstFileFromZip(
+  zip: Uint8Array,
+  maxOutputBytes = MAX_NOVELAI_ZIP_OUTPUT_BYTES,
+): Uint8Array | null {
+  if (!Number.isSafeInteger(maxOutputBytes) || maxOutputBytes < 1) return null;
   // Find End of Central Directory record (search backwards for signature 0x06054b50)
   let eocdOffset = -1;
   for (let i = zip.length - 22; i >= 0; i--) {
@@ -2040,25 +2056,25 @@ function extractFirstFileFromZip(zip: Uint8Array): Uint8Array | null {
   if (eocdOffset + 19 >= zip.length) return null;
 
   // Read first central directory entry offset
-  const cdOffset =
-    zip[eocdOffset + 16]! |
-    (zip[eocdOffset + 17]! << 8) |
-    (zip[eocdOffset + 18]! << 16) |
-    (zip[eocdOffset + 19]! << 24);
+  const cdOffset = readZipUint32Le(zip, eocdOffset + 16);
+  if (cdOffset === null) return null;
 
   // Parse central directory entry for the first file
   const cd = cdOffset;
-  if (cd + 45 >= zip.length) return null;
+  if (cd + 46 > zip.length) return null;
   if (zip[cd] !== 0x50 || zip[cd + 1] !== 0x4b || zip[cd + 2] !== 0x01 || zip[cd + 3] !== 0x02) return null;
 
   const method = zip[cd + 10]! | (zip[cd + 11]! << 8);
-  const compSize = zip[cd + 20]! | (zip[cd + 21]! << 8) | (zip[cd + 22]! << 16) | (zip[cd + 23]! << 24);
-  const uncompSize = zip[cd + 24]! | (zip[cd + 25]! << 8) | (zip[cd + 26]! << 16) | (zip[cd + 27]! << 24);
-  const localHeaderOffset = zip[cd + 42]! | (zip[cd + 43]! << 8) | (zip[cd + 44]! << 16) | (zip[cd + 45]! << 24);
+  const compSize = readZipUint32Le(zip, cd + 20);
+  const uncompSize = readZipUint32Le(zip, cd + 24);
+  const localHeaderOffset = readZipUint32Le(zip, cd + 42);
+  if (compSize === null || uncompSize === null || localHeaderOffset === null) return null;
+  if (uncompSize > maxOutputBytes) return null;
 
   // Skip past local file header to reach data
   const lh = localHeaderOffset;
-  if (lh + 29 >= zip.length) return null;
+  if (lh + 30 > zip.length) return null;
+  if (zip[lh] !== 0x50 || zip[lh + 1] !== 0x4b || zip[lh + 2] !== 0x03 || zip[lh + 3] !== 0x04) return null;
   const lhFnLen = zip[lh + 26]! | (zip[lh + 27]! << 8);
   const lhExtraLen = zip[lh + 28]! | (zip[lh + 29]! << 8);
   const dataStart = lh + 30 + lhFnLen + lhExtraLen;
@@ -2067,6 +2083,7 @@ function extractFirstFileFromZip(zip: Uint8Array): Uint8Array | null {
   if (dataStart + dataSize > zip.length) return null;
   if (method === 0) {
     // Stored (no compression)
+    if (compSize !== uncompSize) return null;
     return zip.slice(dataStart, dataStart + uncompSize);
   }
 
@@ -2074,7 +2091,11 @@ function extractFirstFileFromZip(zip: Uint8Array): Uint8Array | null {
     // Deflate
     const compressed = zip.slice(dataStart, dataStart + compSize);
     try {
-      return inflateRawSync(Buffer.from(compressed));
+      const inflated = inflateRawSync(Buffer.from(compressed), {
+        maxOutputLength: Math.max(1, Math.min(maxOutputBytes, uncompSize)),
+      });
+      if (inflated.length !== uncompSize || inflated.length > maxOutputBytes) return null;
+      return inflated;
     } catch {
       // Malformed or unsupported deflate data
       return null;
