@@ -403,9 +403,20 @@ export function PersonalExtensionInjector() {
       }
       Promise.resolve()
         .then(() => main(createFullPageExtensionApi(active)))
-        .then((cleanup) => {
-          if (typeof cleanup === "function") active.cleanupFns.push(() => cleanup());
-          if (activeFullPageExtensions.get(identity.id) !== active) return;
+        .then(async (cleanup) => {
+          const stale = activeFullPageExtensions.get(identity.id) !== active;
+          if (typeof cleanup === "function") {
+            if (stale) {
+              try {
+                await cleanup();
+              } catch (error) {
+                console.warn(`[Personal Extension ${active.extension.name}] late cleanup failed`, error);
+              }
+              return;
+            }
+            active.cleanupFns.push(() => cleanup());
+          }
+          if (stale) return;
           window.dispatchEvent(
             new CustomEvent("marinara-personal-extension-ready", {
               detail: { id: identity.id, contentHash: identity.contentHash },
@@ -538,6 +549,15 @@ export function PersonalExtensionInjector() {
         script.dataset.personalExtensionFullPage = extension.id;
         script.addEventListener("error", () => {
           console.error(`[Personal Extension ${extension.name}] full-page runtime could not be loaded`);
+          window.dispatchEvent(
+            new CustomEvent("marinara-personal-extension-error", {
+              detail: {
+                id: extension.id,
+                contentHash: extension.contentHash,
+                message: "Full-page extension runtime could not be loaded",
+              },
+            }),
+          );
         });
         const style = extension.styleUrl ? document.createElement("link") : null;
         if (style) {
