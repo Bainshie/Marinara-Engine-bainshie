@@ -24,6 +24,7 @@ import type { TFunction } from "i18next";
 import { toast } from "sonner";
 import {
   PERSONAL_EXTENSION_CAPABILITIES,
+  PERSONAL_EXTENSION_FULL_PAGE_CAPABILITY,
   type PersonalExtension,
 } from "@marinara-engine/shared";
 import { ApiError, getPrivilegedActionErrorMessage } from "../../../lib/api-client";
@@ -139,6 +140,12 @@ function riskMessage(extension: PersonalExtension, t: TFunction) {
   if (extension.runtime === "server") {
     return t("settings.personalExtensions.approval.server", { name: extension.name, hash: fingerprint });
   }
+  if (extension.capabilities.includes(PERSONAL_EXTENSION_FULL_PAGE_CAPABILITY)) {
+    return t("settings.personalExtensions.approval.fullPage", {
+      name: extension.name,
+      hash: fingerprint,
+    });
+  }
   const capabilityLabels = extension.capabilities.map((capability) =>
     t(`settings.personalExtensions.capabilities.${capability}.label`),
   );
@@ -250,11 +257,14 @@ function ExtensionSettings({ showIntro, mode }: { showIntro: boolean; mode: Exte
 
   const runExtension = useCallback(
     async (extension: PersonalExtension) => {
+      const fullPageAccess = extension.capabilities.includes(PERSONAL_EXTENSION_FULL_PAGE_CAPABILITY);
       const confirmed = await showConfirmDialog({
         title: t(
           extension.runtime === "server"
             ? "settings.personalExtensions.approval.titleServer"
-            : "settings.personalExtensions.approval.titleBrowser",
+            : fullPageAccess
+              ? "settings.personalExtensions.approval.titleFullPage"
+              : "settings.personalExtensions.approval.titleBrowser",
         ),
         message: riskMessage(extension, t),
         confirmLabel: t("settings.personalExtensions.approval.confirmLabel"),
@@ -262,7 +272,11 @@ function ExtensionSettings({ showIntro, mode }: { showIntro: boolean; mode: Exte
       });
       if (!confirmed) return;
       try {
-        await approveExtension.mutateAsync({ id: extension.id, contentHash: extension.contentHash });
+        await approveExtension.mutateAsync({
+          id: extension.id,
+          contentHash: extension.contentHash,
+          acknowledgeFullPageAccess: fullPageAccess,
+        });
         toast.success(localizeUi("ui.panels.extensionsettings.value1IsEnabledForHashValue2", { value1: extension.name, value2: shortHash(extension.contentHash) }));
       } catch (runError) {
         toast.error(getPrivilegedActionErrorMessage(runError,localizeUi("ui.panels.extensionsettings.failedToEnablePersonalExtension")));
@@ -434,6 +448,7 @@ function ExtensionSettings({ showIntro, mode }: { showIntro: boolean; mode: Exte
       ? (extensions.find((extension) => extension.id === editingExtension.id) ?? editingExtension)
       : null;
     const approvalChanged = Boolean(current && current.approvedHash !== current.contentHash);
+    const fullPageAccess = draft.capabilities.includes(PERSONAL_EXTENSION_FULL_PAGE_CAPABILITY);
     return (
       <div className="flex flex-col gap-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -554,7 +569,9 @@ function ExtensionSettings({ showIntro, mode }: { showIntro: boolean; mode: Exte
           <AlertTriangle size="0.875rem" className="mt-0.5 shrink-0 text-[var(--primary)]" />
           {draft.runtime === "server"
             ? t("settings.personalExtensions.sandbox.server")
-            : t("settings.personalExtensions.sandbox.browser")}
+            : fullPageAccess
+              ? t("settings.personalExtensions.sandbox.fullPage")
+              : t("settings.personalExtensions.sandbox.browser")}
         </div>
 
         {draft.runtime === "client" && (
@@ -567,12 +584,18 @@ function ExtensionSettings({ showIntro, mode }: { showIntro: boolean; mode: Exte
                 {t("settings.personalExtensions.capabilities.description")}
               </p>
             </div>
-            {PERSONAL_EXTENSION_CAPABILITIES.map((capability) => {
+            {PERSONAL_EXTENSION_CAPABILITIES.filter(
+              (capability) => isExternal || capability !== PERSONAL_EXTENSION_FULL_PAGE_CAPABILITY,
+            ).map((capability) => {
               const checked = draft.capabilities.includes(capability);
+              const isFullPageCapability = capability === PERSONAL_EXTENSION_FULL_PAGE_CAPABILITY;
               return (
                 <label
                   key={capability}
-                  className="flex min-h-11 items-start gap-2.5 rounded-md border border-[var(--border)] bg-[var(--background)]/45 px-3 py-2"
+                  className={cn(
+                    "flex min-h-11 items-start gap-2.5 rounded-md border bg-[var(--background)]/45 px-3 py-2",
+                    isFullPageCapability ? "border-[var(--destructive)]/40" : "border-[var(--border)]",
+                  )}
                 >
                   <input
                     type="checkbox"
@@ -582,9 +605,13 @@ function ExtensionSettings({ showIntro, mode }: { showIntro: boolean; mode: Exte
                       setDraft((value) => ({
                         ...value,
                         capabilities: event.target.checked
-                          ? PERSONAL_EXTENSION_CAPABILITIES.filter(
-                              (candidate) => candidate === capability || value.capabilities.includes(candidate),
-                            )
+                          ? isFullPageCapability
+                            ? [PERSONAL_EXTENSION_FULL_PAGE_CAPABILITY]
+                            : PERSONAL_EXTENSION_CAPABILITIES.filter(
+                                (candidate) =>
+                                  candidate !== PERSONAL_EXTENSION_FULL_PAGE_CAPABILITY &&
+                                  (candidate === capability || value.capabilities.includes(candidate)),
+                              )
                           : value.capabilities.filter((candidate) => candidate !== capability),
                       }))
                     }
@@ -592,7 +619,9 @@ function ExtensionSettings({ showIntro, mode }: { showIntro: boolean; mode: Exte
                   />
                   <span className="min-w-0">
                     <span className="block text-xs font-medium text-[var(--foreground)]">
-                      {t(`settings.personalExtensions.capabilities.${capability}.label`)}
+                      <span className={cn(isFullPageCapability && "text-[var(--destructive)]")}>
+                        {t(`settings.personalExtensions.capabilities.${capability}.label`)}
+                      </span>
                     </span>
                     <span className="mt-0.5 block text-[0.625rem] leading-relaxed text-[var(--muted-foreground)]">
                       {t(`settings.personalExtensions.capabilities.${capability}.description`)}
