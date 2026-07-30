@@ -799,6 +799,13 @@ async function buildRetryAgentContext(args: {
     !Array.isArray(lastAssistantExtra.lorebookScan)
       ? (lastAssistantExtra.lorebookScan as Record<string, unknown>)
       : {};
+  const activatedLorebookEntries = (
+    Array.isArray(rawLorebookScan.activatedEntries) ? rawLorebookScan.activatedEntries : []
+  ).flatMap((entry) => {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) return [];
+    const row = entry as Record<string, unknown>;
+    return typeof row.id === "string" && typeof row.content === "string" ? [{ id: row.id, content: row.content }] : [];
+  });
   const semanticLorebookEntries = (
     Array.isArray(rawLorebookScan.activatedEntries) ? rawLorebookScan.activatedEntries : []
   ).flatMap((entry) => {
@@ -896,6 +903,11 @@ async function buildRetryAgentContext(args: {
         : null,
     writableLorebookIds: null,
     chatSummary: resolveRoleplayChatSummary(chatMode, chatMeta),
+    authorNotes:
+      typeof chatMeta.authorNotes === "string" && chatMeta.authorNotes.trim()
+        ? resolveMacros(chatMeta.authorNotes, promptMacroContext, { trimResult: false }).trim()
+        : null,
+    activatedLorebookEntries,
     ...(customAgentVectorAccessEnabled
       ? {
           vectorContext: {
@@ -1469,6 +1481,7 @@ async function resolveRetryAgents(args: {
         id: cfg.id,
         type: cfg.type,
         name: cfg.name,
+        isCustomAgent: !BUILT_IN_AGENTS.some((agent) => agent.id === cfg.type),
         phase: normalizeAgentPhaseValue(cfg.phase),
         promptTemplate: selectedPromptTemplate,
         connectionId: effectiveConnectionId,
@@ -1542,6 +1555,7 @@ async function resolveRetryAgents(args: {
         id: `builtin:${builtIn.id}`,
         type: builtIn.id,
         name: builtIn.name,
+        isCustomAgent: false,
         phase: normalizeAgentPhaseValue(builtIn.phase),
         promptTemplate: selectedPromptTemplate,
         connectionId: builtInConnection.entry.connectionId,

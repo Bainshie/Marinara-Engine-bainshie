@@ -475,6 +475,16 @@ assert.deepEqual(
   },
   "Character PATCH parsing must not materialize omitted nested defaults",
 );
+assert.equal(
+  characterDataSchema.parse({ name: "  Trimmed Character  " }).name,
+  "Trimmed Character",
+  "Character validation must trim leading and trailing name whitespace",
+);
+assert.equal(
+  updateCharacterSchema.parse({ data: { name: "  Renamed Character  " } }).data.name,
+  "Renamed Character",
+  "Character rename validation must trim leading and trailing whitespace",
+);
 
 assert.equal(
   normalizeNativeCharacterData({}),
@@ -507,6 +517,15 @@ try {
   const db = await getDB();
   const characterStorage = createCharactersStorage(db);
   const noodleStorage = createNoodleStorage(db);
+  const storageTrimFixture = await characterStorage.create({
+    ...characterDataSchema.parse({ name: "Storage trim fixture" }),
+    name: "  Storage trim fixture  ",
+  });
+  assert.equal(
+    (JSON.parse(storageTrimFixture.data) as { name: string }).name,
+    "Storage trim fixture",
+    "Character storage must normalize names even when a caller bypasses route validation",
+  );
   const patchFixture = characterDataSchema.parse({
     name: "Nested patch fixture",
     extensions: {
@@ -3704,9 +3723,8 @@ try {
     "A live Conversation stream must apply depth-scoped regex as the newest message",
   );
 
-  const { normalizeVideoGenerationProfile } = await import(
-    "../../packages/shared/src/constants/video-generation-defaults.js"
-  );
+  const { normalizeVideoGenerationProfile } =
+    await import("../../packages/shared/src/constants/video-generation-defaults.js");
   assert.equal(
     normalizeVideoGenerationProfile({
       service: "comfyui",

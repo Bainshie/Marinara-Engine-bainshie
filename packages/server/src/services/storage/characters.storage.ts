@@ -44,6 +44,11 @@ function characterDataChanged(current: CharacterData, next: CharacterData) {
   return JSON.stringify(current) !== JSON.stringify(next);
 }
 
+function normalizeCharacterData(data: CharacterData): CharacterData {
+  const name = data.name.trim();
+  return name === data.name ? data : { ...data, name };
+}
+
 function personaSnapshotChanged(current: PersonaCardSnapshot, next: PersonaCardSnapshot) {
   return JSON.stringify(current) !== JSON.stringify(next);
 }
@@ -89,7 +94,7 @@ function mergeCharacterData(
     ) as unknown as CharacterData["character_book"];
   }
 
-  return merged;
+  return normalizeCharacterData(merged);
 }
 
 type CharacterRow = typeof characters.$inferSelect;
@@ -411,9 +416,10 @@ export function createCharactersStorage(db: DB) {
     ) {
       const id = newId();
       const timestamp = resolveTimestamps(timestampOverrides);
+      const normalizedData = normalizeCharacterData(data);
       await db.insert(characters).values({
         id,
-        data: JSON.stringify(data),
+        data: JSON.stringify(normalizedData),
         comment: comment ?? "",
         avatarPath: avatarPath ?? null,
         spriteFolderPath: null,
@@ -500,8 +506,9 @@ export function createCharactersStorage(db: DB) {
         const existing = rows[0];
         if (!existing) return false;
         const currentData = parseCharacterData(existing.data);
+        const restoredData = normalizeCharacterData(version.data);
         const alreadyMatches =
-          !characterDataChanged(currentData, version.data) &&
+          !characterDataChanged(currentData, restoredData) &&
           (existing.comment ?? "") === (version.comment ?? "") &&
           (existing.avatarPath ?? null) === (version.avatarPath ?? null);
         if (!alreadyMatches) {
@@ -520,7 +527,7 @@ export function createCharactersStorage(db: DB) {
         await tx
           .update(characters)
           .set({
-            data: JSON.stringify(version.data),
+            data: JSON.stringify(restoredData),
             comment: version.comment ?? "",
             avatarPath: version.avatarPath ?? null,
             updatedAt: now(),
@@ -557,7 +564,10 @@ export function createCharactersStorage(db: DB) {
         const rows = await tx.select().from(characters).where(eq(characters.id, characterId));
         const existing = rows[0];
         if (!existing) return false;
-        const data = { ...parseCharacterData(existing.data), character_version: "0.0" };
+        const data = normalizeCharacterData({
+          ...parseCharacterData(existing.data),
+          character_version: "0.0",
+        });
         await tx.delete(characterCardVersions).where(eq(characterCardVersions.characterId, characterId));
         await tx
           .update(characters)
@@ -598,7 +608,8 @@ export function createCharactersStorage(db: DB) {
       const newCharId = newId();
       const timestamp = now();
       const sourceData = JSON.parse(source.data) as Record<string, unknown>;
-      sourceData.name = `${sourceData.name || "Character"} (Copy)`;
+      const sourceName = typeof sourceData.name === "string" ? sourceData.name.trim() : "";
+      sourceData.name = `${sourceName || "Character"} (Copy)`;
       await db.insert(characters).values({
         id: newCharId,
         data: JSON.stringify(sourceData),

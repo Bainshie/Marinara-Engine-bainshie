@@ -7,7 +7,7 @@ This file is the release-notes source of truth for Marinara Engine. Reuse these 
 ### Added
 
 - Added per-agent context controls for custom agents, allowing each agent to request only the chat history, Character, Persona, lorebook, summary, Author's Note, tracker, and recalled-memory context it needs (#4305).
-- Rendered Markdown in read-only Character, Persona, and lorebook content views while keeping editing fields as plain source text (#4306).
+- Added Markdown preview toggles to Character, Persona, and lorebook text fields, and rendered formatted card text in library detail views (#4306).
 - Added the **Russian** documentation language pack, covering all 123 in-app guides (developer docs included) in natural Russian (the "вы" address of mainstream Russian software with gender-neutral phrasing, product names kept in Latin script and undeclined so search always matches, standard Cyrillic loanword declension), with English UI control names preserved for following instructions against the interface and Russian sidebar category labels in the docs viewer. Select it under **Settings → General → Documentation Language** via **Download & Replace** (#4281).
 - Added the **Polish** documentation language pack, covering all 123 in-app guides (developer docs included) in natural Polish (informal address with gender-neutral phrasing, product names kept undeclined so search always matches, standard Polish loanword declension), with English UI control names preserved for following instructions against the interface and Polish sidebar category labels in the docs viewer. Select it under **Settings → General → Documentation Language** via **Download & Replace** (#4235).
 

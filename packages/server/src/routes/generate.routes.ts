@@ -3383,6 +3383,11 @@ export async function generateRoutes(app: FastifyInstance) {
           memory: {},
           writableLorebookIds: null,
           chatSummary: activeChatSummary,
+          authorNotes: authorNotes || null,
+          activatedLorebookEntries: lorebookScanSnapshot.activatedEntries.map((entry) => ({
+            id: entry.id,
+            content: entry.content,
+          })),
           ...(customAgentVectorAccessEnabled
             ? {
                 vectorContext: {
@@ -8528,8 +8533,7 @@ export async function generateRoutes(app: FastifyInstance) {
                         styleProfileId,
                         imageDefaults,
                         generatedStyle: style,
-                        omitProfileStyleText:
-                          typeof agentContext.memory._illustratorImageStyleInstruction === "string",
+                        omitProfileStyleText: typeof agentContext.memory._illustratorImageStyleInstruction === "string",
                         omitProfileSubjectTags: true,
                       });
                       fullPrompt = compiledPrompt.prompt;
