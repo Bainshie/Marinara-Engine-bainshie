@@ -1,6 +1,6 @@
 # World Maps: Setup, Authoring, and Travel
 
-> **Current compatibility:** This guide matches World Maps **1.2.0** on
+> **Current compatibility:** This guide matches World Maps **1.2.1** on
 > Marinara Engine **2.3.5**. The package supports Roleplay and Game chats.
 
 World Maps adds persistent world state to Roleplay and Game. Instead of
@@ -27,7 +27,7 @@ Roleplay or Game chat.
 
 ## Feature overview
 
-World Maps 1.2.0 provides:
+World Maps 1.2.1 provides:
 
 - nested regions, settlements, places, buildings, floors, and rooms;
 - breadcrumbs and an authoritative current story location;
@@ -37,8 +37,8 @@ World Maps 1.2.0 provides:
 - account-wide map templates created manually, with AI, or by import;
 - AI-assisted map drafts and expansions grounded in setup or selected lore;
 - public location descriptions, private model memory, and exact-location lore;
-- one optional Gallery reference image for each location;
-- a separate Gallery background for each positioned child map;
+- one optional chat or Global Gallery reference image for each location;
+- a separate chat or Global Gallery background for each positioned child map;
 - reviewed batch generation for missing location artwork;
 - a global, variable-based Maps artwork prompt override;
 - location-reference support for Roleplay illustrations and Game Storyboards;
@@ -130,9 +130,14 @@ Each application creates an independent working copy. Later edits to the
 template do not change chats that already copied it, and chat edits do not
 change the template.
 
-Templates do not copy chat Gallery artwork. Image IDs belong to the source
-chat's Gallery and would not be portable. Add or generate the working chat's
-location references and map backgrounds after applying the template.
+Templates keep account-wide Global Gallery artwork references. When you use
+**Save as template** from a chat, Maps promotes referenced chat artwork to the
+Global Gallery and reuses an identical shared image when one already exists.
+Each chat that applies the template then points to the same shared artwork
+without creating another Gallery copy.
+
+Only the artwork is shared. Each applied map definition is still an independent
+working copy; editing the template does not update maps already added to chats.
 
 ## Understand the map editor
 
@@ -359,7 +364,7 @@ reuse the same Gallery image.
 
 | Artwork                      | Purpose                                                                                                                 | Sent to image generation?                                                                                 |
 | ---------------------------- | ----------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
-| **Location reference image** | Anchors the visual identity of the exact current place. Choose from Gallery or create with AI.                          | Yes, when **Use for Roleplay illustrations and Game storyboards** is enabled and the request is eligible. |
+| **Location reference image** | Anchors the visual identity of the exact current place. Choose chat or shared Global Gallery art, or create with AI.    | Yes, when **Use for Roleplay illustrations and Game storyboards** is enabled and the request is eligible. |
 | **Child map background**     | Appears behind movable child locations for a parent using Map presentation. Each map layer can have its own background. | No. It is display-only.                                                                                   |
 
 Character or persona references preserve who is present; the location reference
@@ -379,7 +384,8 @@ and character references can reduce how many automatic references fit.
 
 Select a location in the editor and open **Location reference image**.
 
-- **Choose from Gallery** assigns an existing reviewed image.
+- **Choose artwork** assigns a reviewed image from the current chat or the
+  shared Global Gallery. The picker labels each source.
 - **Create with AI** opens an editable establishing-image prompt and saves the
   result to Gallery before you decide whether to use it.
 - **Use for Roleplay illustrations and Game storyboards** controls whether the
@@ -501,9 +507,11 @@ child-map backgrounds in the same file. Disable it when you want a smaller,
 definition-only backup. Older `.hierarchical-map.json` files remain importable.
 
 Use **Import** to load a hierarchy into the working copy. Bundled artwork is
-restored to the destination chat's Gallery and its image links are remapped.
-Review the result and click **Save** to make it authoritative. Import does not
-save immediately.
+restored and its image links are remapped. Chat-owned artwork returns to the
+destination chat's Gallery. Shared artwork is reused from the Global Gallery
+when the same image already exists, or added there once when a template or
+shared reference needs it. Review the result and click **Save** to make it
+authoritative. Import does not save immediately.
 
 Once campaign history refers to a map, imported changes must retain existing
 location IDs. Add or update locations instead of replacing the hierarchy with
