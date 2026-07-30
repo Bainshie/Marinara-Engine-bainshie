@@ -75,6 +75,10 @@ assert.match(clientInjectorSource, /identity\.contentHash !== active\.contentHas
 assert.match(clientInjectorSource, /const stale = activeFullPageExtensions\.get\(identity\.id\) !== active/u);
 assert.match(clientInjectorSource, /late cleanup failed/u);
 assert.match(clientInjectorSource, /Full-page extension runtime could not be loaded/u);
+assert.match(
+  clientInjectorSource,
+  /activeFullPageExtensions\.get\(extension\.id\)\?\.script === script[\s\S]*cleanupExtension\(extension\.id\)/u,
+);
 assert.match(clientInjectorSource, /registerPersonalExtensionContribution/u);
 assert.match(clientInjectorSource, /removePersonalExtensionContributions/u);
 assert.match(clientInjectorSource, /message\.contentHash === active\.contentHash/u);

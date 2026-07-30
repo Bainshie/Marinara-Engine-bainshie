@@ -549,6 +549,9 @@ export function PersonalExtensionInjector() {
         script.dataset.personalExtensionFullPage = extension.id;
         script.addEventListener("error", () => {
           console.error(`[Personal Extension ${extension.name}] full-page runtime could not be loaded`);
+          if (activeFullPageExtensions.get(extension.id)?.script === script) {
+            void cleanupExtension(extension.id);
+          }
           window.dispatchEvent(
             new CustomEvent("marinara-personal-extension-error", {
               detail: {
