@@ -7,7 +7,7 @@ import AdmZip from "adm-zip";
 import type { Chat, Message } from "../../packages/shared/src/types/chat.js";
 import playwrightConfig from "../../playwright.config.js";
 import { resolveDevSharedBuildScript } from "../dev-shared-build.mjs";
-import { characterCardVersions, characters } from "../../packages/server/src/db/schema/index.js";
+import { characterCardVersions, characters, chats, messages } from "../../packages/server/src/db/schema/index.js";
 import { eq } from "../../packages/server/src/db/file-query.js";
 
 const REPOSITORY_ROOT = fileURLToPath(new URL("../../", import.meta.url));
@@ -731,6 +731,63 @@ try {
   );
 
   const mariDb = new MariDbService(db);
+  const rangedChatId = "professor-mari-range-regression";
+  const rangedChatTimestamp = "2026-07-30T12:00:00.000Z";
+  await db.insert(chats).values({
+    id: rangedChatId,
+    name: "Professor Mari range regression",
+    mode: "roleplay",
+    characterIds: "[]",
+    metadata: "{}",
+    sortOrder: 0,
+    createdAt: rangedChatTimestamp,
+    updatedAt: rangedChatTimestamp,
+  });
+  for (let index = 1; index <= 6; index += 1) {
+    await db.insert(messages).values({
+      id: `${rangedChatId}-${index}`,
+      chatId: rangedChatId,
+      role: index % 2 === 0 ? "assistant" : "user",
+      content: `Message ${index}`,
+      activeSwipeIndex: 0,
+      extra: "{}",
+      createdAt: `2026-07-30T12:00:0${index}.000Z`,
+    });
+  }
+  const lastMessagesResult = await mariDb.executeCli({
+    argv: ["chats", "messages", rangedChatId, "--last", "3"],
+  });
+  assert.deepEqual(
+    (lastMessagesResult.output as Array<{ postNumber: number; content: string }>).map(({ postNumber, content }) => ({
+      postNumber,
+      content,
+    })),
+    [
+      { postNumber: 4, content: "Message 4" },
+      { postNumber: 5, content: "Message 5" },
+      { postNumber: 6, content: "Message 6" },
+    ],
+    "Professor Mari must be able to retrieve exactly the last requested messages",
+  );
+  const afterPostResult = await mariDb.executeCli({
+    argv: ["chats", "messages", rangedChatId, "--after-post", "2", "--limit", "2", "--offset", "1"],
+  });
+  assert.deepEqual(
+    (afterPostResult.output as Array<{ postNumber: number; content: string }>).map(({ postNumber, content }) => ({
+      postNumber,
+      content,
+    })),
+    [
+      { postNumber: 4, content: "Message 4" },
+      { postNumber: 5, content: "Message 5" },
+    ],
+    "Professor Mari must page inside the requested post-number range",
+  );
+  const invalidRangeResult = await mariDb.executeCli({
+    argv: ["chats", "messages", rangedChatId, "--last", "201"],
+  });
+  assert.equal(invalidRangeResult.ok, false);
+  assert.match(String(invalidRangeResult.error), /--last must be an integer from 1 to 200/u);
   const customToolsStore = createCustomToolsStorage(db);
   const agentsStore = createAgentsStorage(db);
   const customTool = await customToolsStore.create({

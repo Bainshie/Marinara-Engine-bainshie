@@ -43,6 +43,7 @@ This file is the release-notes source of truth for Marinara Engine. Reuse these 
 
 ### Fixed
 
+- Made Professor Mari honor requests for only the last N chat messages or messages after a displayed post number, with range-aware pagination that no longer broadens those requests into whole-chat reads (#4308).
 - Trimmed leading and trailing whitespace from Character names when cards are saved or imported (#4303).
 - Made Memory Recall discard superseded message revisions and inject only the current edited message text (#4304).
 - Made the right-side Character and Persona searches use the same creator, version, notes, profile fields, tags, and Unicode-safe matching as their full libraries, so author searches no longer discard valid results (#4299).
