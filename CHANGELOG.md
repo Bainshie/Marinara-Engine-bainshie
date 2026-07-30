@@ -53,6 +53,10 @@ This file is the release-notes source of truth for Marinara Engine. Reuse these 
 - Routed Krea models through OpenRouter's dedicated Images API while retaining image-only modality detection for every current `krea/` model (#4061).
 - Rewrote incomplete legacy UI-settings blobs with newly synced preferences, preserving an explicitly disabled Game Text Effects setting across staging updates (#4062).
 
+### Security
+
+- Imported webhook functions now arrive disabled with hidden chat context access removed. The Functions panel shows the destination origin and requested privileges so users can inspect the full configuration before deliberately enabling it.
+
 ## [2.3.5]
 
 ### Added
