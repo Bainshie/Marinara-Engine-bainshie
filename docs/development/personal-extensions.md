@@ -19,6 +19,7 @@ Keep these properties true:
 11. There is no URL installer, remote catalog, or automatic updater.
 12. Host contributions are plain validated descriptors. Extension markup, styles, URLs, components, and callbacks never cross into Marinara's React tree.
 13. Contribution registration, activation, events, updates, and removal remain bound to the enabled extension's exact approved content hash.
+14. Browser context snapshots contain only the active chat ID and Character IDs. They never contain messages, cards, metadata, Persona IDs, or application access, and every update remains bound to the approved content hash.
 
 The gates are enforced in routes and runtime services. Hiding controls is not a security boundary. A manually added, restored, legacy, or out-of-band external record must remain invisible and unexecutable while either gate is closed.
 
@@ -57,8 +58,23 @@ The worker receives only:
 - private extension storage brokered by the parent;
 - managed timers;
 - cleanup registration;
+- read-only active chat and Character identifiers through `marinara.context`;
 - a constrained iframe window through `marinara.ui.showWindow(...)`;
 - trusted host contribution slots through `marinara.ui.registerContribution(...)`.
+
+Browser Extension API version 5 adds `marinara.context.get()` and `marinara.context.subscribe(listener)`. The immutable snapshot has this shape:
+
+```ts
+{
+  chatId: string | null;
+  characterId: string | null;
+  characterIds: readonly string[];
+}
+```
+
+The client derives the snapshot from `useChatStore` and posts it only when the active chat or its Character list changes. IDs are non-empty strings capped at 256 characters; the Character list is deduplicated and capped at 256 entries. The iframe accepts a context update only from its parent and only when its `contentHash` matches the exact extension revision, then the Worker normalizes and freezes the payload again. Extension startup waits for the first host snapshot, with a one-second null-context fallback so a failed bridge cannot stall the Worker indefinitely.
+
+`characterId` is a single-chat convenience and remains `null` for group chats; `characterIds` contains every active participant. With no active chat, the snapshot is `{ chatId: null, characterId: null, characterIds: [] }`. The capability carries identifiers only and grants no record reads or writes. Extensions can safely use those identifiers as keys in their own private storage.
 
 `marinara.ui.showWindow({ title, elements, onEvent, onClose })` returns a handle with `update({ title?, elements? })` and `close()`. The worker only sends descriptors, and the trusted iframe bootstrap builds every element with DOM APIs and `textContent` (never `innerHTML`). The host reveals the otherwise-hidden sandbox iframe only while a window is open and hides it again on close.
 
@@ -78,7 +94,7 @@ There is no DOM helper, Marinara API fetch, parent event access, or arbitrary ne
 
 The contribution protocol is intended to support real settings-heavy tools and multi-step workflows, not only decorative buttons. A complex extension can progressively replace a panel's elements and keep its own state in private extension storage.
 
-Existing legacy packages that inject buttons with host selectors, traverse React internals, write arbitrary overlays, or call same-origin `/api` routes do not run unchanged in the safe runtime. Port them by replacing their interface with contribution descriptors. Functionality that needs Marinara application data or scene-level visual effects must use a separate, narrowly scoped, user-approved broker capability when one exists; never restore raw DOM or unrestricted API authority as a compatibility shortcut.
+Existing legacy packages that inject buttons with host selectors, traverse React internals, write arbitrary overlays, or call same-origin `/api` routes do not run unchanged in the safe runtime. Port them by replacing their interface with contribution descriptors. Chat- or Character-keyed private state can use `marinara.context`; functionality that needs Marinara record contents or scene-level visual effects must use a separate, narrowly scoped broker capability when one exists. Never restore raw DOM or unrestricted API authority as a compatibility shortcut.
 
 ## Server runtime
 
@@ -102,4 +118,4 @@ pnpm regression:professor-mari-shell-sandbox
 pnpm smoke:ui
 ```
 
-The security regression must prove the two-step gate, exact-hash invalidation, opaque-origin worker shape, host contribution validation and cleanup, removal of same-origin injection, environment stripping, filesystem/network denial, private storage, and fail-closed sandbox availability.
+The security regression must prove the two-step gate, exact-hash invalidation, opaque-origin worker shape, bounded and hash-bound context snapshots, host contribution validation and cleanup, removal of same-origin injection, environment stripping, filesystem/network denial, private storage, and fail-closed sandbox availability.

@@ -1,12 +1,22 @@
 import { useEffect } from "react";
-import { CSRF_HEADER, CSRF_HEADER_VALUE, type PersonalClientExtensionRuntime } from "@marinara-engine/shared";
+import {
+  CSRF_HEADER,
+  CSRF_HEADER_VALUE,
+  type PersonalClientExtensionRuntime,
+  type PersonalExtensionContextSnapshot,
+} from "@marinara-engine/shared";
 import { usePersonalExtensionRuntime } from "../../hooks/use-personal-extensions";
+import {
+  createPersonalExtensionContextSnapshot,
+  personalExtensionContextKey,
+} from "../../lib/personal-extension-context";
 import {
   registerPersonalExtensionContribution,
   removePersonalExtensionContribution,
   removePersonalExtensionContributions,
   setPersonalExtensionContributionDispatcher,
 } from "../../lib/personal-extension-contributions";
+import { useChatStore } from "../../stores/chat.store";
 
 type ActiveClientExtension = {
   contentHash: string;
@@ -95,6 +105,24 @@ function postSandboxTheme(iframe: HTMLIFrameElement) {
         border: read("--border", "rgba(127,127,127,0.35)"),
         muted: read("--secondary", "rgba(127,127,127,0.15)"),
       },
+    },
+    "*",
+  );
+}
+
+function readPersonalExtensionContext(): PersonalExtensionContextSnapshot {
+  const { activeChatId, activeChat } = useChatStore.getState();
+  const characterIds = activeChatId && activeChat?.id === activeChatId ? activeChat.characterIds : [];
+  return createPersonalExtensionContextSnapshot(activeChatId, characterIds);
+}
+
+function postSandboxContext(active: ActiveClientExtension, context = readPersonalExtensionContext()) {
+  active.iframe.contentWindow?.postMessage(
+    {
+      channel: "marinara-personal-extension",
+      type: "context-update",
+      contentHash: active.contentHash,
+      context,
     },
     "*",
   );
@@ -258,6 +286,17 @@ export function PersonalExtensionInjector() {
   }, []);
 
   useEffect(() => {
+    let previousContextKey = personalExtensionContextKey(readPersonalExtensionContext());
+    return useChatStore.subscribe(() => {
+      const context = readPersonalExtensionContext();
+      const nextContextKey = personalExtensionContextKey(context);
+      if (nextContextKey === previousContextKey) return;
+      previousContextKey = nextContextKey;
+      for (const active of activeExtensions.values()) postSandboxContext(active, context);
+    });
+  }, []);
+
+  useEffect(() => {
     const expected = new Map(extensions.map((extension) => [extension.id, extension]));
     for (const [id, active] of activeExtensions) {
       const next = expected.get(id);
@@ -275,12 +314,14 @@ export function PersonalExtensionInjector() {
       iframe.src = extension.sandboxUrl;
       iframe.dataset.personalExtensionSandbox = extension.id;
       iframe.referrerPolicy = "no-referrer";
-      document.body.appendChild(iframe);
-      activeExtensions.set(extension.id, {
+      const nextActive = {
         contentHash: extension.contentHash,
         extension,
         iframe,
-      });
+      };
+      activeExtensions.set(extension.id, nextActive);
+      iframe.addEventListener("load", () => postSandboxContext(nextActive), { once: true });
+      document.body.appendChild(iframe);
       setPersonalExtensionContributionDispatcher(extension, (message) => {
         iframe.contentWindow?.postMessage({ channel: "marinara-personal-extension", ...message }, "*");
       });

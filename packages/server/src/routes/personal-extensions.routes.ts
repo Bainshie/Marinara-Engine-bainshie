@@ -60,6 +60,48 @@ export function browserWorkerSource(extension: PersonalExtension) {
   const cleanupFns = [];
   let requestId = 0;
   const pending = new Map();
+  const MAX_CONTEXT_ID_LENGTH = 256;
+  const MAX_CONTEXT_CHARACTER_IDS = 256;
+  const contextListeners = new Set();
+  const freezeContext = (chatId, characterIds) => Object.freeze({
+    chatId,
+    characterId: characterIds.length === 1 ? characterIds[0] : null,
+    characterIds: Object.freeze(characterIds),
+  });
+  let currentContext = freezeContext(null, []);
+  let resolveInitialContext;
+  let initialContextResolved = false;
+  const initialContextReady = new Promise((resolve) => { resolveInitialContext = resolve; });
+  const markInitialContextReady = () => {
+    if (initialContextResolved) return;
+    initialContextResolved = true;
+    resolveInitialContext();
+  };
+  const initialContextTimer = self.setTimeout(markInitialContextReady, 1_000);
+  const normalizeContextId = (value) => (
+    typeof value === "string" && value.trim() && value.length <= MAX_CONTEXT_ID_LENGTH ? value : null
+  );
+  const normalizeContext = (value) => {
+    const chatId = normalizeContextId(value?.chatId);
+    const characterIds = [];
+    const seen = new Set();
+    if (chatId && Array.isArray(value?.characterIds)) {
+      for (const candidate of value.characterIds) {
+        const id = normalizeContextId(candidate);
+        if (!id || seen.has(id)) continue;
+        seen.add(id);
+        characterIds.push(id);
+        if (characterIds.length >= MAX_CONTEXT_CHARACTER_IDS) break;
+      }
+    }
+    return freezeContext(chatId, characterIds);
+  };
+  const contextKey = (value) => JSON.stringify([value.chatId, ...value.characterIds]);
+  const notifyContextListener = (listener) => {
+    Promise.resolve()
+      .then(() => listener(currentContext))
+      .catch((error) => log("error", [error instanceof Error ? error.message : String(error)]));
+  };
   for (const name of ["fetch", "WebSocket", "EventSource", "XMLHttpRequest", "Worker", "SharedWorker", "WebTransport", "importScripts"]) {
     try { Object.defineProperty(self, name, { value: undefined, writable: false, configurable: false }); } catch {}
   }
@@ -327,7 +369,7 @@ export function browserWorkerSource(extension: PersonalExtension) {
   };
   const marinara = Object.freeze({
     runtime: "client",
-    version: 4,
+    version: 5,
     extensionId: extension.id,
     extensionName: extension.name,
     log: Object.freeze({
@@ -340,6 +382,15 @@ export function browserWorkerSource(extension: PersonalExtension) {
       get: () => storage("get"),
       patch: (patch) => storage("patch", patch),
       delete: () => storage("delete"),
+    }),
+    context: Object.freeze({
+      get: () => currentContext,
+      subscribe: (listener) => {
+        if (typeof listener !== "function") throw new Error("context.subscribe requires a function");
+        contextListeners.add(listener);
+        notifyContextListener(listener);
+        return () => contextListeners.delete(listener);
+      },
     }),
     ui: Object.freeze({
       showWindow,
@@ -356,6 +407,16 @@ export function browserWorkerSource(extension: PersonalExtension) {
   });
   self.addEventListener("message", (event) => {
     const message = event.data;
+    if (message?.type === "context-update") {
+      const nextContext = normalizeContext(message.context);
+      const changed = contextKey(nextContext) !== contextKey(currentContext);
+      currentContext = nextContext;
+      self.clearTimeout(initialContextTimer);
+      markInitialContextReady();
+      if (changed) {
+        for (const listener of contextListeners) notifyContextListener(listener);
+      }
+    }
     if (message?.type === "storage-result") {
       const request = pending.get(message.requestId);
       if (!request) return;
@@ -412,6 +473,7 @@ export function browserWorkerSource(extension: PersonalExtension) {
       uiContributions.clear();
       uiContributionActivateHandlers.clear();
       uiContributionEventHandlers.clear();
+      contextListeners.clear();
       for (const cleanup of [...cleanupFns].reverse()) {
         try { cleanup(); } catch {}
       }
@@ -423,6 +485,7 @@ export function browserWorkerSource(extension: PersonalExtension) {
   self.setInterval(() => send({ type: "heartbeat" }), 1_000);
   Promise.resolve((async () => {
     "use strict";
+    await initialContextReady;
 ${extension.js ?? ""}
   })()).then(
     () => send({ type: "ready", contentHash: extension.contentHash }),
@@ -736,6 +799,14 @@ export function sandboxDocument(extension: PersonalExtension, nonce: string) {
     if (event.source !== window.parent || event.data?.channel !== "marinara-personal-extension") return;
     const message = event.data;
     if (message.type === "storage-result") worker.postMessage(message);
+    if (
+      message.type === "context-update" &&
+      message.contentHash === extension.contentHash &&
+      message.context &&
+      typeof message.context === "object"
+    ) {
+      worker.postMessage({ type: "context-update", context: message.context });
+    }
     if (message.type === "ui-contribution-activate" || message.type === "ui-contribution-event") {
       worker.postMessage(message);
     }

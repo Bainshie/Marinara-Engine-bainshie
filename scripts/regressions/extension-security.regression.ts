@@ -20,6 +20,7 @@ import { createAppSettingsStorage } from "../../packages/server/src/services/sto
 
 const readSource = (relative: string) => readFileSync(new URL(relative, import.meta.url), "utf8");
 const clientInjectorSource = readSource("../../packages/client/src/components/layout/PersonalExtensionInjector.tsx");
+const clientContextSource = readSource("../../packages/client/src/lib/personal-extension-context.ts");
 const clientContributionSource = readSource("../../packages/client/src/lib/personal-extension-contributions.ts");
 const clientContributionPanelSource = readSource(
   "../../packages/client/src/components/panels/PersonalExtensionPanel.tsx",
@@ -41,6 +42,10 @@ assert.match(
   localizationSource,
   /Ask Professor Mari to create an extension for you\. Nothing runs until you enable it and approve the exact code hash\./u,
 );
+assert.match(
+  localizationSource,
+  /read-only active chat and Character IDs\. It cannot read messages, cards, or chat metadata\./u,
+);
 assert.match(clientSettingsSource, /mode="personal"/u);
 assert.match(clientSettingsSource, /mode="external"/u);
 assert.match(clientSettingsSource, /isExternal && \(/u);
@@ -58,6 +63,11 @@ assert.doesNotMatch(clientInjectorSource, /document\.head|createElement\("script
 assert.match(clientInjectorSource, /registerPersonalExtensionContribution/u);
 assert.match(clientInjectorSource, /removePersonalExtensionContributions/u);
 assert.match(clientInjectorSource, /message\.contentHash === active\.contentHash/u);
+assert.match(clientInjectorSource, /useChatStore\.subscribe/u);
+assert.match(clientInjectorSource, /type:\s*"context-update"/u);
+assert.match(clientInjectorSource, /contentHash:\s*active\.contentHash/u);
+assert.doesNotMatch(clientInjectorSource, /activeChat\.messages|activeChat\.personaId/u);
+assert.doesNotMatch(clientContextSource, /\bmessages?\b|\bpersona\b|\bcard\b|\bfetch\b/iu);
 assert.match(clientContributionSource, /PERSONAL_EXTENSION_UI_LIMITS/u);
 assert.doesNotMatch(clientContributionPanelSource, /dangerouslySetInnerHTML|innerHTML/u);
 assert.match(clientContributionPanelSource, /aria-label=\{element\.label \? undefined :/u);
@@ -365,6 +375,10 @@ try {
     updatedAt: "",
   };
   const worker = browserWorkerSource(uiExtension);
+  assert.match(worker, /version:\s*5/u, "Worker must advertise context-capable API version 5");
+  assert.match(worker, /context:\s*Object\.freeze\(\{\s*get:/u);
+  assert.match(worker, /"context-update"/u, "Worker must receive bounded context snapshots");
+  assert.match(worker, /await initialContextReady/u, "Extension startup must wait for its initial context snapshot");
   assert.match(worker, /ui:\s*Object\.freeze\(\{\s*showWindow,\s*registerContribution/u);
   assert.match(worker, /"ui-show"/u, "Worker must send a ui-show descriptor message");
   assert.match(worker, /"ui-event"/u, "Worker must receive button events via ui-event");
@@ -377,6 +391,12 @@ try {
   assert.match(doc, /textContent/u, "Sandbox bootstrap must render window text via textContent");
   assert.doesNotMatch(doc, /innerHTML/u, "Sandbox bootstrap must never assign innerHTML");
   assert.match(doc, /ui-contribution-register/u, "Sandbox must forward declarative contributions to the host");
+  assert.match(doc, /message\.type === "context-update"/u, "Sandbox must forward host context to the worker");
+  assert.match(
+    doc,
+    /message\.contentHash === extension\.contentHash/u,
+    "Sandbox must bind context updates to the approved extension hash",
+  );
   assert.match(doc, /contentHash:\s*extension\.contentHash/u, "Sandbox messages must carry the exact content hash");
   assert.match(doc, /ui-window-open/u, "Sandbox reveals the iframe only through the ui-window-open signal");
   assert.match(doc, /ui-resize/u, "Sandbox reports its content size so the host can fit the floating panel");
@@ -389,6 +409,36 @@ try {
     doc.includes("new Worker(") && doc.includes("marinara.ui.showWindow"),
     "Extension JS must run in the worker embedded by the bootstrap, not in the document",
   );
+}
+
+{
+  const { createPersonalExtensionContextSnapshot } =
+    await import("../../packages/client/src/lib/personal-extension-context.js");
+  const single = createPersonalExtensionContextSnapshot("chat-1", ["character-1", "character-1", "", 42]);
+  assert.deepEqual(single, {
+    chatId: "chat-1",
+    characterId: "character-1",
+    characterIds: ["character-1"],
+  });
+  assert.equal(Object.isFrozen(single), true);
+  assert.equal(Object.isFrozen(single.characterIds), true);
+
+  const group = createPersonalExtensionContextSnapshot("chat-2", ["character-1", "character-2"]);
+  assert.equal(group.characterId, null);
+  assert.deepEqual(group.characterIds, ["character-1", "character-2"]);
+
+  assert.deepEqual(createPersonalExtensionContextSnapshot(null, ["stale-character"]), {
+    chatId: null,
+    characterId: null,
+    characterIds: [],
+  });
+
+  const bounded = createPersonalExtensionContextSnapshot("chat-3", [
+    "x".repeat(257),
+    ...Array.from({ length: 300 }, (_, index) => `character-${index}`),
+  ]);
+  assert.equal(bounded.characterIds.length, 256);
+  assert.equal(bounded.characterIds.includes("x".repeat(257)), false);
 }
 
 {

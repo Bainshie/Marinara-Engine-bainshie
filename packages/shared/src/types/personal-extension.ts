@@ -102,6 +102,21 @@ export interface PersonalExtensionHostContribution extends PersonalExtensionCont
   contentHash: string;
 }
 
+/**
+ * Opaque identifiers for the chat currently displayed by the client.
+ *
+ * Browser Personal Extensions may use these values to namespace their own
+ * private storage. The snapshot deliberately contains no messages, card data,
+ * persona data, or authority to read or mutate Marinara records.
+ */
+export interface PersonalExtensionContextSnapshot {
+  chatId: string | null;
+  /** Present only when the active chat has exactly one Character. */
+  characterId: string | null;
+  /** All Characters participating in the active chat, including group chats. */
+  characterIds: readonly string[];
+}
+
 export interface PersonalExtensionPolicy {
   externalExtensionsEnvEnabled: boolean;
   externalExtensionsEnabled: boolean;

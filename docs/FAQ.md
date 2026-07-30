@@ -140,7 +140,7 @@ leaves provider secrets blank, so re-enter keys after importing. For the full gu
 
 By default, only Professor Mari can create a Personal Extension draft for you. It starts disabled, and you must inspect its code and approve the exact SHA-256 hash before it runs.
 
-Browser code runs in a dedicated Worker inside an opaque-origin iframe. Server code runs in a separate OS-sandboxed process on supported macOS and Linux hosts. Both runtimes receive only narrow logging, private-storage, timer, and cleanup capabilities.
+Browser code runs in a dedicated Worker inside an opaque-origin iframe. In addition to narrow logging, private-storage, timer, cleanup, and declarative UI capabilities, it can read only the opaque IDs of the currently active chat and Characters so extensions such as Notepad can keep chat-specific state. It cannot read messages, cards, metadata, or Marinara APIs. Server code runs in a separate OS-sandboxed process on supported macOS and Linux hosts and does not receive browser chat context.
 
 Third-party imports are hidden by default. The host operator must set `ENABLE_EXTERNAL_EXTENSIONS=true` in `.env`, then the user must accept the warning under **Settings → Advanced → Danger Zone**. Until both gates are open, external records—including manually stored and profile-imported records—do not appear, cannot be approved, and cannot execute. See [Personal Extensions](extending/personal-extensions.md).
 
