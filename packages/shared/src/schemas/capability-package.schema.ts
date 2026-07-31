@@ -202,7 +202,17 @@ export const packagedAgentDefinitionSchema = z
     runtimeDisabled: z.boolean().optional(),
     /** @deprecated Legacy package compatibility; author resultType in defaultSettings instead. */
     resultType: agentResultTypeSchema.optional(),
-    modeAllowlist: z.array(z.enum(["conversation", "roleplay", "game"])).optional(),
+    // Installed packages on disk may still list retired modes (e.g. "visual_novel").
+    // Drop them instead of failing the whole manifest parse, which used to crash startup.
+    modeAllowlist: z
+      .preprocess(
+        (value) =>
+          Array.isArray(value)
+            ? value.filter((mode) => mode === "conversation" || mode === "roleplay" || mode === "game")
+            : value,
+        z.array(z.enum(["conversation", "roleplay", "game"])),
+      )
+      .optional(),
     defaultTools: z.array(z.string()).optional(),
     defaultSettings: z.record(z.string(), z.unknown()).optional(),
     promptTemplates: z.array(packagedAgentPromptTemplateSchema).optional(),
