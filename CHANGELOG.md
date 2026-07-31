@@ -52,6 +52,7 @@ This file is the release-notes source of truth for Marinara Engine. Reuse these 
 
 ### Fixed
 
+- Isolated desktop and mobile Playwright servers and fixture data, made help tooltips non-blocking, kept focused mobile composers open during history scrolling, and aligned appearance and Tracker smoke checks with live application state so the complete browser sweep no longer fails from cross-project mutations or stale assertions (#4343).
 - Built the shared workspace before `pnpm dev:server` and documented the rebuild-and-restart boundary for shared source changes (#4327).
 - Removed Windows child-process calls that combined argument arrays with `shell: true`, eliminating Node.js DEP0190 warnings from startup, updates, native dependency repair, and client builds (#4332).
 - Stopped generic OpenAI-compatible connections from inheriting `reasoning_effort` for unknown models, added an explicit **Off** option that sends `none`, and made the Advanced Parameters toggle omit reasoning fields entirely (#4335).
