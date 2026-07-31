@@ -1639,6 +1639,7 @@ const GAME_ASSET_CATEGORIES = [
 
 const VIDEO_PROMPT_TEMPLATE_KEYS = [
   "game.video",
+  "roleplay.galleryVideoDirector",
   "conversation.callVideo.idle",
   "conversation.callVideo.talking",
   "conversation.callVideo.laughing",
