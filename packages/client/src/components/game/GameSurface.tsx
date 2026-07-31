@@ -6398,7 +6398,7 @@ function GameSurfaceComponent({
   }, [activeChatId, updatePendingSharedWorldSetupApply]);
   const activePendingSharedWorldSetupApply =
     pendingSharedWorldSetupApply?.chatId === activeChatId ? pendingSharedWorldSetupApply : null;
-  const pendingSetupMapPlanRef = useRef<
+  type PostSetupMapPlan =
     | { mode: "manual" }
     | { mode: "template"; selection: unknown }
     | { mode: "shared-world"; selection: unknown }
@@ -6409,9 +6409,20 @@ function GameSurfaceComponent({
         sourceLorebookIds: string[];
         instructions?: string;
         connectionId?: string;
-      }
-    | null
-  >(null);
+      };
+  const pendingSetupMapPlanRef = useRef<{ chatId: string; plan: PostSetupMapPlan } | null>(null);
+  const clearPendingSetupMapPlan = useCallback((chatId: string) => {
+    const pending = pendingSetupMapPlanRef.current;
+    if (activeChatIdRef.current !== chatId || pending?.chatId !== chatId) return false;
+    pendingSetupMapPlanRef.current = null;
+    return true;
+  }, []);
+  useEffect(() => {
+    const pending = pendingSetupMapPlanRef.current;
+    if (pending && pending.chatId !== activeChatId) {
+      pendingSetupMapPlanRef.current = null;
+    }
+  }, [activeChatId]);
   createGameResetRef.current = createGame.reset;
   gameSetupResetRef.current = gameSetup.reset;
   startGameResetRef.current = startGame.reset;
@@ -6426,12 +6437,10 @@ function GameSurfaceComponent({
 
   const completePostSetupMapPlan = useCallback(
     async (chatId: string) => {
-      const plan = pendingSetupMapPlanRef.current;
+      const pending = pendingSetupMapPlanRef.current;
+      if (!pending || pending.chatId !== chatId || activeChatIdRef.current !== chatId) return;
       pendingSetupMapPlanRef.current = null;
-      if (!plan) {
-        useGameModeStore.getState().setSetupActive(false);
-        return;
-      }
+      const { plan } = pending;
       if (plan.mode === "manual") {
         useGameModeStore.getState().setSetupActive(false);
         useUIStore.getState().openSpatialMapDetail(chatId);
@@ -6468,6 +6477,7 @@ function GameSurfaceComponent({
           connectionId: plan.connectionId,
           debugMode: useUIStore.getState().debugMode,
         });
+        if (activeChatIdRef.current !== chatId) return;
         useGameModeStore.getState().setSetupActive(false);
         useUIStore.getState().openSpatialMapDraftReview({
           chatId,
@@ -6476,6 +6486,7 @@ function GameSurfaceComponent({
         });
         toast.success(localizeUi("ui.game.gamesurfacecomponent.worldCreatedReviewTheHierarchicalMapBeforeSavingIt"));
       } catch (error) {
+        if (activeChatIdRef.current !== chatId) return;
         useGameModeStore.getState().setSetupActive(false);
         toast.error(
           error instanceof Error
@@ -6664,10 +6675,13 @@ function GameSurfaceComponent({
       }
 
       if (request.kind === "game_setup") {
-        if (pendingSetupMapPlanRef.current) {
-          void completePostSetupMapPlan(targetChatId);
-        } else {
-          useGameModeStore.getState().setSetupActive(false);
+        if (targetChatId && activeChatIdRef.current === targetChatId) {
+          const pendingPlan = pendingSetupMapPlanRef.current;
+          if (pendingPlan?.chatId === targetChatId) {
+            void completePostSetupMapPlan(targetChatId);
+          } else if (!pendingPlan) {
+            useGameModeStore.getState().setSetupActive(false);
+          }
         }
       }
       if (request.kind === "session_conclusion") {
@@ -9906,17 +9920,24 @@ function GameSurfaceComponent({
         >
           <GameSetupWizard
             onComplete={(config, preferences, conns, wizardGameName, mapPlan) => {
-              const queueSetupMapPlan = () => {
-                pendingSetupMapPlanRef.current =
+              const queueSetupMapPlan = (chatId: string) => {
+                if (activeChatIdRef.current !== chatId) return false;
+                const plan: PostSetupMapPlan | null =
                   mapPlan?.mode === "ai"
                     ? {
                         ...mapPlan,
                         connectionId: conns.gmConnectionId,
                       }
                     : (mapPlan ?? null);
+                if (plan) {
+                  pendingSetupMapPlanRef.current = { chatId, plan };
+                } else if (pendingSetupMapPlanRef.current?.chatId === chatId) {
+                  pendingSetupMapPlanRef.current = null;
+                }
+                return true;
               };
               const runSetup = (chatId: string) => {
-                queueSetupMapPlan();
+                if (!queueSetupMapPlan(chatId)) return;
                 gameSetup.mutate(
                   {
                     chatId,
@@ -9930,13 +9951,14 @@ function GameSurfaceComponent({
                       if (mapPlan) void completePostSetupMapPlan(chatId);
                     },
                     onError: (error) => {
-                      if (!handleJsonRepairError(error)) pendingSetupMapPlanRef.current = null;
+                      if (activeChatIdRef.current !== chatId) return;
+                      if (!handleJsonRepairError(error)) clearPendingSetupMapPlan(chatId);
                     },
                   },
                 );
               };
               const continueExistingSetup = async (chatId: string) => {
-                queueSetupMapPlan();
+                if (!queueSetupMapPlan(chatId)) return;
                 const storedSetupConfig =
                   chatMeta.gameSetupConfig &&
                   typeof chatMeta.gameSetupConfig === "object" &&
@@ -9957,7 +9979,8 @@ function GameSurfaceComponent({
                   ]);
                   await completePostSetupMapPlan(chatId);
                 } catch (error) {
-                  pendingSetupMapPlanRef.current = null;
+                  if (activeChatIdRef.current !== chatId) return;
+                  clearPendingSetupMapPlan(chatId);
                   toast.error(
                     error instanceof Error && error.message.trim()
                       ? error.message
