@@ -1,4 +1,4 @@
-import type { Chat } from "@marinara-engine/shared";
+import { isAgentAvailableInChatMode, type Chat } from "@marinara-engine/shared";
 import { chatBackgroundMetadataToUrl, chatBackgroundUrlToMetadata } from "./backgrounds";
 import type { ChatResourceDragPayload } from "./chat-resource-drag";
 
@@ -14,7 +14,7 @@ export type ChatResourceDropAction =
 /** Why a drop cannot happen, so the surface can explain instead of silently ignoring it. */
 export type ChatResourceDropBlock = {
   type: "blocked";
-  reason: "already-active" | "preset-unsupported-mode" | "connection-kind";
+  reason: "already-active" | "preset-unsupported-mode" | "agent-unsupported-mode" | "connection-kind";
   label: string;
 };
 
@@ -55,7 +55,11 @@ export function resolveChatResourceDropAction(
 
   if (payload.kind === "agent") {
     const currentIds = new Set(readStringArray(metadata.activeAgentIds));
-    const ids = payload.ids.filter((id) => !currentIds.has(id));
+    const supported = payload.ids.filter((id) => isAgentAvailableInChatMode(chat.mode, id));
+    if (supported.length === 0) {
+      return { type: "blocked", reason: "agent-unsupported-mode", label: payload.label };
+    }
+    const ids = supported.filter((id) => !currentIds.has(id));
     return ids.length > 0
       ? {
           type: "add-agents",

@@ -89,6 +89,7 @@ const ACTION_HINT_KEY: Record<ChatResourceDropAction["type"], string> = {
 
 function blockedKey(action: ChatResourceDropBlock) {
   if (action.reason === "preset-unsupported-mode") return "ui.chat.chatresourcedropoverlay.presetUnsupportedMode";
+  if (action.reason === "agent-unsupported-mode") return "ui.chat.chatresourcedropoverlay.agentUnsupportedMode";
   if (action.reason === "connection-kind") return "ui.chat.chatresourcedropoverlay.connectionUnsupportedKind";
   return "ui.chat.chatresourcedropoverlay.alreadyActive";
 }

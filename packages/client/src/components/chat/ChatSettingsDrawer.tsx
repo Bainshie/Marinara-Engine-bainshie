@@ -27,6 +27,7 @@ import {
   CalendarClock,
   RefreshCw,
   Settings2,
+  Info,
   ArrowRightLeft,
   Unlink,
   Brain,
@@ -3900,6 +3901,12 @@ export function ChatSettingsDrawer({
           >
             <X size={ROLEPLAY_POPOVER_CLOSE_ICON_SIZE} />
           </button>
+        </div>
+
+        {/* Desktop-only: drag-and-drop hint (sidebar drag is disabled on mobile overlays) */}
+        <div className="flex shrink-0 items-start gap-2 border-b border-[var(--border)] px-4 py-2 text-[0.6875rem] leading-snug text-[var(--muted-foreground)] max-md:hidden">
+          <Info size="0.8125rem" className="mt-px shrink-0" />
+          <span>{localizeUi("chat.settings.dragDropHint")}</span>
         </div>
 
         <div
