@@ -76,9 +76,8 @@ import {
 } from "../services/video/prompt-context.js";
 import { resolveSceneVideoPrompt, SceneVideoPromptReviewError } from "../services/video/scene-video-prompt-review.js";
 import {
-  buildRoleplayVideoDirectionUserPrompt,
+  buildRoleplayVideoDirectionMessages,
   resolveRoleplayVideoDirection,
-  ROLEPLAY_VIDEO_DIRECTION_SYSTEM_PROMPT,
 } from "../services/video/roleplay-video-direction.js";
 import { isDebugAgentsEnabled } from "../config/runtime-config.js";
 import { newId } from "../utils/id-generator.js";
@@ -757,7 +756,7 @@ export async function galleryRoutes(app: FastifyInstance) {
         );
       }
       const sourceExchange = resolveGalleryVideoSourceExchange(messages, swipes, galleryImage.id);
-      const userPrompt = buildRoleplayVideoDirectionUserPrompt({
+      const directionMessages = await buildRoleplayVideoDirectionMessages(promptOverridesStorage, {
         durationSeconds,
         aspectRatio,
         sourceExchange:
@@ -766,28 +765,23 @@ export async function galleryRoutes(app: FastifyInstance) {
         characterNames,
         setting: buildRoleplayVideoSettingLine(chat, meta, videoRuntime.promptLimits.artStyle),
       });
+      const [systemMessage, userMessage] = directionMessages;
       const debugOverrideEnabled = input.debugMode === true || isDebugAgentsEnabled();
       logDebugOverride(
         debugOverrideEnabled,
         "[debug/gallery/roleplay-video-director] system:\n%s\nuser:\n%s",
-        ROLEPLAY_VIDEO_DIRECTION_SYSTEM_PROMPT,
-        userPrompt,
+        systemMessage.content,
+        userMessage.content,
       );
       try {
-        const result = await promptRuntime.provider.chatComplete(
-          [
-            { role: "system", content: ROLEPLAY_VIDEO_DIRECTION_SYSTEM_PROMPT },
-            { role: "user", content: userPrompt },
-          ],
-          {
-            model: promptRuntime.model,
-            ...(promptRuntime.suppressModelParameters ? {} : { temperature: 0.5, maxTokens: 1_200 }),
-            suppressModelParameters: promptRuntime.suppressModelParameters,
-            signal,
-            enableCaching: promptRuntime.enableCaching,
-            anthropicExtendedCacheTtl: promptRuntime.anthropicExtendedCacheTtl,
-          },
-        );
+        const result = await promptRuntime.provider.chatComplete(directionMessages, {
+          model: promptRuntime.model,
+          ...(promptRuntime.suppressModelParameters ? {} : { temperature: 0.5, maxTokens: 1_200 }),
+          suppressModelParameters: promptRuntime.suppressModelParameters,
+          signal,
+          enableCaching: promptRuntime.enableCaching,
+          anthropicExtendedCacheTtl: promptRuntime.anthropicExtendedCacheTtl,
+        });
         promptDraft = resolveRoleplayVideoDirection(result.content, videoRuntime.promptLimits.finalPrompt);
       } catch (err) {
         logger.warn(err, "[gallery/roleplay-video-director] Failed to plan animation for chat %s", input.chatId);
