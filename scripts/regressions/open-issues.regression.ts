@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -332,6 +332,7 @@ assert.equal(renamedBackgroundOrganization.assignments["user:moonlit-courtyard.j
 assert.deepEqual(removeBackgroundFolder(renamedBackgroundOrganization, "folder-night"), {
   folders: [],
   assignments: {},
+  favorites: [],
 });
 assert.equal(getNextBackgroundFolderName([{ name: "Unnamed" }, { name: "unnamed 2" }]), "unnamed 3");
 
@@ -816,6 +817,94 @@ try {
   await customToolsStore.remove(customTool.id);
   const cleanedToolAgent = await agentsStore.getById(toolAgent.id);
   assert.deepEqual(JSON.parse(cleanedToolAgent?.settings ?? "{}").enabledTools, ["roll_dice"]);
+  const { resolveGenerationTools } = await import(
+    "../../packages/server/src/services/generation/tool-resolution-runtime.js"
+  );
+  const diceAgent = {
+    id: "dice-agent-regression",
+    type: "dice-agent-regression",
+    name: "Dice Agent Regression",
+    phase: "parallel",
+    promptTemplate: "Roll the configured dice.",
+    connectionId: null,
+    settings: { enabledTools: ["roll_dice"] },
+    isCustomAgent: true,
+    provider: {},
+    model: "regression",
+  } as any;
+  await resolveGenerationTools({
+    requestBody: {},
+    chatId: rangedChatId,
+    chatMetadata: {},
+    chats: {
+      async getMessage() {
+        return null;
+      },
+      async updateMessageContent() {
+        return null;
+      },
+      async patchMetadata(_chatId, patcher) {
+        return { metadata: await patcher({}) };
+      },
+    },
+    agentsStore,
+    customToolsStore,
+    lorebooksStore: {
+      async listActiveEntries() {
+        return [];
+      },
+      async getById() {
+        return null;
+      },
+      async listEntries() {
+        return [];
+      },
+      async createEntry() {
+        return null;
+      },
+      async updateEntry() {
+        return null;
+      },
+    },
+    resolvedAgents: [diceAgent],
+    enabledConfigs: [],
+    promptCharacterIds: [],
+    personaId: null,
+    activeLorebookIds: [],
+    excludedLorebookIds: [],
+    excludedSourceAgentIds: [],
+    gameState: null,
+    gameSpotifyMusicEnabled: false,
+    agentContext: {
+      chatId: rangedChatId,
+      chatMode: "roleplay",
+      recentMessages: [],
+      mainResponse: null,
+      gameState: null,
+      characters: [],
+      persona: null,
+      memory: {},
+      writableLorebookIds: null,
+      chatSummary: null,
+    },
+    emitMetadataPatch() {},
+  });
+  assert.deepEqual(
+    diceAgent.toolContext?.tools.map((tool: { function: { name: string } }) => tool.function.name),
+    ["roll_dice"],
+    "An agent that enables roll_dice must receive the built-in dice definition",
+  );
+  const diceResult = JSON.parse(
+    await diceAgent.toolContext.executeToolCall({
+      id: "dice-agent-regression-call",
+      type: "function",
+      function: { name: "roll_dice", arguments: JSON.stringify({ notation: "1d2" }) },
+    }),
+  );
+  assert.ok(
+    diceResult.total === 1 || diceResult.total === 2,
+    "The agent tool context must execute roll_dice through the shared executor",
+  );
   const characterId = "partial-update-preservation";
   const createResult = await mariDb.executeAction({
     action: "character.create",
@@ -1803,6 +1892,14 @@ const notificationSettingsSource = readFileSync(
   new URL("../../packages/client/src/components/panels/settings/SettingControls.tsx", import.meta.url),
   "utf8",
 );
+const chatGallerySource = readFileSync(
+  new URL("../../packages/client/src/components/chat/ChatGallery.tsx", import.meta.url),
+  "utf8",
+);
+const galleryHooksSource = readFileSync(
+  new URL("../../packages/client/src/hooks/use-gallery.ts", import.meta.url),
+  "utf8",
+);
 const globalStyles = readFileSync(new URL("../../packages/client/src/styles/globals.css", import.meta.url), "utf8");
 const galleryRoutesSource = readFileSync(
   new URL("../../packages/server/src/routes/gallery.routes.ts", import.meta.url),
@@ -1827,6 +1924,14 @@ assert.doesNotMatch(localMusicPlayerSource, /return `\/api\/game-assets\/local-m
 assert.match(gameAssetsRoutesSource, /app\.get\("\/local-music-file"/u);
 assert.match(gameAssetsRoutesSource, /const \{ path: encoded \} = \(req\.query as \{ path\?: string \}\)/u);
 assert.doesNotMatch(gameAssetsRoutesSource, /app\.get\("\/local-music-file\/:encoded"/u);
+assert.match(galleryRoutesSource, /app\.delete<[\s\S]*>\("\/scene-videos\/:chatId\/:id"/u);
+assert.match(
+  galleryRoutesSource,
+  /video\.chatId !== chatId[\s\S]*sceneVideos\.remove\(video\.id\)[\s\S]*removeSavedVideoFromDisk\(video\.filePath\)\.catch/u,
+);
+assert.match(galleryHooksSource, /api\.delete\(`\/gallery\/scene-videos\/\$\{chatId\}\/\$\{videoId\}`\)/u);
+assert.match(chatGallerySource, /handleDeleteVideo\(video\)/u);
+assert.match(chatGallerySource, /ui\.chat\.chatgallery\.deleteSceneVideo/u);
 assert.match(characterEditorSource, /ui\.characters\.colorstab\.value1AvatarPreview/u);
 assert.match(characterEditorSource, /getAvatarCropStyle/u);
 assert.match(characterEditorSource, /downloadSpriteFile/u);
@@ -1917,7 +2022,7 @@ assert.equal(
 );
 assert.match(
   gameRoutesSource,
-  /if \(templateId === fallbackTemplateId \|\| !selectedTemplate\?\.promptTemplate\.trim\(\)\)/u,
+  /if \(!selectedTemplate\?\.promptTemplate\.trim\(\)\) \{[\s\S]*The Storyboard Agent has no/u,
 );
 assert.match(presetsPanelSource, /\{!selectionMode && isSelected && \(/u);
 assert.match(
@@ -2970,11 +3075,11 @@ try {
   assert.equal(personaRows.length, 1);
   const characterFile = join(entityGalleryRoot, String(characterRows[0]!.filePath));
   const personaFile = join(entityGalleryRoot, String(personaRows[0]!.filePath));
+  assert.equal(characterFile, join(sourceDir, "generated.png"));
+  assert.equal(personaFile, join(sourceDir, "generated.png"));
   assert.equal(readFileSync(characterFile, "utf8"), "generated-image");
   assert.equal(readFileSync(personaFile, "utf8"), "generated-image");
-  unlinkSync(characterFile);
   assert.equal(existsSync(join(sourceDir, "generated.png")), true);
-  assert.equal(existsSync(personaFile), true);
 } finally {
   rmSync(entityGalleryRoot, { recursive: true, force: true });
 }
