@@ -17,7 +17,7 @@
   "capabilities.failure.runtime.title": "{{name}} stopped",
   "capabilities.loading": "Loading {{name}}",
   "capabilities.refresh.actionLabel": "Refresh Marinara to finish updating {{name}}",
-  "capabilities.refresh.description": "Save any pending edits, then refresh Marinara to load the updated interface.",
+  "capabilities.refresh.description": "Finish or copy any pending edits, then refresh Marinara to load the updated interface.",
   "capabilities.refresh.title": "{{name}} was updated",
   "chat.activeContext.activeEntries_one": "{{count}} active • ~{{tokens}} tokens",
   "chat.activeContext.activeEntries_other": "{{count}} active • ~{{tokens}} tokens",

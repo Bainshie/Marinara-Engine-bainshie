@@ -121,6 +121,9 @@ function publishCapabilityClientModuleState(next: CapabilityClientModuleState): 
 
 function removeCapabilityClientModuleState(packageId: string): void {
   if (!capabilityClientModuleStates.delete(packageId)) return;
+  // Imported code and its custom-element constructor remain in this document
+  // even while a restart-required package is temporarily ineligible. Keep the
+  // loaded version so the next ready version can require a truthful refresh.
   capabilityClientModuleRevision += 1;
   for (const listener of capabilityClientModuleListeners) listener();
 }
