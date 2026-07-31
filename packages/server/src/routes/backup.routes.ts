@@ -44,6 +44,7 @@ import {
   type ProfileImportAssetInput,
   type StagedProfileImportAssets,
 } from "../services/import/profile-import-assets.js";
+import { ProfileImportRequestError } from "../services/import/profile-import-errors.js";
 import { planProfileNoodleImport, type ProfileNoodleImportWarning } from "../services/import/profile-import-noodle.js";
 import { computePersonalExtensionHash } from "../services/extensions/personal-extension-hash.js";
 import { personalServerExtensionRuntime } from "../services/extensions/personal-server-extension-runtime.js";
@@ -279,8 +280,6 @@ class ProfileJsonTooLargeError extends Error {
 }
 
 class ProfileArchiveTooLargeError extends Error {}
-
-class ProfileImportRequestError extends Error {}
 
 class ProfileImportArchiveTooLargeError extends ProfileImportRequestError {}
 
@@ -918,8 +917,8 @@ async function importProfileStorageSnapshot(
     let committed = false;
     let rollbackFailed = false;
     try {
-      const plannedSnapshot = await planProfileNoodleImport(app.db, snapshot, warnings);
       await app.db.transaction(async (tx) => {
+        const plannedSnapshot = await planProfileNoodleImport(tx, snapshot, warnings);
         for (const tableName of FILE_BACKED_TABLES) {
           const table = profileTableObjects.get(tableName);
           const rows = plannedSnapshot.tables[tableName];
@@ -2548,7 +2547,7 @@ export async function backupRoutes(app: FastifyInstance) {
       const profileStoragePreviewStats = isProfileStorageSnapshot(data.fileStorage)
         ? previewProfileStorageSnapshotStats(data.fileStorage, importInput.readAsset, warnings)
         : null;
-      if (isProfileStorageSnapshot(data.fileStorage)) {
+      if (previewOnly && isProfileStorageSnapshot(data.fileStorage)) {
         await planProfileNoodleImport(app.db, data.fileStorage, warnings);
       }
       if (!previewOnly && expectedFingerprint && importInput.fileFingerprint !== expectedFingerprint) {

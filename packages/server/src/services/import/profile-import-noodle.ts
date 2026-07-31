@@ -7,10 +7,18 @@ import {
   noodlePostUnlocks,
 } from "../../db/schema/noodle.js";
 import { newId } from "../../utils/id-generator.js";
+import { ProfileImportRequestError } from "./profile-import-errors.js";
 
 type Row = Record<string, unknown>;
 type Snapshot = { tables: Record<string, Row[]> };
-export type ProfileNoodleImportWarning = { type: string; path?: string; message: string };
+export type ProfileNoodleImportWarning = {
+  type: "noodle_handle_conflict";
+  path?: string;
+  message: string;
+};
+type ProfileImportWarning =
+  | ProfileNoodleImportWarning
+  | { type: "missing_asset"; path: string; message: string };
 
 type AccountIdentity = { platform: string; kind: string; entityId: string };
 
@@ -47,6 +55,12 @@ function allocateHandle(base: string, reserved: ReadonlySet<string>) {
     if (!reserved.has(candidate)) return candidate;
   }
   throw new Error("Could not allocate a unique Noodle handle");
+}
+
+function addProfileNoodleImportWarning(warnings: ProfileImportWarning[], warning: ProfileNoodleImportWarning) {
+  if (!warnings.some((candidate) => candidate.type === warning.type && candidate.message === warning.message)) {
+    warnings.push(warning);
+  }
 }
 
 function parseObject(value: unknown): Row {
@@ -103,41 +117,51 @@ function parseJson(value: unknown): unknown {
 }
 
 function remapSnapshotRows(snapshot: Snapshot, accountMap: ReadonlyMap<string, string>) {
-  const tables = Object.fromEntries(
-    Object.entries(snapshot.tables).map(([tableName, sourceRows]) => [
-      tableName,
-      sourceRows.map((sourceRow) => {
-        const row = { ...sourceRow };
-        if (tableName === "noodle_accounts") {
-          row.id = accountMap.get(String(row.id)) ?? row.id;
-          if (row.noodleAccountId != null)
-            row.noodleAccountId = accountMap.get(String(row.noodleAccountId)) ?? row.noodleAccountId;
-          row.settings = remapAccountSettings(row.settings, accountMap);
-        } else if (tableName === "noodle_posts") {
-          row.authorAccountId = accountMap.get(String(row.authorAccountId)) ?? row.authorAccountId;
-        } else if (tableName === "noodle_account_subscriptions") {
-          row.viewerAccountId = accountMap.get(String(row.viewerAccountId)) ?? row.viewerAccountId;
-          row.creatorAccountId = accountMap.get(String(row.creatorAccountId)) ?? row.creatorAccountId;
-        } else if (tableName === "noodle_post_unlocks") {
-          row.viewerAccountId = accountMap.get(String(row.viewerAccountId)) ?? row.viewerAccountId;
-        } else if (tableName === "noodle_interactions") {
-          row.actorAccountId = accountMap.get(String(row.actorAccountId)) ?? row.actorAccountId;
-        } else if (tableName === "noodle_activity_digests") {
-          row.accountIds = remapJsonArray(row.accountIds, accountMap);
-        } else if (tableName === "noodle_refresh_runs") {
-          row.activeAccountIds = remapJsonArray(row.activeAccountIds, accountMap);
-        }
-        return row;
-      }),
-    ]),
-  );
+  if ([...accountMap].every(([sourceId, destinationId]) => sourceId === destinationId)) return snapshot;
+
+  const tables = { ...snapshot.tables };
+  for (const tableName of [
+    "noodle_accounts",
+    "noodle_posts",
+    "noodle_account_subscriptions",
+    "noodle_post_unlocks",
+    "noodle_interactions",
+    "noodle_activity_digests",
+    "noodle_refresh_runs",
+  ]) {
+    const sourceRows = snapshot.tables[tableName];
+    if (!sourceRows) continue;
+    tables[tableName] = sourceRows.map((sourceRow) => {
+      const row = { ...sourceRow };
+      if (tableName === "noodle_accounts") {
+        row.id = accountMap.get(String(row.id)) ?? row.id;
+        if (row.noodleAccountId != null)
+          row.noodleAccountId = accountMap.get(String(row.noodleAccountId)) ?? row.noodleAccountId;
+        row.settings = remapAccountSettings(row.settings, accountMap);
+      } else if (tableName === "noodle_posts") {
+        row.authorAccountId = accountMap.get(String(row.authorAccountId)) ?? row.authorAccountId;
+      } else if (tableName === "noodle_account_subscriptions") {
+        row.viewerAccountId = accountMap.get(String(row.viewerAccountId)) ?? row.viewerAccountId;
+        row.creatorAccountId = accountMap.get(String(row.creatorAccountId)) ?? row.creatorAccountId;
+      } else if (tableName === "noodle_post_unlocks") {
+        row.viewerAccountId = accountMap.get(String(row.viewerAccountId)) ?? row.viewerAccountId;
+      } else if (tableName === "noodle_interactions") {
+        row.actorAccountId = accountMap.get(String(row.actorAccountId)) ?? row.actorAccountId;
+      } else if (tableName === "noodle_activity_digests") {
+        row.accountIds = remapJsonArray(row.accountIds, accountMap);
+      } else if (tableName === "noodle_refresh_runs") {
+        row.activeAccountIds = remapJsonArray(row.activeAccountIds, accountMap);
+      }
+      return row;
+    });
+  }
   return { ...snapshot, tables };
 }
 
 export async function planProfileNoodleImport(
   db: DB,
   snapshot: Snapshot,
-  warnings: Array<{ type: string; path?: string; message: string }>,
+  warnings: ProfileImportWarning[],
 ): Promise<Snapshot> {
   const importedRows = (snapshot.tables.noodle_accounts ?? []).map((row) => migrateLegacyNoodleAccountRow({ ...row }));
   if (importedRows.length === 0) return snapshot;
@@ -145,16 +169,20 @@ export async function planProfileNoodleImport(
   const importedByIdentity = new Map<string, Row>();
   for (const row of importedRows) {
     const key = identityKey(accountIdentity(row));
-    if (importedByIdentity.has(key)) throw new Error(`Profile contains duplicate Noodle account identity: ${key}`);
+    if (importedByIdentity.has(key)) {
+      throw new ProfileImportRequestError(`Profile contains duplicate Noodle account identity: ${key}`);
+    }
     importedByIdentity.set(key, row);
   }
 
   const destinationRows = (await db.select().from(noodleAccounts)) as Row[];
   const destinationByIdentity = new Map<string, Row>();
   const destinationById = new Map<string, Row>();
+  const destinationByNoodleAccountId = new Map<string, Row>();
   for (const row of destinationRows) {
     destinationById.set(String(row.id), row);
     destinationByIdentity.set(identityKey(accountIdentity(row)), row);
+    if (row.noodleAccountId != null) destinationByNoodleAccountId.set(String(row.noodleAccountId), row);
   }
 
   const accountMap = new Map<string, string>();
@@ -175,6 +203,38 @@ export async function planProfileNoodleImport(
     accountMap.set(sourceId, destinationId);
   }
 
+  const importedByNoodleAccountId = new Map<string, Row>();
+  for (const sourceRow of importedRows) {
+    if (sourceRow.noodleAccountId == null) continue;
+    const sourceId = String(sourceRow.id);
+    const destinationNoodleAccountId =
+      accountMap.get(String(sourceRow.noodleAccountId)) ?? String(sourceRow.noodleAccountId);
+    const existingSource = importedByNoodleAccountId.get(destinationNoodleAccountId);
+    const destinationOwner = destinationByNoodleAccountId.get(destinationNoodleAccountId);
+    const identity = identityKey(accountIdentity(sourceRow));
+
+    if (existingSource && identityKey(accountIdentity(existingSource)) !== identity) {
+      throw new ProfileImportRequestError(
+        `Profile contains multiple Noodle account identities linked to ${destinationNoodleAccountId}.`,
+      );
+    }
+    importedByNoodleAccountId.set(destinationNoodleAccountId, sourceRow);
+
+    if (!destinationOwner) continue;
+    if (identityKey(accountIdentity(destinationOwner)) !== identity) {
+      throw new ProfileImportRequestError(
+        `Noodle account ${destinationNoodleAccountId} is already linked to another profile identity.`,
+      );
+    }
+
+    const ownerId = String(destinationOwner.id);
+    const currentDestinationId = accountMap.get(sourceId);
+    if (currentDestinationId !== ownerId && accountMapHasValue(accountMap, ownerId)) {
+      throw new ProfileImportRequestError(`Profile contains conflicting Noodle account mapping for ${ownerId}.`);
+    }
+    accountMap.set(sourceId, ownerId);
+  }
+
   const reservedHandles = new Set(
     destinationRows
       .filter((row) => accountIdentity(row).platform !== "noodler")
@@ -191,9 +251,7 @@ export async function planProfileNoodleImport(
     if (reservedHandles.has(desired) && desired !== ownHandle) {
       const replacement = allocateHandle(desired, reservedHandles);
       const message = `Noodle handle "${desired}" was already used by another account and was imported as "${replacement}".`;
-      if (!warnings.some((warning) => warning.type === "noodle_handle_conflict" && warning.message === message)) {
-        warnings.push({ type: "noodle_handle_conflict", message });
-      }
+      addProfileNoodleImportWarning(warnings, { type: "noodle_handle_conflict", message });
       sourceRow.handle = replacement;
       reservedHandles.add(replacement);
     } else {
@@ -218,10 +276,15 @@ async function remapExistingDependentIds(db: DB, snapshot: Snapshot) {
   const reconcile = async (tableName: string, key: (row: Row) => string, table: unknown) => {
     const existingRows = (await db.select().from(table as any)) as Row[];
     const existingByKey = new Map(existingRows.map((row) => [key(row), String(row.id)]));
-    for (const row of snapshot.tables[tableName] ?? []) {
+    const sourceRows = snapshot.tables[tableName] ?? [];
+    let remappedRows: Row[] | null = null;
+    for (const [index, row] of sourceRows.entries()) {
       const existingId = existingByKey.get(key(row));
-      if (existingId) row.id = existingId;
+      if (!existingId || existingId === row.id) continue;
+      remappedRows ??= [...sourceRows];
+      remappedRows[index] = { ...row, id: existingId };
     }
+    if (remappedRows) snapshot = { ...snapshot, tables: { ...snapshot.tables, [tableName]: remappedRows } };
   };
 
   await reconcile(
