@@ -1517,7 +1517,7 @@ export function ChatRoleplaySurface({
       ? chatMeta.roleplayStoryboardAutoGenerateMode
       : null;
   const latestStoryboardMessage = useMemo(
-    () => messages.find((message) => message.id === lastAssistantMessageId) ?? null,
+    () => messages?.find((message) => message.id === lastAssistantMessageId) ?? null,
     [lastAssistantMessageId, messages],
   );
   const roleplayStoryboardsQuery = useGameChatStoryboards(activeChatId, storyboardAgentActive);
