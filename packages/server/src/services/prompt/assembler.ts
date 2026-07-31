@@ -358,6 +358,9 @@ export async function assemblePrompt(input: AssemblerInput): Promise<AssemblerOu
   const enabledSectionContents = sectionOrder.flatMap((sectionId) => {
     const section = sectionMap.get(sectionId);
     if (!section || section.enabled !== "true") return [];
+    if (input.impersonate === true && input.preserveImpersonatePresetSections !== true && section.isMarker !== "true") {
+      return [];
+    }
     if (section.groupId) {
       const group = groupMap.get(section.groupId);
       if (group && group.enabled !== "true") return [];

@@ -1766,8 +1766,12 @@ export function resolveMacros(template: string, ctx: MacroContext, options: Reso
   result = result.replace(/\{\{chatId\}\}/gi, ctx.chatId ?? "");
   result = result.replace(/\{\{lastGenerationType\}\}/gi, ctx.lastGenerationType ?? "");
   result = result.replace(/\{\{idle_duration\}\}/gi, ctx.idleDuration ?? "");
+  const unresolvedCharacterReferences = new Set<string>();
   result = result.replace(CHARACTER_REFERENCE_ID_PATTERN, (match, characterId: string) => {
-    return ctx.characterReferences?.[characterId] ?? match;
+    const reference = ctx.characterReferences?.[characterId];
+    if (reference !== undefined) return reference;
+    unresolvedCharacterReferences.add(characterId);
+    return match;
   });
 
   // ── Date/time ──
@@ -1854,6 +1858,7 @@ export function resolveMacros(template: string, ctx: MacroContext, options: Reso
   // ── Catch-all: resolve any remaining {{name}} from variables ──
   // This allows preset variables like {{POV}} to resolve directly
   result = result.replace(/\{\{(\w+)\}\}/g, (match, name) => {
+    if (unresolvedCharacterReferences.has(name)) return match;
     const val = ctx.variables[name];
     return val !== undefined ? val : match; // leave unknown macros as-is
   });

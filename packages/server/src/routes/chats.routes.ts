@@ -3982,7 +3982,7 @@ export async function chatsRoutes(app: FastifyInstance) {
         {
           model,
           temperature: 0.5,
-          maxTokens: summaryMaxTokens,
+          maxTokens: effectiveSummaryMaxTokens,
         },
       );
       if (!result.content) {

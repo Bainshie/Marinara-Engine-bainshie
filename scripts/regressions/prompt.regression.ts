@@ -2050,7 +2050,7 @@ const cases: RegressionCase[] = [
         user: "Mari",
         char: "Dottore",
         characters: ["Dottore"],
-        variables: {},
+        variables: { [unknownId]: "Variable collision" },
         characterReferences: { [referencedId]: "Susie" },
       };
 
@@ -2058,7 +2058,7 @@ const cases: RegressionCase[] = [
       assert.equal(
         resolveMacros(`I went with {{${unknownId}}}.`, context),
         `I went with {{${unknownId}}}.`,
-        "Unknown IDs must remain visible instead of silently disappearing",
+        "Unknown IDs must remain visible instead of resolving through a colliding variable",
       );
     },
   },
