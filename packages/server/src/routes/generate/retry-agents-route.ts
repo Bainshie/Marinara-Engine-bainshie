@@ -3193,7 +3193,8 @@ async function applyRetryResultEffects(args: {
     ) {
       const resultAgent = resolvedAgents.find((agent) => agent.resolved.id === result.agentId);
       const fallbackIllustratorAgent = resolvedAgents.find((agent) => agent.resolved.type === "illustrator");
-      const imagePromptAgent = resultAgent ?? fallbackIllustratorAgent;
+      const imagePromptAgent =
+        resultAgent ?? (result.agentType === "illustrator" ? fallbackIllustratorAgent : undefined);
       const usesChatIllustratorSettings =
         resultAgent?.resolved.type === "illustrator" || (!resultAgent && result.agentType === "illustrator");
       const illustratorFailureName = imagePromptAgent?.cfg.name ?? "Illustrator";

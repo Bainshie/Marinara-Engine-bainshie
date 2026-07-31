@@ -14,6 +14,7 @@ import {
   createChatSummaryEntry,
   DEFAULT_CONVERSATION_PROMPT,
   DEFAULT_GAME_SYSTEM_PROMPT,
+  estimateChatSummaryTokens,
   markAutonomousUnreadSchema,
   nameToXmlTag,
   normalizeChatSummaryEntries,
@@ -126,6 +127,8 @@ type EntryStateOverrides = Record<string, { ephemeral?: number | null; enabled?:
 const MEMORY_RECALL_IMPORT_BODY_LIMIT_BYTES = 25 * 1024 * 1024;
 const MEMORY_RECALL_IMPORT_BATCH_SIZE = 500;
 const PROFESSOR_MARI_INTERNAL_CHAT_MARKER = "professor-mari";
+const SUMMARY_COMBINE_DEFAULT_CONTEXT_TOKENS = 32_768;
+const SUMMARY_COMBINE_PROMPT_RESERVE_TOKENS = 1_024;
 
 function presetStringField(preset: Record<string, unknown> | null | undefined, field: string): string {
   const value = preset?.[field];
@@ -3932,6 +3935,23 @@ export async function chatsRoutes(app: FastifyInstance) {
       const selectedEntries = currentEntries.filter((entry) => requestedIds.has(entry.id));
       if (selectedEntries.length !== requestedIds.size) {
         return reply.status(400).send({ error: "One or more selected summary entries no longer exist" });
+      }
+      const effectiveSummaryMaxTokens = Math.min(
+        summaryMaxTokens,
+        provider.maxTokensOverrideValue ?? summaryMaxTokens,
+      );
+      const combinedSummaryInputBudget = Math.max(
+        0,
+        (provider.maxContextValue ?? SUMMARY_COMBINE_DEFAULT_CONTEXT_TOKENS) -
+          effectiveSummaryMaxTokens -
+          SUMMARY_COMBINE_PROMPT_RESERVE_TOKENS,
+      );
+      const combinedTokenEstimate = selectedEntries.reduce(
+        (total, entry) => total + Math.max(entry.tokenEstimate, estimateChatSummaryTokens(entry.content)),
+        0,
+      );
+      if (combinedTokenEstimate > combinedSummaryInputBudget) {
+        return reply.status(400).send({ error: "Selected summaries are too large to combine at once" });
       }
 
       const requestedPromptTemplateId =

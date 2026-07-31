@@ -8272,7 +8272,8 @@ export async function generateRoutes(app: FastifyInstance) {
               const illCharacters = Array.isArray(illData.characters) ? (illData.characters as string[]) : [];
               const resultAgent = resolvedAgents.find((agent) => agent.id === result.agentId);
               const fallbackIllustratorAgent = resolvedAgents.find((agent) => agent.type === "illustrator");
-              const illustratorAgent = resultAgent ?? fallbackIllustratorAgent;
+              const illustratorAgent =
+                resultAgent ?? (result.agentType === "illustrator" ? fallbackIllustratorAgent : undefined);
               const usesChatIllustratorSettings =
                 resultAgent?.type === "illustrator" || (!resultAgent && result.agentType === "illustrator");
               const illustratorBackgroundAgent =

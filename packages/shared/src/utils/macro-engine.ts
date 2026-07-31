@@ -115,6 +115,8 @@ export interface SupportedMacroDefinition {
   description: string;
 }
 
+export const CHARACTER_REFERENCE_ID_PATTERN = /\{\{([A-Za-z0-9_-]{21})\}\}/g;
+
 const CHARACTER_MACRO_PATTERN =
   /\{\{(?:char|charName|charNamePhonetic|charPhonetic|description|personality|backstory|appearance|scenario|example|charSysInfo|charPostHistory)\}\}|\{\{\s*#if\s+[^}]*\b(?:char|charName|charNamePhonetic|charPhonetic|character|speaker|description|personality|backstory|appearance|scenario|example|charSysInfo|charPostHistory)\b/i;
 const MAX_CHARACTER_FIELD_RESOLUTION_DEPTH = 4;
@@ -311,7 +313,7 @@ export const SUPPORTED_MACROS: readonly SupportedMacroDefinition[] = [
   { category: "Identity", syntax: "{{charName}}", description: "Alias for {{char}}" },
   {
     category: "Identity",
-    syntax: "{{CHARACTER_ID}}",
+    syntax: "{{<21-character-card-ID>}}",
     description: "Name of another character card, referenced by its exact 21-character ID",
   },
   {
@@ -1764,7 +1766,7 @@ export function resolveMacros(template: string, ctx: MacroContext, options: Reso
   result = result.replace(/\{\{chatId\}\}/gi, ctx.chatId ?? "");
   result = result.replace(/\{\{lastGenerationType\}\}/gi, ctx.lastGenerationType ?? "");
   result = result.replace(/\{\{idle_duration\}\}/gi, ctx.idleDuration ?? "");
-  result = result.replace(/\{\{([A-Za-z0-9_-]{21})\}\}/g, (match, characterId: string) => {
+  result = result.replace(CHARACTER_REFERENCE_ID_PATTERN, (match, characterId: string) => {
     return ctx.characterReferences?.[characterId] ?? match;
   });
 

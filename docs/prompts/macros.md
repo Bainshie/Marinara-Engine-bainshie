@@ -38,7 +38,7 @@ These macros pull in the names and card fields of the person speaking and the ch
 | `{{user}}` / `{{userName}}` | Your current display name (or persona name). Defaults to `User` when no persona is set. |
 | `{{userNamePhonetic}}` | Your persona's Phonetic name, or `{{user}}` when it is empty. |
 | `{{char}}` / `{{charName}}` | The current character's name. Defaults to `Character`. |
-| `{{CHARACTER_ID}}` | The name of another character card, using that card's exact 21-character ID. |
+| `{{<21-character-card-ID>}}` | Placeholder syntax for the name of another character card. Replace the angle-bracketed text with that card's exact 21-character ID. |
 | `{{charNamePhonetic}}` | The character's Phonetic name, or `{{char}}` when it is empty. |
 | `{{characters}}` | Every character in the chat, joined by commas. |
 | `{{group}}` | Every other active character in the group chat, excluding the current responder. The persona is not part of this character roster. |

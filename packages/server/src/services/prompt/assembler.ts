@@ -355,10 +355,28 @@ export async function assemblePrompt(input: AssemblerInput): Promise<AssemblerOu
     idleDuration: input.idleDuration,
     timeZone: input.timeZone,
   });
+  const enabledSectionContents = sectionOrder.flatMap((sectionId) => {
+    const section = sectionMap.get(sectionId);
+    if (!section || section.enabled !== "true") return [];
+    if (section.groupId) {
+      const group = groupMap.get(section.groupId);
+      if (group && group.enabled !== "true") return [];
+    }
+    return [section.content];
+  });
+  const personaReferenceSources = Object.values(input.personaFields ?? {}).filter(
+    (value): value is string => typeof value === "string",
+  );
   const referencedCharacterContext = await buildReferencedCharacterContext({
     db: input.db,
     activeCharacterIds: input.groupCharacterIds ?? input.characterIds,
-    sources: [...input.sections.map((section) => section.content), ...Object.values(variableValues)],
+    sources: [
+      ...enabledSectionContents,
+      ...Object.values(variableValues),
+      input.chatSummary ?? "",
+      input.personaDescription,
+      ...personaReferenceSources,
+    ],
     chatMessages: input.lorebookScanMessages ?? input.chatMessages,
     macroCtx,
     wrapFormat,

@@ -2575,13 +2575,13 @@ assert.match(
 );
 assert.match(
   conversationGenerationSource,
-  /const resultAgent = resolvedAgents\.find[\s\S]{0,240}const illustratorAgent = resultAgent \?\? fallbackIllustratorAgent/u,
-  "Image generation must use the custom agent that produced the image prompt before Illustrator fallback",
+  /const resultAgent = resolvedAgents\.find[\s\S]{0,300}resultAgent \?\? \(result\.agentType === "illustrator" \? fallbackIllustratorAgent : undefined\)/u,
+  "Image generation must use the custom producing agent and reserve Illustrator fallback for Illustrator results",
 );
 assert.match(
   retryAgentsPromptReviewSource,
-  /const resultAgent = resolvedAgents\.find[\s\S]{0,300}const imagePromptAgent = resultAgent \?\? fallbackIllustratorAgent/u,
-  "Image Prompt retries must retain the producing custom agent's image settings",
+  /const resultAgent = resolvedAgents\.find[\s\S]{0,360}resultAgent \?\? \(result\.agentType === "illustrator" \? fallbackIllustratorAgent : undefined\)/u,
+  "Image Prompt retries must retain custom agent settings without borrowing Illustrator configuration",
 );
 const uiStoreSource = readFileSync(new URL("../../packages/client/src/stores/ui.store.ts", import.meta.url), "utf8");
 const settingsSyncSource = readFileSync(
@@ -3478,6 +3478,11 @@ assert.match(
   chatRoutesSource,
   /requestedSummaryEntryIds[\s\S]{0,6500}nextEntries\.splice\(Math\.max\(0, firstIndex\), 0, combinedEntry\)/u,
   "Combined summaries must replace their selected entries at the first selected chronological position",
+);
+assert.match(
+  chatRoutesSource,
+  /combinedTokenEstimate[\s\S]{0,500}Selected summaries are too large to combine at once[\s\S]{0,3000}provider\.chatComplete/u,
+  "Combined summaries must be rejected before provider generation when they exceed the input budget",
 );
 const chatSidebarSource = readFileSync(
   join(REPOSITORY_ROOT, "packages/client/src/components/layout/ChatSidebar.tsx"),

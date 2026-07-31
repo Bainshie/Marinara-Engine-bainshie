@@ -6,6 +6,7 @@
 // ──────────────────────────────────────────────
 
 import {
+  CHARACTER_REFERENCE_ID_PATTERN,
   formatRpgStatsForPrompt,
   resolveMacros,
   stripMacroComments,
@@ -71,7 +72,6 @@ export interface MacroResolutionTransaction {
   rollback: () => void;
 }
 
-const CHARACTER_REFERENCE_ID_PATTERN = /\{\{([A-Za-z0-9_-]{21})\}\}/g;
 const MAX_REFERENCED_CHARACTERS = 8;
 const MAX_REFERENCED_FIELD_CHARS = 8_000;
 const MAX_REFERENCED_LOREBOOK_CHARS = 8_000;
@@ -212,19 +212,18 @@ export async function buildReferencedCharacterContext(input: {
   const activeIds = new Set(input.activeCharacterIds);
   const sources = [...input.sources, ...input.chatMessages.map((message) => message.content)];
 
-  for (const id of activeIds) {
-    const row = await characters.getById(id);
+  const activeRows = await Promise.all([...activeIds].map((id) => characters.getById(id)));
+  for (const row of activeRows) {
     const data = parseCharacterData(row?.data);
     if (data) sources.push(...referencedCharacterSourceFields(data));
   }
 
-  const referenced = [];
-  for (const id of extractCharacterReferenceIds(sources)) {
-    if (activeIds.has(id)) continue;
-    const row = await characters.getById(id);
-    const data = parseCharacterData(row?.data);
-    if (data) referenced.push({ id, data });
-  }
+  const candidateIds = extractCharacterReferenceIds(sources).filter((id) => !activeIds.has(id));
+  const referencedRows = await Promise.all(candidateIds.map((id) => characters.getById(id)));
+  const referenced = candidateIds.flatMap((id, index) => {
+    const data = parseCharacterData(referencedRows[index]?.data);
+    return data ? [{ id, data }] : [];
+  });
   if (referenced.length === 0) return { content: "", references: {} };
 
   const references = Object.fromEntries(referenced.map(({ id, data }) => [id, data.name || "Character"]));
