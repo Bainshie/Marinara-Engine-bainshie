@@ -2423,7 +2423,7 @@
   "ui.chat.chatsettingsdrawer.forOfficialNovelaiV4V45StoryboardsSendVisible": "For official NovelAI V4/V4.5 storyboards, send visible characters through native Add Character captions and positions. Turn off to keep every character in the shared legacy prompt.",
   "ui.chat.chatsettingsdrawer.forValue1Characters": " for {{value1}} characters",
   "ui.chat.chatsettingsdrawer.freeFormGuidanceThatSteersHowCharacterSchedulesAre": "Free-form guidance that steers how character schedules are generated. Both directives ('no characters past midnight') and factual constraints ('I work 9-5') work. This setting is global, it applies to every conversation chat.",
-  "ui.chat.chatsettingsdrawer.galleryVideoAndImageAnimateUseThisConnectionWith": "Gallery Video and image Animate use this connection with the editable Omni scene-video prompt.",
+  "ui.chat.chatsettingsdrawer.galleryVideoAndImageAnimateUseThisConnectionWith": "Gallery Video and image Animate use this connection. The selected Prompt Model plans one motion, camera, dialogue, and audio beat from the scene behind the image.",
   "ui.chat.chatsettingsdrawer.game": "game",
   "ui.chat.chatsettingsdrawer.gameIllustrator": "Game Illustrator",
   "ui.chat.chatsettingsdrawer.gameModeRunsThisAfterASessionEndsWith": "Game Mode runs this after a session ends with separate game-specific instructions.",
