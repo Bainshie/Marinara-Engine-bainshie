@@ -213,6 +213,7 @@ import {
   LIMITS,
   MIN_AGENT_MAX_TOKENS,
   PROFESSOR_MARI_ID,
+  STORYBOARD_AGENT_ID,
   SUMMARY_TAIL_MESSAGES,
   estimateAgentLoadCost,
   getAgentPromptTemplateOptions,
@@ -8053,6 +8054,7 @@ export function ChatSettingsDrawer({
                           chatId={chat.id}
                           metadata={metadata as Record<string, unknown>}
                           onClose={onClose}
+                          ownerMode="game"
                         />
                       </Suspense>
                     </AgentSettingsCard>
@@ -8457,6 +8459,16 @@ export function ChatSettingsDrawer({
                                               }}
                                               className="mt-2 block overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--background)]/45"
                                             />
+                                          )}
+                                          {agent.id === STORYBOARD_AGENT_ID && (
+                                            <Suspense fallback={null}>
+                                              <StoryboardChatSettingsPanel
+                                                chatId={chat.id}
+                                                metadata={metadata as Record<string, unknown>}
+                                                onClose={onClose}
+                                                ownerMode="roleplay"
+                                              />
+                                            </Suspense>
                                           )}
                                         </div>
                                       );

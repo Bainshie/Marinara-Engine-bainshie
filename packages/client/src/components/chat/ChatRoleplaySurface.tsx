@@ -1,4 +1,5 @@
 import { createPortal } from "react-dom";
+import { useQueryClient } from "@tanstack/react-query";
 import { useTranslation, useTranslation as useUiTranslation } from "react-i18next";
 import {
   Suspense,
@@ -18,6 +19,8 @@ import { isMessageShadowedByLiveStream } from "../../lib/generation-stream-polic
 import {
   normalizeChatSummaryEntries,
   isLongTermMemoryChatSummaryPromptAllowed,
+  STORYBOARD_AGENT_ID,
+  type GameTurnStoryboard,
   type ChatSummaryEntry,
   type MarkerConfig,
   type PromptGroup,
@@ -87,6 +90,11 @@ import type {
   PersonaInfo,
 } from "./chat-area.types";
 import type { ChatImage } from "../../hooks/use-gallery";
+import {
+  gameStoryboardKeys,
+  useGameChatStoryboards,
+  useGenerateGameTurnStoryboard,
+} from "../../hooks/use-game-storyboards";
 
 type ChatData = ComponentProps<typeof ChatCommonOverlays>["chat"];
 
@@ -1266,6 +1274,8 @@ export function ChatRoleplaySurface({
   const rightPanelOpen = useUIStore((s) => s.rightPanelOpen);
   const chatBackgroundBlur = useUIStore((s) => s.chatBackgroundBlur);
   const roleplayReducedPaintEffects = useUIStore((s) => s.roleplayReducedPaintEffects);
+  const queryClient = useQueryClient();
+  const automaticStoryboardMessageRef = useRef<string | undefined>(undefined);
   const initialLoadSettledRef = useRef(false);
   const prevMessageKeysRef = useRef<Set<string>>(new Set());
   const seenMessageKeysRef = useRef(roleplayNotificationSeenKeys);
@@ -1499,6 +1509,104 @@ export function ChatRoleplaySurface({
     typeof chatMeta.summaryTailMessages === "number" && Number.isFinite(chatMeta.summaryTailMessages)
       ? chatMeta.summaryTailMessages
       : undefined;
+  const storyboardAgentActive = chatMeta.enableAgents === true && summaryActiveAgentIds.includes(STORYBOARD_AGENT_ID);
+  const roleplayStoryboardAutoMode =
+    chatMeta.roleplayStoryboardAutoGenerateMode === "manual" ||
+    chatMeta.roleplayStoryboardAutoGenerateMode === "illustration" ||
+    chatMeta.roleplayStoryboardAutoGenerateMode === "animation"
+      ? chatMeta.roleplayStoryboardAutoGenerateMode
+      : null;
+  const latestStoryboardMessage = useMemo(
+    () => messages.find((message) => message.id === lastAssistantMessageId) ?? null,
+    [lastAssistantMessageId, messages],
+  );
+  const roleplayStoryboardsQuery = useGameChatStoryboards(activeChatId, storyboardAgentActive);
+  const generateRoleplayStoryboard = useGenerateGameTurnStoryboard();
+  const roleplayStoryboardByTurn = useMemo(() => {
+    const byTurn = new Map<string, GameTurnStoryboard>();
+    for (const storyboard of roleplayStoryboardsQuery.data ?? []) {
+      const key = `${storyboard.messageId}:${storyboard.swipeIndex}`;
+      const existing = byTurn.get(key);
+      if (!existing || storyboard.createdAt > existing.createdAt) byTurn.set(key, storyboard);
+    }
+    return byTurn;
+  }, [roleplayStoryboardsQuery.data]);
+  const storeGeneratedStoryboard = useCallback(
+    (storyboard: GameTurnStoryboard) => {
+      queryClient.setQueryData<GameTurnStoryboard[]>(gameStoryboardKeys.list(activeChatId), (current) => [
+        storyboard,
+        ...(current ?? []).filter((row) => row.id !== storyboard.id),
+      ]);
+      queryClient.setQueryData<GameTurnStoryboard[]>(
+        gameStoryboardKeys.turn(activeChatId, storyboard.messageId, storyboard.swipeIndex),
+        (current) => [storyboard, ...(current ?? []).filter((row) => row.id !== storyboard.id)],
+      );
+      void queryClient.invalidateQueries({ queryKey: ["gallery", activeChatId] });
+      void queryClient.invalidateQueries({ queryKey: ["gallery", "assets", activeChatId] });
+    },
+    [activeChatId, queryClient],
+  );
+  const handleGenerateRoleplayStoryboard = useCallback(async () => {
+    if (!latestStoryboardMessage) return;
+    const result = await generateRoleplayStoryboard.mutateAsync({
+      chatId: activeChatId,
+      messageId: latestStoryboardMessage.id,
+      swipeIndex: latestStoryboardMessage.activeSwipeIndex ?? 0,
+      automatic: false,
+      debugMode: useUIStore.getState().debugMode,
+    });
+    if ("storyboard" in result) storeGeneratedStoryboard(result.storyboard);
+  }, [activeChatId, generateRoleplayStoryboard, latestStoryboardMessage, storeGeneratedStoryboard]);
+
+  useEffect(() => {
+    automaticStoryboardMessageRef.current = undefined;
+  }, [activeChatId]);
+
+  useEffect(() => {
+    const messageId = latestStoryboardMessage?.id;
+    if (!messageId) return;
+    if (automaticStoryboardMessageRef.current === undefined) {
+      automaticStoryboardMessageRef.current = messageId;
+      return;
+    }
+    if (automaticStoryboardMessageRef.current === messageId) return;
+    if (!storyboardAgentActive || roleplayStoryboardAutoMode === "manual") {
+      automaticStoryboardMessageRef.current = messageId;
+      return;
+    }
+    if (
+      isStreaming ||
+      agentProcessing ||
+      messageHasPendingPostProcessing(latestStoryboardMessage) ||
+      generateRoleplayStoryboard.isPending
+    ) {
+      return;
+    }
+
+    automaticStoryboardMessageRef.current = messageId;
+    void generateRoleplayStoryboard
+      .mutateAsync({
+        chatId: activeChatId,
+        messageId,
+        swipeIndex: latestStoryboardMessage.activeSwipeIndex ?? 0,
+        automatic: true,
+        ...(roleplayStoryboardAutoMode ? { generateVideos: roleplayStoryboardAutoMode === "animation" } : {}),
+        debugMode: useUIStore.getState().debugMode,
+      })
+      .then((result) => {
+        if ("storyboard" in result) storeGeneratedStoryboard(result.storyboard);
+      })
+      .catch(() => undefined);
+  }, [
+    activeChatId,
+    agentProcessing,
+    generateRoleplayStoryboard,
+    isStreaming,
+    latestStoryboardMessage,
+    roleplayStoryboardAutoMode,
+    storyboardAgentActive,
+    storeGeneratedStoryboard,
+  ]);
 
   return (
     <div data-component="ChatArea.Roleplay" className="flex flex-1 overflow-hidden">
@@ -1914,6 +2022,14 @@ export function ChatRoleplaySurface({
                   const messageDepth = (messages?.length ?? 0) - 1 - sourceIndex;
                   const messageOrderIndex = loadedMessageOffset + sourceIndex;
                   const isRegenerating = hasLiveStream && regenerateMessageId === msg.id;
+                  const inlineStoryboard =
+                    roleplayStoryboardByTurn.get(`${msg.id}:${msg.activeSwipeIndex ?? 0}`) ?? null;
+                  const inlineStoryboardGenerating =
+                    msg.id === latestStoryboardMessage?.id &&
+                    generateRoleplayStoryboard.isPending &&
+                    (generateRoleplayStoryboard.variables?.automatic !== true ||
+                      roleplayStoryboardAutoMode === "illustration" ||
+                      roleplayStoryboardAutoMode === "animation");
                   return (
                     <div
                       key={msg.id}
@@ -1951,6 +2067,8 @@ export function ChatRoleplaySurface({
                           multiSelectMode={multiSelectMode}
                           isSelected={selectedMessageIds.has(msg.id)}
                           onToggleSelect={onToggleSelectMessage}
+                          storyboard={inlineStoryboard}
+                          storyboardGenerating={inlineStoryboardGenerating}
                         />
                       ) : (
                         <ChatMessage
@@ -1980,6 +2098,8 @@ export function ChatRoleplaySurface({
                           multiSelectMode={multiSelectMode}
                           isSelected={selectedMessageIds.has(msg.id)}
                           onToggleSelect={onToggleSelectMessage}
+                          storyboard={inlineStoryboard}
+                          storyboardGenerating={inlineStoryboardGenerating}
                         />
                       )}
                     </div>
@@ -2095,6 +2215,11 @@ export function ChatRoleplaySurface({
         onCloseGallery={onCloseGallery}
         onOpenScheduleEditor={onOpenScheduleEditor}
         onIllustrate={onIllustrate}
+        onGenerateStoryboard={
+          storyboardAgentActive && latestStoryboardMessage && !generateRoleplayStoryboard.isPending
+            ? handleGenerateRoleplayStoryboard
+            : undefined
+        }
         onGenerateVideo={onGenerateVideo}
         onAnimateImage={onAnimateImage}
         onGenerateBackground={onGenerateBackground}

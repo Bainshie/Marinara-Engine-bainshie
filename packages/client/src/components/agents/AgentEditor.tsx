@@ -561,10 +561,18 @@ function storyboardSettingsForStorage(settings: StoryboardAgentSettings): Record
     animationPlannerTemplateIds: settings.animationPlannerTemplateIds,
     illustrationTemplates: settings.illustrationTemplates,
     videoTemplates: settings.videoTemplates,
+    roleplayEpisodeTemplates: settings.roleplayEpisodeTemplates,
+    roleplayStyleTemplates: settings.roleplayStyleTemplates,
+    roleplayAnimationTemplates: settings.roleplayAnimationTemplates,
+    roleplayOutputTemplates: settings.roleplayOutputTemplates,
     illustrationPlannerTemplateId: settings.illustrationPlannerTemplateId,
     animationPlannerTemplateId: settings.animationPlannerTemplateId,
     illustrationTemplateId: settings.illustrationTemplateId,
     videoTemplateId: settings.videoTemplateId,
+    roleplayEpisodeTemplateId: settings.roleplayEpisodeTemplateId,
+    roleplayStyleTemplateId: settings.roleplayStyleTemplateId,
+    roleplayAnimationTemplateId: settings.roleplayAnimationTemplateId,
+    roleplayOutputTemplateId: settings.roleplayOutputTemplateId,
     imageConnectionId: settings.imageConnectionId,
     videoConnectionId: settings.videoConnectionId,
     autoGenerateMode: settings.autoGenerateMode,
@@ -575,6 +583,7 @@ function storyboardSettingsForStorage(settings: StoryboardAgentSettings): Record
     useAvatarReferences: settings.useAvatarReferences,
     useNovelAiCharacterPrompts: settings.useNovelAiCharacterPrompts,
     usePromptTemplate: settings.usePromptTemplate,
+    runInterval: settings.runInterval,
   };
 }
 
@@ -3616,9 +3625,17 @@ export function AgentEditor() {
 
           {/* ── Prompt Template ── */}
           <FieldGroup
-            label={localizeUi("ui.agents.agenteditor.promptTemplate")}
+            label={
+              isStoryboardAgent
+                ? localizeUi("ui.agents.storyboard.gamePromptLibrary")
+                : localizeUi("ui.agents.agenteditor.promptTemplate")
+            }
             icon={<FileText size="0.875rem" className="text-[var(--primary)]" />}
-            help={localizeUi("ui.agents.agenteditor.theSystemInstructionsThisAgentReceivesBuiltInAgents")}
+            help={
+              isStoryboardAgent
+                ? localizeUi("ui.agents.storyboard.gamePromptLibraryDescription")
+                : localizeUi("ui.agents.agenteditor.theSystemInstructionsThisAgentReceivesBuiltInAgents")
+            }
           >
             {/* Toolbar — only show default/override status for built-in agents */}
             {builtIn && (

@@ -166,13 +166,13 @@ Professor Mari can still edit ordinary Marinara source files. Dependency files, 
 
 Note: on an ordinary remote address, Professor Mari's data-changing actions need both Basic Auth and an admin secret. Trusted or allowlisted network routes can use the bypasses described in [Remote Access](REMOTE_ACCESS.md).
 
-## How do Game Mode storyboard animations work?
+## How do storyboard animations work?
 
-A **storyboard** turns one finished game master narration turn into a short sequence of manga-style keyframe images. It can also add short animated clips. The turn then plays back like a mini cutscene. Storyboards exist only in **Game Mode**.
+A **storyboard** turns completed story text into a short sequence of keyframe images and can add animated clips. In **Game Mode**, it follows one finished game master narration turn. In **Roleplay**, the Storyboard Agent combines newly completed exchanges into an inline episode after a configurable number of assistant responses.
 
-To make one by hand, open the **Gallery** and click **Create storyboard** for the latest narration turn. To reopen a storyboard you closed, click **View storyboard**.
+To make one by hand, open the **Gallery** and click **Create storyboard**. Game Mode can reopen its viewer with **View storyboard**; Roleplay displays the result below the assistant response that ends the episode.
 
-To make them automatically, open **Chat Settings**, go to **Agents**, find the **Storyboards** card, and turn on **Automatic Storyboard Illustrations**. Turn on **Automatic Storyboard Animations** too if you also want video clips, which needs a Video Generation connection. For the full workflow, see [Game Mode Storyboards](game/storyboard.md).
+To make them automatically, open **Chat Settings**, go to **Agents**, and find the **Storyboards** card. Game Mode has separate illustration and animation toggles. Roleplay offers **Manual only**, **Still images**, or **Animations**, plus **Assistant messages per episode**. Video clips need a Video Generation connection. For both workflows, see [Storyboard Engine Guide](game/storyboard.md).
 
 ## Can characters talk out loud in a call?
 

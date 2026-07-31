@@ -38,20 +38,94 @@ function hasActiveStoryboardAgent(meta: Record<string, unknown>): boolean {
 export async function applyStoryboardAgentSettings(
   meta: Record<string, unknown>,
   agents: AgentsStorage,
+  ownerMode: "game" | "roleplay" = "game",
 ): Promise<Record<string, unknown>> {
   try {
     const config = await agents.ensureBuiltinConfig(STORYBOARD_AGENT_ID);
     if (!config) return meta;
 
-    const settings = normalizeStoryboardAgentSettings(mergeBuiltInAgentSettings(STORYBOARD_AGENT_ID, config.settings));
+    const mergedSettings = mergeBuiltInAgentSettings(STORYBOARD_AGENT_ID, config.settings);
+    const settings = normalizeStoryboardAgentSettings(mergedSettings);
     const active = hasActiveStoryboardAgent(meta);
     const defaultAutoIllustrations = settings.autoGenerateMode !== "manual";
     const defaultAutoAnimations = settings.autoGenerateMode === "animation";
+    const configuredRunInterval = Number(mergedSettings.runInterval);
+    const runInterval =
+      Number.isFinite(configuredRunInterval) && configuredRunInterval >= 1
+        ? Math.min(100, Math.floor(configuredRunInterval))
+        : 1;
+
+    if (ownerMode === "roleplay") {
+      const autoGenerateMode =
+        meta.roleplayStoryboardAutoGenerateMode === "manual" ||
+        meta.roleplayStoryboardAutoGenerateMode === "illustration" ||
+        meta.roleplayStoryboardAutoGenerateMode === "animation"
+          ? meta.roleplayStoryboardAutoGenerateMode
+          : settings.autoGenerateMode;
+
+      return {
+        ...meta,
+        storyboardAgentInstalled: true,
+        storyboardAgentActive: active,
+        storyboardAgentConfigId: config.id,
+        storyboardAgentPromptConnectionId: meta.roleplayStoryboardPromptConnectionId ?? config.connectionId ?? null,
+        storyboardAgentImageConnectionId: meta.roleplayStoryboardImageConnectionId ?? settings.imageConnectionId,
+        storyboardAgentVideoConnectionId: meta.roleplayStoryboardVideoConnectionId ?? settings.videoConnectionId,
+        storyboardAgentIncludeCharacterAppearance:
+          meta.roleplayStoryboardIncludeCharacterAppearance ?? settings.includeCharacterAppearance,
+        storyboardAgentUseAvatarReferences: meta.roleplayStoryboardUseAvatarReferences ?? settings.useAvatarReferences,
+        roleplayStoryboardsEnabled: active,
+        roleplayStoryboardAutoGenerateMode: autoGenerateMode,
+        roleplayStoryboardRunInterval: meta.roleplayStoryboardRunInterval ?? runInterval,
+        roleplayStoryboardKeyframeCount: meta.roleplayStoryboardKeyframeCount ?? settings.keyframeCount,
+        roleplayStoryboardAnimationDurationSeconds:
+          meta.roleplayStoryboardAnimationDurationSeconds ?? settings.animationDurationSeconds,
+        roleplayStoryboardUseNovelAiCharacterPrompts:
+          meta.roleplayStoryboardUseNovelAiCharacterPrompts ?? settings.useNovelAiCharacterPrompts,
+        roleplayStoryboardUsePromptTemplate: meta.roleplayStoryboardUsePromptTemplate ?? settings.usePromptTemplate,
+        roleplayStoryboardEpisodeTemplateId:
+          meta.roleplayStoryboardEpisodeTemplateId ?? settings.roleplayEpisodeTemplateId,
+        roleplayStoryboardStyleTemplateId: meta.roleplayStoryboardStyleTemplateId ?? settings.roleplayStyleTemplateId,
+        roleplayStoryboardAnimationTemplateId:
+          meta.roleplayStoryboardAnimationTemplateId ?? settings.roleplayAnimationTemplateId,
+        roleplayStoryboardOutputTemplateId:
+          meta.roleplayStoryboardOutputTemplateId ?? settings.roleplayOutputTemplateId,
+        roleplayStoryboardEpisodeTemplates: mergeTemplates(
+          settings.roleplayEpisodeTemplates,
+          meta.roleplayStoryboardEpisodeTemplates,
+        ),
+        roleplayStoryboardStyleTemplates: mergeTemplates(
+          settings.roleplayStyleTemplates,
+          meta.roleplayStoryboardStyleTemplates,
+        ),
+        roleplayStoryboardAnimationTemplates: mergeTemplates(
+          settings.roleplayAnimationTemplates,
+          meta.roleplayStoryboardAnimationTemplates,
+        ),
+        roleplayStoryboardOutputTemplates: mergeTemplates(
+          settings.roleplayOutputTemplates,
+          meta.roleplayStoryboardOutputTemplates,
+        ),
+        roleplayStoryboardImagePromptTemplateId:
+          meta.roleplayStoryboardImagePromptTemplateId ?? settings.illustrationTemplateId,
+        roleplayStoryboardVideoPromptTemplateId:
+          meta.roleplayStoryboardVideoPromptTemplateId ?? settings.videoTemplateId,
+        roleplayStoryboardImagePromptTemplates: mergeTemplates(
+          settings.illustrationTemplates,
+          meta.roleplayStoryboardImagePromptTemplates,
+        ),
+        roleplayStoryboardVideoPromptTemplates: mergeTemplates(
+          settings.videoTemplates,
+          meta.roleplayStoryboardVideoPromptTemplates,
+        ),
+      };
+    }
 
     return {
       ...meta,
       storyboardAgentInstalled: true,
       storyboardAgentActive: active,
+      storyboardAgentConfigId: config.id,
       storyboardAgentPromptConnectionId: meta.gameSceneConnectionId ?? config.connectionId,
       storyboardAgentImageConnectionId: meta.gameImageConnectionId ?? settings.imageConnectionId,
       storyboardAgentVideoConnectionId: meta.gameVideoConnectionId ?? settings.videoConnectionId,

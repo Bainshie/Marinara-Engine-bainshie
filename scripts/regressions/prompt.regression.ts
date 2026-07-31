@@ -252,6 +252,8 @@ import { loadGameStoryboardImagePrompt } from "../../packages/server/src/service
 import { formatAgentFailuresToast, toAgentFailure } from "../../packages/client/src/lib/agent-failures.js";
 import { formatGenerationParameterError } from "../../packages/client/src/lib/generation-parameter-errors.js";
 import { normalizeCustomMusicSource } from "../../packages/client/src/components/chat/AgentAddSetupFields.js";
+import { selectRoleplayStoryboardEpisode } from "../../packages/server/src/services/roleplay/storyboard-episode.js";
+import { buildRoleplayStoryboardMessages } from "../../packages/server/src/services/roleplay/storyboard-prompts.js";
 
 const assistantCadenceMessages = [
   { id: "illustrator-anchor", role: "assistant" },
@@ -723,6 +725,148 @@ const keywordOptions = {
 };
 
 const cases: RegressionCase[] = [
+  {
+    name: "Roleplay Storyboard cadence selects bounded episodes since the last successful run",
+    run() {
+      const messages = [
+        { id: "user-1", role: "user", content: "The door opens." },
+        { id: "assistant-1", role: "assistant", content: "Mira enters the observatory.", activeSwipeIndex: 0 },
+        { id: "user-2", role: "user", content: "I ask what she found." },
+        { id: "assistant-2", role: "assistant", content: "She raises a brass star map.", activeSwipeIndex: 1 },
+        { id: "user-3", role: "user", content: "I move closer." },
+        { id: "assistant-3", role: "assistant", content: "Blue constellations fill the room.", activeSwipeIndex: 0 },
+      ];
+
+      const firstAutomaticRun = selectRoleplayStoryboardEpisode({
+        messages,
+        currentMessageId: "assistant-3",
+        runInterval: 3,
+        automatic: true,
+      });
+      assert.equal(firstAutomaticRun.status, "ready");
+      if (firstAutomaticRun.status !== "ready") return;
+      assert.deepEqual(
+        firstAutomaticRun.sections.map((section) => section.messageId),
+        ["user-3", "assistant-3"],
+        "the first run should use the latest completed exchange instead of backfilling the chat",
+      );
+
+      assert.deepEqual(
+        selectRoleplayStoryboardEpisode({
+          messages,
+          currentMessageId: "assistant-2",
+          previousSuccessfulMessageId: "assistant-1",
+          runInterval: 2,
+          automatic: true,
+        }),
+        { status: "skip", reason: "interval" },
+      );
+
+      const accumulatedEpisode = selectRoleplayStoryboardEpisode({
+        messages,
+        currentMessageId: "assistant-3",
+        previousSuccessfulMessageId: "assistant-1",
+        runInterval: 2,
+        automatic: true,
+      });
+      assert.equal(accumulatedEpisode.status, "ready");
+      if (accumulatedEpisode.status !== "ready") return;
+      assert.equal(accumulatedEpisode.assistantMessageCount, 2);
+      assert.equal(accumulatedEpisode.swipeIndex, 0);
+      assert.deepEqual(
+        accumulatedEpisode.sections.map((section) => section.messageId),
+        ["user-2", "assistant-2", "user-3", "assistant-3"],
+      );
+
+      const boundedEpisode = selectRoleplayStoryboardEpisode({
+        messages: [
+          { id: "anchor", role: "assistant", content: "Previous success" },
+          ...Array.from({ length: 24 }, (_, index) => ({
+            id: `bounded-${index}`,
+            role: index % 2 === 0 ? "user" : "assistant",
+            content: "x".repeat(1_000),
+          })),
+        ],
+        currentMessageId: "bounded-23",
+        previousSuccessfulMessageId: "anchor",
+        automatic: false,
+      });
+      assert.equal(boundedEpisode.status, "ready");
+      if (boundedEpisode.status !== "ready") return;
+      assert.ok(boundedEpisode.sections.length <= 20);
+      assert.ok(boundedEpisode.sections.reduce((total, section) => total + section.content.length, 0) <= 12_000);
+    },
+  },
+  {
+    name: "Roleplay Storyboard prompts layer still and animation instructions without changing source text",
+    run() {
+      const meta = {
+        roleplayStoryboardEpisodeTemplateId: "episode",
+        roleplayStoryboardEpisodeTemplates: [
+          { id: "episode", name: "Episode", promptTemplate: "EPISODE ${keyframeCount}" },
+        ],
+        roleplayStoryboardStyleTemplateId: "comic",
+        roleplayStoryboardStyleTemplates: [
+          { id: "comic", name: "Comic", promptTemplate: "STYLE COMIC ${aspectRatio}" },
+        ],
+        roleplayStoryboardAnimationTemplateId: "motion",
+        roleplayStoryboardAnimationTemplates: [
+          {
+            id: "motion",
+            name: "Motion",
+            promptTemplate:
+              "ANIMATION: imagePrompt is the exact T=0 frame. Add simple action, camera, source dialogue, sound effects, ambience, and end hold for ${durationSeconds} seconds.",
+          },
+        ],
+        roleplayStoryboardOutputTemplateId: "output",
+        roleplayStoryboardOutputTemplates: [{ id: "output", name: "Output", promptTemplate: "OUTPUT JSON" }],
+      };
+      const sections = [
+        {
+          index: 0,
+          kind: "user" as const,
+          speaker: "User" as const,
+          messageId: "user<&quote",
+          content: "Keep <thinking> and A&B verbatim.",
+        },
+        {
+          index: 1,
+          kind: "assistant" as const,
+          speaker: "Assistant" as const,
+          messageId: "assistant-1",
+          content: "Mira turns toward the rain.",
+        },
+      ];
+
+      const still = buildRoleplayStoryboardMessages({
+        meta,
+        sections,
+        keyframeCount: 3,
+        durationSeconds: 6,
+        aspectRatio: "16:9",
+        generateVideos: false,
+      });
+      assert.match(still.systemPrompt, /EPISODE 3/u);
+      assert.match(still.systemPrompt, /STYLE COMIC 16:9/u);
+      assert.match(still.systemPrompt, /OUTPUT JSON/u);
+      assert.doesNotMatch(still.systemPrompt, /ANIMATION:/u);
+      assert.match(still.messages[1]?.content ?? "", /Keep <thinking> and A&B verbatim\./u);
+      assert.match(still.messages[1]?.content ?? "", /message_id="user&lt;&amp;quote"/u);
+      assert.deepEqual(still.selectedTemplateIds, ["episode", "comic", "output"]);
+
+      const animation = buildRoleplayStoryboardMessages({
+        meta,
+        sections,
+        keyframeCount: 3,
+        durationSeconds: 8,
+        aspectRatio: "16:9",
+        generateVideos: true,
+      });
+      assert.match(animation.systemPrompt, /exact T=0 frame/u);
+      assert.match(animation.systemPrompt, /source dialogue, sound effects, ambience, and end hold/u);
+      assert.deepEqual(animation.selectedTemplateIds, ["episode", "comic", "motion", "output"]);
+    },
+  },
   {
     name: "CYOA accepts escaped double quotes and normalizes single-quoted dialogue",
     async run() {
@@ -2519,13 +2663,15 @@ const cases: RegressionCase[] = [
         editorSource,
         /\.\.\.\(localMaxTokens !== "" \? \{ maxTokens: clampAgentMaxTokens\(localMaxTokens\) \} : \{\}\)/u,
       );
+      const roleplayLibraryIndex = storyboardEditorSource.indexOf("ui.agents.storyboard.roleplayPromptLibrary");
+      const sharedFormatterIndex = storyboardEditorSource.indexOf("ui.agents.storyboard.sharedProviderFormatters");
       const defaultImagePromptIndex = storyboardEditorSource.indexOf("ui.agents.storyboard.defaultImagePrompt");
-      const firstTemplateEditorIndex = storyboardEditorSource.indexOf("<TemplateCollectionEditor");
       assert.ok(defaultImagePromptIndex >= 0, "Storyboard editor should expose a default image prompt selector");
-      assert.ok(firstTemplateEditorIndex >= 0, "Storyboard editor should expose editable prompt templates");
+      assert.ok(roleplayLibraryIndex >= 0, "Storyboard editor should expose a separate Roleplay prompt library");
+      assert.ok(sharedFormatterIndex >= 0, "Storyboard editor should identify shared provider formatters");
       assert.ok(
-        defaultImagePromptIndex < firstTemplateEditorIndex,
-        "Storyboard default prompt selectors should precede the editable template libraries",
+        roleplayLibraryIndex < sharedFormatterIndex && sharedFormatterIndex < defaultImagePromptIndex,
+        "Roleplay planning prompts should stay separate from the shared provider formatters",
       );
       assert.match(editorSource, /includeCharacterAppearance:\s*settings\.includeCharacterAppearance/u);
       assert.match(editorSource, /useAvatarReferences:\s*settings\.useAvatarReferences/u);
@@ -3256,6 +3402,10 @@ const cases: RegressionCase[] = [
         new URL("../../packages/client/src/components/chat/StoryboardChatSettingsPanel.tsx", import.meta.url),
         "utf8",
       );
+      const roleplaySettingsStart = storyboardChatSettingsSource.indexOf(
+        "function RoleplayStoryboardChatSettingsPanel",
+      );
+      const gameStoryboardChatSettingsSource = storyboardChatSettingsSource.slice(0, roleplaySettingsStart);
       const gameSurfaceSource = readFileSync(
         new URL("../../packages/client/src/components/game/GameSurface.tsx", import.meta.url),
         "utf8",
@@ -3271,10 +3421,10 @@ const cases: RegressionCase[] = [
       assert.match(storyboardSettingsSource, /update\(\{ includeCharacterAppearance: checked \}\)/u);
       assert.match(storyboardSettingsSource, /settings\.useAvatarReferences/u);
       assert.match(storyboardSettingsSource, /update\(\{ useAvatarReferences: checked \}\)/u);
-      assert.doesNotMatch(storyboardChatSettingsSource, /gameStoryboardIncludeCharacterAppearance/u);
-      assert.doesNotMatch(storyboardChatSettingsSource, /gameStoryboardUseAvatarReferences/u);
-      assert.doesNotMatch(storyboardChatSettingsSource, /appearanceOverridden/u);
-      assert.doesNotMatch(storyboardChatSettingsSource, /avatarReferencesOverridden/u);
+      assert.doesNotMatch(gameStoryboardChatSettingsSource, /gameStoryboardIncludeCharacterAppearance/u);
+      assert.doesNotMatch(gameStoryboardChatSettingsSource, /gameStoryboardUseAvatarReferences/u);
+      assert.doesNotMatch(gameStoryboardChatSettingsSource, /appearanceOverridden/u);
+      assert.doesNotMatch(gameStoryboardChatSettingsSource, /avatarReferencesOverridden/u);
       assert.doesNotMatch(gameSurfaceSource, /useGamePromptTemplate/u);
       assert.match(gameRouteSource, /characterAppearanceContextBlock:\s*storyboardAppearanceContextBlock/u);
       assert.equal(gameRouteSource.match(/^\s+characterAppearanceContextBlock,\s*$/gmu)?.length, 2);
