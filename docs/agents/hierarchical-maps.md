@@ -634,13 +634,20 @@ Archiving preserves old references. Before archiving a location:
 - choose another active starting location if needed; and
 - choose an active replacement if it is the current runtime location.
 
-Archived locations can be restored from the Details pane.
+Archived locations can be restored from the Details pane. World Maps 1.2.4
+also offers **Delete permanently** for an archived location or fully archived
+branch when it is safe to remove. The editor disables that action when the
+location is the saved starting or current story location, appears in message
+history, has a Game map binding, participates in a queued destination or route,
+or belongs to a linked shared world. Resolve the named dependency first, or
+keep the location archived.
 
-World Maps 1.2.4 does not offer permanent per-location deletion after
-archiving. This protects stable IDs used by message snapshots, breadcrumbs,
-routes, bindings, and linked chats. An archived location therefore remains in
-exports. A future cleanup flow can remove only locations proven to be
-unreferenced; until then, do not edit exported JSON to bypass the protection.
+Permanent deletion removes the location from the working draft and cleans up
+its hierarchy and direct-link references when you click **Save**. Closing
+without saving still discards the deletion. Deleted locations no longer appear
+in exports; archived locations that remain protected continue to be exported
+so their stable IDs can support history and linked data. Do not edit exported
+JSON to bypass these protections.
 
 ## Troubleshooting
 
