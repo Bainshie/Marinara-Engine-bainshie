@@ -6372,15 +6372,30 @@ function GameSurfaceComponent({
     pendingSharedWorldSetupApplyRef.current = pending;
     setPendingSharedWorldSetupApply(pending);
   }, []);
+  const activeChatIdRef = useRef(activeChatId);
+  activeChatIdRef.current = activeChatId;
   const clearPendingSharedWorldSetupApply = useCallback((chatId: string, attempt: number) => {
     const pending = pendingSharedWorldSetupApplyRef.current;
-    if (!pending || pending.chatId !== chatId || pending.attempt !== attempt) return false;
+    if (
+      activeChatIdRef.current !== chatId ||
+      !pending ||
+      pending.chatId !== chatId ||
+      pending.attempt !== attempt
+    ) {
+      return false;
+    }
     pendingSharedWorldSetupApplyRef.current = null;
     setPendingSharedWorldSetupApply((current) =>
       current?.chatId === chatId && current.attempt === attempt ? null : current,
     );
     return true;
   }, []);
+  useEffect(() => {
+    const pending = pendingSharedWorldSetupApplyRef.current;
+    if (pending && pending.chatId !== activeChatId) {
+      updatePendingSharedWorldSetupApply(null);
+    }
+  }, [activeChatId, updatePendingSharedWorldSetupApply]);
   const activePendingSharedWorldSetupApply =
     pendingSharedWorldSetupApply?.chatId === activeChatId ? pendingSharedWorldSetupApply : null;
   const pendingSetupMapPlanRef = useRef<
