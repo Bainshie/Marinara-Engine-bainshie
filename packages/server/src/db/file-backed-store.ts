@@ -13,6 +13,7 @@ import { getFileStorageDir } from "../config/runtime-config.js";
 import * as schema from "./schema/index.js";
 import { inArray, isFileCondition, isFileOrdering, type FileCondition, type FileOrdering } from "./file-query.js";
 import { migrateLegacyNoodleAccountRow } from "./noodle-platform-migration.js";
+import { migrateRetiredChatModeRow, RETIRED_CHAT_MODE_TABLES } from "./retired-chat-mode-migration.js";
 import {
   getFileTableConfig,
   FileUniqueConstraintError,
@@ -1288,11 +1289,20 @@ class FileTableStore {
         unreadablePaths,
       } = parseJsonFile<Row[]>(path, []);
       const source = Array.isArray(rows) ? rows : [];
-      const migrate = table === "noodle_accounts" ? migrateLegacyNoodleAccountRow : null;
+      const migrate = table === "noodle_accounts"
+        ? migrateLegacyNoodleAccountRow
+        : (RETIRED_CHAT_MODE_TABLES as readonly string[]).includes(table)
+          ? migrateRetiredChatModeRow
+          : null;
       const normalized = source.map((row) => normalizeRow(meta, migrate ? migrate(row) : row));
       this.tables.set(table, normalized);
       counts[table] = normalized.length;
-      if (migrate && source.some((row) => row.platform === undefined)) {
+      if (source.some((row) => row.mode === "visual_novel")) {
+        // Persist the normalized mode so the rewrite happens once, not on every boot.
+        this.dirtyTables.add(table);
+        this.dirty = true;
+      }
+      if (migrate === migrateLegacyNoodleAccountRow && source.some((row) => row.platform === undefined)) {
         // Persist the renamed keys on the next flush, alongside the `visibility` /
         // `publicAccountId` rollback mirrors the migration deliberately retains.
         this.dirtyTables.add(table);
