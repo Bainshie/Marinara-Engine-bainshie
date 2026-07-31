@@ -928,8 +928,10 @@ export async function galleryRoutes(app: FastifyInstance) {
     const video = await sceneVideos.getById(id);
     if (!video || video.chatId !== chatId) return reply.status(404).send({ error: "Scene video not found" });
 
-    await removeSavedVideoFromDisk(video.filePath);
     await sceneVideos.remove(video.id);
+    await removeSavedVideoFromDisk(video.filePath).catch((error) => {
+      logger.warn(error, "[gallery/scene-videos] Failed to remove video file %s", video.filePath);
+    });
     return { success: true };
   });
 
