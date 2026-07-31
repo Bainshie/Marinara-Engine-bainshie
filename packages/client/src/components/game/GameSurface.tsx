@@ -6360,11 +6360,27 @@ function GameSurfaceComponent({
   const gameSetupResetRef = useRef(gameSetup.reset);
   const startGameResetRef = useRef(startGame.reset);
   const startSessionResetRef = useRef(startSession.reset);
-  const [pendingSharedWorldSetupApply, setPendingSharedWorldSetupApply] = useState<{
+  type PendingSharedWorldSetupApply = {
     chatId: string;
     selection: unknown;
     attempt: number;
-  } | null>(null);
+  };
+  const [pendingSharedWorldSetupApply, setPendingSharedWorldSetupApply] =
+    useState<PendingSharedWorldSetupApply | null>(null);
+  const pendingSharedWorldSetupApplyRef = useRef<PendingSharedWorldSetupApply | null>(null);
+  const updatePendingSharedWorldSetupApply = useCallback((pending: PendingSharedWorldSetupApply | null) => {
+    pendingSharedWorldSetupApplyRef.current = pending;
+    setPendingSharedWorldSetupApply(pending);
+  }, []);
+  const clearPendingSharedWorldSetupApply = useCallback((chatId: string, attempt: number) => {
+    const pending = pendingSharedWorldSetupApplyRef.current;
+    if (!pending || pending.chatId !== chatId || pending.attempt !== attempt) return false;
+    pendingSharedWorldSetupApplyRef.current = null;
+    setPendingSharedWorldSetupApply((current) =>
+      current?.chatId === chatId && current.attempt === attempt ? null : current,
+    );
+    return true;
+  }, []);
   const activePendingSharedWorldSetupApply =
     pendingSharedWorldSetupApply?.chatId === activeChatId ? pendingSharedWorldSetupApply : null;
   const pendingSetupMapPlanRef = useRef<
@@ -6418,7 +6434,7 @@ function GameSurfaceComponent({
         return;
       }
       if (plan.mode === "shared-world") {
-        setPendingSharedWorldSetupApply({
+        updatePendingSharedWorldSetupApply({
           chatId,
           selection: plan.selection,
           attempt: Date.now(),
@@ -6456,12 +6472,12 @@ function GameSurfaceComponent({
         );
       }
     },
-    [generateSetupMapDraft, localizeUi],
+    [generateSetupMapDraft, localizeUi, updatePendingSharedWorldSetupApply],
   );
 
   const handleSharedWorldSetupApplyError = useCallback(
-    (message: unknown) => {
-      setPendingSharedWorldSetupApply(null);
+    (chatId: string, attempt: number, message: unknown) => {
+      if (!clearPendingSharedWorldSetupApply(chatId, attempt)) return;
       const detail = typeof message === "string" && message.trim() ? message.trim() : null;
       toast.error(
         detail
@@ -6472,7 +6488,7 @@ function GameSurfaceComponent({
         { duration: 10000 },
       );
     },
-    [localizeUi],
+    [clearPendingSharedWorldSetupApply, localizeUi],
   );
 
   const handleStartGameNow = useCallback(() => {
@@ -10000,25 +10016,44 @@ function GameSurfaceComponent({
               packageId="hierarchical-maps"
               view="setup-apply"
               className="hidden"
-              onHostError={handleSharedWorldSetupApplyError}
+              onHostError={(message) =>
+                handleSharedWorldSetupApplyError(
+                  activePendingSharedWorldSetupApply.chatId,
+                  activePendingSharedWorldSetupApply.attempt,
+                  message,
+                )
+              }
               capabilityProps={{
                 chatId: activePendingSharedWorldSetupApply.chatId,
                 selection: activePendingSharedWorldSetupApply.selection,
                 onApplied: (result: unknown) => {
+                  if (
+                    !clearPendingSharedWorldSetupApply(
+                      activePendingSharedWorldSetupApply.chatId,
+                      activePendingSharedWorldSetupApply.attempt,
+                    )
+                  )
+                    return;
                   const applied = result && typeof result === "object" ? (result as Record<string, unknown>) : null;
                   const worldName =
                     typeof applied?.worldName === "string" && applied.worldName.trim()
                       ? applied.worldName.trim()
                       : localizeUi("ui.game.gamesurfacecomponent.theSelectedSharedWorld");
-                  setPendingSharedWorldSetupApply(null);
                   useGameModeStore.getState().setSetupActive(false);
-                  void queryClient.invalidateQueries({ queryKey: chatKeys.detail(activeChatId) });
+                  void queryClient.invalidateQueries({
+                    queryKey: chatKeys.detail(activePendingSharedWorldSetupApply.chatId),
+                  });
                   void queryClient.invalidateQueries({ queryKey: chatKeys.list() });
                   toast.success(
                     localizeUi("ui.game.gamesurfacecomponent.linkedToSharedWorldValue1", { value1: worldName }),
                   );
                 },
-                onError: handleSharedWorldSetupApplyError,
+                onError: (message: unknown) =>
+                  handleSharedWorldSetupApplyError(
+                    activePendingSharedWorldSetupApply.chatId,
+                    activePendingSharedWorldSetupApply.attempt,
+                    message,
+                  ),
               }}
             />
           ) : null}
