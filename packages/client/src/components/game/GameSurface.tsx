@@ -9977,7 +9977,11 @@ function GameSurfaceComponent({
                       gameSetupConfig: { ...storedSetupConfig, ...config },
                     }),
                   ]);
-                  await completePostSetupMapPlan(chatId);
+                  if (mapPlan) {
+                    await completePostSetupMapPlan(chatId);
+                  } else if (activeChatIdRef.current === chatId) {
+                    useGameModeStore.getState().setSetupActive(false);
+                  }
                 } catch (error) {
                   if (activeChatIdRef.current !== chatId) return;
                   clearPendingSetupMapPlan(chatId);
