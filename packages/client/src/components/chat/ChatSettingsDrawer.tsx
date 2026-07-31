@@ -353,6 +353,11 @@ const ROLEPLAY_AGENT_SETTINGS_ORDER = new Map<string, number>(
     })
     .map(({ agent }, index) => [agent.id, index]),
 );
+ROLEPLAY_AGENT_SETTINGS_ORDER.set(
+  STORYBOARD_AGENT_ID,
+  ROLEPLAY_AGENT_SETTINGS_ORDER.get(STORYBOARD_AGENT_ID) ??
+    (ROLEPLAY_AGENT_SETTINGS_ORDER.get("illustrator") ?? ROLEPLAY_AGENT_SETTINGS_ORDER.size) + 0.5,
+);
 const CUSTOM_AGENT_SETTINGS_ORDER = ROLEPLAY_AGENT_SETTINGS_ORDER.size + 100;
 
 function getRoleplayAgentSettingsOrder(agentId: string): number {

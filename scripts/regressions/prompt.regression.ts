@@ -2773,6 +2773,10 @@ const cases: RegressionCase[] = [
         new URL("../../packages/client/src/components/chat/ChatSettingsDrawer.tsx", import.meta.url),
         "utf8",
       );
+      const roleplaySurfaceSource = readFileSync(
+        new URL("../../packages/client/src/components/chat/ChatRoleplaySurface.tsx", import.meta.url),
+        "utf8",
+      );
       const storyboardChatSettingsSource = readFileSync(
         new URL("../../packages/client/src/components/chat/StoryboardChatSettingsPanel.tsx", import.meta.url),
         "utf8",
@@ -2816,9 +2820,14 @@ const cases: RegressionCase[] = [
         drawerSource,
         /addLink\(STORYBOARD_AGENT_ID, activeAgentIds\.includes\(STORYBOARD_AGENT_ID\), storyboardAgent\.name\)/u,
       );
+      assert.match(drawerSource, /ROLEPLAY_AGENT_SETTINGS_ORDER\.set\(\s*STORYBOARD_AGENT_ID,/u);
       assert.match(
         drawerSource,
         /agent\.id === "hierarchical-maps" \|\| agent\.id === STORYBOARD_AGENT_ID[\s\S]*?getAgentSettingsMenuId\(chat\.id, agent\.id\)/u,
+      );
+      assert.match(
+        roleplaySurfaceSource,
+        /if \(\s*isStreaming \|\|\s*agentProcessing[\s\S]*?automaticStoryboardMessageRef\.current = messageId;[\s\S]*?automatic: true,/u,
       );
       assert.match(storyboardChatSettingsSource, /settings\.plannerTemplates\.filter/u);
       assert.match(storyboardChatSettingsSource, /gameStoryboardIllustrationPromptTemplateId/u);
