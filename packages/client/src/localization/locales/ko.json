@@ -5463,7 +5463,7 @@
   "ui.panels.advancedsettings.refreshApp": "앱 새로고침",
   "ui.panels.advancedsettings.refreshing": "새로고침 중…",
   "ui.panels.advancedsettings.release": "릴리즈:",
-  "ui.panels.advancedsettings.releaseChannel": "릴리즈 채널",
+  "ui.panels.advancedsettings.releaseChannel": "릴리스 채널",
   "ui.panels.advancedsettings.releaseNotes": "릴리즈 노트",
   "ui.panels.advancedsettings.selectAll": "전체 선택",
   "ui.panels.advancedsettings.selectedDataWasClearedRuntimeCachesWereResetImmediately": "선택한 데이터를 지웠습니다. 런타임 캐시는 즉시 초기화되었습니다.",
