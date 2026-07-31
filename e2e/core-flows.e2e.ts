@@ -1629,6 +1629,52 @@ test("Character favorite tags and stars inherit the configured accent color", as
   }
 });
 
+test("Characters can be dragged from the right panel into the active chat", async ({ page, request }, testInfo) => {
+  test.skip(testInfo.project.name.includes("mobile"), "HTML resource dragging is covered on desktop.");
+
+  const suffix = Date.now().toString(36);
+  const characterName = `Chat Drop Character ${suffix}`;
+  const characterResponse = await request.post("/api/characters", {
+    data: { data: { name: characterName } },
+  });
+  expect(characterResponse.ok()).toBeTruthy();
+  const character = (await characterResponse.json()) as { id: string };
+  const chatResponse = await request.post("/api/chats", {
+    data: { name: `Chat Drop ${suffix}`, mode: "conversation", characterIds: [] },
+  });
+  expect(chatResponse.ok()).toBeTruthy();
+  const chat = (await chatResponse.json()) as { id: string };
+
+  try {
+    await page.goto("/");
+    await page.evaluate(async (chatId) => {
+      const module = await import("/src/stores/chat.store.ts");
+      module.useChatStore.getState().setActiveChatId(chatId);
+    }, chat.id);
+    await expect(page.locator('[data-chat-resource-drop-surface]')).toBeVisible();
+
+    await page.locator('[data-tour="panel-characters"]').click();
+    const rightPanel = page.locator('[data-component="RightPanelDesktop"]');
+    const characterRow = rightPanel.locator('[data-touch-drag-card="character"]').filter({ hasText: characterName });
+    await expect(characterRow).toBeVisible();
+
+    await characterRow.dragTo(page.locator('[data-chat-resource-drop-surface]'));
+
+    await expect
+      .poll(async () => {
+        const response = await request.get(`/api/chats/${chat.id}`);
+        const stored = (await response.json()) as { characterIds?: string[] | string };
+        return typeof stored.characterIds === "string" ? JSON.parse(stored.characterIds) : (stored.characterIds ?? []);
+      })
+      .toContain(character.id);
+  } finally {
+    await Promise.all([
+      request.delete(`/api/chats/${chat.id}`).catch(() => undefined),
+      request.delete(`/api/characters/${character.id}`).catch(() => undefined),
+    ]);
+  }
+});
+
 test("Character Chat actions reuse mode selection and seed the chosen setup wizard", async ({
   page,
   request,

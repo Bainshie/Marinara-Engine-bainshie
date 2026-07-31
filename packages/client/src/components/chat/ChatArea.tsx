@@ -131,6 +131,7 @@ import {
   type ImagePromptReviewItem,
 } from "../ui/ImagePromptReviewModal";
 import { useTranslation, useTranslation as useUiTranslation } from "react-i18next";
+import { ChatResourceDropOverlay } from "./ChatResourceDropOverlay";
 
 export type { CharacterMap };
 
@@ -3103,6 +3104,7 @@ export function ChatArea() {
       />
     </Suspense>
   ) : null;
+  const resourceDropOverlay = chat ? <ChatResourceDropOverlay chat={chat} /> : null;
 
   // ═══════════════════════════════════════════════
   // Game mode — RPG surface with GM narration, map, party chat
@@ -3115,6 +3117,7 @@ export function ChatArea() {
         <>
           {cardCssInjector}
           {scheduleModal}
+          {resourceDropOverlay}
           <GameSurface
             activeChatId={activeChatId}
             chat={chat!}
@@ -3192,6 +3195,7 @@ export function ChatArea() {
       <>
         {cardCssInjector}
         {scheduleModal}
+        {resourceDropOverlay}
         <Suspense fallback={surfaceFallback}>
           <ChatConversationSurface
             activeChatId={activeChatId}
@@ -3288,6 +3292,7 @@ export function ChatArea() {
     <>
       {cardCssInjector}
       {scheduleModal}
+      {resourceDropOverlay}
       <Suspense fallback={surfaceFallback}>
         <ChatRoleplaySurface
           activeChatId={activeChatId}

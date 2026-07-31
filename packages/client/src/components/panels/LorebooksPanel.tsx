@@ -65,6 +65,7 @@ import { TouchDragHandle } from "../ui/TouchDragHandle";
 import { useLocalizedUiText } from "../../localization/use-localized-ui-text";
 import { useTranslation as useUiTranslation } from "react-i18next";
 import { PanelLoadMoreBar } from "./PanelLoadMoreBar";
+import { clearActiveChatResourceDrag, writeChatResourceDragPayload } from "../../lib/chat-resource-drag";
 
 const CATEGORIES: Array<{ id: LorebookCategory | "all" | "active"; label: string }> = [
   { id: "all", label: "All" },
@@ -654,11 +655,23 @@ export function LorebooksPanel() {
             if (isMobileOverlay) return;
             const ids = getDraggedLorebookIds(lb.id);
             setDraggedLorebookId(lb.id);
-            event.dataTransfer.effectAllowed = "move";
+            event.dataTransfer.effectAllowed = "copyMove";
             event.dataTransfer.setData("application/x-marinara-lorebook-ids", JSON.stringify(ids));
             event.dataTransfer.setData("text/plain", lb.id);
+            writeChatResourceDragPayload(event.dataTransfer, {
+              version: 1,
+              kind: "lorebook",
+              ids,
+              label:
+                ids.length === 1
+                  ? lb.name
+                  : localizeUi("ui.chat.chatresourcedropoverlay.lorebookCount", { count: ids.length }),
+            });
           }}
-          onDragEnd={() => setDraggedLorebookId(null)}
+          onDragEnd={() => {
+            setDraggedLorebookId(null);
+            clearActiveChatResourceDrag();
+          }}
           onTouchStart={(event) => {
             startLorebookTouchDrag(event, lb.id, {
               allowInteractiveTarget: true,

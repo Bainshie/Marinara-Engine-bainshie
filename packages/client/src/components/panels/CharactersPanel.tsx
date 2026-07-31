@@ -55,6 +55,7 @@ import { SelectionActionBar } from "../ui/SelectionActionBar";
 import { SmoothFolderContent } from "../ui/SmoothFolderContent";
 import { TouchDragHandle } from "../ui/TouchDragHandle";
 import { PanelLoadMoreBar } from "./PanelLoadMoreBar";
+import { clearActiveChatResourceDrag, writeChatResourceDragPayload } from "../../lib/chat-resource-drag";
 
 type CharacterRow = {
   id: string;
@@ -1073,11 +1074,23 @@ export function CharactersPanel() {
                       onDragStart={(event) => {
                         const ids = getDraggedCharacterIds(memberId);
                         setDraggedCharacterId(memberId);
-                        event.dataTransfer.effectAllowed = "move";
+                        event.dataTransfer.effectAllowed = "copyMove";
                         event.dataTransfer.setData("application/x-marinara-character-ids", JSON.stringify(ids));
                         event.dataTransfer.setData("text/plain", memberId);
+                        writeChatResourceDragPayload(event.dataTransfer, {
+                          version: 1,
+                          kind: "character",
+                          ids,
+                          label:
+                            ids.length === 1
+                              ? memberName
+                              : localizeUi("ui.chat.chatresourcedropoverlay.characterCount", { count: ids.length }),
+                        });
                       }}
-                      onDragEnd={() => setDraggedCharacterId(null)}
+                      onDragEnd={() => {
+                        setDraggedCharacterId(null);
+                        clearActiveChatResourceDrag();
+                      }}
                       role="button"
                       tabIndex={0}
                       className={cn(
@@ -1385,11 +1398,23 @@ export function CharactersPanel() {
               onDragStart={(event) => {
                 const ids = getDraggedCharacterIds(char.id);
                 setDraggedCharacterId(char.id);
-                event.dataTransfer.effectAllowed = "move";
+                event.dataTransfer.effectAllowed = "copyMove";
                 event.dataTransfer.setData("application/x-marinara-character-ids", JSON.stringify(ids));
                 event.dataTransfer.setData("text/plain", char.id);
+                writeChatResourceDragPayload(event.dataTransfer, {
+                  version: 1,
+                  kind: "character",
+                  ids,
+                  label:
+                    ids.length === 1
+                      ? charName
+                      : localizeUi("ui.chat.chatresourcedropoverlay.characterCount", { count: ids.length }),
+                });
               }}
-              onDragEnd={() => setDraggedCharacterId(null)}
+              onDragEnd={() => {
+                setDraggedCharacterId(null);
+                clearActiveChatResourceDrag();
+              }}
               className={cn(
                 "group relative flex min-h-[4.5rem] shrink-0 touch-pan-y cursor-pointer items-center gap-2.5 rounded-xl p-2 transition-all hover:bg-[var(--sidebar-accent)] max-md:min-h-16",
                 selectionMode &&

@@ -80,6 +80,7 @@ import { useLocalizedUiText } from "../../localization/use-localized-ui-text";
 import { useTranslation as useUiTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 import { Modal } from "../ui/Modal";
+import { clearActiveChatResourceDrag, writeChatResourceDragPayload } from "../../lib/chat-resource-drag";
 
 type JsonRecord = Record<string, unknown>;
 type NormalizedAgentImport = NonNullable<ReturnType<typeof normalizeAgentImportEntry>>;
@@ -733,11 +734,23 @@ export function AgentsPanel() {
         onDragStart: (event) => {
           const ids = getDraggedAgentIds(agent.id);
           setDraggedAgentId(agent.id);
-          event.dataTransfer.effectAllowed = "move";
+          event.dataTransfer.effectAllowed = "copyMove";
           event.dataTransfer.setData("application/x-marinara-agent-ids", JSON.stringify(ids));
           event.dataTransfer.setData("text/plain", agent.id);
+          writeChatResourceDragPayload(event.dataTransfer, {
+            version: 1,
+            kind: "agent",
+            ids,
+            label:
+              ids.length === 1
+                ? getAgentLibraryDisplayName(agent)
+                : localizeUi("ui.chat.chatresourcedropoverlay.agentCount", { count: ids.length }),
+          });
         },
-        onDragEnd: () => setDraggedAgentId(null),
+        onDragEnd: () => {
+          setDraggedAgentId(null);
+          clearActiveChatResourceDrag();
+        },
         nativeDragEnabled: nativeAgentDragEnabled,
         touchSafeDragMode: touchSafeAgentDragMode,
         suppressClickRef: suppressAgentClickRef,
@@ -1137,11 +1150,23 @@ export function AgentsPanel() {
                   onDragStart: (event) => {
                     const ids = getDraggedAgentIds(agent.id);
                     setDraggedAgentId(agent.id);
-                    event.dataTransfer.effectAllowed = "move";
+                    event.dataTransfer.effectAllowed = "copyMove";
                     event.dataTransfer.setData("application/x-marinara-agent-ids", JSON.stringify(ids));
                     event.dataTransfer.setData("text/plain", agent.id);
+                    writeChatResourceDragPayload(event.dataTransfer, {
+                      version: 1,
+                      kind: "agent",
+                      ids,
+                      label:
+                        ids.length === 1
+                          ? agent.name
+                          : localizeUi("ui.chat.chatresourcedropoverlay.agentCount", { count: ids.length }),
+                    });
                   },
-                  onDragEnd: () => setDraggedAgentId(null),
+                  onDragEnd: () => {
+                    setDraggedAgentId(null);
+                    clearActiveChatResourceDrag();
+                  },
                   nativeDragEnabled: nativeAgentDragEnabled,
                   touchSafeDragMode: touchSafeAgentDragMode,
                   suppressClickRef: suppressAgentClickRef,
@@ -1191,11 +1216,23 @@ export function AgentsPanel() {
                 onDragStart: (event) => {
                   const ids = getDraggedAgentIds(agent.id);
                   setDraggedAgentId(agent.id);
-                  event.dataTransfer.effectAllowed = "move";
+                  event.dataTransfer.effectAllowed = "copyMove";
                   event.dataTransfer.setData("application/x-marinara-agent-ids", JSON.stringify(ids));
                   event.dataTransfer.setData("text/plain", agent.id);
+                  writeChatResourceDragPayload(event.dataTransfer, {
+                    version: 1,
+                    kind: "agent",
+                    ids,
+                    label:
+                      ids.length === 1
+                        ? agent.name
+                        : localizeUi("ui.chat.chatresourcedropoverlay.agentCount", { count: ids.length }),
+                  });
                 },
-                onDragEnd: () => setDraggedAgentId(null),
+                onDragEnd: () => {
+                  setDraggedAgentId(null);
+                  clearActiveChatResourceDrag();
+                },
                 nativeDragEnabled: nativeAgentDragEnabled,
                 touchSafeDragMode: touchSafeAgentDragMode,
                 suppressClickRef: suppressAgentClickRef,
