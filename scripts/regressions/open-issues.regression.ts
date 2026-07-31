@@ -897,9 +897,8 @@ try {
   await customToolsStore.remove(customTool.id);
   const cleanedToolAgent = await agentsStore.getById(toolAgent.id);
   assert.deepEqual(JSON.parse(cleanedToolAgent?.settings ?? "{}").enabledTools, ["roll_dice"]);
-  const { resolveGenerationTools } = await import(
-    "../../packages/server/src/services/generation/tool-resolution-runtime.js"
-  );
+  const { resolveGenerationTools } =
+    await import("../../packages/server/src/services/generation/tool-resolution-runtime.js");
   const diceAgent = {
     id: "dice-agent-regression",
     type: "dice-agent-regression",
@@ -1875,6 +1874,21 @@ const playwrightWebServer = Array.isArray(playwrightConfig.webServer)
   ? playwrightConfig.webServer[0]
   : playwrightConfig.webServer;
 assert.equal(playwrightWebServer?.env?.DEV_PRESERVE_SHARED_DIST, "true");
+assert.match(playwrightWebServer?.command ?? "", /e2e\/start-servers\.mjs/u);
+const desktopPlaywrightProject = playwrightConfig.projects?.find((project) => project.name === "desktop-chromium");
+const mobilePlaywrightProject = playwrightConfig.projects?.find((project) => project.name === "mobile-chromium");
+assert.ok(desktopPlaywrightProject);
+assert.ok(mobilePlaywrightProject);
+assert.notEqual(
+  desktopPlaywrightProject.use?.baseURL,
+  mobilePlaywrightProject.use?.baseURL,
+  "desktop and mobile Playwright projects must use isolated app servers",
+);
+const playwrightServerSource = readFileSync(join(REPOSITORY_ROOT, "e2e/start-servers.mjs"), "utf8");
+assert.match(playwrightServerSource, /startProject\("mobile", mobileClientPort, mobileServerPort\)/u);
+assert.match(playwrightServerSource, /startProject\("desktop", desktopClientPort, desktopServerPort\)/u);
+assert.match(playwrightServerSource, /resolve\(dataRoot, name\)/u);
+assert.match(playwrightServerSource, /DATA_DIR:\s*dataDir/u);
 
 const appSource = readFileSync(new URL("../../packages/client/src/App.tsx", import.meta.url), "utf8");
 const agentEditorSource = readFileSync(
