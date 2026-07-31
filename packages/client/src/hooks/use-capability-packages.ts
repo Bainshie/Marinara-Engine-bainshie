@@ -9,6 +9,7 @@ import {
   type InstalledCapabilityPackage,
 } from "@marinara-engine/shared";
 import { api } from "../lib/api-client";
+import { capabilityClientNeedsRefresh } from "../lib/capability-client-version";
 
 export const capabilityPackageKeys = {
   all: ["capability-packages"] as const,
@@ -67,7 +68,7 @@ const capabilityClientModuleIdleStates = new Map<string, CapabilityClientModuleS
 const capabilityClientModuleListeners = new Set<() => void>();
 let capabilityClientModuleRevision = 0;
 
-export type CapabilityClientModuleStatus = "idle" | "loading" | "ready" | "error";
+export type CapabilityClientModuleStatus = "idle" | "loading" | "ready" | "error" | "refresh-required";
 
 export interface CapabilityClientModuleState {
   packageId: string;
@@ -120,7 +121,6 @@ function publishCapabilityClientModuleState(next: CapabilityClientModuleState): 
 
 function removeCapabilityClientModuleState(packageId: string): void {
   if (!capabilityClientModuleStates.delete(packageId)) return;
-  loadedClientModules.delete(packageId);
   capabilityClientModuleRevision += 1;
   for (const listener of capabilityClientModuleListeners) listener();
 }
@@ -163,7 +163,26 @@ export function useCapabilityClientModules() {
       eligiblePackageIds.add(item.id);
       const current = getCapabilityClientModuleState(item.id);
       const attempt = current.version === item.version ? current.attempt : 0;
-      if (loadedClientModules.get(item.id) === item.version) {
+      const loadedVersion = loadedClientModules.get(item.id);
+      const tag = `marinara-capability-${item.id}`;
+      if (
+        capabilityClientNeedsRefresh(
+          loadedVersion,
+          item.version,
+          typeof customElements !== "undefined" && Boolean(customElements.get(tag)),
+        )
+      ) {
+        publishCapabilityClientModuleState({
+          packageId: item.id,
+          name: item.manifest.name,
+          version: item.version,
+          status: "refresh-required",
+          error: null,
+          attempt,
+        });
+        continue;
+      }
+      if (loadedVersion === item.version) {
         publishCapabilityClientModuleState({
           packageId: item.id,
           name: item.manifest.name,
@@ -174,7 +193,10 @@ export function useCapabilityClientModules() {
         });
         continue;
       }
-      if (current.version === item.version && (current.status === "loading" || current.status === "error")) {
+      if (
+        current.version === item.version &&
+        (current.status === "loading" || current.status === "error" || current.status === "refresh-required")
+      ) {
         continue;
       }
       publishCapabilityClientModuleState({
@@ -188,7 +210,6 @@ export function useCapabilityClientModules() {
       const source = `/api/capability-packages/${encodeURIComponent(item.id)}/client?v=${encodeURIComponent(item.version)}${attempt > 0 ? `&retry=${attempt}` : ""}`;
       void import(/* @vite-ignore */ source)
         .then(() => {
-          const tag = `marinara-capability-${item.id}`;
           if (!customElements.get(tag)) {
             throw new Error(`Client module did not register ${tag}`);
           }
@@ -280,7 +301,8 @@ export function useInstallCapabilityPackage() {
   const invalidate = useInvalidateCapabilityState();
   return useMutation({
     mutationFn: (variables: string | { id: string; expectedVersion: string }) => {
-      const { id, expectedVersion } = typeof variables === "string" ? { id: variables, expectedVersion: undefined } : variables;
+      const { id, expectedVersion } =
+        typeof variables === "string" ? { id: variables, expectedVersion: undefined } : variables;
       return api.post<InstalledCapabilityPackage>(
         `/capability-packages/${encodeURIComponent(id)}/install`,
         expectedVersion ? { expectedVersion } : undefined,
