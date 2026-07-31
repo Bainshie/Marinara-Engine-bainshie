@@ -444,10 +444,17 @@ assert.deepEqual(
   "an uncapped roleplay summary tail should protect every requested recent message",
 );
 import {
+  clipVerbatimVideoSource,
   compactVideoPromptText,
   getSceneVideoPromptLimits,
   resolveGalleryVideoNarrationSummary,
+  resolveGalleryVideoSourceExchange,
 } from "../../packages/server/src/services/video/prompt-context.js";
+import {
+  buildRoleplayVideoDirectionMessages,
+  buildRoleplayVideoDirectionUserPrompt,
+  resolveRoleplayVideoDirection,
+} from "../../packages/server/src/services/video/roleplay-video-direction.js";
 import { resolveGameGmPromptTemplate } from "../../packages/server/src/services/generation/game-gm-prompt-runtime.js";
 import { countConversationMessagesAfterSummaryAnchor } from "../../packages/server/src/services/conversation/auto-summary.service.js";
 import {
@@ -592,7 +599,11 @@ import {
 import { executeToolCalls } from "../../packages/server/src/services/tools/tool-executor.js";
 import { parseRouterResponse } from "../../packages/server/src/services/agents/knowledge-router.js";
 import type { PromptOverridesStorage } from "../../packages/server/src/services/storage/prompt-overrides.storage.js";
-import { listPromptOverrideKeys } from "../../packages/server/src/services/prompt-overrides/index.js";
+import {
+  listPromptOverrideKeys,
+  loadPrompt,
+  ROLEPLAY_GALLERY_VIDEO_DIRECTOR,
+} from "../../packages/server/src/services/prompt-overrides/index.js";
 import {
   buildElevenLabsTextInput,
   detectTTSAudioMimeType,
@@ -3310,8 +3321,14 @@ const cases: RegressionCase[] = [
   },
   {
     name: "Roleplay Gallery Animate uses the selected image's source narration",
-    run() {
+    async run() {
       const messages = [
+        {
+          id: "source-request",
+          role: "user",
+          content: "Draw the blade, but do not strike yet.",
+          extra: "{}",
+        },
         {
           id: "source-turn",
           role: "assistant",
@@ -3369,6 +3386,126 @@ const cases: RegressionCase[] = [
         resolveGalleryVideoNarrationSummary(messages, swipes, "legacy-upload-without-source", 650),
         "Much later, Sol runs across the moonlit courtyard.",
       );
+
+      assert.deepEqual(resolveGalleryVideoSourceExchange(messages, swipes, "swipe-gallery-image"), {
+        sourceMessageId: "source-turn",
+        content:
+          "User:\nDraw the blade, but do not strike yet.\n\nAssistant:\nMira slowly draws the ancient blade as dust falls from the ceiling.",
+      });
+      assert.equal(clipVerbatimVideoSource("  verbatim source  ", 8), "verbatim");
+
+      const directionUserPrompt = buildRoleplayVideoDirectionUserPrompt({
+        durationSeconds: 6,
+        aspectRatio: "16:9",
+        sourceExchange: "User:\nDraw the blade.\n\nAssistant:\nMira slowly draws it as dust falls.",
+        referenceImagePrompt: "Mira holds the half-drawn blade in a ruined hall, static portrait details.",
+        characterNames: ["Mira"],
+        setting: "Ruined hall at night",
+      });
+      const defaultDirectorPrompt = ROLEPLAY_GALLERY_VIDEO_DIRECTOR.defaultBuilder({ durationSeconds: 6 });
+      assert.match(defaultDirectorPrompt, /one 6-second image-to-video Roleplay clip/u);
+      assert.match(defaultDirectorPrompt, /inside the 6-second runtime/u);
+      assert.match(defaultDirectorPrompt, /exact first frame at time zero/u);
+      assert.match(defaultDirectorPrompt, /camera movement/u);
+      assert.match(defaultDirectorPrompt, /ambient audio/u);
+      assert.match(defaultDirectorPrompt, /Do not repeat a static image description/u);
+      assert.equal(listPromptOverrideKeys().includes("roleplay.galleryVideoDirector"), true);
+      const directorOverrideStorage = {
+        async get(key: string) {
+          if (key !== ROLEPLAY_GALLERY_VIDEO_DIRECTOR.key) return null;
+          return {
+            key,
+            template: "Direct one ${durationSeconds}-second Roleplay animation.",
+            enabled: true,
+            updatedAt: "2026-01-01T00:00:00.000Z",
+          };
+        },
+        async list() {
+          return [];
+        },
+        async upsert(input) {
+          return {
+            key: input.key,
+            template: input.template,
+            enabled: input.enabled,
+            updatedAt: "2026-01-01T00:00:00.000Z",
+          };
+        },
+        async remove() {},
+      } satisfies PromptOverridesStorage;
+      assert.equal(
+        await loadPrompt(directorOverrideStorage, ROLEPLAY_GALLERY_VIDEO_DIRECTOR, { durationSeconds: 12 }),
+        "Direct one 12-second Roleplay animation.",
+      );
+      const missingDirectorOverrideStorage = {
+        ...directorOverrideStorage,
+        async get() {
+          return null;
+        },
+      } satisfies PromptOverridesStorage;
+      assert.equal(
+        await loadPrompt(missingDirectorOverrideStorage, ROLEPLAY_GALLERY_VIDEO_DIRECTOR, { durationSeconds: 8 }),
+        ROLEPLAY_GALLERY_VIDEO_DIRECTOR.defaultBuilder({ durationSeconds: 8 }),
+      );
+      const disabledDirectorOverrideStorage = {
+        ...directorOverrideStorage,
+        async get(key: string) {
+          if (key !== ROLEPLAY_GALLERY_VIDEO_DIRECTOR.key) return null;
+          return {
+            key,
+            template: "This disabled template must not render ${durationSeconds}.",
+            enabled: false,
+            updatedAt: "2026-01-01T00:00:00.000Z",
+          };
+        },
+      } satisfies PromptOverridesStorage;
+      assert.equal(
+        await loadPrompt(disabledDirectorOverrideStorage, ROLEPLAY_GALLERY_VIDEO_DIRECTOR, { durationSeconds: 9 }),
+        ROLEPLAY_GALLERY_VIDEO_DIRECTOR.defaultBuilder({ durationSeconds: 9 }),
+      );
+      const directionMessages = await buildRoleplayVideoDirectionMessages(directorOverrideStorage, {
+        durationSeconds: 12,
+        aspectRatio: "16:9",
+        sourceExchange: "User:\nDraw the blade.\n\nAssistant:\nMira slowly draws it as dust falls.",
+        referenceImagePrompt: "Mira holds the half-drawn blade in a ruined hall, static portrait details.",
+        characterNames: ["Mira"],
+        setting: "Ruined hall at night",
+      });
+      assert.equal(directionMessages[0].role, "system");
+      assert.equal(directionMessages[0].content, "Direct one 12-second Roleplay animation.");
+      assert.equal(directionMessages[1].role, "user");
+      assert.match(directionMessages[1].content, /<clip_duration_seconds>12<\/clip_duration_seconds>/u);
+      assert.match(directionUserPrompt, /<source_exchange>[\s\S]*Draw the blade/u);
+      assert.match(directionUserPrompt, /<first_frame_generation_context>/u);
+      assert.equal(
+        resolveRoleplayVideoDirection(
+          '```json\n{"narrationBeat":"Mira draws the blade as the camera eases closer; dust falls and steel rings softly."}\n```',
+          3_800,
+        ),
+        "Mira draws the blade as the camera eases closer; dust falls and steel rings softly.",
+      );
+      assert.equal(
+        resolveRoleplayVideoDirection(
+          'Planned direction follows.\n```json\n{"narrationBeat":"Mira holds the blade steady while the camera settles."}\n```\nEnd.',
+          3_800,
+        ),
+        "Mira holds the blade steady while the camera settles.",
+      );
+      assert.equal(
+        resolveRoleplayVideoDirection("Narration beat: She stops and holds as the room tone settles.", 3_800),
+        "She stops and holds as the room tone settles.",
+      );
+      assert.equal(resolveRoleplayVideoDirection('{"wrongField":"do not send raw JSON"}', 3_800), "");
+
+      const galleryRouteSource = readFileSync(
+        new URL("../../packages/server/src/routes/gallery.routes.ts", import.meta.url),
+        "utf8",
+      );
+      assert.match(galleryRouteSource, /!promptDraft && chat\.mode === "roleplay"/u);
+      assert.match(galleryRouteSource, /resolveIllustratorPromptRuntime/u);
+      assert.match(galleryRouteSource, /buildRoleplayVideoDirectionMessages\(promptOverridesStorage/u);
+      assert.match(galleryRouteSource, /input\.promptOverride\?\.trim\(\) \?\? ""/u);
+      assert.doesNotMatch(galleryRouteSource, /chat\.mode === "roleplay"[\s\S]{0,400}gameStoryboard/u);
     },
   },
   {
