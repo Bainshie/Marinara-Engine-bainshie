@@ -7,6 +7,7 @@ import {
   type NoodleInteractionType,
   type NoodleSettings,
 } from "@marinara-engine/shared";
+import { logger } from "../../lib/logger.js";
 import { createCharactersStorage } from "../storage/characters.storage.js";
 import { createNoodleStorage, parseNoodleAvatarCrop } from "../storage/noodle.storage.js";
 import { isNoodleProfileGenerated } from "./noodle-profile-selection.js";
@@ -150,7 +151,11 @@ export async function bootstrapVisibleNoodle(
     if (!row) {
       // Character was deleted but the account cleanup failed or predates it existing (see
       // characters.routes.ts delete handler) — reconcile the ghost here on every open.
-      await noodle.deleteAccountByEntity("character", account.entityId);
+      try {
+        await noodle.deleteAccountByEntity("character", account.entityId);
+      } catch (err) {
+        logger.error(err, "Failed to reconcile ghost Noodle account for character %s", account.entityId);
+      }
       continue;
     }
     await noodle.upsertAccountFromProfile({
