@@ -1,4 +1,6 @@
 import { clipVerbatimVideoSource, compactVideoPromptText } from "./prompt-context.js";
+import type { PromptOverridesStorage } from "../storage/prompt-overrides.storage.js";
+import { loadPrompt, ROLEPLAY_GALLERY_VIDEO_DIRECTOR } from "../prompt-overrides/index.js";
 
 const ROLEPLAY_VIDEO_DIRECTION_MAX_LENGTH = 6_000;
 
@@ -10,6 +12,8 @@ export interface RoleplayVideoDirectionContext {
   characterNames: string[];
   setting: string;
 }
+
+export type RoleplayVideoDirectionMessages = [{ role: "system"; content: string }, { role: "user"; content: string }];
 
 export function buildRoleplayVideoDirectionUserPrompt(ctx: RoleplayVideoDirectionContext): string {
   const characterLine =
@@ -28,6 +32,19 @@ export function buildRoleplayVideoDirectionUserPrompt(ctx: RoleplayVideoDirectio
   ]
     .filter(Boolean)
     .join("\n\n");
+}
+
+export async function buildRoleplayVideoDirectionMessages(
+  storage: PromptOverridesStorage,
+  ctx: RoleplayVideoDirectionContext,
+): Promise<RoleplayVideoDirectionMessages> {
+  const systemPrompt = await loadPrompt(storage, ROLEPLAY_GALLERY_VIDEO_DIRECTOR, {
+    durationSeconds: ctx.durationSeconds,
+  });
+  return [
+    { role: "system", content: systemPrompt },
+    { role: "user", content: buildRoleplayVideoDirectionUserPrompt(ctx) },
+  ];
 }
 
 function unwrapJsonFence(value: string): string {

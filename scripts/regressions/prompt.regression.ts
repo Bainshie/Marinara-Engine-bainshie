@@ -451,6 +451,7 @@ import {
   resolveGalleryVideoSourceExchange,
 } from "../../packages/server/src/services/video/prompt-context.js";
 import {
+  buildRoleplayVideoDirectionMessages,
   buildRoleplayVideoDirectionUserPrompt,
   resolveRoleplayVideoDirection,
 } from "../../packages/server/src/services/video/roleplay-video-direction.js";
@@ -3436,6 +3437,44 @@ const cases: RegressionCase[] = [
         await loadPrompt(directorOverrideStorage, ROLEPLAY_GALLERY_VIDEO_DIRECTOR, { durationSeconds: 12 }),
         "Direct one 12-second Roleplay animation.",
       );
+      const missingDirectorOverrideStorage = {
+        ...directorOverrideStorage,
+        async get() {
+          return null;
+        },
+      } satisfies PromptOverridesStorage;
+      assert.equal(
+        await loadPrompt(missingDirectorOverrideStorage, ROLEPLAY_GALLERY_VIDEO_DIRECTOR, { durationSeconds: 8 }),
+        ROLEPLAY_GALLERY_VIDEO_DIRECTOR.defaultBuilder({ durationSeconds: 8 }),
+      );
+      const disabledDirectorOverrideStorage = {
+        ...directorOverrideStorage,
+        async get(key: string) {
+          if (key !== ROLEPLAY_GALLERY_VIDEO_DIRECTOR.key) return null;
+          return {
+            key,
+            template: "This disabled template must not render ${durationSeconds}.",
+            enabled: false,
+            updatedAt: "2026-01-01T00:00:00.000Z",
+          };
+        },
+      } satisfies PromptOverridesStorage;
+      assert.equal(
+        await loadPrompt(disabledDirectorOverrideStorage, ROLEPLAY_GALLERY_VIDEO_DIRECTOR, { durationSeconds: 9 }),
+        ROLEPLAY_GALLERY_VIDEO_DIRECTOR.defaultBuilder({ durationSeconds: 9 }),
+      );
+      const directionMessages = await buildRoleplayVideoDirectionMessages(directorOverrideStorage, {
+        durationSeconds: 12,
+        aspectRatio: "16:9",
+        sourceExchange: "User:\nDraw the blade.\n\nAssistant:\nMira slowly draws it as dust falls.",
+        referenceImagePrompt: "Mira holds the half-drawn blade in a ruined hall, static portrait details.",
+        characterNames: ["Mira"],
+        setting: "Ruined hall at night",
+      });
+      assert.equal(directionMessages[0].role, "system");
+      assert.equal(directionMessages[0].content, "Direct one 12-second Roleplay animation.");
+      assert.equal(directionMessages[1].role, "user");
+      assert.match(directionMessages[1].content, /<clip_duration_seconds>12<\/clip_duration_seconds>/u);
       assert.match(directionUserPrompt, /<source_exchange>[\s\S]*Draw the blade/u);
       assert.match(directionUserPrompt, /<first_frame_generation_context>/u);
       assert.equal(
@@ -3464,8 +3503,7 @@ const cases: RegressionCase[] = [
       );
       assert.match(galleryRouteSource, /!promptDraft && chat\.mode === "roleplay"/u);
       assert.match(galleryRouteSource, /resolveIllustratorPromptRuntime/u);
-      assert.match(galleryRouteSource, /loadPrompt\(promptOverridesStorage, ROLEPLAY_GALLERY_VIDEO_DIRECTOR/u);
-      assert.match(galleryRouteSource, /\{ role: "system", content: systemPrompt \}/u);
+      assert.match(galleryRouteSource, /buildRoleplayVideoDirectionMessages\(promptOverridesStorage/u);
       assert.match(galleryRouteSource, /input\.promptOverride\?\.trim\(\) \?\? ""/u);
       assert.doesNotMatch(galleryRouteSource, /chat\.mode === "roleplay"[\s\S]{0,400}gameStoryboard/u);
     },
