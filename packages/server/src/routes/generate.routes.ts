@@ -8273,6 +8273,8 @@ export async function generateRoutes(app: FastifyInstance) {
               const resultAgent = resolvedAgents.find((agent) => agent.id === result.agentId);
               const fallbackIllustratorAgent = resolvedAgents.find((agent) => agent.type === "illustrator");
               const illustratorAgent = resultAgent ?? fallbackIllustratorAgent;
+              const usesChatIllustratorSettings =
+                resultAgent?.type === "illustrator" || (!resultAgent && result.agentType === "illustrator");
               const illustratorBackgroundAgent =
                 resultAgent?.type === "illustrator"
                   ? resultAgent
@@ -8428,11 +8430,15 @@ export async function generateRoutes(app: FastifyInstance) {
                 // Resolve connections: text LLM = connectionId, image gen = settings.imageConnectionId
                 const imagePositivePrompt = ((illustratorAgent?.settings?.imagePositivePrompt as string) ?? "").trim();
                 const savedNegativePrompt = ((illustratorAgent?.settings?.imageNegativePrompt as string) ?? "").trim();
-                const imageConnectionOverride = resolveIllustratorImageConnectionId(
-                  requestChatMode,
-                  chatMeta,
-                  illustratorAgent?.settings?.imageConnectionId,
-                );
+                const imageConnectionOverride = usesChatIllustratorSettings
+                  ? resolveIllustratorImageConnectionId(
+                      requestChatMode,
+                      chatMeta,
+                      illustratorAgent?.settings?.imageConnectionId,
+                    )
+                  : typeof illustratorAgent?.settings?.imageConnectionId === "string"
+                    ? illustratorAgent.settings.imageConnectionId.trim()
+                    : "";
                 let imgConnFull = imageConnectionOverride
                   ? await connections.getWithKey(imageConnectionOverride)
                   : null;
@@ -8501,10 +8507,11 @@ export async function generateRoutes(app: FastifyInstance) {
                       // Collect optional character visual context. Prefer avatar
                       // portraits for references, then fall back to full-body sprites.
                       const useAvatarRefs =
-                        typeof chatMeta.illustratorUseAvatarReferences === "boolean"
+                        usesChatIllustratorSettings && typeof chatMeta.illustratorUseAvatarReferences === "boolean"
                           ? chatMeta.illustratorUseAvatarReferences
                           : illustratorAgent?.settings?.useAvatarReferences === true;
                       const includeCharacterAppearance =
+                        usesChatIllustratorSettings &&
                         typeof chatMeta.illustratorIncludeCharacterAppearance === "boolean"
                           ? chatMeta.illustratorIncludeCharacterAppearance
                           : illustratorAgent?.settings?.includeCharacterAppearance === true;

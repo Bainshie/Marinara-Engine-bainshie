@@ -254,6 +254,24 @@ function getMemoryRecallChunkImportKey(
   return JSON.stringify([chunk.firstMessageAt, chunk.lastMessageAt, chunk.content]);
 }
 
+function extractGeneratedSummary(content: string): string {
+  try {
+    const cleaned = content
+      .trim()
+      .replace(/```(?:json)?\s*/giu, "")
+      .replace(/```/gu, "");
+    const first = cleaned.indexOf("{");
+    const last = cleaned.lastIndexOf("}");
+    if (first >= 0 && last > first) {
+      const parsed = JSON.parse(cleaned.slice(first, last + 1)) as { summary?: unknown };
+      if (typeof parsed.summary === "string" && parsed.summary.trim()) return parsed.summary.trim();
+    }
+  } catch {
+    // Plain-text summary responses are valid.
+  }
+  return content.trim();
+}
+
 function readMemoryRecallImportPayload(
   body: unknown,
 ): { chunks: ChatMemoryRecallExportChunk[]; skipped: number; sourceChatId: string | null } | null {
@@ -3858,6 +3876,22 @@ export async function chatsRoutes(app: FastifyInstance) {
     const hasRangeByMessageId = !!requestedRangeStartMessageId && !!requestedRangeEndMessageId;
     const hasRangeByIndex = requestedRangeStartIndex !== null && requestedRangeEndIndex !== null;
     const hasRange = hasRangeByMessageId || hasRangeByIndex;
+    const requestedSummaryEntryIds = Array.isArray(body.summaryEntryIds)
+      ? Array.from(
+          new Set(
+            body.summaryEntryIds
+              .filter((id): id is string => typeof id === "string")
+              .map((id) => id.trim())
+              .filter(Boolean),
+          ),
+        )
+      : [];
+    if (requestedSummaryEntryIds.length === 1) {
+      return reply.status(400).send({ error: "Select at least two summary entries to combine" });
+    }
+    if (requestedSummaryEntryIds.length > 100) {
+      return reply.status(400).send({ error: "No more than 100 summary entries can be combined at once" });
+    }
     const summaryMaxTokens = clampRoleplaySummaryMaxTokens(chatMeta.summaryMaxTokens);
 
     const connections = createConnectionsStorage(app.db);
@@ -3889,6 +3923,114 @@ export async function chatsRoutes(app: FastifyInstance) {
       );
     }
     const { provider, model } = resolvedSummaryConnection;
+
+    if (requestedSummaryEntryIds.length >= 2) {
+      const currentEntries = normalizeChatSummaryEntries(chatMeta.summaryEntries, {
+        legacySummary: typeof chatMeta.summary === "string" ? chatMeta.summary : null,
+      });
+      const requestedIds = new Set(requestedSummaryEntryIds);
+      const selectedEntries = currentEntries.filter((entry) => requestedIds.has(entry.id));
+      if (selectedEntries.length !== requestedIds.size) {
+        return reply.status(400).send({ error: "One or more selected summary entries no longer exist" });
+      }
+
+      const requestedPromptTemplateId =
+        typeof body.promptTemplateId === "string" && body.promptTemplateId.trim()
+          ? body.promptTemplateId.trim()
+          : typeof chatMeta.activeSummaryPromptTemplateId === "string" && chatMeta.activeSummaryPromptTemplateId.trim()
+            ? chatMeta.activeSummaryPromptTemplateId.trim()
+            : null;
+      const globalSummaryPromptSettings = await appSettings.get(CHAT_SUMMARY_PROMPT_SETTINGS_KEY);
+      const summaryPrompt = resolveChatSummaryPrompt({
+        requestedTemplateId: requestedPromptTemplateId,
+        chatMetadata: chatMeta,
+        globalSettingsValue: globalSummaryPromptSettings,
+      });
+      const sourceText = selectedEntries
+        .map((entry, index) => `Summary ${index + 1} — ${entry.title}:\n${entry.content}`)
+        .join("\n\n");
+      const result = await provider.chatComplete(
+        [
+          { role: "system", content: summaryPrompt },
+          {
+            role: "user",
+            content:
+              "Condense the ordered summaries below into one summary. Preserve durable facts, relationships, decisions, and chronological order. Return the same summary format requested by the system prompt.\n\n" +
+              sourceText,
+          },
+        ],
+        {
+          model,
+          temperature: 0.5,
+          maxTokens: summaryMaxTokens,
+        },
+      );
+      if (!result.content) {
+        return reply.status(500).send({ error: "No response from AI" });
+      }
+      const summaryText = extractGeneratedSummary(result.content);
+
+      let combinedEntry: ChatSummaryEntry | null = null;
+      let combinedEntries: ChatSummaryEntry[] = [];
+      let combinedSummary: string | null = null;
+      const updatedChat = await storage.patchMetadata(req.params.id, (freshMeta) => {
+        const entries = normalizeChatSummaryEntries(freshMeta.summaryEntries, {
+          legacySummary: typeof freshMeta.summary === "string" ? freshMeta.summary : null,
+        });
+        const selected = entries.filter((entry) => requestedIds.has(entry.id));
+        if (selected.length !== requestedIds.size) {
+          throw new Error("One or more selected summary entries changed while they were being combined");
+        }
+
+        const messageIds = Array.from(new Set(selected.flatMap((entry) => entry.messageIds ?? [])));
+        const hiddenMessageIds = Array.from(new Set(selected.flatMap((entry) => entry.hiddenMessageIds ?? [])));
+        const starts = selected.flatMap((entry) => entry.rangeStartIndex ?? []);
+        const ends = selected.flatMap((entry) => entry.rangeEndIndex ?? []);
+        const now = new Date().toISOString();
+        const firstIndex = entries.findIndex((entry) => requestedIds.has(entry.id));
+        combinedEntry = createChatSummaryEntry(
+          {
+            kind: "rolling",
+            origin: "manual",
+            title: "Combined summary",
+            content: summaryText,
+            enabled: selected.some((entry) => entry.enabled),
+            sourceMode: starts.length > 0 || ends.length > 0 ? "range" : "last",
+            messageCount:
+              messageIds.length > 0
+                ? messageIds.length
+                : selected.reduce((total, entry) => total + (entry.messageCount ?? 0), 0) || undefined,
+            rangeStartIndex: starts.length > 0 ? Math.min(...starts) : undefined,
+            rangeEndIndex: ends.length > 0 ? Math.max(...ends) : undefined,
+            messageIds,
+            hiddenMessageIds,
+            promptTemplateId: requestedPromptTemplateId,
+            createdAt: selected[0]?.createdAt ?? now,
+            updatedAt: now,
+          },
+          { createId: newId, now },
+        );
+        const nextEntries = entries.filter((entry) => !requestedIds.has(entry.id));
+        nextEntries.splice(Math.max(0, firstIndex), 0, combinedEntry);
+        combinedEntries = normalizeChatSummaryEntries(nextEntries);
+        combinedSummary = compileChatSummaryEntries(combinedEntries);
+        return {
+          summary: combinedSummary,
+          summaryEntries: combinedEntries,
+        };
+      });
+      const persistedCombinedEntry = combinedEntry as ChatSummaryEntry | null;
+      if (!updatedChat || !persistedCombinedEntry) {
+        return reply.status(404).send({ error: "Chat not found" });
+      }
+      return {
+        summary: combinedSummary,
+        entry: persistedCombinedEntry,
+        entries: combinedEntries,
+        messageIds: persistedCombinedEntry.messageIds ?? [],
+        hideMessageIds: [],
+      };
+    }
 
     // Build conversation context (use contextSize from popover, or a custom range).
     // Hidden-from-AI messages are excluded from summary generation even when
@@ -3966,20 +4108,7 @@ export async function chatsRoutes(app: FastifyInstance) {
       return reply.status(500).send({ error: "No response from AI" });
     }
 
-    // Parse JSON response
-    let summaryText: string;
-    try {
-      const cleaned = result.content
-        .trim()
-        .replace(/```(?:json)?\s*/gi, "")
-        .replace(/```/g, "");
-      const first = cleaned.indexOf("{");
-      const last = cleaned.lastIndexOf("}");
-      const json = JSON.parse(cleaned.slice(first, last + 1));
-      summaryText = json.summary ?? result.content;
-    } catch {
-      summaryText = result.content.trim();
-    }
+    const summaryText = extractGeneratedSummary(result.content);
 
     const messageIds = selectedMessages.map((message) => message.id);
     // Subset eligible to be hidden when "Hide summarised messages" is on: the

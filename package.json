@@ -15,7 +15,7 @@
     "preinstall": "node ./scripts/clean-stale-client-artifacts.mjs",
     "postinstall": "node ./scripts/ensure-native-deps.mjs",
     "dev": "node ./scripts/dev.mjs",
-    "dev:server": "pnpm --filter @marinara-engine/server dev",
+    "dev:server": "pnpm build:shared && pnpm --filter @marinara-engine/server dev",
     "dev:client": "pnpm build:shared && pnpm --filter @marinara-engine/client dev",
     "build": "pnpm clean:stale-client && pnpm --filter @marinara-engine/shared build && pnpm --filter @marinara-engine/server --filter @marinara-engine/client --parallel run build",
     "build:shared": "pnpm --filter @marinara-engine/shared build",

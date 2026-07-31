@@ -18,6 +18,7 @@ import {
 } from "../../packages/shared/src/utils/speaker-segments.js";
 import type { Lorebook } from "../../packages/shared/src/types/lorebook.js";
 import {
+  createLorebookEntrySchema,
   createLorebookSchema,
   bulkUpdateLorebookEntriesSchema,
   normalizeLorebookCategory,
@@ -61,6 +62,11 @@ import {
   withoutNpcAvatarRevision,
 } from "../../packages/client/src/lib/game-npc-avatar.js";
 import { characterMatchesSearch, parseCharacterDisplayData } from "../../packages/client/src/lib/character-display.js";
+import {
+  compareChatsByActivityDesc,
+  compareChatsByCreatedAtAsc,
+  compareChatsByCreatedAtDesc,
+} from "../../packages/client/src/lib/chat-recency.js";
 import {
   DEFAULT_GENERATION_PARAMS,
   DEFAULT_TRANSLATION_SYSTEM_PROMPT,
@@ -175,7 +181,9 @@ import { ttsConfigSchema } from "../../packages/shared/src/types/tts.js";
 import { createAgentsStorage } from "../../packages/server/src/services/storage/agents.storage.js";
 import { createCustomToolsStorage } from "../../packages/server/src/services/storage/custom-tools.storage.js";
 import { createCharactersStorage } from "../../packages/server/src/services/storage/characters.storage.js";
+import { createLorebooksStorage } from "../../packages/server/src/services/storage/lorebooks.storage.js";
 import { createNoodleStorage } from "../../packages/server/src/services/storage/noodle.storage.js";
+import { buildReferencedCharacterContext } from "../../packages/server/src/services/prompt/macro-context.js";
 import { resolveRunPodComfyUiTimeoutSeconds } from "../../packages/server/src/services/image/runpod-comfyui.service.js";
 import {
   findMissingComfyReferenceSlots,
@@ -519,6 +527,7 @@ try {
   closeCharacterUpdateDb = closeDB;
   const db = await getDB();
   const characterStorage = createCharactersStorage(db);
+  const lorebookStorage = createLorebooksStorage(db);
   const noodleStorage = createNoodleStorage(db);
   const storageTrimFixture = await characterStorage.create({
     ...characterDataSchema.parse({ name: "Storage trim fixture" }),
@@ -555,6 +564,77 @@ try {
     (JSON.parse(duplicateTrimFixture?.data ?? "{}") as { name?: string }).name,
     "Duplicate fixture (Copy)",
     "Duplicating a Character must normalize legacy padded names",
+  );
+
+  const referencedCharacter = await characterStorage.create(
+    characterDataSchema.parse({
+      name: "Susie",
+      description: "A trusted friend from the western district.",
+      first_mes: "REFERENCED_GREETING_MUST_STAY_OUT",
+      mes_example: "REFERENCED_EXAMPLE_MUST_STAY_OUT",
+      extensions: {
+        appearance: "Blonde hair and a blue summer dress.",
+      },
+    }),
+  );
+  const hiddenCharacterLorebook = await lorebookStorage.create(
+    createLorebookSchema.parse({
+      name: "Susie's private memories",
+      category: "character",
+      characterIds: [referencedCharacter.id],
+      hiddenFromLibrary: true,
+    }),
+  );
+  await lorebookStorage.createEntry(
+    createLorebookEntrySchema.parse({
+      lorebookId: hiddenCharacterLorebook.id,
+      name: "The cafe meeting",
+      content: "REFERENCED_LOREBOOK_MEMORY",
+      keys: ["cafe"],
+    }),
+  );
+  assert.equal(
+    (await lorebookStorage.list()).some((book) => book.id === hiddenCharacterLorebook.id),
+    true,
+    "Hidden lorebooks must remain available to internal prompt processing",
+  );
+  assert.equal(
+    (await lorebookStorage.listPage({ limit: 100, offset: 0, search: "Susie's private memories" })).items.length,
+    0,
+    "Hidden embedded lorebooks must not appear in general library searches",
+  );
+
+  const referencedContext = await buildReferencedCharacterContext({
+    db,
+    activeCharacterIds: [storageTrimFixture.id],
+    sources: [],
+    chatMessages: [
+      {
+        role: "user",
+        content: `I went to the cafe with {{${referencedCharacter.id}}}.`,
+      },
+    ],
+    macroCtx: {
+      user: "Mari",
+      char: "Version snapshot fixture",
+      characters: ["Version snapshot fixture"],
+      variables: {},
+    },
+    wrapFormat: "xml",
+    chatId: "character-reference-regression",
+  });
+  assert.equal(referencedContext.references[referencedCharacter.id], "Susie");
+  assert.match(referencedContext.content, /A trusted friend from the western district\./u);
+  assert.match(referencedContext.content, /Blonde hair and a blue summer dress\./u);
+  assert.match(referencedContext.content, /REFERENCED_LOREBOOK_MEMORY/u);
+  assert.doesNotMatch(referencedContext.content, /REFERENCED_GREETING_MUST_STAY_OUT/u);
+  assert.doesNotMatch(referencedContext.content, /REFERENCED_EXAMPLE_MUST_STAY_OUT/u);
+
+  await lorebookStorage.update(hiddenCharacterLorebook.id, { hiddenFromLibrary: false });
+  assert.equal(
+    (await lorebookStorage.listPage({ limit: 100, offset: 0, search: "Susie's private memories" })).items.length,
+    1,
+    "Making an embedded lorebook visible must restore it to general library searches",
   );
 
   const restoreTrimFixture = await characterStorage.create(characterDataSchema.parse({ name: "Restore source" }));
@@ -1515,6 +1595,32 @@ assert.equal(characterMatchesSearch(searchableCharacter, "modern au"), true);
 assert.equal(characterMatchesSearch(searchableCharacter, "snezhnaya"), true);
 assert.equal(characterMatchesSearch(searchableCharacter, "friendly bard"), false);
 
+const olderActiveChat = {
+  id: "older-active",
+  createdAt: "2026-01-01T00:00:00.000Z",
+  lastMessageAt: "2026-07-31T10:00:00.000Z",
+};
+const newerIdleChat = {
+  id: "newer-idle",
+  createdAt: "2026-07-30T00:00:00.000Z",
+  lastMessageAt: "2026-07-30T01:00:00.000Z",
+};
+assert.deepEqual(
+  [newerIdleChat, olderActiveChat].sort(compareChatsByActivityDesc).map((chat) => chat.id),
+  ["older-active", "newer-idle"],
+  "Recent chat sorting must use last-message activity",
+);
+assert.deepEqual(
+  [olderActiveChat, newerIdleChat].sort(compareChatsByCreatedAtDesc).map((chat) => chat.id),
+  ["newer-idle", "older-active"],
+  "Newest chat sorting must use creation time",
+);
+assert.deepEqual(
+  [newerIdleChat, olderActiveChat].sort(compareChatsByCreatedAtAsc).map((chat) => chat.id),
+  ["older-active", "newer-idle"],
+  "Oldest chat sorting must use creation time",
+);
+
 const termuxLauncher = readFileSync(new URL("../../start-termux.sh", import.meta.url), "utf8");
 assert.doesNotMatch(termuxLauncher, /run_pnpm install --force/u);
 assert.match(termuxLauncher, /run_pnpm store prune/u);
@@ -1529,7 +1635,15 @@ assert.doesNotMatch(preserveSharedBuild, /\bdist\b/u);
 const serverPackageJson = JSON.parse(
   readFileSync(new URL("../../packages/server/package.json", import.meta.url), "utf8"),
 ) as { scripts?: Record<string, string> };
+const rootPackageJson = JSON.parse(readFileSync(new URL("../../package.json", import.meta.url), "utf8")) as {
+  scripts?: Record<string, string>;
+};
 assert.match(serverPackageJson.scripts?.dev ?? "", /--ignore \.\.\/shared\/dist/u);
+assert.match(
+  rootPackageJson.scripts?.["dev:server"] ?? "",
+  /^pnpm build:shared && pnpm --filter @marinara-engine\/server dev$/u,
+  "The server-only development command must establish shared build output first",
+);
 assert.equal(resolveDevSharedBuildScript({ DEV_PRESERVE_SHARED_DIST: "true" }), "build:preserve");
 assert.equal(resolveDevSharedBuildScript({}), "build");
 const conversationImageConnections = [
@@ -2454,6 +2568,21 @@ const retryAgentsPromptReviewSource = readFileSync(
   new URL("../../packages/server/src/routes/generate/retry-agents-route.ts", import.meta.url),
   "utf8",
 );
+assert.match(
+  agentEditorSource,
+  /isCustomImagePromptAgent[\s\S]{0,180}supportsImagePromptSettings/u,
+  "Custom Image Prompt agents must expose the shared Illustrator image settings",
+);
+assert.match(
+  conversationGenerationSource,
+  /const resultAgent = resolvedAgents\.find[\s\S]{0,240}const illustratorAgent = resultAgent \?\? fallbackIllustratorAgent/u,
+  "Image generation must use the custom agent that produced the image prompt before Illustrator fallback",
+);
+assert.match(
+  retryAgentsPromptReviewSource,
+  /const resultAgent = resolvedAgents\.find[\s\S]{0,300}const imagePromptAgent = resultAgent \?\? fallbackIllustratorAgent/u,
+  "Image Prompt retries must retain the producing custom agent's image settings",
+);
 const uiStoreSource = readFileSync(new URL("../../packages/client/src/stores/ui.store.ts", import.meta.url), "utf8");
 const settingsSyncSource = readFileSync(
   new URL("../../packages/client/src/hooks/use-settings-sync.ts", import.meta.url),
@@ -3336,10 +3465,48 @@ assert.match(
   /if \(existing\.mode === "conversation" && hasStartedChat\) \{/u,
   "Only Conversation chats should create character membership timeline notices",
 );
+const summaryPopoverSource = readFileSync(
+  join(REPOSITORY_ROOT, "packages/client/src/components/chat/SummaryPopover.tsx"),
+  "utf8",
+);
+assert.match(
+  summaryPopoverSource,
+  /summaryEntryIds:\s*selectedEntries\.map\(\(entry\) => entry\.id\)/u,
+  "The summary UI must submit every selected entry to the combine endpoint",
+);
+assert.match(
+  chatRoutesSource,
+  /requestedSummaryEntryIds[\s\S]{0,6500}nextEntries\.splice\(Math\.max\(0, firstIndex\), 0, combinedEntry\)/u,
+  "Combined summaries must replace their selected entries at the first selected chronological position",
+);
+const chatSidebarSource = readFileSync(
+  join(REPOSITORY_ROOT, "packages/client/src/components/layout/ChatSidebar.tsx"),
+  "utf8",
+);
+assert.match(
+  chatSidebarSource,
+  /useState<ChatSortOption>\("recent"\)/u,
+  "Recent activity must be the default chat sort",
+);
 
 const windowsLauncherSource = readFileSync(join(REPOSITORY_ROOT, "start.bat"), "utf8");
 for (const workspace of ["shared", "server", "client"]) {
   assert.match(windowsLauncherSource, new RegExp(`--filter @marinara-engine/${workspace} run clean`, "u"));
+}
+for (const relativePath of [
+  "packages/client/scripts/build.mjs",
+  "packages/server/src/config/build-info.ts",
+  "packages/server/src/routes/updates.routes.ts",
+  "packages/server/src/services/mari-db/mari-db.service.ts",
+  "scripts/check-tracked-installers.mjs",
+  "scripts/ensure-native-deps.mjs",
+]) {
+  const source = readFileSync(join(REPOSITORY_ROOT, relativePath), "utf8");
+  assert.doesNotMatch(
+    source,
+    /shell:\s*process\.platform\s*===\s*"win32"/u,
+    `${relativePath} must not pass an argument array through shell: true on Windows`,
+  );
 }
 
 const longSceneNarration = Array.from(

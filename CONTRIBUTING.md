@@ -36,7 +36,7 @@ pnpm dev
 Useful entry points:
 
 - `pnpm dev` starts the server and client with hot reload.
-- `pnpm dev:server` starts only the API server.
+- `pnpm dev:server` builds the shared package, then starts only the API server. If shared source changes while it is running, rerun `pnpm build:shared` and restart the server; the server watcher intentionally ignores shared build output.
 - `pnpm dev:client` starts only the Vite frontend.
 - `start.bat`, `start.sh`, and `start-termux.sh` run the launcher flow, including git-based auto-update and optional browser auto-open.
 
