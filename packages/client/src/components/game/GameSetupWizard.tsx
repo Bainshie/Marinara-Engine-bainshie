@@ -85,6 +85,7 @@ const GameAssetsBrowserView = lazy(() =>
 );
 
 interface CapabilitySetupSelection {
+  kind: "template" | "shared-world";
   id: string;
   label: string;
   payload: unknown;
@@ -99,6 +100,7 @@ interface GameSetupWizardProps {
     mapPlan?:
       | { mode: "manual" }
       | { mode: "template"; selection: CapabilitySetupSelection }
+      | { mode: "shared-world"; selection: CapabilitySetupSelection }
       | {
           mode: "ai";
           size: SpatialMapDraftSize;
@@ -110,6 +112,7 @@ interface GameSetupWizardProps {
   onCancel: () => void;
   isLoading: boolean;
   isDraftingMap: boolean;
+  isLinkingSharedWorld: boolean;
   characters: Array<{
     id: string;
     name: string;
@@ -421,6 +424,7 @@ export function GameSetupWizard({
   onCancel,
   isLoading,
   isDraftingMap,
+  isLinkingSharedWorld,
   characters,
   initialPartyCharacterIds = [],
 }: GameSetupWizardProps) {
@@ -833,18 +837,25 @@ export function GameSetupWizard({
     const candidate = selection && typeof selection === "object" && !Array.isArray(selection)
       ? (selection as Record<string, unknown>)
       : null;
+    const kind = candidate?.kind === "shared-world"
+      ? "shared-world"
+      : candidate?.kind === undefined || candidate.kind === "template"
+        ? "template"
+        : null;
     if (
       !candidate ||
+      !kind ||
       typeof candidate.id !== "string" ||
       !candidate.id.trim() ||
       typeof candidate.label !== "string" ||
       !candidate.label.trim() ||
       !("payload" in candidate)
     ) {
-      toast.error(localizeUi("ui.game.gamesetupwizard.theSelectedMapTemplateCouldNotBeRead"));
+      toast.error(localizeUi("ui.game.gamesetupwizard.theSelectedSavedMapCouldNotBeRead"));
       return;
     }
     setSpatialTemplateSelection({
+      kind,
       id: candidate.id,
       label: candidate.label,
       payload: candidate.payload,
@@ -1157,7 +1168,9 @@ export function GameSetupWizard({
           ? { mode: "manual" as const }
         : enableAgents && hierarchicalMapsInstalled && templateSpatialMap
           ? spatialTemplateSelection
-            ? { mode: "template" as const, selection: spatialTemplateSelection }
+            ? spatialTemplateSelection.kind === "shared-world"
+              ? { mode: "shared-world" as const, selection: spatialTemplateSelection }
+              : { mode: "template" as const, selection: spatialTemplateSelection }
             : undefined
         : undefined,
     );
@@ -2559,14 +2572,17 @@ export function GameSetupWizard({
                     />
                     <span className="min-w-0">
                       <span className="block text-xs font-medium text-[var(--foreground)]">
-                        {localizeUi("ui.game.gamesetupwizard.useATemplate")}
+                        {localizeUi("ui.game.gamesetupwizard.useATemplateOrSharedWorld")}
                       </span>
                       <span className="block text-[0.575rem] leading-relaxed text-[var(--muted-foreground)]">
                         {spatialTemplateSelection
-                          ? localizeUi("ui.game.gamesetupwizard.selectedMapTemplateValue1", {
-                              value1: spatialTemplateSelection.label,
-                            })
-                          : localizeUi("ui.game.gamesetupwizard.chooseASavedMapTemplateAfterSetupThenReview")}
+                          ? localizeUi(
+                              spatialTemplateSelection.kind === "shared-world"
+                                ? "ui.game.gamesetupwizard.selectedSharedWorldValue1"
+                                : "ui.game.gamesetupwizard.selectedMapTemplateValue1",
+                              { value1: spatialTemplateSelection.label },
+                            )
+                          : localizeUi("ui.game.gamesetupwizard.chooseASavedMapTemplateOrSharedWorld")}
                       </span>
                     </span>
                   </span>
@@ -2897,7 +2913,9 @@ export function GameSetupWizard({
                     <span className="font-medium text-[var(--foreground)]" role="status" aria-live="polite">
                       {isDraftingMap
                         ?localizeUi("ui.game.gamesetupwizard.theWorldIsReadyNowDraftingItsMapFor")
-                        :localizeUi("ui.game.gamesetupwizard.holdOnTightTheGameIsBeingGeneratedRight")}
+                        : isLinkingSharedWorld
+                          ? localizeUi("ui.game.gamesetupwizard.theGameIsReadyNowLinkingItsSharedWorld")
+                          : localizeUi("ui.game.gamesetupwizard.holdOnTightTheGameIsBeingGeneratedRight")}
                     </span>
                     <span aria-hidden="true" className="shrink-0 tabular-nums text-[var(--muted-foreground)]">
                       {generationElapsedSeconds}{localizeUi("ui.noodle.stageprofileview.s")}</span>
@@ -2905,7 +2923,11 @@ export function GameSetupWizard({
                   <div
                     className="mt-2 h-1.5 overflow-hidden rounded-full bg-[var(--muted)]/60"
                     role="progressbar"
-                    aria-label={isDraftingMap ?localizeUi("ui.game.gamesetupwizard.draftingHierarchicalWorldMap") :localizeUi("ui.game.gamesetupwizard.generatingGameWorld")}
+                    aria-label={isDraftingMap
+                      ? localizeUi("ui.game.gamesetupwizard.draftingHierarchicalWorldMap")
+                      : isLinkingSharedWorld
+                        ? localizeUi("ui.game.gamesetupwizard.linkingSharedWorld")
+                        : localizeUi("ui.game.gamesetupwizard.generatingGameWorld")}
                   >
                     <motion.div
                       className="h-full w-2/5 rounded-full bg-[var(--primary)]"
@@ -2976,7 +2998,11 @@ export function GameSetupWizard({
                     {isLoading ? (
                       <>
                         <Loader2 size={14} className="animate-spin" />
-                        {isDraftingMap ?localizeUi("ui.game.gamesetupwizard.draftingMap") :localizeUi("ui.game.gamesetupwizard.generatingWorld")}
+                        {isDraftingMap
+                          ?localizeUi("ui.game.gamesetupwizard.draftingMap")
+                          : isLinkingSharedWorld
+                            ? localizeUi("ui.game.gamesetupwizard.linkingWorld")
+                            : localizeUi("ui.game.gamesetupwizard.generatingWorld")}
                       </>
                     ) : (
                       <>
@@ -2994,6 +3020,7 @@ export function GameSetupWizard({
           packageId="hierarchical-maps"
           view="setup"
           capabilityProps={{
+            supportedSelectionKinds: ["template", "shared-world"],
             onSelect: handleSpatialTemplateSelected,
             onClose: () => setSpatialTemplatePickerOpen(false),
           }}

@@ -23,7 +23,7 @@ type CapabilityElementNode = HTMLElement & {
 
 interface CapabilityElementProps {
   packageId: string;
-  view: "surface" | "setup" | "settings" | "toolbar" | "detail" | "workspace" | "runtime" | "world-map";
+  view: "surface" | "setup" | "setup-apply" | "settings" | "toolbar" | "detail" | "workspace" | "runtime" | "world-map";
   capabilityProps?: Record<string, unknown>;
   className?: string;
 }
