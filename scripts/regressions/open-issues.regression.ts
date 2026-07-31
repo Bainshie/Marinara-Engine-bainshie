@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import AdmZip from "adm-zip";
-import type { Chat, Message } from "../../packages/shared/src/types/chat.js";
+import type { Chat, ChatMode, Message } from "../../packages/shared/src/types/chat.js";
 import playwrightConfig from "../../playwright.config.js";
 import { resolveDevSharedBuildScript } from "../dev-shared-build.mjs";
 import { characterCardVersions, characters, chats, messages } from "../../packages/server/src/db/schema/index.js";
@@ -79,7 +79,8 @@ import {
   parseManagedGenerationParameterDefinitions,
   resolveManagedGenerationParameters,
 } from "../../packages/shared/src/utils/managed-generation-parameters.js";
-import { getChatModeCapabilities } from "../../packages/shared/src/constants/chat-mode-capabilities.js";
+import { isAgentManifestAvailableInChatMode } from "../../packages/shared/src/constants/chat-mode-agent-policy.js";
+import { CHAT_SETTINGS_SURFACES } from "../../packages/client/src/components/chat/chat-settings-surfaces.js";
 import { mergeNoodleCustomEmojiMap } from "../../packages/client/src/lib/noodle-custom-emojis.js";
 import {
   isBundledGameAssetFolderPath,
@@ -397,8 +398,85 @@ assert.equal(
   "merged",
   "pre-existing Conversation groups without mode metadata must retain Grouped behavior",
 );
-assert.equal(getChatModeCapabilities("conversation").supportsGroupChatControls, true);
-assert.equal(getChatModeCapabilities("conversation").modeSections.includes("group-chat"), true);
+const expectedChatModeSurfaces = {
+  conversation: {
+    showSettingsProfiles: true,
+    promptSettingsSurface: "conversation",
+    agentSettingsSurface: "conversation",
+    showGroupChatControls: true,
+  },
+  roleplay: {
+    showSettingsProfiles: true,
+    promptSettingsSurface: "roleplay",
+    agentSettingsSurface: "generation",
+    showGroupChatControls: true,
+  },
+  game: {
+    showSettingsProfiles: false,
+    promptSettingsSurface: "game",
+    agentSettingsSurface: "generation",
+    showGroupChatControls: false,
+  },
+} as const satisfies Record<
+  Exclude<ChatMode, "visual_novel">,
+  {
+    showSettingsProfiles: boolean;
+    promptSettingsSurface: "conversation" | "roleplay" | "game";
+    agentSettingsSurface: "conversation" | "generation";
+    showGroupChatControls: boolean;
+  }
+>;
+for (const mode of Object.keys(expectedChatModeSurfaces) as Array<Exclude<ChatMode, "visual_novel">>) {
+  const modeSettingsSurfaces = CHAT_SETTINGS_SURFACES[mode];
+  assert.deepEqual(
+    {
+      showSettingsProfiles: modeSettingsSurfaces.showSettingsProfiles,
+      promptSettingsSurface: modeSettingsSurfaces.promptSettingsSurface,
+      agentSettingsSurface: modeSettingsSurfaces.agentSettingsSurface,
+      showGroupChatControls: modeSettingsSurfaces.showGroupChatControls,
+    },
+    expectedChatModeSurfaces[mode],
+    `Chat mode ${mode} must expose the expected settings surfaces`,
+  );
+}
+assert.equal(
+  Object.hasOwn(CHAT_SETTINGS_SURFACES, "visual_novel"),
+  false,
+  "Legacy Visual Novel must alias Roleplay instead of owning a settings-surface row",
+);
+const downloadableAgent = { id: "downloadable-agent", execution: "pipeline" as const };
+assert.equal(isAgentManifestAvailableInChatMode("conversation", downloadableAgent), false);
+assert.equal(isAgentManifestAvailableInChatMode("roleplay", downloadableAgent), true);
+assert.equal(isAgentManifestAvailableInChatMode("visual_novel", downloadableAgent), true);
+assert.equal(isAgentManifestAvailableInChatMode("game", downloadableAgent), false);
+assert.equal(
+  isAgentManifestAvailableInChatMode("visual_novel", {
+    id: "roleplay-limited-agent",
+    execution: "pipeline",
+    modeAllowlist: ["roleplay"],
+  }),
+  true,
+  "Legacy Visual Novel must use the normalized Roleplay mode for manifest allowlists",
+);
+assert.equal(
+  isAgentManifestAvailableInChatMode("game", { id: "spotify", execution: "pipeline" }),
+  true,
+  "Game mode must retain its opt-in Spotify agent",
+);
+assert.equal(
+  isAgentManifestAvailableInChatMode("game", {
+    id: "mode-limited-feature",
+    execution: "feature",
+    modeAllowlist: ["roleplay"],
+  }),
+  false,
+  "An explicit mode allowlist must still take precedence over feature-agent availability",
+);
+assert.equal(
+  isAgentManifestAvailableInChatMode(null, downloadableAgent),
+  true,
+  "Missing legacy mode metadata must retain the Roleplay agent policy",
+);
 assert.equal(resolveGroupGenerationMode("roleplay", "individual"), "individual");
 assert.equal(resolveGroupGenerationMode("roleplay", "merged"), "merged");
 assert.equal(shouldRestoreRegenerationCharacterTarget("roleplay", "merged", ["a", "b"]), false);
@@ -1735,10 +1813,21 @@ assert.match(
   /ui\.chat\.chatsettingsdrawer\.individualRepliesCanUseManyTokens/u,
   "Conversation group-token warning must remain wired through localization",
 );
+const groupChatLabelIndex = conversationGroupSettingsSource.indexOf("ui.chat.chatsettingsdrawer.groupChat");
+assert.notEqual(groupChatLabelIndex, -1, "Chat Settings Drawer must retain the Group Chat section");
+const groupChatVisibilitySource = conversationGroupSettingsSource.slice(
+  Math.max(0, groupChatLabelIndex - 500),
+  groupChatLabelIndex,
+);
 assert.match(
-  conversationGroupSettingsSource,
-  /chatCharIds\.length > 1 && modeCapabilities\.supportsGroupChatControls/u,
-  "pre-existing multi-character Conversation chats must show Group Chat settings without requiring mode metadata",
+  groupChatVisibilitySource,
+  /chatCharIds\.length\s*>\s*1/u,
+  "pre-existing multi-character Conversation chats must retain the Group Chat character-count gate",
+);
+assert.match(
+  groupChatVisibilitySource,
+  /\bshowGroupChatControls\b/u,
+  "Group Chat visibility must consume the settings-surface policy",
 );
 assert.match(
   conversationGroupSettingsSource,
@@ -1957,6 +2046,43 @@ const gameSetupWizardSource = readFileSync(
 const chatSettingsDrawerSource = readFileSync(
   new URL("../../packages/client/src/components/chat/ChatSettingsDrawer.tsx", import.meta.url),
   "utf8",
+);
+assert.match(
+  chatSettingsDrawerSource,
+  /CHAT_SETTINGS_SURFACES\s*\[\s*chatMode\s*===\s*["']visual_novel["']\s*\?\s*["']roleplay["']\s*:\s*chatMode\s*\]/u,
+  "Chat Settings Drawer must normalize legacy Visual Novel to the Roleplay settings surface",
+);
+for (const surfaceField of ["showSettingsProfiles", "promptSettingsSurface", "agentSettingsSurface"]) {
+  assert.match(
+    chatSettingsDrawerSource,
+    new RegExp(`\\b${surfaceField}\\b`, "u"),
+    `Chat Settings Drawer must consume the ${surfaceField} settings-surface policy`,
+  );
+}
+assert.match(
+  chatSettingsDrawerSource,
+  /agentSettingsSurface\s*===\s*["']conversation["']\s*&&\s*\(\s*<Section\s+id=["']conversation-agents["']/u,
+  "Conversation Agents visibility must consume the conversation agent-settings surface",
+);
+assert.match(
+  chatSettingsDrawerSource,
+  /agentSettingsSurface\s*===\s*["']generation["']\s*&&\s*\(\s*<Section\s+id=\{`\$\{chatMode\}-agents`\}/u,
+  "Roleplay and Game Agents visibility must consume the generation agent-settings surface",
+);
+assert.doesNotMatch(
+  chatSettingsDrawerSource,
+  /getChatModeCapabilities|modeCapabilities/u,
+  "Chat Settings Drawer must use the settings-surface policy instead of shared capabilities",
+);
+assert.doesNotMatch(
+  chatSettingsDrawerSource,
+  /supportsPromptPresets\s*&&\s*isRoleplayMode/u,
+  "Prompt preset visibility must not contradict the matrix with a duplicate roleplay gate",
+);
+assert.doesNotMatch(
+  chatSettingsDrawerSource,
+  /sharedSections\s*\.includes\(\s*["']agents["']\s*\)\s*&&\s*!isConversation/u,
+  "Agent settings visibility must not retain the obsolete sharedSections/isConversation gate",
 );
 const conversationInputSource = readFileSync(
   new URL("../../packages/client/src/components/chat/ConversationInput.tsx", import.meta.url),
