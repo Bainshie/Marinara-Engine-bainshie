@@ -1888,6 +1888,7 @@ const playwrightServerSource = readFileSync(join(REPOSITORY_ROOT, "e2e/start-ser
 assert.match(playwrightServerSource, /startProject\("mobile", mobileClientPort, mobileServerPort\)/u);
 assert.match(playwrightServerSource, /startProject\("desktop", desktopClientPort, desktopServerPort\)/u);
 assert.match(playwrightServerSource, /resolve\(dataRoot, name\)/u);
+assert.match(playwrightServerSource, /DATA_DIR:\s*dataDir/u);
 
 const appSource = readFileSync(new URL("../../packages/client/src/App.tsx", import.meta.url), "utf8");
 const agentEditorSource = readFileSync(
