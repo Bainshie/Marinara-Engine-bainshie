@@ -1,4 +1,4 @@
-import { compactVideoPromptText } from "./prompt-context.js";
+import { clipVerbatimVideoSource, compactVideoPromptText } from "./prompt-context.js";
 
 const ROLEPLAY_VIDEO_DIRECTION_MAX_LENGTH = 6_000;
 
@@ -22,22 +22,16 @@ export const ROLEPLAY_VIDEO_DIRECTION_SYSTEM_PROMPT = [
   'Return only JSON in this exact shape: {"narrationBeat":"one cohesive animation direction"}',
 ].join("\n");
 
-function clipVerbatimLeaf(value: string, maxLength: number): string {
-  const trimmed = value.trim();
-  if (trimmed.length <= maxLength) return trimmed;
-  return trimmed.slice(0, maxLength).trimEnd();
-}
-
 export function buildRoleplayVideoDirectionUserPrompt(ctx: RoleplayVideoDirectionContext): string {
   const characterLine =
     ctx.characterNames.length > 0 ? ctx.characterNames.join(", ") : "Use only people visible in the scene.";
-  const referenceImagePrompt = clipVerbatimLeaf(ctx.referenceImagePrompt, 2_000);
+  const referenceImagePrompt = clipVerbatimVideoSource(ctx.referenceImagePrompt, 2_000);
   return [
     `<clip_duration_seconds>${ctx.durationSeconds}</clip_duration_seconds>`,
     `<aspect_ratio>${ctx.aspectRatio}</aspect_ratio>`,
     `<scene_characters>${characterLine}</scene_characters>`,
-    `<scene_setting>${clipVerbatimLeaf(ctx.setting, 1_000)}</scene_setting>`,
-    `<source_exchange>\n${clipVerbatimLeaf(ctx.sourceExchange, 8_000)}\n</source_exchange>`,
+    `<scene_setting>${clipVerbatimVideoSource(ctx.setting, 1_000)}</scene_setting>`,
+    `<source_exchange>\n${clipVerbatimVideoSource(ctx.sourceExchange, 8_000)}\n</source_exchange>`,
     referenceImagePrompt
       ? `<first_frame_generation_context>\n${referenceImagePrompt}\n</first_frame_generation_context>`
       : "",
@@ -49,7 +43,7 @@ export function buildRoleplayVideoDirectionUserPrompt(ctx: RoleplayVideoDirectio
 
 function unwrapJsonFence(value: string): string {
   const trimmed = value.trim();
-  const fenced = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/iu);
+  const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)\s*```/iu);
   return fenced?.[1]?.trim() ?? trimmed;
 }
 

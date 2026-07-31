@@ -791,7 +791,11 @@ export async function galleryRoutes(app: FastifyInstance) {
         promptDraft = resolveRoleplayVideoDirection(result.content, videoRuntime.promptLimits.finalPrompt);
       } catch (err) {
         logger.warn(err, "[gallery/roleplay-video-director] Failed to plan animation for chat %s", input.chatId);
-        throw new GallerySceneVideoRequestError(502, "The Roleplay animation Prompt Model failed to plan this clip.");
+        const message =
+          err instanceof Error && err.message.trim()
+            ? err.message.trim()
+            : "The Roleplay animation Prompt Model failed to plan this clip.";
+        throw new GallerySceneVideoRequestError(502, message);
       }
       if (!promptDraft) {
         throw new GallerySceneVideoRequestError(

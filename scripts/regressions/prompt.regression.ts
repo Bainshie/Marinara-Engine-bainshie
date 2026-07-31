@@ -444,6 +444,7 @@ assert.deepEqual(
   "an uncapped roleplay summary tail should protect every requested recent message",
 );
 import {
+  clipVerbatimVideoSource,
   compactVideoPromptText,
   getSceneVideoPromptLimits,
   resolveGalleryVideoNarrationSummary,
@@ -3387,6 +3388,7 @@ const cases: RegressionCase[] = [
         content:
           "User:\nDraw the blade, but do not strike yet.\n\nAssistant:\nMira slowly draws the ancient blade as dust falls from the ceiling.",
       });
+      assert.equal(clipVerbatimVideoSource("  verbatim source  ", 8), "verbatim");
 
       const directionUserPrompt = buildRoleplayVideoDirectionUserPrompt({
         durationSeconds: 6,
@@ -3408,6 +3410,13 @@ const cases: RegressionCase[] = [
           3_800,
         ),
         "Mira draws the blade as the camera eases closer; dust falls and steel rings softly.",
+      );
+      assert.equal(
+        resolveRoleplayVideoDirection(
+          'Planned direction follows.\n```json\n{"narrationBeat":"Mira holds the blade steady while the camera settles."}\n```\nEnd.',
+          3_800,
+        ),
+        "Mira holds the blade steady while the camera settles.",
       );
       assert.equal(
         resolveRoleplayVideoDirection("Narration beat: She stops and holds as the room tone settles.", 3_800),

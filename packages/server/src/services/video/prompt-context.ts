@@ -132,7 +132,7 @@ export function resolveGalleryVideoNarrationSummary(
   return "Animate the latest illustrated roleplay scene with motion that fits the reference image.";
 }
 
-function clipVerbatimVideoSource(value: unknown, maxLength: number): string {
+export function clipVerbatimVideoSource(value: unknown, maxLength: number): string {
   if (typeof value !== "string" || maxLength <= 0) return "";
   const trimmed = value.trim();
   if (trimmed.length <= maxLength) return trimmed;

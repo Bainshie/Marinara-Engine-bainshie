@@ -101,11 +101,12 @@ Replace the corresponding values in the API export with quoted Marinara placehol
 | `%reference_image_name%` | The first-frame image uploaded to ComfyUI |
 | `%duration_seconds%` | The Storyboard clip duration in seconds |
 | `%length%` | The duration converted to Marinara's 16 FPS frame contract |
+| `%fps%` | The frame rate Marinara uses for the clip |
 | `%width%`, `%height%` | Dimensions selected from the video connection's resolution and aspect ratio |
 | `%seed%` | A new random seed for the request |
 | `%model%` | Optional model value from the connection when the workflow does not hard-code its loader model |
 
-The reference image belongs inside the `segments` array of LTX Director's `timeline_data`. In the API workflow, `timeline_data` is a serialized JSON string. Keep the clip length dynamic and put the uploaded filename in its frame-zero image segment:
+The reference image belongs inside the `segments` array of LTX Director's `timeline_data`. In the API workflow, `timeline_data` is a serialized JSON string. `%length%` keeps the clip length dynamic through `normalDurationFrames`; the frame-zero reference-image segment intentionally keeps its own fixed short `"length":16` value:
 
 ```json
 {
