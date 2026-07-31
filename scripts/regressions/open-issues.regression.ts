@@ -450,6 +450,15 @@ assert.equal(isAgentManifestAvailableInChatMode("roleplay", downloadableAgent), 
 assert.equal(isAgentManifestAvailableInChatMode("visual_novel", downloadableAgent), true);
 assert.equal(isAgentManifestAvailableInChatMode("game", downloadableAgent), false);
 assert.equal(
+  isAgentManifestAvailableInChatMode("visual_novel", {
+    id: "roleplay-limited-agent",
+    execution: "pipeline",
+    modeAllowlist: ["roleplay"],
+  }),
+  true,
+  "Legacy Visual Novel must use the normalized Roleplay mode for manifest allowlists",
+);
+assert.equal(
   isAgentManifestAvailableInChatMode("game", { id: "spotify", execution: "pipeline" }),
   true,
   "Game mode must retain its opt-in Spotify agent",

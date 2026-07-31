@@ -22,10 +22,9 @@ export function isAgentManifestAvailableInChatMode(
   agent: Pick<BuiltInAgentMeta, "id" | "modeAllowlist" | "execution">,
 ): boolean {
   if (isRetiredBuiltInAgentId(agent.id)) return false;
-  const normalizedMode = mode ?? "roleplay";
-  if (agent.modeAllowlist?.length && !agent.modeAllowlist.includes(normalizedMode)) return false;
+  const policyMode = mode === "visual_novel" ? "roleplay" : (mode ?? "roleplay");
+  if (agent.modeAllowlist?.length && !agent.modeAllowlist.includes(policyMode)) return false;
   if (agent.execution === "feature" || agent.execution === "host") return true;
-  const policyMode = normalizedMode === "visual_novel" ? "roleplay" : normalizedMode;
   const policy = CHAT_MODE_AGENT_POLICIES[policyMode] ?? CHAT_MODE_AGENT_POLICIES.roleplay;
   return policy.kind === "all" || policy.allowedAgentIds.includes(agent.id);
 }
