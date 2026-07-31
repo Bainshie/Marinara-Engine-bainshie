@@ -2812,6 +2812,14 @@ const cases: RegressionCase[] = [
       assert.doesNotMatch(settingsSource, /game\.storyboardIllustrationDirector|game\.storyboardAnimationDirector/u);
       assert.doesNotMatch(drawerSource, /gameStoryboard/u);
       assert.match(drawerSource, /lazy\(\(\) =>\s*import\("\.\/StoryboardChatSettingsPanel"\)/u);
+      assert.match(
+        drawerSource,
+        /addLink\(STORYBOARD_AGENT_ID, activeAgentIds\.includes\(STORYBOARD_AGENT_ID\), storyboardAgent\.name\)/u,
+      );
+      assert.match(
+        drawerSource,
+        /agent\.id === "hierarchical-maps" \|\| agent\.id === STORYBOARD_AGENT_ID[\s\S]*?getAgentSettingsMenuId\(chat\.id, agent\.id\)/u,
+      );
       assert.match(storyboardChatSettingsSource, /settings\.plannerTemplates\.filter/u);
       assert.match(storyboardChatSettingsSource, /gameStoryboardIllustrationPromptTemplateId/u);
       assert.match(storyboardChatSettingsSource, /gameStoryboardAnimationPromptTemplateId/u);
