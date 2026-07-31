@@ -147,7 +147,12 @@ export async function bootstrapVisibleNoodle(
   const characterRowsById = new Map((await characters.list()).map((row) => [row.id, row]));
   for (const account of existingCharacterAccounts) {
     const row = characterRowsById.get(account.entityId);
-    if (!row) continue;
+    if (!row) {
+      // Character was deleted but the account cleanup failed or predates it existing (see
+      // characters.routes.ts delete handler) — reconcile the ghost here on every open.
+      await noodle.deleteAccountByEntity("character", account.entityId);
+      continue;
+    }
     await noodle.upsertAccountFromProfile({
       kind: "character",
       entityId: row.id,
