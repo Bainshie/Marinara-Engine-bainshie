@@ -1,6 +1,13 @@
 export const CHAT_RESOURCE_DRAG_MIME = "application/x-marinara-chat-resource";
 
-export type ChatResourceDragKind = "character" | "lorebook" | "agent" | "persona" | "preset" | "connection";
+export type ChatResourceDragKind =
+  | "character"
+  | "lorebook"
+  | "agent"
+  | "persona"
+  | "preset"
+  | "connection"
+  | "background";
 
 export type ChatResourceDragPayload = {
   version: 1;
@@ -21,7 +28,8 @@ export function parseChatResourceDragPayload(value: unknown): ChatResourceDragPa
     payload.kind !== "agent" &&
     payload.kind !== "persona" &&
     payload.kind !== "preset" &&
-    payload.kind !== "connection"
+    payload.kind !== "connection" &&
+    payload.kind !== "background"
   ) {
     return null;
   }

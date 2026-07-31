@@ -2,7 +2,7 @@
 
 ## Status
 
-Phases 1 and 2 are implemented on `drag-me-baby-one-more-time`. Phase 3 background assignment and Phase 4 touch/non-drag parity remain planned.
+Phases 1, 2, and 3 are implemented on `drag-me-baby-one-more-time`. Phase 4 touch/non-drag parity remains planned.
 
 Automated resolver coverage is active. Desktop Playwright coverage has been added for character assignment and persona replacement, but local execution in the current development container is blocked because Chromium cannot load `libnspr4.so`; CI or an environment with Playwright system dependencies must run those browser cases.
 

@@ -2352,6 +2352,7 @@
   "ui.chat.chatresourcedropoverlay.switchConnectionTitle": "Switch chat connection?",
   "ui.chat.chatresourcedropoverlay.undo": "Undo",
   "ui.chat.chatresourcedropoverlay.undoUnavailable": "The chat changed, so that action can no longer be undone.",
+  "ui.chat.chatresourcedropoverlay.useBackground": "Use {{name}} as this chat's background",
   "ui.chat.chatresourcedropoverlay.useConnection": "Use {{name}} for this chat",
   "ui.chat.chatresourcedropoverlay.usePersona": "Use {{name}} as this chat's persona",
   "ui.chat.chatroleplaysurface.loadMore": "Load More",

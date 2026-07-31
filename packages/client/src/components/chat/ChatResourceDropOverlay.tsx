@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Bot, BookOpen, FileText, Link, UserPlus, VenetianMask } from "lucide-react";
+import { Bot, BookOpen, FileText, Image, Link, UserPlus, VenetianMask } from "lucide-react";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
 import type { Chat } from "@marinara-engine/shared";
@@ -21,7 +21,9 @@ import {
   type ChatResourceDropAction,
 } from "../../lib/chat-resource-drop-capabilities";
 import { getChatCharacterIds } from "../../lib/chat-macros";
+import { chatBackgroundMetadataToUrl, chatBackgroundUrlToMetadata } from "../../lib/backgrounds";
 import { useChatStore } from "../../stores/chat.store";
+import { useUIStore } from "../../stores/ui.store";
 
 type OverlayState = {
   payload: ChatResourceDragPayload;
@@ -40,6 +42,7 @@ function getActionIcon(action: ChatResourceDropAction) {
   if (action.type === "add-agents") return <Bot size="1.25rem" />;
   if (action.type === "set-persona") return <VenetianMask size="1.25rem" />;
   if (action.type === "set-preset") return <FileText size="1.25rem" />;
+  if (action.type === "set-background") return <Image size="1.25rem" />;
   return <Link size="1.25rem" />;
 }
 
@@ -208,6 +211,36 @@ export function ChatResourceDropOverlay({ chat }: { chat: Chat }) {
               },
             },
           );
+        } else if (latestAction.type === "set-background") {
+          const previousBackground = chatBackgroundUrlToMetadata(
+            chatBackgroundMetadataToUrl(currentChat.metadata?.background),
+          );
+          const previousBackgroundUrl = useUIStore.getState().chatBackground;
+          const nextBackground = chatBackgroundUrlToMetadata(latestAction.id);
+          useUIStore.getState().setChatBackground(latestAction.id);
+          try {
+            await updateMetadata.mutateAsync({ id: currentChat.id, background: nextBackground });
+          } catch (error) {
+            useUIStore.getState().setChatBackground(previousBackgroundUrl);
+            throw error;
+          }
+          toast.success(t("ui.chat.chatresourcedropoverlay.appliedToChat", { name: latestAction.label }), {
+            action: {
+              label: t("ui.chat.chatresourcedropoverlay.undo"),
+              onClick: () => {
+                const activeChat = useChatStore.getState().activeChat;
+                const activeBackground = chatBackgroundUrlToMetadata(
+                  chatBackgroundMetadataToUrl(activeChat?.metadata?.background),
+                );
+                if (!activeChat || activeChat.id !== currentChat.id || activeBackground !== nextBackground) {
+                  toast.info(t("ui.chat.chatresourcedropoverlay.undoUnavailable"));
+                  return;
+                }
+                useUIStore.getState().setChatBackground(previousBackgroundUrl);
+                updateMetadata.mutate({ id: currentChat.id, background: previousBackground });
+              },
+            },
+          });
         } else {
           const field =
             latestAction.type === "set-persona"
@@ -302,7 +335,7 @@ export function ChatResourceDropOverlay({ chat }: { chat: Chat }) {
   if (!overlay) return null;
   return createPortal(
     <div
-      className="pointer-events-none fixed z-[90] flex items-center justify-center bg-[var(--background)]/35 p-6"
+      className="pointer-events-none fixed z-[10010] flex items-center justify-center bg-[var(--background)]/35 p-6"
       style={{ left: overlay.rect.left, top: overlay.rect.top, width: overlay.rect.width, height: overlay.rect.height }}
       role="status"
       aria-live="polite"
@@ -322,7 +355,9 @@ export function ChatResourceDropOverlay({ chat }: { chat: Chat }) {
                   ? t("ui.chat.chatresourcedropoverlay.usePersona", { name: overlay.payload.label })
                   : overlay.action.type === "set-preset"
                     ? t("ui.chat.chatresourcedropoverlay.applyPreset", { name: overlay.payload.label })
-                    : t("ui.chat.chatresourcedropoverlay.useConnection", { name: overlay.payload.label })}
+                    : overlay.action.type === "set-connection"
+                      ? t("ui.chat.chatresourcedropoverlay.useConnection", { name: overlay.payload.label })
+                      : t("ui.chat.chatresourcedropoverlay.useBackground", { name: overlay.payload.label })}
         </span>
       </div>
     </div>,

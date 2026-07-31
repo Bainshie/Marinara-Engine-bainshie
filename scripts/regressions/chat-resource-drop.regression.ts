@@ -12,6 +12,7 @@ const baseChat = {
     activeLorebookIds: ["lorebook-1"],
     activeAgentIds: ["agent-1"],
     enableAgents: true,
+    background: "current-background.png",
   },
 };
 
@@ -26,6 +27,34 @@ assert.deepEqual(
 assert.equal(
   resolveChatResourceDropAction(
     { version: 1, kind: "character", ids: ["character-1"], label: "Existing character" },
+    baseChat,
+  ),
+  null,
+);
+assert.deepEqual(
+  resolveChatResourceDropAction(
+    {
+      version: 1,
+      kind: "background",
+      ids: ["/api/backgrounds/file/new-background.png"],
+      label: "New background",
+    },
+    baseChat,
+  ),
+  {
+    type: "set-background",
+    id: "/api/backgrounds/file/new-background.png",
+    label: "New background",
+  },
+);
+assert.equal(
+  resolveChatResourceDropAction(
+    {
+      version: 1,
+      kind: "background",
+      ids: ["/api/backgrounds/file/current-background.png"],
+      label: "Current background",
+    },
     baseChat,
   ),
   null,

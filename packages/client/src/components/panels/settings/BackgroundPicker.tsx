@@ -40,6 +40,7 @@ import { ImageUploadDropzone } from "../../ui/ImageUploadDropzone";
 import { TouchDragHandle } from "../../ui/TouchDragHandle";
 import { Modal } from "../../ui/Modal";
 import { useTranslation as useUiTranslation } from "react-i18next";
+import { clearActiveChatResourceDrag, writeChatResourceDragPayload } from "../../../lib/chat-resource-drag";
 
 type BackgroundLibraryItem = {
   id: string;
@@ -686,13 +687,20 @@ export function BackgroundPicker({
         onDragStart={(event) => {
           draggedBackgroundIdRef.current = background.id;
           setDraggedBackgroundId(background.id);
-          event.dataTransfer.effectAllowed = "move";
+          event.dataTransfer.effectAllowed = "copyMove";
           event.dataTransfer.setData("application/x-marinara-background-id", background.id);
           event.dataTransfer.setData("text/plain", background.id);
+          writeChatResourceDragPayload(event.dataTransfer, {
+            version: 1,
+            kind: "background",
+            ids: [background.url],
+            label: title,
+          });
         }}
         onDragEnd={() => {
           draggedBackgroundIdRef.current = null;
           setDraggedBackgroundId(null);
+          clearActiveChatResourceDrag();
         }}
         className={cn(
           "group relative min-w-0 touch-pan-y overflow-hidden rounded-xl bg-[var(--secondary)]/35 ring-1 transition-all",
@@ -1021,6 +1029,7 @@ export function BackgroundPicker({
         mobileFullscreen
         panelClassName="sm:h-[min(88dvh,52rem)]"
         contentRef={modalContentRef}
+        dragThrough={draggedBackgroundId !== null}
       >
         <div className="flex flex-col gap-3">
           <div className="flex gap-1.5">

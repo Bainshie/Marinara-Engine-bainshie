@@ -1,4 +1,5 @@
 import type { Chat } from "@marinara-engine/shared";
+import { chatBackgroundMetadataToUrl, chatBackgroundUrlToMetadata } from "./backgrounds";
 import type { ChatResourceDragPayload } from "./chat-resource-drag";
 
 export type ChatResourceDropAction =
@@ -7,7 +8,8 @@ export type ChatResourceDropAction =
   | { type: "add-agents"; ids: string[]; label: string; mustEnableAgents: boolean }
   | { type: "set-persona"; id: string; label: string; replacesId: string | null }
   | { type: "set-preset"; id: string; label: string; replacesId: string | null }
-  | { type: "set-connection"; id: string; label: string; replacesId: string | null };
+  | { type: "set-connection"; id: string; label: string; replacesId: string | null }
+  | { type: "set-background"; id: string; label: string };
 
 function readStringArray(value: unknown): string[] {
   return Array.isArray(value)
@@ -57,6 +59,12 @@ export function resolveChatResourceDropAction(
   if (payload.kind === "preset") {
     if (chat.mode === "conversation" || chat.promptPresetId === id) return null;
     return { type: "set-preset", id, label: payload.label, replacesId: chat.promptPresetId ?? null };
+  }
+  if (payload.kind === "background") {
+    const currentBackground = chatBackgroundUrlToMetadata(chatBackgroundMetadataToUrl(metadata.background));
+    return currentBackground === chatBackgroundUrlToMetadata(id)
+      ? null
+      : { type: "set-background", id, label: payload.label };
   }
   return chat.connectionId === id
     ? null
