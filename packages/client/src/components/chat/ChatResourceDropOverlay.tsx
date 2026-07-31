@@ -21,6 +21,7 @@ import {
 } from "../../lib/chat-resource-drag";
 import {
   resolveChatResourceDropAction,
+  type ChatResourceDropAction,
   type ChatResourceDropBlock,
   type ChatResourceDropResult,
 } from "../../lib/chat-resource-drop-capabilities";
@@ -45,15 +46,46 @@ function findDropSurface(target: EventTarget | null) {
 }
 
 function getActionIcon(action: ChatResourceDropResult) {
-  if (action.type === "blocked") return <Ban size="1.25rem" />;
-  if (action.type === "add-characters") return <UserPlus size="1.25rem" />;
-  if (action.type === "add-lorebooks") return <BookOpen size="1.25rem" />;
-  if (action.type === "add-agents") return <Bot size="1.25rem" />;
-  if (action.type === "set-persona") return <VenetianMask size="1.25rem" />;
-  if (action.type === "set-preset") return <FileText size="1.25rem" />;
-  if (action.type === "set-background") return <Image size="1.25rem" />;
-  return <Link size="1.25rem" />;
+  if (action.type === "blocked") return <Ban size="1.5rem" />;
+  if (action.type === "add-characters") return <UserPlus size="1.5rem" />;
+  if (action.type === "add-lorebooks") return <BookOpen size="1.5rem" />;
+  if (action.type === "add-agents") return <Bot size="1.5rem" />;
+  if (action.type === "set-persona") return <VenetianMask size="1.5rem" />;
+  if (action.type === "set-preset") return <FileText size="1.5rem" />;
+  if (action.type === "set-background") return <Image size="1.5rem" />;
+  return <Link size="1.5rem" />;
 }
+
+/** Each resource keeps its library colour (lorebooks amber, personas emerald, …) while it is dragged. */
+const ACTION_ACCENT_CLASS: Record<ChatResourceDropAction["type"], string> = {
+  "add-characters": "mari-panel-gradient--characters",
+  "add-lorebooks": "mari-panel-gradient--lorebooks",
+  "add-agents": "mari-panel-gradient--agents",
+  "set-persona": "mari-panel-gradient--personas",
+  "set-preset": "mari-panel-gradient--presets",
+  "set-connection": "mari-panel-gradient--connections",
+  "set-background": "mari-panel-gradient--backgrounds",
+};
+
+const ACTION_TITLE_KEY: Record<ChatResourceDropAction["type"], string> = {
+  "add-characters": "ui.chat.chatresourcedropoverlay.addCharacters",
+  "add-lorebooks": "ui.chat.chatresourcedropoverlay.addLorebooks",
+  "add-agents": "ui.chat.chatresourcedropoverlay.addAgents",
+  "set-persona": "ui.chat.chatresourcedropoverlay.usePersona",
+  "set-preset": "ui.chat.chatresourcedropoverlay.applyPreset",
+  "set-connection": "ui.chat.chatresourcedropoverlay.useConnection",
+  "set-background": "ui.chat.chatresourcedropoverlay.useBackground",
+};
+
+const ACTION_HINT_KEY: Record<ChatResourceDropAction["type"], string> = {
+  "add-characters": "ui.chat.chatresourcedropoverlay.hintCharacters",
+  "add-lorebooks": "ui.chat.chatresourcedropoverlay.hintLorebooks",
+  "add-agents": "ui.chat.chatresourcedropoverlay.hintAgents",
+  "set-persona": "ui.chat.chatresourcedropoverlay.hintPersona",
+  "set-preset": "ui.chat.chatresourcedropoverlay.hintPreset",
+  "set-connection": "ui.chat.chatresourcedropoverlay.hintConnection",
+  "set-background": "ui.chat.chatresourcedropoverlay.hintBackground",
+};
 
 function blockedKey(action: ChatResourceDropBlock) {
   if (action.reason === "preset-unsupported-mode") return "ui.chat.chatresourcedropoverlay.presetUnsupportedMode";
@@ -394,54 +426,53 @@ export function ChatResourceDropOverlay({ chat }: { chat: Chat }) {
 
   return (
     <>
-      {overlay && createPortal(<div
-      className={`mari-chat-drop-zone pointer-events-none fixed z-[10010] flex items-center justify-center p-6 ${
-        overlay.action.type === "blocked" ? "mari-chat-drop-zone--blocked" : ""
-      }`}
-      style={{ left: overlay.rect.left, top: overlay.rect.top, width: overlay.rect.width, height: overlay.rect.height }}
-      role="status"
-      aria-live="polite"
-    >
-      <div
-        className={
-          overlay.action.type === "blocked"
-            ? "mari-chat-drop-card flex max-w-sm items-center gap-3 rounded-xl border border-[var(--destructive)]/60 bg-[var(--card)]/95 px-4 py-3 text-[var(--muted-foreground)] shadow-2xl backdrop-blur-sm"
-            : "mari-chat-drop-card flex max-w-sm items-center gap-3 rounded-xl border border-[var(--primary)] bg-[var(--card)]/95 px-4 py-3 text-[var(--foreground)] shadow-2xl backdrop-blur-sm"
-        }
-      >
-        <span
-          className={
-            overlay.action.type === "blocked"
-              ? "flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[var(--destructive)]/15 text-[var(--destructive)]"
-              : "mari-chat-drop-icon flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[var(--primary)] text-[var(--primary-foreground)]"
-          }
-        >
-          {getActionIcon(overlay.action)}
-        </span>
-        <span className="min-w-0 text-sm font-semibold">
-          {overlay.action.type === "blocked"
-            ? t(blockedKey(overlay.action), { name: overlay.payload.label })
-            : overlay.action.type === "add-characters"
-            ? t("ui.chat.chatresourcedropoverlay.addCharacters", { name: overlay.payload.label })
-            : overlay.action.type === "add-lorebooks"
-              ? t("ui.chat.chatresourcedropoverlay.addLorebooks", { name: overlay.payload.label })
-              : overlay.action.type === "add-agents"
-                ? t("ui.chat.chatresourcedropoverlay.addAgents", { name: overlay.payload.label })
-                : overlay.action.type === "set-persona"
-                  ? t("ui.chat.chatresourcedropoverlay.usePersona", { name: overlay.payload.label })
-                  : overlay.action.type === "set-preset"
-                    ? t("ui.chat.chatresourcedropoverlay.applyPreset", { name: overlay.payload.label })
-                    : overlay.action.type === "set-connection"
-                      ? t("ui.chat.chatresourcedropoverlay.useConnection", { name: overlay.payload.label })
-                      : t("ui.chat.chatresourcedropoverlay.useBackground", { name: overlay.payload.label })}
-          <span className="mt-0.5 block text-xs font-normal text-[var(--muted-foreground)]">
-            {overlay.action.type === "blocked"
-              ? t("ui.chat.chatresourcedropoverlay.cannotDropHint")
-              : t("ui.chat.chatresourcedropoverlay.releaseToDropHint")}
-          </span>
-        </span>
-      </div>
-    </div>, document.body)}
+      {overlay &&
+        createPortal(
+          <div
+            className={`mari-chat-drop-zone pointer-events-none fixed z-[10010] flex items-center justify-center p-8 ${
+              overlay.action.type === "blocked"
+                ? "mari-chat-drop-zone--blocked"
+                : ACTION_ACCENT_CLASS[overlay.action.type]
+            }`}
+            style={{
+              left: overlay.rect.left,
+              top: overlay.rect.top,
+              width: overlay.rect.width,
+              height: overlay.rect.height,
+            }}
+            role="status"
+            aria-live="polite"
+          >
+            <div
+              className={`mari-chat-drop-card flex max-w-md items-center gap-4 rounded-2xl border-2 bg-[var(--card)]/95 px-6 py-5 shadow-2xl backdrop-blur-sm ${
+                overlay.action.type === "blocked" ? "text-[var(--muted-foreground)]" : "text-[var(--foreground)]"
+              }`}
+            >
+              <span
+                className={
+                  overlay.action.type === "blocked"
+                    ? "flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-[var(--destructive)]/15 text-[var(--destructive)]"
+                    : "mari-chat-drop-icon flex h-14 w-14 shrink-0 items-center justify-center rounded-xl"
+                }
+              >
+                {getActionIcon(overlay.action)}
+              </span>
+              <span className="min-w-0">
+                <span className="block text-base font-semibold leading-snug">
+                  {overlay.action.type === "blocked"
+                    ? t(blockedKey(overlay.action), { name: overlay.payload.label })
+                    : t(ACTION_TITLE_KEY[overlay.action.type], { name: overlay.payload.label })}
+                </span>
+                <span className="mt-1 block text-xs font-normal leading-relaxed text-[var(--muted-foreground)]">
+                  {overlay.action.type === "blocked"
+                    ? t("ui.chat.chatresourcedropoverlay.cannotDropHint")
+                    : t(ACTION_HINT_KEY[overlay.action.type])}
+                </span>
+              </span>
+            </div>
+          </div>,
+          document.body,
+        )}
       <ChoiceSelectionModal
         open={choicePresetId !== null}
         onClose={() => setChoicePresetId(null)}

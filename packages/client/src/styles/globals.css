@@ -899,6 +899,12 @@
   --mari-panel-gradient-text: #f9fafb;
 }
 
+.mari-panel-gradient--backgrounds {
+  --mari-panel-gradient-start: #818cf8;
+  --mari-panel-gradient-end: #6366f1;
+  --mari-panel-gradient-text: #eef2ff;
+}
+
 .mari-suggestion-chips {
   display: flex;
   flex-wrap: wrap;
@@ -3845,7 +3851,9 @@ strong {
   animation: roleplay-hud-field-scroll 9s linear infinite;
 }
 
-/* ── Chat resource drop target ── */
+/* ── Chat resource drop target ──
+   Accent comes from the panel gradient tokens (.mari-panel-gradient--*), so a dropped
+   lorebook reads amber, a persona reads emerald, and so on. */
 @keyframes mari-chat-drop-zone-in {
   from {
     opacity: 0;
@@ -3858,7 +3866,7 @@ strong {
 @keyframes mari-chat-drop-card-in {
   from {
     opacity: 0;
-    transform: translateY(6px) scale(0.96);
+    transform: translateY(8px) scale(0.96);
   }
   to {
     opacity: 1;
@@ -3866,50 +3874,38 @@ strong {
   }
 }
 
-@keyframes mari-chat-drop-dash {
-  to {
-    background-position:
-      24px 0,
-      0 -24px,
-      0 0,
-      -24px 0;
-  }
-}
-
 .mari-chat-drop-zone {
-  border-radius: 0.75rem;
-  background:
-    linear-gradient(var(--primary), var(--primary)) 0 0 / 12px 2px repeat-x,
-    linear-gradient(var(--primary), var(--primary)) 100% 0 / 2px 12px repeat-y,
-    linear-gradient(var(--primary), var(--primary)) 100% 100% / 12px 2px repeat-x,
-    linear-gradient(var(--primary), var(--primary)) 0 100% / 2px 12px repeat-y,
-    color-mix(in srgb, var(--primary) 12%, transparent);
-  animation:
-    mari-chat-drop-zone-in 0.12s ease-out,
-    mari-chat-drop-dash 0.6s linear infinite;
-}
-
-.mari-chat-drop-zone--blocked {
-  background:
-    linear-gradient(var(--destructive), var(--destructive)) 0 0 / 12px 2px repeat-x,
-    linear-gradient(var(--destructive), var(--destructive)) 100% 0 / 2px 12px repeat-y,
-    linear-gradient(var(--destructive), var(--destructive)) 100% 100% / 12px 2px repeat-x,
-    linear-gradient(var(--destructive), var(--destructive)) 0 100% / 2px 12px repeat-y,
-    color-mix(in srgb, var(--destructive) 10%, transparent);
+  --mari-chat-drop-accent: var(--mari-panel-gradient-end, var(--primary));
+  --mari-chat-drop-accent-soft: var(--mari-panel-gradient-start, var(--primary));
+  border: 0.25rem dotted color-mix(in srgb, var(--mari-chat-drop-accent) 80%, transparent);
+  border-radius: 1rem;
+  background: radial-gradient(
+    circle at center,
+    color-mix(in srgb, var(--mari-chat-drop-accent-soft) 18%, transparent),
+    color-mix(in srgb, var(--mari-chat-drop-accent) 10%, transparent)
+  );
+  box-shadow: inset 0 0 3rem color-mix(in srgb, var(--mari-chat-drop-accent) 16%, transparent);
   animation: mari-chat-drop-zone-in 0.12s ease-out;
 }
 
+.mari-chat-drop-zone--blocked {
+  --mari-chat-drop-accent: var(--destructive);
+  --mari-chat-drop-accent-soft: var(--destructive);
+}
+
 .mari-chat-drop-card {
+  border-color: color-mix(in srgb, var(--mari-chat-drop-accent) 60%, transparent);
   animation: mari-chat-drop-card-in 0.16s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .mari-chat-drop-icon {
-  box-shadow: 0 0 0 0.35rem color-mix(in srgb, var(--primary) 22%, transparent);
+  background: linear-gradient(135deg, var(--mari-chat-drop-accent-soft), var(--mari-chat-drop-accent));
+  color: var(--mari-panel-gradient-text, var(--primary-foreground));
+  box-shadow: 0 0 0 0.4rem color-mix(in srgb, var(--mari-chat-drop-accent) 20%, transparent);
 }
 
 @media (prefers-reduced-motion: reduce) {
   .mari-chat-drop-zone,
-  .mari-chat-drop-zone--blocked,
   .mari-chat-drop-card {
     animation: none;
   }
