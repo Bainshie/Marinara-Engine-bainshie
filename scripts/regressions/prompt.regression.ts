@@ -2045,7 +2045,7 @@ const cases: RegressionCase[] = [
     name: "character ID macros resolve exact card references without matching unknown IDs",
     run() {
       const referencedId = "V1StGXR8_Z5jdHi6B-myT";
-      const unknownId = "A1StGXR8_Z5jdHi6B-myT";
+      const unknownId = "A1StGXR8_Z5jdHi6BmyTX";
       const context = {
         user: "Mari",
         char: "Dottore",

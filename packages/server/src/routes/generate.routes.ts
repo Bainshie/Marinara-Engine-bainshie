@@ -8714,7 +8714,7 @@ export async function generateRoutes(app: FastifyInstance) {
                         `data: ${JSON.stringify({
                           type: "agent_error",
                           data: {
-                            agentType: "illustrator",
+                            agentType: result.agentType,
                             agentName: imagePromptAgent?.name ?? "Illustrator",
                             retryTarget: "illustration",
                             error: `Image generation failed: ${illErr instanceof Error ? illErr.message : String(illErr)}`,
@@ -8729,11 +8729,13 @@ export async function generateRoutes(app: FastifyInstance) {
                     `data: ${JSON.stringify({
                       type: "agent_error",
                       data: {
-                        agentType: "illustrator",
+                        agentType: result.agentType,
                         agentName: imagePromptAgent?.name ?? "Illustrator",
                         retryTarget: "illustration",
-                        error:
-                          "No image generation connection is set on the Illustrator agent or under Settings → Connections → Defaults → Images. Choose one there, or assign one directly in Settings → Agents → Illustrator.",
+                        error: `No image generation connection is set on ${
+                          imagePromptAgent?.name?.trim() ||
+                          (result.agentType === "illustrator" ? "the Illustrator agent" : "this image agent")
+                        } or under Settings → Connections → Defaults → Images. Choose one there, or assign one directly in Settings → Agents.`,
                       },
                     })}\n\n`,
                   );
