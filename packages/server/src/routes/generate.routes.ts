@@ -140,7 +140,7 @@ import {
   type ChatMessage,
   type LLMUsage,
 } from "../services/llm/base-provider.js";
-import { executeToolCalls } from "../services/tools/tool-executor.js";
+import { executeToolCalls, formatToolExecutionResultForModel } from "../services/tools/tool-executor.js";
 import { createAgentPipeline, type ResolvedAgent, type AgentInjection } from "../services/agents/agent-pipeline.js";
 import { DATA_DIR } from "../utils/data-dir.js";
 import { executeAgent, normalizeAgentContextSize, resolveAgentResultType } from "../services/agents/agent-executor.js";
@@ -5692,7 +5692,7 @@ export async function generateRoutes(app: FastifyInstance) {
               for (const tr of toolResults) {
                 loopMessages.push({
                   role: "tool",
-                  content: tr.result,
+                  content: formatToolExecutionResultForModel(tr),
                   tool_call_id: tr.toolCallId,
                 });
               }
