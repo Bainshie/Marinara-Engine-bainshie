@@ -1,0 +1,73 @@
+import { clipVerbatimVideoSource, compactVideoPromptText } from "./prompt-context.js";
+
+const ROLEPLAY_VIDEO_DIRECTION_MAX_LENGTH = 6_000;
+
+export interface RoleplayVideoDirectionContext {
+  durationSeconds: number;
+  aspectRatio: "16:9" | "9:16";
+  sourceExchange: string;
+  referenceImagePrompt: string;
+  characterNames: string[];
+  setting: string;
+}
+
+export const ROLEPLAY_VIDEO_DIRECTION_SYSTEM_PROMPT = [
+  "You are an animation director for one short image-to-video Roleplay clip.",
+  "The supplied reference image is the exact first frame at time zero.",
+  "Plan only the action already happening in the source exchange or its immediate visual follow-through.",
+  "Describe one continuous shot with concrete subject motion, camera movement, point of view, environmental motion, spoken dialogue only when supported by the source, sound effects, and ambient audio.",
+  "Keep identities, clothing, objects, setting, lighting, and composition continuous with the first frame.",
+  "Do not repeat a static image description, list character traits, invent the user's next reply, continue into a new story beat, add cuts or a montage, or mention prompts, storyboards, keyframes, timestamps, or the reference image.",
+  "End on a stable hold that can loop or cut cleanly.",
+  'Return only JSON in this exact shape: {"narrationBeat":"one cohesive animation direction"}',
+].join("\n");
+
+export function buildRoleplayVideoDirectionUserPrompt(ctx: RoleplayVideoDirectionContext): string {
+  const characterLine =
+    ctx.characterNames.length > 0 ? ctx.characterNames.join(", ") : "Use only people visible in the scene.";
+  const referenceImagePrompt = clipVerbatimVideoSource(ctx.referenceImagePrompt, 2_000);
+  return [
+    `<clip_duration_seconds>${ctx.durationSeconds}</clip_duration_seconds>`,
+    `<aspect_ratio>${ctx.aspectRatio}</aspect_ratio>`,
+    `<scene_characters>${characterLine}</scene_characters>`,
+    `<scene_setting>${clipVerbatimVideoSource(ctx.setting, 1_000)}</scene_setting>`,
+    `<source_exchange>\n${clipVerbatimVideoSource(ctx.sourceExchange, 8_000)}\n</source_exchange>`,
+    referenceImagePrompt
+      ? `<first_frame_generation_context>\n${referenceImagePrompt}\n</first_frame_generation_context>`
+      : "",
+    "Write one duration-aware narrationBeat. Use the first-frame generation context only to understand the starting pose and scene; do not repeat it in the output.",
+  ]
+    .filter(Boolean)
+    .join("\n\n");
+}
+
+function unwrapJsonFence(value: string): string {
+  const trimmed = value.trim();
+  const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)\s*```/iu);
+  return fenced?.[1]?.trim() ?? trimmed;
+}
+
+export function resolveRoleplayVideoDirection(value: unknown, maxLength: number | null): string {
+  if (typeof value !== "string") return "";
+  const unwrapped = unwrapJsonFence(value);
+  let narrationBeat = unwrapped;
+  try {
+    const parsed = JSON.parse(unwrapped) as unknown;
+    if (typeof parsed === "string") {
+      narrationBeat = parsed;
+    } else if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      const candidate = (parsed as Record<string, unknown>).narrationBeat;
+      narrationBeat = typeof candidate === "string" ? candidate : "";
+    } else {
+      narrationBeat = "";
+    }
+  } catch {
+    narrationBeat = unwrapped.replace(/^narration\s*beat\s*:\s*/iu, "");
+  }
+  return compactVideoPromptText(
+    narrationBeat,
+    maxLength && maxLength > 0
+      ? Math.min(maxLength, ROLEPLAY_VIDEO_DIRECTION_MAX_LENGTH)
+      : ROLEPLAY_VIDEO_DIRECTION_MAX_LENGTH,
+  );
+}

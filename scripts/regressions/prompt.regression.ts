@@ -444,10 +444,17 @@ assert.deepEqual(
   "an uncapped roleplay summary tail should protect every requested recent message",
 );
 import {
+  clipVerbatimVideoSource,
   compactVideoPromptText,
   getSceneVideoPromptLimits,
   resolveGalleryVideoNarrationSummary,
+  resolveGalleryVideoSourceExchange,
 } from "../../packages/server/src/services/video/prompt-context.js";
+import {
+  buildRoleplayVideoDirectionUserPrompt,
+  resolveRoleplayVideoDirection,
+  ROLEPLAY_VIDEO_DIRECTION_SYSTEM_PROMPT,
+} from "../../packages/server/src/services/video/roleplay-video-direction.js";
 import { resolveGameGmPromptTemplate } from "../../packages/server/src/services/generation/game-gm-prompt-runtime.js";
 import { countConversationMessagesAfterSummaryAnchor } from "../../packages/server/src/services/conversation/auto-summary.service.js";
 import {
@@ -3313,6 +3320,12 @@ const cases: RegressionCase[] = [
     run() {
       const messages = [
         {
+          id: "source-request",
+          role: "user",
+          content: "Draw the blade, but do not strike yet.",
+          extra: "{}",
+        },
+        {
           id: "source-turn",
           role: "assistant",
           content: "The active swipe now describes a quiet room.",
@@ -3369,6 +3382,57 @@ const cases: RegressionCase[] = [
         resolveGalleryVideoNarrationSummary(messages, swipes, "legacy-upload-without-source", 650),
         "Much later, Sol runs across the moonlit courtyard.",
       );
+
+      assert.deepEqual(resolveGalleryVideoSourceExchange(messages, swipes, "swipe-gallery-image"), {
+        sourceMessageId: "source-turn",
+        content:
+          "User:\nDraw the blade, but do not strike yet.\n\nAssistant:\nMira slowly draws the ancient blade as dust falls from the ceiling.",
+      });
+      assert.equal(clipVerbatimVideoSource("  verbatim source  ", 8), "verbatim");
+
+      const directionUserPrompt = buildRoleplayVideoDirectionUserPrompt({
+        durationSeconds: 6,
+        aspectRatio: "16:9",
+        sourceExchange: "User:\nDraw the blade.\n\nAssistant:\nMira slowly draws it as dust falls.",
+        referenceImagePrompt: "Mira holds the half-drawn blade in a ruined hall, static portrait details.",
+        characterNames: ["Mira"],
+        setting: "Ruined hall at night",
+      });
+      assert.match(ROLEPLAY_VIDEO_DIRECTION_SYSTEM_PROMPT, /exact first frame at time zero/u);
+      assert.match(ROLEPLAY_VIDEO_DIRECTION_SYSTEM_PROMPT, /camera movement/u);
+      assert.match(ROLEPLAY_VIDEO_DIRECTION_SYSTEM_PROMPT, /ambient audio/u);
+      assert.match(ROLEPLAY_VIDEO_DIRECTION_SYSTEM_PROMPT, /Do not repeat a static image description/u);
+      assert.match(directionUserPrompt, /<source_exchange>[\s\S]*Draw the blade/u);
+      assert.match(directionUserPrompt, /<first_frame_generation_context>/u);
+      assert.equal(
+        resolveRoleplayVideoDirection(
+          '```json\n{"narrationBeat":"Mira draws the blade as the camera eases closer; dust falls and steel rings softly."}\n```',
+          3_800,
+        ),
+        "Mira draws the blade as the camera eases closer; dust falls and steel rings softly.",
+      );
+      assert.equal(
+        resolveRoleplayVideoDirection(
+          'Planned direction follows.\n```json\n{"narrationBeat":"Mira holds the blade steady while the camera settles."}\n```\nEnd.',
+          3_800,
+        ),
+        "Mira holds the blade steady while the camera settles.",
+      );
+      assert.equal(
+        resolveRoleplayVideoDirection("Narration beat: She stops and holds as the room tone settles.", 3_800),
+        "She stops and holds as the room tone settles.",
+      );
+      assert.equal(resolveRoleplayVideoDirection('{"wrongField":"do not send raw JSON"}', 3_800), "");
+
+      const galleryRouteSource = readFileSync(
+        new URL("../../packages/server/src/routes/gallery.routes.ts", import.meta.url),
+        "utf8",
+      );
+      assert.match(galleryRouteSource, /!promptDraft && chat\.mode === "roleplay"/u);
+      assert.match(galleryRouteSource, /resolveIllustratorPromptRuntime/u);
+      assert.match(galleryRouteSource, /ROLEPLAY_VIDEO_DIRECTION_SYSTEM_PROMPT/u);
+      assert.match(galleryRouteSource, /input\.promptOverride\?\.trim\(\) \?\? ""/u);
+      assert.doesNotMatch(galleryRouteSource, /chat\.mode === "roleplay"[\s\S]{0,400}gameStoryboard/u);
     },
   },
   {
