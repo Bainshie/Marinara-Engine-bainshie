@@ -4,6 +4,7 @@ import {
   normalizeStoryboardAgentSettings,
   STORYBOARD_AGENT_ID,
   type AgentPromptTemplateOption,
+  type StoryboardAutoGenerateMode,
 } from "@marinara-engine/shared";
 import { logger } from "../../lib/logger.js";
 import type { createAgentsStorage } from "../storage/agents.storage.js";
@@ -30,6 +31,33 @@ function hasActiveStoryboardAgent(meta: Record<string, unknown>): boolean {
   );
 }
 
+export function resolveRoleplayStoryboardAutoGenerateMode(
+  meta: Record<string, unknown>,
+  fallback: StoryboardAutoGenerateMode,
+): StoryboardAutoGenerateMode {
+  return meta.roleplayStoryboardAutoGenerateMode === "manual" ||
+    meta.roleplayStoryboardAutoGenerateMode === "illustration" ||
+    meta.roleplayStoryboardAutoGenerateMode === "animation"
+    ? meta.roleplayStoryboardAutoGenerateMode
+    : fallback;
+}
+
+/** Prevents two foreground-media agents from rendering the same new Roleplay response. */
+export function shouldSuppressIllustratorForegroundForStoryboard(args: {
+  ownerMode: string;
+  storyboardAgentActive: boolean;
+  createsAssistantMessage: boolean;
+  meta: Record<string, unknown>;
+  defaultAutoGenerateMode: StoryboardAutoGenerateMode;
+}): boolean {
+  return (
+    args.ownerMode === "roleplay" &&
+    args.storyboardAgentActive &&
+    args.createsAssistantMessage &&
+    resolveRoleplayStoryboardAutoGenerateMode(args.meta, args.defaultAutoGenerateMode) !== "manual"
+  );
+}
+
 /**
  * Projects the installed Storyboard Agent's global settings onto the legacy
  * Game storyboard fields consumed by the host generation workflow. Existing
@@ -52,12 +80,7 @@ export async function applyStoryboardAgentSettings(
     const runInterval = settings.runInterval;
 
     if (ownerMode === "roleplay") {
-      const autoGenerateMode =
-        meta.roleplayStoryboardAutoGenerateMode === "manual" ||
-        meta.roleplayStoryboardAutoGenerateMode === "illustration" ||
-        meta.roleplayStoryboardAutoGenerateMode === "animation"
-          ? meta.roleplayStoryboardAutoGenerateMode
-          : settings.autoGenerateMode;
+      const autoGenerateMode = resolveRoleplayStoryboardAutoGenerateMode(meta, settings.autoGenerateMode);
 
       return {
         ...meta,

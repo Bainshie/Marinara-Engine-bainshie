@@ -257,7 +257,10 @@ import {
   selectRoleplayStoryboardEpisode,
 } from "../../packages/server/src/services/roleplay/storyboard-episode.js";
 import { buildRoleplayStoryboardMessages } from "../../packages/server/src/services/roleplay/storyboard-prompts.js";
-import { applyStoryboardAgentSettings } from "../../packages/server/src/services/game/storyboard-agent-settings.js";
+import {
+  applyStoryboardAgentSettings,
+  shouldSuppressIllustratorForegroundForStoryboard,
+} from "../../packages/server/src/services/game/storyboard-agent-settings.js";
 
 const assistantCadenceMessages = [
   { id: "illustrator-anchor", role: "assistant" },
@@ -826,6 +829,51 @@ const cases: RegressionCase[] = [
           ["agent-planner", "AGENT FALLBACK"],
         ],
       );
+    },
+  },
+  {
+    name: "automatic Roleplay Storyboard owns foreground media without suppressing Illustrator backgrounds",
+    run() {
+      assert.equal(
+        shouldSuppressIllustratorForegroundForStoryboard({
+          ownerMode: "roleplay",
+          storyboardAgentActive: true,
+          createsAssistantMessage: true,
+          meta: { roleplayStoryboardAutoGenerateMode: "animation" },
+          defaultAutoGenerateMode: "manual",
+        }),
+        true,
+      );
+      assert.equal(
+        shouldSuppressIllustratorForegroundForStoryboard({
+          ownerMode: "roleplay",
+          storyboardAgentActive: true,
+          createsAssistantMessage: true,
+          meta: { roleplayStoryboardAutoGenerateMode: "manual" },
+          defaultAutoGenerateMode: "animation",
+        }),
+        false,
+        "a chat-level manual override should keep Illustrator foreground generation available",
+      );
+      assert.equal(
+        shouldSuppressIllustratorForegroundForStoryboard({
+          ownerMode: "roleplay",
+          storyboardAgentActive: true,
+          createsAssistantMessage: false,
+          meta: { roleplayStoryboardAutoGenerateMode: "animation" },
+          defaultAutoGenerateMode: "animation",
+        }),
+        false,
+        "regeneration and continuation do not create a new automatic Storyboard target",
+      );
+
+      const generateRouteSource = readFileSync(
+        new URL("../../packages/server/src/routes/generate.routes.ts", import.meta.url),
+        "utf8",
+      );
+      assert.match(generateRouteSource, /shouldSuppressIllustratorForegroundForStoryboard\(\{/u);
+      assert.match(generateRouteSource, /if \(automaticBackgroundsEnabled && illustratorBackgroundAgent\)/u);
+      assert.match(generateRouteSource, /if \(!storyboardSuppressesForeground && shouldGenerate && imagePrompt\)/u);
     },
   },
   {
