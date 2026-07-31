@@ -8,6 +8,10 @@ import {
   generateRequestSchema,
   BUILT_IN_AGENTS,
   getDefaultBuiltInAgentSettings,
+  isBuiltInAgentHostManaged,
+  mergeBuiltInAgentSettings,
+  normalizeStoryboardAgentSettings,
+  STORYBOARD_AGENT_ID,
   resolveMacros,
   resolveDeferredCharacterMacros,
   hasDeferredCharacterMacros,
@@ -57,6 +61,7 @@ import type {
 } from "@marinara-engine/shared";
 import { createChatsStorage } from "../services/storage/chats.storage.js";
 import { commitSpatialOwnerTurn, SpatialOwnerTurnError } from "../services/spatial-context/owner-turn.js";
+import { shouldSuppressIllustratorForegroundForStoryboard } from "../services/game/storyboard-agent-settings.js";
 import {
   formatOwnerSpatialBreadcrumb,
   injectOwnerSpatialPrompt,
@@ -3479,6 +3484,22 @@ export async function generateRoutes(app: FastifyInstance) {
 
         const illustratorAgentForInterval = resolvedAgents.find((a) => a.type === "illustrator");
         const createsAssistantMessage = !input.impersonate && !input.regenerateMessageId && !input.continueMessageId;
+        const storyboardAgentConfig = configuredPromptAgents.find((agent) => agent.type === STORYBOARD_AGENT_ID);
+        const storyboardAgentSettings = normalizeStoryboardAgentSettings(
+          mergeBuiltInAgentSettings(STORYBOARD_AGENT_ID, storyboardAgentConfig?.settings),
+        );
+        const storyboardAgentActive =
+          chatEnableAgents &&
+          hasPerChatAgentList &&
+          perChatAgentSet.has(STORYBOARD_AGENT_ID) &&
+          isBuiltInAgentHostManaged(STORYBOARD_AGENT_ID);
+        const storyboardOwnsAutomaticForeground = shouldSuppressIllustratorForegroundForStoryboard({
+          ownerMode: requestChatMode,
+          storyboardAgentActive,
+          createsAssistantMessage,
+          meta: chatMeta,
+          defaultAutoGenerateMode: storyboardAgentSettings.autoGenerateMode,
+        });
         if (
           illustratorAgentForInterval &&
           (await shouldSkipAgentByAssistantInterval({
@@ -8260,6 +8281,8 @@ export async function generateRoutes(app: FastifyInstance) {
                     : undefined;
               const requestedBackground = illustratorRequestedBackground(illData.generateBackground);
               const automaticBackgroundsEnabled = illustratorBackgroundGenerationEnabled(chatMode, chatMeta);
+              const storyboardSuppressesForeground =
+                storyboardOwnsAutomaticForeground && result.agentType === "illustrator";
 
               // Always log what the illustrator decided
               logger.debug(
@@ -8381,7 +8404,27 @@ export async function generateRoutes(app: FastifyInstance) {
                 };
               }
 
-              if (shouldGenerate && imagePrompt) {
+              if (storyboardSuppressesForeground) {
+                if (shouldGenerate && imagePrompt) {
+                  logger.info(
+                    "[illustrator] Skipping foreground image because automatic Roleplay Storyboard owns this response",
+                  );
+                }
+                if (resultMessageId) {
+                  try {
+                    await agentsStore.saveRun({
+                      agentConfigId: result.agentId,
+                      chatId: input.chatId,
+                      messageId: resultMessageId,
+                      result,
+                    });
+                  } catch (err) {
+                    logger.warn(err, "[illustrator] Failed to persist Storyboard-suppressed run");
+                  }
+                }
+              }
+
+              if (!storyboardSuppressesForeground && shouldGenerate && imagePrompt) {
                 // Resolve connections: text LLM = connectionId, image gen = settings.imageConnectionId
                 const imagePositivePrompt = ((illustratorAgent?.settings?.imagePositivePrompt as string) ?? "").trim();
                 const savedNegativePrompt = ((illustratorAgent?.settings?.imageNegativePrompt as string) ?? "").trim();

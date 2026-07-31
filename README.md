@@ -148,7 +148,7 @@ Three chat modes — **Conversation** (Discord-style DMs), **Roleplay** (immersi
 
 ### Visual & Immersive
 
-Character expression sprites with automatic emotion switching, custom scene backgrounds, dynamic weather overlays, gallery illustrations, short scene videos from generated illustrations, Game Mode storyboards with selectable keyframe and video prompt styles, two visual themes (Y2K Marinara and SillyTavern classic), and light/dark mode.
+Character expression sprites with automatic emotion switching, custom scene backgrounds, dynamic weather overlays, gallery illustrations, short scene videos from generated illustrations, Game Mode storyboards, inline Roleplay storyboard episodes with selectable prompt layers, two visual themes (Y2K Marinara and SillyTavern classic), and light/dark mode.
 
 ### AI Agent System
 
@@ -199,7 +199,7 @@ The full guide library is browsable inside the app: open **Documentation** from 
 | [docs/media/style-profiles.md](docs/media/style-profiles.md)                         | Image style profiles and prompt grammar                                                                            |
 | [docs/media/tts-setup.md](docs/media/tts-setup.md)                                   | Text to speech (TTS) setup and voices                                                                              |
 | [docs/media/scene-video.md](docs/media/scene-video.md)                               | Scene-video provider setup and the Gallery animation workflow                                                      |
-| [docs/game/storyboard.md](docs/game/storyboard.md)                                   | Step-by-step guide to manual and automatic Game Mode storyboards                                                   |
+| [docs/game/storyboard.md](docs/game/storyboard.md)                                   | Manual and automatic Game Mode storyboards plus inline Roleplay storyboard episodes                                |
 | [docs/game/ltx-2-3-storyboards.md](docs/game/ltx-2-3-storyboards.md)                   | Krea 2 first frames, local LTX 2.3 ComfyUI animation, and tested Game Mode settings                               |
 | [docs/agents/agents-overview.md](docs/agents/agents-overview.md)                     | Agent system overview: phases, per-chat enablement, built-in and custom agents                                     |
 | [docs/extending/custom-tools.md](docs/extending/custom-tools.md)                     | Function calling, custom tools, webhooks, scripts, and agent tool enablement                                       |

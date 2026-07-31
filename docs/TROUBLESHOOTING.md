@@ -187,17 +187,18 @@ Then restart Marinara and click **Reapply Cleanup** in the sprite generation win
 - Rebuild the tool with `pnpm backgroundremover:reinstall`.
 - To force automatic matte cleanup without the AI fallback while you troubleshoot, set `SPRITE_BACKGROUND_REMOVAL_ENGINE=builtin` in `.env`.
 
-### Game Mode storyboards or scene videos do not appear
+### Game Mode or Roleplay storyboards do not appear
 
-Storyboards are a Game Mode feature. They turn a completed narration turn into keyframe images and optional clips.
+Game Mode Storyboards turn a completed GM narration into keyframe images and optional clips. Roleplay Storyboards combine completed exchanges and display the result inline after the assistant response.
 
 - For a manual scene video, generate or upload a **Gallery** image first, then use its **Video** or **Animate** action. The **Gallery** splits **Images** and **Videos** into tabs, so check the **Videos** tab.
-- For automatic storyboards, open **Chat Settings** > **Agents** > **Storyboards** and confirm **Automatic Storyboard Illustrations** is on. Turn on **Automatic Storyboard Animations** too if you also want clips.
-- Keyframe images need a Game image connection. Clips also need a video connection.
+- For automatic Game Mode Storyboards, open **Chat Settings** > **Agents** > **Storyboards** and confirm **Automatic Storyboard Illustrations** is on. Turn on **Automatic Storyboard Animations** too if you also want clips.
+- In Roleplay, add the **Storyboard** Agent to the chat. Choose **Still images** or **Animations**, set **Assistant messages per episode**, and select the Storyboard image connection. **Manual only** runs from **Create storyboard** in the Gallery instead.
+- Keyframe images need an image connection. Clips also need a video connection.
 - If a custom prompt works better with all characters combined, turn off **Use NovelAI Character Prompts**.
 - Slow providers can hit a timeout. Raise `IMAGE_GEN_TIMEOUT_MS` or `VIDEO_GEN_TIMEOUT_MS` in `.env`, then restart Marinara. The server only reads these values at startup.
 
-See [Game Mode: Getting Started](game/getting-started.md) for the full setup.
+See [Storyboard Engine Guide](game/storyboard.md) for both workflows and [Game Mode: Getting Started](game/getting-started.md) for Game setup.
 
 ### Game Mode world generation shows a JSON error
 

@@ -5833,6 +5833,7 @@ function GameSurfaceComponent({
         plannedStoryboard,
         promptOverrides,
       });
+      if (!("storyboard" in result)) return;
       applyGeneratedStoryboardToCache(result.storyboard, { refetchTurnStoryboards: true });
       const frameCount = result.storyboard.keyframes.length;
       toast.success(
@@ -5913,7 +5914,7 @@ function GameSurfaceComponent({
         debugMode: useUIStore.getState().debugMode,
       })
       .then((result) => {
-        applyGeneratedStoryboardToCache(result.storyboard);
+        if ("storyboard" in result) applyGeneratedStoryboardToCache(result.storyboard);
       })
       .catch((error) => {
         console.warn("[game/storyboard] auto storyboard generation failed", error);
