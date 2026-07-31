@@ -1675,6 +1675,61 @@ test("Characters can be dragged from the right panel into the active chat", asyn
   }
 });
 
+test("Dropping a persona confirms before replacing the active chat persona", async ({ page, request }, testInfo) => {
+  test.skip(testInfo.project.name.includes("mobile"), "HTML resource dragging is covered on desktop.");
+
+  const suffix = Date.now().toString(36);
+  const currentResponse = await request.post("/api/characters/personas", {
+    data: { name: `Current Drop Persona ${suffix}` },
+  });
+  const nextResponse = await request.post("/api/characters/personas", {
+    data: { name: `Next Drop Persona ${suffix}` },
+  });
+  expect(currentResponse.ok()).toBeTruthy();
+  expect(nextResponse.ok()).toBeTruthy();
+  const currentPersona = (await currentResponse.json()) as { id: string; name: string };
+  const nextPersona = (await nextResponse.json()) as { id: string; name: string };
+  const chatResponse = await request.post("/api/chats", {
+    data: { name: `Persona Drop ${suffix}`, mode: "roleplay", characterIds: [], personaId: currentPersona.id },
+  });
+  expect(chatResponse.ok()).toBeTruthy();
+  const chat = (await chatResponse.json()) as { id: string };
+
+  try {
+    await page.goto("/");
+    await page.evaluate(async (chatId) => {
+      const module = await import("/src/stores/chat.store.ts");
+      module.useChatStore.getState().setActiveChatId(chatId);
+    }, chat.id);
+    await expect(page.locator('[data-chat-resource-drop-surface]')).toBeVisible();
+    await page.locator('[data-tour="panel-personas"]').click();
+    const personaRow = page.locator('[data-touch-drag-card="persona"]').filter({ hasText: nextPersona.name });
+    const dropSurface = page.locator('[data-chat-resource-drop-surface]');
+    await expect(personaRow).toBeVisible();
+
+    await personaRow.dragTo(dropSurface);
+    const dialog = page.getByRole("dialog", { name: "Replace chat persona?" });
+    await expect(dialog).toContainText(currentPersona.name);
+    await expect(dialog).toContainText(nextPersona.name);
+    await dialog.getByRole("button", { name: "Cancel" }).click();
+    expect(((await (await request.get(`/api/chats/${chat.id}`)).json()) as { personaId: string }).personaId).toBe(
+      currentPersona.id,
+    );
+
+    await personaRow.dragTo(dropSurface);
+    await page.getByRole("dialog", { name: "Replace chat persona?" }).getByRole("button", { name: "Replace" }).click();
+    await expect
+      .poll(async () => ((await (await request.get(`/api/chats/${chat.id}`)).json()) as { personaId: string }).personaId)
+      .toBe(nextPersona.id);
+  } finally {
+    await Promise.all([
+      request.delete(`/api/chats/${chat.id}`).catch(() => undefined),
+      request.delete(`/api/characters/personas/${currentPersona.id}`).catch(() => undefined),
+      request.delete(`/api/characters/personas/${nextPersona.id}`).catch(() => undefined),
+    ]);
+  }
+});
+
 test("Character Chat actions reuse mode selection and seed the chosen setup wizard", async ({
   page,
   request,

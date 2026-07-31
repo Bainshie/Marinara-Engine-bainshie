@@ -53,6 +53,7 @@ import {
   matchesCardLibrarySearch,
   parseCardLibrarySearchQuery,
 } from "../../lib/card-library-search";
+import { clearActiveChatResourceDrag, writeChatResourceDragPayload } from "../../lib/chat-resource-drag";
 
 type PersonaRow = {
   id: string;
@@ -914,11 +915,20 @@ export function PersonasPanel() {
                             }
                             const ids = getDraggedPersonaIds(pid);
                             setDraggedPersonaId(pid);
-                            event.dataTransfer.effectAllowed = "move";
+                            event.dataTransfer.effectAllowed = "copyMove";
                             event.dataTransfer.setData("application/x-marinara-persona-ids", JSON.stringify(ids));
                             event.dataTransfer.setData("text/plain", pid);
+                            writeChatResourceDragPayload(event.dataTransfer, {
+                              version: 1,
+                              kind: "persona",
+                              ids: [pid],
+                              label: p.name,
+                            });
                           }}
-                          onDragEnd={() => setDraggedPersonaId(null)}
+                          onDragEnd={() => {
+                            setDraggedPersonaId(null);
+                            clearActiveChatResourceDrag();
+                          }}
                           role="button"
                           tabIndex={0}
                           className={cn(
@@ -1091,11 +1101,20 @@ export function PersonasPanel() {
                 }
                 const ids = getDraggedPersonaIds(persona.id);
                 setDraggedPersonaId(persona.id);
-                event.dataTransfer.effectAllowed = "move";
+                event.dataTransfer.effectAllowed = "copyMove";
                 event.dataTransfer.setData("application/x-marinara-persona-ids", JSON.stringify(ids));
                 event.dataTransfer.setData("text/plain", persona.id);
+                writeChatResourceDragPayload(event.dataTransfer, {
+                  version: 1,
+                  kind: "persona",
+                  ids: [persona.id],
+                  label: persona.name,
+                });
               }}
-              onDragEnd={() => setDraggedPersonaId(null)}
+              onDragEnd={() => {
+                setDraggedPersonaId(null);
+                clearActiveChatResourceDrag();
+              }}
             >
               {selectionMode && (
                 <button

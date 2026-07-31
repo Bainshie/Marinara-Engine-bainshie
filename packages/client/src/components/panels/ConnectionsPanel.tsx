@@ -94,6 +94,8 @@ import { SmoothFolderContent } from "../ui/SmoothFolderContent";
 import { TouchDragHandle } from "../ui/TouchDragHandle";
 import { useLocalizedUiText } from "../../localization/use-localized-ui-text";
 import { useTranslation as useUiTranslation } from "react-i18next";
+import { clearActiveChatResourceDrag, writeChatResourceDragPayload } from "../../lib/chat-resource-drag";
+import { isLanguageGenerationConnection } from "../../lib/connection-filters";
 
 const CONNECTION_ICON_COLORS = {
   from: "from-sky-400",
@@ -1670,12 +1672,23 @@ export function ConnectionsPanel() {
         onDragStart={(event) => {
           const ids = getDraggedConnectionIds(conn.id);
           setDraggedConnectionId(conn.id);
-          event.dataTransfer.effectAllowed = "move";
+          event.dataTransfer.effectAllowed = isLanguageGenerationConnection(conn) ? "copyMove" : "move";
           event.dataTransfer.setData("application/x-marinara-connection-ids", JSON.stringify(ids));
           event.dataTransfer.setData("application/x-marinara-connection-id", conn.id);
           event.dataTransfer.setData("text/plain", conn.id);
+          if (isLanguageGenerationConnection(conn)) {
+            writeChatResourceDragPayload(event.dataTransfer, {
+              version: 1,
+              kind: "connection",
+              ids: [conn.id],
+              label: conn.name,
+            });
+          }
         }}
-        onDragEnd={() => setDraggedConnectionId(null)}
+        onDragEnd={() => {
+          setDraggedConnectionId(null);
+          clearActiveChatResourceDrag();
+        }}
         onDropOnRow={(event) => {
           event.preventDefault();
           event.stopPropagation();

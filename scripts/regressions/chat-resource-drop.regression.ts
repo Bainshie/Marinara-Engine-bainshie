@@ -3,7 +3,11 @@ import { resolveChatResourceDropAction } from "../../packages/client/src/lib/cha
 import { parseChatResourceDragPayload } from "../../packages/client/src/lib/chat-resource-drag.js";
 
 const baseChat = {
+  mode: "roleplay" as const,
   characterIds: ["character-1"],
+  personaId: "persona-1",
+  promptPresetId: "preset-1",
+  connectionId: "connection-1",
   metadata: {
     activeLorebookIds: ["lorebook-1"],
     activeAgentIds: ["agent-1"],
@@ -69,7 +73,50 @@ assert.deepEqual(
   { version: 1, kind: "character", ids: ["character-1", "character-2"], label: "Characters" },
 );
 assert.equal(parseChatResourceDragPayload({ version: 2, kind: "character", ids: ["character-1"], label: "A" }), null);
-assert.equal(parseChatResourceDragPayload({ version: 1, kind: "preset", ids: ["preset-1"], label: "A" }), null);
+assert.equal(parseChatResourceDragPayload({ version: 1, kind: "unknown", ids: ["resource-1"], label: "A" }), null);
 assert.equal(parseChatResourceDragPayload({ version: 1, kind: "agent", ids: [], label: "A" }), null);
+
+assert.deepEqual(
+  resolveChatResourceDropAction(
+    { version: 1, kind: "persona", ids: ["persona-2"], label: "New persona" },
+    baseChat,
+  ),
+  { type: "set-persona", id: "persona-2", label: "New persona", replacesId: "persona-1" },
+);
+assert.equal(
+  resolveChatResourceDropAction(
+    { version: 1, kind: "persona", ids: ["persona-1"], label: "Current persona" },
+    baseChat,
+  ),
+  null,
+);
+assert.deepEqual(
+  resolveChatResourceDropAction(
+    { version: 1, kind: "preset", ids: ["preset-2"], label: "New preset" },
+    baseChat,
+  ),
+  { type: "set-preset", id: "preset-2", label: "New preset", replacesId: "preset-1" },
+);
+assert.equal(
+  resolveChatResourceDropAction(
+    { version: 1, kind: "preset", ids: ["preset-2"], label: "New preset" },
+    { ...baseChat, mode: "conversation" },
+  ),
+  null,
+);
+assert.deepEqual(
+  resolveChatResourceDropAction(
+    { version: 1, kind: "connection", ids: ["connection-2"], label: "New connection" },
+    baseChat,
+  ),
+  { type: "set-connection", id: "connection-2", label: "New connection", replacesId: "connection-1" },
+);
+assert.equal(
+  resolveChatResourceDropAction(
+    { version: 1, kind: "connection", ids: ["connection-1"], label: "Current connection" },
+    baseChat,
+  ),
+  null,
+);
 
 console.info("Chat resource drop regressions passed.");

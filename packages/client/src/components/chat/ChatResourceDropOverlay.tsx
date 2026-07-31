@@ -1,10 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Bot, BookOpen, UserPlus } from "lucide-react";
+import { Bot, BookOpen, FileText, Link, UserPlus, VenetianMask } from "lucide-react";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
 import type { Chat } from "@marinara-engine/shared";
 import { useUpdateChat, useUpdateChatMetadata } from "../../hooks/use-chats";
+import { usePersona } from "../../hooks/use-characters";
+import { usePresets } from "../../hooks/use-presets";
+import { useConnections } from "../../hooks/use-connections";
 import { showConfirmDialog } from "../../lib/app-dialogs";
 import {
   CHAT_RESOURCE_DRAG_MIME,
@@ -34,17 +37,27 @@ function findDropSurface(target: EventTarget | null) {
 function getActionIcon(action: ChatResourceDropAction) {
   if (action.type === "add-characters") return <UserPlus size="1.25rem" />;
   if (action.type === "add-lorebooks") return <BookOpen size="1.25rem" />;
-  return <Bot size="1.25rem" />;
+  if (action.type === "add-agents") return <Bot size="1.25rem" />;
+  if (action.type === "set-persona") return <VenetianMask size="1.25rem" />;
+  if (action.type === "set-preset") return <FileText size="1.25rem" />;
+  return <Link size="1.25rem" />;
 }
 
 function sameIds(left: string[], right: string[]) {
   return left.length === right.length && left.every((id, index) => id === right[index]);
 }
 
+function hasPresetChoices(value: unknown) {
+  return !!value && typeof value === "object" && !Array.isArray(value) && Object.keys(value).length > 0;
+}
+
 export function ChatResourceDropOverlay({ chat }: { chat: Chat }) {
   const { t } = useTranslation();
   const updateChat = useUpdateChat();
   const updateMetadata = useUpdateChatMetadata();
+  const { data: currentPersona } = usePersona(chat.personaId);
+  const { data: presets = [] } = usePresets();
+  const { data: connections = [] } = useConnections();
   const chatRef = useRef(chat);
   const [overlay, setOverlay] = useState<OverlayState | null>(null);
   chatRef.current = chat;
@@ -61,19 +74,12 @@ export function ChatResourceDropOverlay({ chat }: { chat: Chat }) {
   }, []);
 
   const applyAction = useCallback(
-    async (action: ChatResourceDropAction) => {
-      const payload: ChatResourceDragPayload = {
-        version: 1,
-        kind:
-          action.type === "add-characters" ? "character" : action.type === "add-lorebooks" ? "lorebook" : "agent",
-        ids: action.ids,
-        label: action.label,
-      };
+    async (payload: ChatResourceDragPayload) => {
       let currentChat = useChatStore.getState().activeChat ?? chatRef.current;
       if (useChatStore.getState().activeChatId !== currentChat.id) return;
       let latestAction = resolveChatResourceDropAction(payload, currentChat);
       if (!latestAction) {
-        toast.info(t("ui.chat.chatresourcedropoverlay.alreadyActive", { name: action.label }));
+        toast.info(t("ui.chat.chatresourcedropoverlay.alreadyActive", { name: payload.label }));
         return;
       }
 
@@ -87,6 +93,54 @@ export function ChatResourceDropOverlay({ chat }: { chat: Chat }) {
         currentChat = useChatStore.getState().activeChat ?? chatRef.current;
         latestAction = resolveChatResourceDropAction(payload, currentChat);
         if (!latestAction) return;
+      }
+
+      if (
+        (latestAction.type === "set-persona" ||
+          latestAction.type === "set-preset" ||
+          latestAction.type === "set-connection") &&
+        latestAction.replacesId
+      ) {
+        const replacementAction = latestAction;
+        const currentName =
+          replacementAction.type === "set-persona"
+            ? (currentPersona?.name ?? t("ui.chat.chatresourcedropoverlay.currentPersona"))
+            : replacementAction.type === "set-preset"
+              ? ((presets as Array<{ id: string; name: string }>).find(
+                  (item) => item.id === replacementAction.replacesId,
+                )?.name ?? t("ui.chat.chatresourcedropoverlay.currentPreset"))
+              : ((connections as Array<{ id: string; name: string }>).find(
+                    (item) => item.id === replacementAction.replacesId,
+                  )?.name ?? t("ui.chat.chatresourcedropoverlay.currentConnection"));
+        const confirmed = await showConfirmDialog({
+          title:
+            replacementAction.type === "set-persona"
+              ? t("ui.chat.chatresourcedropoverlay.replacePersonaTitle")
+              : replacementAction.type === "set-preset"
+                ? t("ui.chat.chatresourcedropoverlay.replacePresetTitle")
+                : t("ui.chat.chatresourcedropoverlay.switchConnectionTitle"),
+          message: t("ui.chat.chatresourcedropoverlay.replaceMessage", {
+            current: currentName,
+            next: replacementAction.label,
+          }),
+          confirmLabel:
+            replacementAction.type === "set-connection"
+              ? t("ui.chat.chatresourcedropoverlay.switch")
+              : t("ui.chat.chatresourcedropoverlay.replace"),
+        });
+        if (!confirmed || useChatStore.getState().activeChatId !== currentChat.id) return;
+        currentChat = useChatStore.getState().activeChat ?? chatRef.current;
+        latestAction = resolveChatResourceDropAction(payload, currentChat);
+        if (!latestAction) return;
+        if (
+          (latestAction.type === "set-persona" ||
+            latestAction.type === "set-preset" ||
+            latestAction.type === "set-connection") &&
+          latestAction.replacesId !== replacementAction.replacesId
+        ) {
+          toast.info(t("ui.chat.chatresourcedropoverlay.chatChanged"));
+          return;
+        }
       }
 
       try {
@@ -110,7 +164,7 @@ export function ChatResourceDropOverlay({ chat }: { chat: Chat }) {
               },
             },
           });
-        } else {
+        } else if (latestAction.type === "add-lorebooks" || latestAction.type === "add-agents") {
           const metadata: Record<string, unknown> =
             currentChat.metadata && typeof currentChat.metadata === "object" ? currentChat.metadata : {};
           const key = latestAction.type === "add-lorebooks" ? "activeLorebookIds" : "activeAgentIds";
@@ -154,12 +208,59 @@ export function ChatResourceDropOverlay({ chat }: { chat: Chat }) {
               },
             },
           );
+        } else {
+          const field =
+            latestAction.type === "set-persona"
+              ? "personaId"
+              : latestAction.type === "set-preset"
+                ? "promptPresetId"
+                : "connectionId";
+          const previousId = latestAction.replacesId;
+          const metadata: Record<string, unknown> =
+            currentChat.metadata && typeof currentChat.metadata === "object" ? currentChat.metadata : {};
+          const previousPresetChoices = metadata.presetChoices;
+          if (latestAction.type === "set-preset") {
+            await updateMetadata.mutateAsync({ id: currentChat.id, presetChoices: {} });
+          }
+          try {
+            await updateChat.mutateAsync({ id: currentChat.id, [field]: latestAction.id });
+          } catch (error) {
+            if (latestAction.type === "set-preset") {
+              await updateMetadata
+                .mutateAsync({ id: currentChat.id, presetChoices: previousPresetChoices ?? {} })
+                .catch(() => undefined);
+            }
+            throw error;
+          }
+          toast.success(t("ui.chat.chatresourcedropoverlay.appliedToChat", { name: latestAction.label }), {
+            action: {
+              label: t("ui.chat.chatresourcedropoverlay.undo"),
+              onClick: () => {
+                const activeChat = useChatStore.getState().activeChat;
+                const activeMetadata: Record<string, unknown> =
+                  activeChat?.metadata && typeof activeChat.metadata === "object" ? activeChat.metadata : {};
+                if (
+                  !activeChat ||
+                  activeChat.id !== currentChat.id ||
+                  activeChat[field] !== latestAction.id ||
+                  (latestAction.type === "set-preset" && hasPresetChoices(activeMetadata.presetChoices))
+                ) {
+                  toast.info(t("ui.chat.chatresourcedropoverlay.undoUnavailable"));
+                  return;
+                }
+                if (latestAction.type === "set-preset") {
+                  updateMetadata.mutate({ id: currentChat.id, presetChoices: previousPresetChoices ?? {} });
+                }
+                updateChat.mutate({ id: currentChat.id, [field]: previousId });
+              },
+            },
+          });
         }
       } catch (error) {
         toast.error(error instanceof Error ? error.message : t("ui.chat.chatresourcedropoverlay.failed"));
       }
     },
-    [t, updateChat, updateMetadata],
+    [connections, currentPersona?.name, presets, t, updateChat, updateMetadata],
   );
 
   useEffect(() => {
@@ -182,7 +283,7 @@ export function ChatResourceDropOverlay({ chat }: { chat: Chat }) {
       if (!next) return;
       event.preventDefault();
       event.stopPropagation();
-      void applyAction(next.action);
+      void applyAction(next.payload);
     };
     const clear = () => {
       setOverlay(null);
@@ -215,7 +316,13 @@ export function ChatResourceDropOverlay({ chat }: { chat: Chat }) {
             ? t("ui.chat.chatresourcedropoverlay.addCharacters", { name: overlay.payload.label })
             : overlay.action.type === "add-lorebooks"
               ? t("ui.chat.chatresourcedropoverlay.addLorebooks", { name: overlay.payload.label })
-              : t("ui.chat.chatresourcedropoverlay.addAgents", { name: overlay.payload.label })}
+              : overlay.action.type === "add-agents"
+                ? t("ui.chat.chatresourcedropoverlay.addAgents", { name: overlay.payload.label })
+                : overlay.action.type === "set-persona"
+                  ? t("ui.chat.chatresourcedropoverlay.usePersona", { name: overlay.payload.label })
+                  : overlay.action.type === "set-preset"
+                    ? t("ui.chat.chatresourcedropoverlay.applyPreset", { name: overlay.payload.label })
+                    : t("ui.chat.chatresourcedropoverlay.useConnection", { name: overlay.payload.label })}
         </span>
       </div>
     </div>,

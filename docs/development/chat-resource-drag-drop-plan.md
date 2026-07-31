@@ -2,9 +2,11 @@
 
 ## Status
 
-Planning document. No implementation has started.
+Phases 1 and 2 are implemented on `drag-me-baby-one-more-time`. Phase 3 background assignment and Phase 4 touch/non-drag parity remain planned.
 
-Before implementation begins, follow the repository coordination rules:
+Automated resolver coverage is active. Desktop Playwright coverage has been added for character assignment and persona replacement, but local execution in the current development container is blocked because Chromium cannot load `libnspr4.so`; CI or an environment with Playwright system dependencies must run those browser cases.
+
+Before remaining phases begin, follow the repository coordination rules:
 
 1. Check for an existing issue, issue-linked branch, draft PR, or project item covering chat resource drag-and-drop.
 2. Establish visible ownership on the issue.

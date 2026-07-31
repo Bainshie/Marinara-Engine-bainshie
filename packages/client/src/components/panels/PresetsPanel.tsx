@@ -89,6 +89,7 @@ import { TouchDragHandle } from "../ui/TouchDragHandle";
 import { getTouchReorderDropIndex } from "../../lib/touch-reorder";
 import { useLocalizedUiText } from "../../localization/use-localized-ui-text";
 import { useTranslation as useUiTranslation } from "react-i18next";
+import { clearActiveChatResourceDrag, writeChatResourceDragPayload } from "../../lib/chat-resource-drag";
 
 type PresetRow = {
   id: string;
@@ -832,11 +833,20 @@ export function PresetsPanel() {
           onDragStart={(event) => {
             const ids = getDraggedPresetIds(preset.id);
             setDraggedPresetId(preset.id);
-            event.dataTransfer.effectAllowed = "move";
+            event.dataTransfer.effectAllowed = "copyMove";
             event.dataTransfer.setData("application/x-marinara-preset-ids", JSON.stringify(ids));
             event.dataTransfer.setData("text/plain", preset.id);
+            writeChatResourceDragPayload(event.dataTransfer, {
+              version: 1,
+              kind: "preset",
+              ids: [preset.id],
+              label: preset.name,
+            });
           }}
-          onDragEnd={() => setDraggedPresetId(null)}
+          onDragEnd={() => {
+            setDraggedPresetId(null);
+            clearActiveChatResourceDrag();
+          }}
         >
           <TouchDragHandle
             label={localizeUi("ui.panels.presetspanel.dragPreset")}

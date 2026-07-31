@@ -4,7 +4,10 @@ import type { ChatResourceDragPayload } from "./chat-resource-drag";
 export type ChatResourceDropAction =
   | { type: "add-characters"; ids: string[]; label: string }
   | { type: "add-lorebooks"; ids: string[]; label: string }
-  | { type: "add-agents"; ids: string[]; label: string; mustEnableAgents: boolean };
+  | { type: "add-agents"; ids: string[]; label: string; mustEnableAgents: boolean }
+  | { type: "set-persona"; id: string; label: string; replacesId: string | null }
+  | { type: "set-preset"; id: string; label: string; replacesId: string | null }
+  | { type: "set-connection"; id: string; label: string; replacesId: string | null };
 
 function readStringArray(value: unknown): string[] {
   return Array.isArray(value)
@@ -14,7 +17,7 @@ function readStringArray(value: unknown): string[] {
 
 export function resolveChatResourceDropAction(
   payload: ChatResourceDragPayload,
-  chat: Pick<Chat, "characterIds" | "metadata">,
+  chat: Pick<Chat, "characterIds" | "metadata" | "mode" | "personaId" | "promptPresetId" | "connectionId">,
 ): ChatResourceDropAction | null {
   const metadata: Record<string, unknown> =
     chat.metadata && typeof chat.metadata === "object" ? chat.metadata : {};
@@ -31,14 +34,31 @@ export function resolveChatResourceDropAction(
     return ids.length > 0 ? { type: "add-lorebooks", ids, label: payload.label } : null;
   }
 
-  const currentIds = new Set(readStringArray(metadata.activeAgentIds));
-  const ids = payload.ids.filter((id) => !currentIds.has(id));
-  return ids.length > 0
-    ? {
-        type: "add-agents",
-        ids,
-        label: payload.label,
-        mustEnableAgents: metadata.enableAgents !== true,
-      }
-    : null;
+  if (payload.kind === "agent") {
+    const currentIds = new Set(readStringArray(metadata.activeAgentIds));
+    const ids = payload.ids.filter((id) => !currentIds.has(id));
+    return ids.length > 0
+      ? {
+          type: "add-agents",
+          ids,
+          label: payload.label,
+          mustEnableAgents: metadata.enableAgents !== true,
+        }
+      : null;
+  }
+
+  const id = payload.ids[0];
+  if (!id) return null;
+  if (payload.kind === "persona") {
+    return chat.personaId === id
+      ? null
+      : { type: "set-persona", id, label: payload.label, replacesId: chat.personaId ?? null };
+  }
+  if (payload.kind === "preset") {
+    if (chat.mode === "conversation" || chat.promptPresetId === id) return null;
+    return { type: "set-preset", id, label: payload.label, replacesId: chat.promptPresetId ?? null };
+  }
+  return chat.connectionId === id
+    ? null
+    : { type: "set-connection", id, label: payload.label, replacesId: chat.connectionId ?? null };
 }
