@@ -8272,7 +8272,10 @@ export async function generateRoutes(app: FastifyInstance) {
               const illCharacters = Array.isArray(illData.characters) ? (illData.characters as string[]) : [];
               const resultAgent = resolvedAgents.find((agent) => agent.id === result.agentId);
               const fallbackIllustratorAgent = resolvedAgents.find((agent) => agent.type === "illustrator");
-              const illustratorAgent = resultAgent ?? fallbackIllustratorAgent;
+              const imagePromptAgent =
+                resultAgent ?? (result.agentType === "illustrator" ? fallbackIllustratorAgent : undefined);
+              const usesChatIllustratorSettings =
+                resultAgent?.type === "illustrator" || (!resultAgent && result.agentType === "illustrator");
               const illustratorBackgroundAgent =
                 resultAgent?.type === "illustrator"
                   ? resultAgent
@@ -8426,13 +8429,17 @@ export async function generateRoutes(app: FastifyInstance) {
 
               if (!storyboardSuppressesForeground && shouldGenerate && imagePrompt) {
                 // Resolve connections: text LLM = connectionId, image gen = settings.imageConnectionId
-                const imagePositivePrompt = ((illustratorAgent?.settings?.imagePositivePrompt as string) ?? "").trim();
-                const savedNegativePrompt = ((illustratorAgent?.settings?.imageNegativePrompt as string) ?? "").trim();
-                const imageConnectionOverride = resolveIllustratorImageConnectionId(
-                  requestChatMode,
-                  chatMeta,
-                  illustratorAgent?.settings?.imageConnectionId,
-                );
+                const imagePositivePrompt = ((imagePromptAgent?.settings?.imagePositivePrompt as string) ?? "").trim();
+                const savedNegativePrompt = ((imagePromptAgent?.settings?.imageNegativePrompt as string) ?? "").trim();
+                const imageConnectionOverride = usesChatIllustratorSettings
+                  ? resolveIllustratorImageConnectionId(
+                      requestChatMode,
+                      chatMeta,
+                      imagePromptAgent?.settings?.imageConnectionId,
+                    )
+                  : typeof imagePromptAgent?.settings?.imageConnectionId === "string"
+                    ? imagePromptAgent.settings.imageConnectionId.trim()
+                    : "";
                 let imgConnFull = imageConnectionOverride
                   ? await connections.getWithKey(imageConnectionOverride)
                   : null;
@@ -8501,13 +8508,14 @@ export async function generateRoutes(app: FastifyInstance) {
                       // Collect optional character visual context. Prefer avatar
                       // portraits for references, then fall back to full-body sprites.
                       const useAvatarRefs =
-                        typeof chatMeta.illustratorUseAvatarReferences === "boolean"
+                        usesChatIllustratorSettings && typeof chatMeta.illustratorUseAvatarReferences === "boolean"
                           ? chatMeta.illustratorUseAvatarReferences
-                          : illustratorAgent?.settings?.useAvatarReferences === true;
+                          : imagePromptAgent?.settings?.useAvatarReferences === true;
                       const includeCharacterAppearance =
+                        usesChatIllustratorSettings &&
                         typeof chatMeta.illustratorIncludeCharacterAppearance === "boolean"
                           ? chatMeta.illustratorIncludeCharacterAppearance
-                          : illustratorAgent?.settings?.includeCharacterAppearance === true;
+                          : imagePromptAgent?.settings?.includeCharacterAppearance === true;
                       const spatialLocationReferenceImage = await resolveSpatialLocationReferenceImage({
                         db: app.db,
                         chatId: input.chatId,
@@ -8706,8 +8714,8 @@ export async function generateRoutes(app: FastifyInstance) {
                         `data: ${JSON.stringify({
                           type: "agent_error",
                           data: {
-                            agentType: "illustrator",
-                            agentName: illustratorAgent?.name ?? "Illustrator",
+                            agentType: result.agentType,
+                            agentName: imagePromptAgent?.name ?? "Illustrator",
                             retryTarget: "illustration",
                             error: `Image generation failed: ${illErr instanceof Error ? illErr.message : String(illErr)}`,
                           },
@@ -8721,11 +8729,13 @@ export async function generateRoutes(app: FastifyInstance) {
                     `data: ${JSON.stringify({
                       type: "agent_error",
                       data: {
-                        agentType: "illustrator",
-                        agentName: illustratorAgent?.name ?? "Illustrator",
+                        agentType: result.agentType,
+                        agentName: imagePromptAgent?.name ?? "Illustrator",
                         retryTarget: "illustration",
-                        error:
-                          "No image generation connection is set on the Illustrator agent or under Settings → Connections → Defaults → Images. Choose one there, or assign one directly in Settings → Agents → Illustrator.",
+                        error: `No image generation connection is set on ${
+                          imagePromptAgent?.name?.trim() ||
+                          (result.agentType === "illustrator" ? "the Illustrator agent" : "this image agent")
+                        } or under Settings → Connections → Defaults → Images. Choose one there, or assign one directly in Settings → Agents.`,
                       },
                     })}\n\n`,
                   );

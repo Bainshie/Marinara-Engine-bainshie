@@ -3191,9 +3191,13 @@ async function applyRetryResultEffects(args: {
       result.data &&
       typeof result.data === "object"
     ) {
-      const illustratorFailureName =
-        resolvedAgents.find((a) => a.resolved.id === result.agentId || a.resolved.type === "illustrator")?.cfg.name ??
-        "Illustrator";
+      const resultAgent = resolvedAgents.find((agent) => agent.resolved.id === result.agentId);
+      const fallbackIllustratorAgent = resolvedAgents.find((agent) => agent.resolved.type === "illustrator");
+      const imagePromptAgent =
+        resultAgent ?? (result.agentType === "illustrator" ? fallbackIllustratorAgent : undefined);
+      const usesChatIllustratorSettings =
+        resultAgent?.resolved.type === "illustrator" || (!resultAgent && result.agentType === "illustrator");
+      const illustratorFailureName = imagePromptAgent?.cfg.name ?? "Illustrator";
       try {
         const illData = result.data as Record<string, unknown>;
         const shouldGenerate = isManualIllustratorImageRequest || illData.shouldGenerate === true;
@@ -3203,18 +3207,19 @@ async function applyRetryResultEffects(args: {
         const illCharacters = Array.isArray(illData.characters) ? (illData.characters as string[]) : [];
 
         if (shouldGenerate && imagePrompt) {
-          const illustratorAgent = resolvedAgents.find(
-            (a) => a.resolved.id === result.agentId || a.resolved.type === "illustrator",
-          );
-          const rawImagePositivePrompt = illustratorAgent?.resolved.settings?.imagePositivePrompt;
-          const rawSavedNegativePrompt = illustratorAgent?.resolved.settings?.imageNegativePrompt;
+          const rawImagePositivePrompt = imagePromptAgent?.resolved.settings?.imagePositivePrompt;
+          const rawSavedNegativePrompt = imagePromptAgent?.resolved.settings?.imageNegativePrompt;
           const imagePositivePrompt = typeof rawImagePositivePrompt === "string" ? rawImagePositivePrompt.trim() : "";
           const savedNegativePrompt = typeof rawSavedNegativePrompt === "string" ? rawSavedNegativePrompt.trim() : "";
-          const imageConnectionOverride = resolveIllustratorImageConnectionId(
-            chat.mode,
-            chatMeta,
-            illustratorAgent?.resolved.settings?.imageConnectionId,
-          );
+          const imageConnectionOverride = usesChatIllustratorSettings
+            ? resolveIllustratorImageConnectionId(
+                chat.mode,
+                chatMeta,
+                imagePromptAgent?.resolved.settings?.imageConnectionId,
+              )
+            : typeof imagePromptAgent?.resolved.settings?.imageConnectionId === "string"
+              ? imagePromptAgent.resolved.settings.imageConnectionId.trim()
+              : "";
           let imgConnFull = imageConnectionOverride ? await conns.getWithKey(imageConnectionOverride) : null;
           if (imageConnectionOverride && !imgConnFull) {
             logger.warn(
@@ -3274,13 +3279,13 @@ async function applyRetryResultEffects(args: {
             // Collect optional character visual context. Prefer avatar portraits
             // for references, then fall back to full-body sprites.
             const useAvatarRefs =
-              typeof chatMeta.illustratorUseAvatarReferences === "boolean"
+              usesChatIllustratorSettings && typeof chatMeta.illustratorUseAvatarReferences === "boolean"
                 ? chatMeta.illustratorUseAvatarReferences
-                : illustratorAgent?.resolved.settings?.useAvatarReferences === true;
+                : imagePromptAgent?.resolved.settings?.useAvatarReferences === true;
             const includeCharacterAppearance =
-              typeof chatMeta.illustratorIncludeCharacterAppearance === "boolean"
+              usesChatIllustratorSettings && typeof chatMeta.illustratorIncludeCharacterAppearance === "boolean"
                 ? chatMeta.illustratorIncludeCharacterAppearance
-                : illustratorAgent?.resolved.settings?.includeCharacterAppearance === true;
+                : imagePromptAgent?.resolved.settings?.includeCharacterAppearance === true;
             const spatialLocationReferenceImage = await resolveSpatialLocationReferenceImage({
               db: app.db,
               chatId,

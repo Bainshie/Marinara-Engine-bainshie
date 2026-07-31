@@ -6,6 +6,11 @@ This file is the release-notes source of truth for Marinara Engine. Reuse these 
 
 ### Added
 
+- Added Character-ID macros such as `{{V1StGXR8_Z5jdHi6B-myT}}` for loading another card's context into the system prompt without its greetings or example dialogue, while still applying normally activated attached lorebooks (#4336).
+- Added selection and one-click condensation of multiple ordered chat summaries into a single summary entry (#4334).
+- Added a visibility toggle for reimported embedded Character lorebooks so they remain linked, active, and editable without cluttering general lorebook searches and selectors (#4333).
+- Added Illustrator-style image connection, reference-image, appearance, and prompt controls to custom agents whose result type is **Image Prompt** (#4337).
+- Added **Recent** as the default chat sort, based on last-message activity, while **Newest** and **Oldest** now use chat creation dates (#4341).
 - Added a single-shot animation director to Roleplay Gallery **Animate**. The selected Prompt Model now plans motion, camera behavior, supported dialogue, sound effects, ambience, and an ending hold from the exchange behind the Illustrator image, while the existing image remains frame zero and Game Storyboard behavior stays unchanged. Its duration-aware instructions are editable under **Settings > Generations > Video Generation Prompt Overrides** with `${durationSeconds}` support (#4311).
 - Added an external-only **Full page access** compatibility mode for legacy Browser Extensions such as WeatherTweaker. The safe opaque-origin Worker remains the default; page-level code requires both External Extension gates, explicit exact-hash approval with a dedicated high-risk disclosure, and fresh approval after every code, CSS, or permission change. Pre-sandbox `marinara.extension` v1 packages without an explicit capabilities field are classified into this review flow instead of silently failing in the Worker (#4319).
 - Added Browser Personal Extension API version 5 with read-only active chat and Character identifiers, plus separately reviewable permissions for bounded snapshots of the active Character cards and selected Persona. Extensions such as Notepad can keep per-chat or per-Character state and display active profile context without gaining access to messages, full libraries, undeclared fields, chat metadata, DOM, database, network, or mutation operations (#4316).
@@ -47,6 +52,9 @@ This file is the release-notes source of truth for Marinara Engine. Reuse these 
 
 ### Fixed
 
+- Built the shared workspace before `pnpm dev:server` and documented the rebuild-and-restart boundary for shared source changes (#4327).
+- Removed Windows child-process calls that combined argument arrays with `shell: true`, eliminating Node.js DEP0190 warnings from startup, updates, native dependency repair, and client builds (#4332).
+- Stopped generic OpenAI-compatible connections from inheriting `reasoning_effort` for unknown models, added an explicit **Off** option that sends `none`, and made the Advanced Parameters toggle omit reasoning fields entirely (#4335).
 - Skipped corrupt or undecodable Noodle timeline images before captioning and multimodal generation, allowing the refresh to continue with text instead of forwarding invalid bytes to the model (#4310).
 - Added the missing delete action for generated scene videos in the Chat Gallery, including destructive confirmation, pinned-view cleanup, and removal of only the selected video file and metadata (#4314).
 - Made Professor Mari honor requests for only the last N chat messages or messages after a displayed post number, with range-aware pagination that no longer broadens those requests into whole-chat reads (#4308).

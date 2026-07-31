@@ -2042,6 +2042,27 @@ const cases: RegressionCase[] = [
     },
   },
   {
+    name: "character ID macros resolve exact card references without matching unknown IDs",
+    run() {
+      const referencedId = "V1StGXR8_Z5jdHi6B-myT";
+      const unknownId = "A1StGXR8_Z5jdHi6BmyTX";
+      const context = {
+        user: "Mari",
+        char: "Dottore",
+        characters: ["Dottore"],
+        variables: { [unknownId]: "Variable collision" },
+        characterReferences: { [referencedId]: "Susie" },
+      };
+
+      assert.equal(resolveMacros(`I went with {{${referencedId}}}.`, context), "I went with Susie.");
+      assert.equal(
+        resolveMacros(`I went with {{${unknownId}}}.`, context),
+        `I went with {{${unknownId}}}.`,
+        "Unknown IDs must remain visible instead of resolving through a colliding variable",
+      );
+    },
+  },
+  {
     name: "lorebook Outlets collect only named position-7 entries and resolve case-sensitively",
     run() {
       const activated = [
