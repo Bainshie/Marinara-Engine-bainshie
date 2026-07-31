@@ -8,10 +8,12 @@ import { useUpdateChat, useUpdateChatMetadata } from "../../hooks/use-chats";
 import { usePersona } from "../../hooks/use-characters";
 import { usePresets } from "../../hooks/use-presets";
 import { useConnections } from "../../hooks/use-connections";
+import { api } from "../../lib/api-client";
 import { showConfirmDialog } from "../../lib/app-dialogs";
 import {
   CHAT_RESOURCE_DRAG_MIME,
   CHAT_RESOURCE_ASSIGN_EVENT,
+  requestChatAgentSetup,
   clearActiveChatResourceDrag,
   getActiveChatResourceDrag,
   readChatResourceDragPayload,
@@ -25,6 +27,7 @@ import { getChatCharacterIds } from "../../lib/chat-macros";
 import { chatBackgroundMetadataToUrl, chatBackgroundUrlToMetadata } from "../../lib/backgrounds";
 import { useChatStore } from "../../stores/chat.store";
 import { useUIStore } from "../../stores/ui.store";
+import { ChoiceSelectionModal } from "../presets/ChoiceSelectionModal";
 
 type OverlayState = {
   payload: ChatResourceDragPayload;
@@ -64,6 +67,7 @@ export function ChatResourceDropOverlay({ chat }: { chat: Chat }) {
   const { data: connections = [] } = useConnections();
   const chatRef = useRef(chat);
   const [overlay, setOverlay] = useState<OverlayState | null>(null);
+  const [choicePresetId, setChoicePresetId] = useState<string | null>(null);
   chatRef.current = chat;
 
   const resolveOverlay = useCallback((target: EventTarget | null, dataTransfer: DataTransfer) => {
@@ -87,16 +91,21 @@ export function ChatResourceDropOverlay({ chat }: { chat: Chat }) {
         return;
       }
 
-      if (latestAction.type === "add-agents" && latestAction.mustEnableAgents) {
-        const confirmed = await showConfirmDialog({
-          title: t("ui.chat.chatresourcedropoverlay.enableAgentsTitle"),
-          message: t("ui.chat.chatresourcedropoverlay.enableAgentsMessage", { name: latestAction.label }),
-          confirmLabel: t("ui.chat.chatresourcedropoverlay.enableAndAdd"),
-        });
-        if (!confirmed || useChatStore.getState().activeChatId !== currentChat.id) return;
-        currentChat = useChatStore.getState().activeChat ?? chatRef.current;
-        latestAction = resolveChatResourceDropAction(payload, currentChat);
-        if (!latestAction) return;
+      if (latestAction.type === "add-agents") {
+        requestChatAgentSetup(latestAction.ids);
+        return;
+      }
+
+      if (latestAction.type === "set-connection") {
+        const connectionId = latestAction.id;
+        const connection = (connections as Array<{ id: string; model?: string | null; provider?: string | null }>).find(
+          (item) => item.id === connectionId,
+        );
+        if (!connection?.model?.trim() && connection?.provider !== "grok_subscription") {
+          useUIStore.getState().openConnectionDetail(connectionId);
+          toast.info(t("ui.chat.chatresourcedropoverlay.connectionNeedsSetup", { name: latestAction.label }));
+          return;
+        }
       }
 
       if (
@@ -266,6 +275,14 @@ export function ChatResourceDropOverlay({ chat }: { chat: Chat }) {
             }
             throw error;
           }
+          if (latestAction.type === "set-preset") {
+            try {
+              const presetFull = await api.get<{ choiceBlocks?: unknown[] }>(`/prompts/${latestAction.id}/full`);
+              if ((presetFull.choiceBlocks?.length ?? 0) > 0) setChoicePresetId(latestAction.id);
+            } catch {
+              setChoicePresetId(null);
+            }
+          }
           toast.success(t("ui.chat.chatresourcedropoverlay.appliedToChat", { name: latestAction.label }), {
             action: {
               label: t("ui.chat.chatresourcedropoverlay.undo"),
@@ -342,9 +359,9 @@ export function ChatResourceDropOverlay({ chat }: { chat: Chat }) {
     return () => window.removeEventListener(CHAT_RESOURCE_ASSIGN_EVENT, assign);
   }, [applyAction]);
 
-  if (!overlay) return null;
-  return createPortal(
-    <div
+  return (
+    <>
+      {overlay && createPortal(<div
       className="pointer-events-none fixed z-[10010] flex items-center justify-center bg-[var(--background)]/35 p-6"
       style={{ left: overlay.rect.left, top: overlay.rect.top, width: overlay.rect.width, height: overlay.rect.height }}
       role="status"
@@ -370,7 +387,15 @@ export function ChatResourceDropOverlay({ chat }: { chat: Chat }) {
                       : t("ui.chat.chatresourcedropoverlay.useBackground", { name: overlay.payload.label })}
         </span>
       </div>
-    </div>,
-    document.body,
+    </div>, document.body)}
+      <ChoiceSelectionModal
+        open={choicePresetId !== null}
+        onClose={() => setChoicePresetId(null)}
+        presetId={choicePresetId}
+        chatId={chat.id}
+        existingChoices={{}}
+        chatFloatingPanel
+      />
+    </>
   );
 }

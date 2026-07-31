@@ -440,6 +440,13 @@ export function AgentsPanel() {
     (agentId: string) => (selectionMode && selectedAgentIds.has(agentId) ? Array.from(selectedAgentIds) : [agentId]),
     [selectedAgentIds, selectionMode],
   );
+  const getDraggedAgentTypes = useCallback(
+    (agentId: string) =>
+      getDraggedAgentIds(agentId)
+        .map((id) => selectableAgentById.get(id)?.type)
+        .filter((type): type is string => Boolean(type)),
+    [getDraggedAgentIds, selectableAgentById],
+  );
 
   const handleCreateFolder = useCallback(() => {
     createAgentFolder.mutate(
@@ -734,6 +741,7 @@ export function AgentsPanel() {
         isDragging: draggedAgentId === agent.id,
         onDragStart: (event) => {
           const ids = getDraggedAgentIds(agent.id);
+          const agentTypes = getDraggedAgentTypes(agent.id);
           setDraggedAgentId(agent.id);
           event.dataTransfer.effectAllowed = "copyMove";
           event.dataTransfer.setData("application/x-marinara-agent-ids", JSON.stringify(ids));
@@ -741,7 +749,7 @@ export function AgentsPanel() {
           writeChatResourceDragPayload(event.dataTransfer, {
             version: 1,
             kind: "agent",
-            ids,
+            ids: agentTypes,
             label:
               ids.length === 1
                 ? getAgentLibraryDisplayName(agent)
@@ -778,6 +786,7 @@ export function AgentsPanel() {
       deleteAgent,
       draggedAgentId,
       getDraggedAgentIds,
+      getDraggedAgentTypes,
       handlePickAgentImage,
       handleDuplicateAgent,
       nativeAgentDragEnabled,
@@ -1150,6 +1159,7 @@ export function AgentsPanel() {
                   isDragging: draggedAgentId === agent.id,
                   onDragStart: (event) => {
                     const ids = getDraggedAgentIds(agent.id);
+                    const agentTypes = getDraggedAgentTypes(agent.id);
                     setDraggedAgentId(agent.id);
                     event.dataTransfer.effectAllowed = "copyMove";
                     event.dataTransfer.setData("application/x-marinara-agent-ids", JSON.stringify(ids));
@@ -1157,7 +1167,7 @@ export function AgentsPanel() {
                     writeChatResourceDragPayload(event.dataTransfer, {
                       version: 1,
                       kind: "agent",
-                      ids,
+                      ids: agentTypes,
                       label:
                         ids.length === 1
                           ? agent.name
@@ -1216,6 +1226,7 @@ export function AgentsPanel() {
                 isDragging: draggedAgentId === agent.id,
                 onDragStart: (event) => {
                   const ids = getDraggedAgentIds(agent.id);
+                  const agentTypes = getDraggedAgentTypes(agent.id);
                   setDraggedAgentId(agent.id);
                   event.dataTransfer.effectAllowed = "copyMove";
                   event.dataTransfer.setData("application/x-marinara-agent-ids", JSON.stringify(ids));
@@ -1223,7 +1234,7 @@ export function AgentsPanel() {
                   writeChatResourceDragPayload(event.dataTransfer, {
                     version: 1,
                     kind: "agent",
-                    ids,
+                    ids: agentTypes,
                     label:
                       ids.length === 1
                         ? agent.name
@@ -1561,7 +1572,7 @@ function renderAgentCard({
       </button>
       {!selectionMode && (
         <div className="absolute right-2 top-1/2 flex -translate-y-1/2 shrink-0 items-center gap-0.5 rounded-lg bg-[var(--sidebar)] px-1 py-0.5 opacity-0 shadow-sm ring-1 ring-[var(--border)] transition-opacity group-hover:opacity-100 max-md:opacity-100">
-          <ChatResourceActionButton payload={{ version: 1, kind: "agent", ids: [id], label: name }} />
+          <ChatResourceActionButton payload={{ version: 1, kind: "agent", ids: [type], label: name }} />
           <button
             className="mari-chrome-control mari-chrome-control--small p-1.5"
             title={localizeUi("ui.panels.agentcard.copyAgent")}

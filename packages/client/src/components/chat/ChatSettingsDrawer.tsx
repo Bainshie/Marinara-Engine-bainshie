@@ -278,6 +278,7 @@ import {
   type CustomMusicSource,
   type MusicProvider,
 } from "./AgentAddSetupFields";
+import { CHAT_RESOURCE_AGENT_SETUP_EVENT, takePendingChatAgentSetupIds } from "../../lib/chat-resource-drag";
 import { GameWidgetFileControls, GameWidgetSetupEditor, normalizeGameHudWidgets } from "../game/GameWidgetSetupEditor";
 
 const QuickPresetSectionsEditor = lazy(() =>
@@ -2899,6 +2900,7 @@ export function ChatSettingsDrawer({
   const [lbSearch, setLbSearch] = useState("");
   const [toolSearch, setToolSearch] = useState("");
   const [agentAddPreview, setAgentAddPreview] = useState<AgentAddPreview | null>(null);
+  const [agentSetupQueue, setAgentSetupQueue] = useState<string[]>([]);
   const [agentAddCadenceInputFocused, setAgentAddCadenceInputFocused] = useState(false);
   const [addingAgentToChat, setAddingAgentToChat] = useState(false);
   const [isRegeneratingSchedules, setIsRegeneratingSchedules] = useState(false);
@@ -3111,7 +3113,7 @@ export function ChatSettingsDrawer({
     [chat.id, fallbackPromptPreset?.id, isConversation, isGame, setPreset, updateMeta],
   );
 
-  const openAgentAddModal = (agent: AvailableAgent) => {
+  const openAgentAddModal = useCallback((agent: AvailableAgent) => {
     setAgentAddCadenceInputFocused(false);
     const config = agentConfigsByType.get(agent.id) ?? null;
     const mergedSettings = mergeBuiltInAgentSettings(agent.id, config?.settings);
@@ -3133,7 +3135,35 @@ export function ChatSettingsDrawer({
         allowSecretPlot: supportsNarrativeDirectorSecretPlot,
       }),
     });
-  };
+  }, [
+    agentConfigsByType,
+    metadata,
+    musicPlayerSource,
+    roleplaySpriteScale,
+    supportsNarrativeDirectorSecretPlot,
+  ]);
+
+  useEffect(() => {
+    if (!open) return;
+    const consumeRequest = () => {
+      const ids = takePendingChatAgentSetupIds().filter((id) => !activeAgentIds.includes(id));
+      if (ids.length > 0) setAgentSetupQueue(ids);
+    };
+    consumeRequest();
+    window.addEventListener(CHAT_RESOURCE_AGENT_SETUP_EVENT, consumeRequest);
+    return () => window.removeEventListener(CHAT_RESOURCE_AGENT_SETUP_EVENT, consumeRequest);
+  }, [activeAgentIds, open]);
+
+  useEffect(() => {
+    if (!open || agentAddPreview || agentSetupQueue.length === 0) return;
+    const agent = availableAgents.find((entry) => entry.id === agentSetupQueue[0]);
+    if (!agent) {
+      setAgentSetupQueue((current) => current.slice(1));
+      toast.error(localizeUi("ui.chat.chatresourcedropoverlay.agentUnavailable"));
+      return;
+    }
+    openAgentAddModal(agent);
+  }, [agentAddPreview, agentSetupQueue, availableAgents, open, openAgentAddModal, localizeUi]);
 
   const confirmAddAgent = async () => {
     if (!agentAddPreview) return;
@@ -3197,6 +3227,7 @@ export function ChatSettingsDrawer({
         localizeUi("ui.chat.chatsettingsdrawer.addedValue1YouCanAccessItsSettingsInAgents", { value1: agent.name }),
       );
       setAgentAddPreview(null);
+      setAgentSetupQueue((current) => current.slice(1));
     } catch (error) {
       await showAlertDialog({
         title: "Couldn’t Add Agent",
@@ -8806,7 +8837,10 @@ export function ChatSettingsDrawer({
       <Modal
         open={!!agentAddPreview}
         onClose={() => {
-          if (!addingAgentToChat) setAgentAddPreview(null);
+          if (!addingAgentToChat) {
+            setAgentAddPreview(null);
+            setAgentSetupQueue([]);
+          }
         }}
         title={
           agentAddPreview
@@ -9073,7 +9107,10 @@ export function ChatSettingsDrawer({
 
             <div className="flex items-center justify-end gap-2 pt-1">
               <button
-                onClick={() => setAgentAddPreview(null)}
+                onClick={() => {
+                  setAgentAddPreview(null);
+                  setAgentSetupQueue([]);
+                }}
                 disabled={addingAgentToChat}
                 className="rounded-lg px-3 py-2 text-xs font-medium text-[var(--muted-foreground)] transition-colors hover:bg-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-60"
               >

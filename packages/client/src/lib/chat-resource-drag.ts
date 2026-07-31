@@ -1,5 +1,6 @@
 export const CHAT_RESOURCE_DRAG_MIME = "application/x-marinara-chat-resource";
 export const CHAT_RESOURCE_ASSIGN_EVENT = "marinara:assign-chat-resource";
+export const CHAT_RESOURCE_AGENT_SETUP_EVENT = "marinara:setup-chat-agent";
 
 export type ChatResourceDragKind =
   | "character"
@@ -18,6 +19,7 @@ export type ChatResourceDragPayload = {
 };
 
 let activeChatResourceDrag: ChatResourceDragPayload | null = null;
+let pendingChatAgentSetupIds: string[] = [];
 
 export function parseChatResourceDragPayload(value: unknown): ChatResourceDragPayload | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
@@ -76,4 +78,15 @@ export function isFileDrag(dataTransfer: DataTransfer) {
 
 export function requestChatResourceAssignment(payload: ChatResourceDragPayload) {
   window.dispatchEvent(new CustomEvent<ChatResourceDragPayload>(CHAT_RESOURCE_ASSIGN_EVENT, { detail: payload }));
+}
+
+export function requestChatAgentSetup(ids: string[]) {
+  pendingChatAgentSetupIds = Array.from(new Set(ids.filter(Boolean)));
+  window.dispatchEvent(new CustomEvent<string[]>(CHAT_RESOURCE_AGENT_SETUP_EVENT, { detail: pendingChatAgentSetupIds }));
+}
+
+export function takePendingChatAgentSetupIds() {
+  const ids = pendingChatAgentSetupIds;
+  pendingChatAgentSetupIds = [];
+  return ids;
 }
