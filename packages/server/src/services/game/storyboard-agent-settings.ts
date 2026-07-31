@@ -10,12 +10,12 @@ import type { createAgentsStorage } from "../storage/agents.storage.js";
 
 type AgentsStorage = ReturnType<typeof createAgentsStorage>;
 
-function mergeTemplates(primary: unknown, legacy: unknown): AgentPromptTemplateOption[] {
-  const primaryTemplates = normalizeAgentPromptTemplateOptions(primary);
-  const primaryIds = new Set(primaryTemplates.map((template) => template.id));
+function mergeTemplates(overrides: unknown, defaults: unknown): AgentPromptTemplateOption[] {
+  const overrideTemplates = normalizeAgentPromptTemplateOptions(overrides);
+  const overrideIds = new Set(overrideTemplates.map((template) => template.id));
   return [
-    ...primaryTemplates,
-    ...normalizeAgentPromptTemplateOptions(legacy).filter((template) => !primaryIds.has(template.id)),
+    ...overrideTemplates,
+    ...normalizeAgentPromptTemplateOptions(defaults).filter((template) => !overrideIds.has(template.id)),
   ];
 }
 
@@ -87,32 +87,32 @@ export async function applyStoryboardAgentSettings(
         roleplayStoryboardOutputTemplateId:
           meta.roleplayStoryboardOutputTemplateId ?? settings.roleplayOutputTemplateId,
         roleplayStoryboardEpisodeTemplates: mergeTemplates(
-          settings.roleplayEpisodeTemplates,
           meta.roleplayStoryboardEpisodeTemplates,
+          settings.roleplayEpisodeTemplates,
         ),
         roleplayStoryboardStyleTemplates: mergeTemplates(
-          settings.roleplayStyleTemplates,
           meta.roleplayStoryboardStyleTemplates,
+          settings.roleplayStyleTemplates,
         ),
         roleplayStoryboardAnimationTemplates: mergeTemplates(
-          settings.roleplayAnimationTemplates,
           meta.roleplayStoryboardAnimationTemplates,
+          settings.roleplayAnimationTemplates,
         ),
         roleplayStoryboardOutputTemplates: mergeTemplates(
-          settings.roleplayOutputTemplates,
           meta.roleplayStoryboardOutputTemplates,
+          settings.roleplayOutputTemplates,
         ),
         roleplayStoryboardImagePromptTemplateId:
           meta.roleplayStoryboardImagePromptTemplateId ?? settings.illustrationTemplateId,
         roleplayStoryboardVideoPromptTemplateId:
           meta.roleplayStoryboardVideoPromptTemplateId ?? settings.videoTemplateId,
         roleplayStoryboardImagePromptTemplates: mergeTemplates(
-          settings.illustrationTemplates,
           meta.roleplayStoryboardImagePromptTemplates,
+          settings.illustrationTemplates,
         ),
         roleplayStoryboardVideoPromptTemplates: mergeTemplates(
-          settings.videoTemplates,
           meta.roleplayStoryboardVideoPromptTemplates,
+          settings.videoTemplates,
         ),
       };
     }
@@ -148,16 +148,16 @@ export async function applyStoryboardAgentSettings(
         meta.gameStoryboardAnimationPromptTemplateId ?? settings.animationPlannerTemplateId,
       gameStoryboardImagePromptTemplateId: meta.gameStoryboardImagePromptTemplateId ?? settings.illustrationTemplateId,
       gameStoryboardVideoPromptTemplateId: meta.gameStoryboardVideoPromptTemplateId ?? settings.videoTemplateId,
-      gameStoryboardPromptTemplates: mergeTemplates(settings.plannerTemplates, meta.gameStoryboardPromptTemplates),
+      gameStoryboardPromptTemplates: mergeTemplates(meta.gameStoryboardPromptTemplates, settings.plannerTemplates),
       gameStoryboardIllustrationPlannerTemplateIds: settings.illustrationPlannerTemplateIds,
       gameStoryboardAnimationPlannerTemplateIds: settings.animationPlannerTemplateIds,
       gameStoryboardImagePromptTemplates: mergeTemplates(
-        settings.illustrationTemplates,
         meta.gameStoryboardImagePromptTemplates,
+        settings.illustrationTemplates,
       ),
       gameStoryboardVideoPromptTemplates: mergeTemplates(
-        settings.videoTemplates,
         meta.gameStoryboardVideoPromptTemplates,
+        settings.videoTemplates,
       ),
     };
   } catch (error) {

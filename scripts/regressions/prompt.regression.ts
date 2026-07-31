@@ -257,6 +257,7 @@ import {
   selectRoleplayStoryboardEpisode,
 } from "../../packages/server/src/services/roleplay/storyboard-episode.js";
 import { buildRoleplayStoryboardMessages } from "../../packages/server/src/services/roleplay/storyboard-prompts.js";
+import { applyStoryboardAgentSettings } from "../../packages/server/src/services/game/storyboard-agent-settings.js";
 
 const assistantCadenceMessages = [
   { id: "illustrator-anchor", role: "assistant" },
@@ -735,6 +736,94 @@ const keywordOptions = {
 };
 
 const cases: RegressionCase[] = [
+  {
+    name: "Storyboard chat settings override agent defaults for Game and Roleplay",
+    async run() {
+      const agents = {
+        ensureBuiltinConfig: async () => ({
+          id: "storyboard-config",
+          connectionId: "agent-prompt-connection",
+          settings: {
+            runInterval: 2,
+            keyframeCount: 3,
+            animationDurationSeconds: 6,
+            autoGenerateMode: "illustration",
+            imageConnectionId: "agent-image-connection",
+            videoConnectionId: "agent-video-connection",
+            promptTemplates: [
+              { id: "shared-planner", name: "Agent planner", promptTemplate: "AGENT PLANNER" },
+              { id: "agent-planner", name: "Agent fallback", promptTemplate: "AGENT FALLBACK" },
+            ],
+            illustrationPlannerTemplateIds: ["shared-planner", "agent-planner"],
+            animationPlannerTemplateIds: ["shared-planner", "agent-planner"],
+            roleplayEpisodeTemplates: [
+              { id: "shared-episode", name: "Agent episode", promptTemplate: "AGENT EPISODE" },
+              { id: "agent-episode", name: "Agent fallback", promptTemplate: "AGENT EPISODE FALLBACK" },
+            ],
+          },
+        }),
+      } as unknown as Parameters<typeof applyStoryboardAgentSettings>[1];
+
+      const roleplay = await applyStoryboardAgentSettings(
+        {
+          activeAgentIds: ["storyboard"],
+          roleplayStoryboardAutoGenerateMode: "manual",
+          roleplayStoryboardRunInterval: 7,
+          roleplayStoryboardKeyframeCount: 5,
+          roleplayStoryboardAnimationDurationSeconds: 11,
+          roleplayStoryboardPromptConnectionId: "chat-prompt-connection",
+          roleplayStoryboardImageConnectionId: "chat-image-connection",
+          roleplayStoryboardVideoConnectionId: "chat-video-connection",
+          roleplayStoryboardEpisodeTemplateId: "shared-episode",
+          roleplayStoryboardEpisodeTemplates: [
+            { id: "shared-episode", name: "Chat episode", promptTemplate: "CHAT EPISODE" },
+          ],
+        },
+        agents,
+        "roleplay",
+      );
+      assert.equal(roleplay.roleplayStoryboardAutoGenerateMode, "manual");
+      assert.equal(roleplay.roleplayStoryboardRunInterval, 7);
+      assert.equal(roleplay.roleplayStoryboardKeyframeCount, 5);
+      assert.equal(roleplay.roleplayStoryboardAnimationDurationSeconds, 11);
+      assert.equal(roleplay.storyboardAgentPromptConnectionId, "chat-prompt-connection");
+      assert.equal(roleplay.storyboardAgentImageConnectionId, "chat-image-connection");
+      assert.equal(roleplay.storyboardAgentVideoConnectionId, "chat-video-connection");
+      assert.deepEqual(
+        (roleplay.roleplayStoryboardEpisodeTemplates as Array<{ id: string; promptTemplate: string }>).map(
+          (template) => [template.id, template.promptTemplate],
+        ),
+        [
+          ["shared-episode", "CHAT EPISODE"],
+          ["agent-episode", "AGENT EPISODE FALLBACK"],
+        ],
+      );
+
+      const game = await applyStoryboardAgentSettings(
+        {
+          activeAgentIds: ["storyboard"],
+          gameStoryboardKeyframeCount: 6,
+          gameStoryboardIllustrationPromptTemplateId: "shared-planner",
+          gameStoryboardPromptTemplates: [
+            { id: "shared-planner", name: "Chat planner", promptTemplate: "CHAT PLANNER" },
+          ],
+        },
+        agents,
+        "game",
+      );
+      assert.equal(game.gameStoryboardKeyframeCount, 6);
+      assert.deepEqual(
+        (game.gameStoryboardPromptTemplates as Array<{ id: string; promptTemplate: string }>).map((template) => [
+          template.id,
+          template.promptTemplate,
+        ]),
+        [
+          ["shared-planner", "CHAT PLANNER"],
+          ["agent-planner", "AGENT FALLBACK"],
+        ],
+      );
+    },
+  },
   {
     name: "Roleplay Storyboard cadence selects bounded episodes since the last successful run",
     run() {
