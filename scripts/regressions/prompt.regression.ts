@@ -1043,6 +1043,7 @@ const cases: RegressionCase[] = [
       });
       assert.match(animation.systemPrompt, /exact T=0 frame/u);
       assert.match(animation.systemPrompt, /source dialogue, sound effects, ambience, and end hold/u);
+      assert.match(animation.systemPrompt, /end hold for 8 seconds/u);
       assert.deepEqual(animation.selectedTemplateIds, ["episode", "comic", "motion", "output"]);
     },
   },

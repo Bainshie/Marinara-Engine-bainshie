@@ -1,5 +1,6 @@
 import { normalizeAgentPromptTemplateOptions, type AgentPromptTemplateOption } from "@marinara-engine/shared";
 import type { ChatMessage } from "../llm/base-provider.js";
+import { escapeXmlAttribute } from "../prompt/xml-escaping.js";
 import { renderTemplate } from "../prompt-overrides/index.js";
 import type { RoleplayStoryboardEpisodeSection } from "./storyboard-episode.js";
 
@@ -9,10 +10,6 @@ type RoleplayStoryboardPromptContext = Record<(typeof ROLEPLAY_STORYBOARD_PROMPT
 
 function readString(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value.trim() : null;
-}
-
-function escapeXmlAttribute(value: string): string {
-  return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
 function selectTemplate(rawTemplates: unknown, selectedId: unknown, label: string): AgentPromptTemplateOption {

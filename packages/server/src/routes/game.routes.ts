@@ -56,6 +56,7 @@ import { buildPartySystemPrompt } from "../services/game/party-prompts.js";
 import { normalizeNextSessionCampaignPlan, normalizeNextSessionNpcs } from "../services/game/next-session-plan.js";
 import { normalizeCharacterLookupName } from "../services/game/name-normalization.js";
 import { buildPromptMacroContext, resolveMacrosWithVariableSnapshot } from "../services/prompt/index.js";
+import { escapeXmlAttribute } from "../services/prompt/xml-escaping.js";
 import { listPartySprites, readPreferredFullBodySpriteBase64 } from "../services/game/sprite.service.js";
 import {
   buildSceneAnalyzerSystemPrompt,
@@ -708,7 +709,7 @@ function compactIllustratorAppearanceLine(value: string): string {
 export function buildGameIllustratorAppearanceContextBlock(characterDescriptions: string[]): string {
   const lines = Array.from(new Set(characterDescriptions.map(compactIllustratorAppearanceLine).filter(Boolean)))
     .slice(0, 16)
-    .map(escapeStoryboardXml);
+    .map(escapeXmlAttribute);
   if (!lines.length) return "";
   return `<character_appearance_context>\n${lines.join("\n")}\n</character_appearance_context>`;
 }
@@ -4858,10 +4859,6 @@ function compactStoryboardSourceNarration(value: string): string {
     .trim();
 }
 
-function escapeStoryboardXml(value: string): string {
-  return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-}
-
 function normalizeStoryboardAnchorKind(value: unknown): StoryboardAnchorKind | "" {
   const text = typeof value === "string" ? value.trim().toLowerCase() : "";
   return STORYBOARD_ANCHOR_KINDS.has(text as StoryboardAnchorKind) ? (text as StoryboardAnchorKind) : "";
@@ -4916,8 +4913,8 @@ function normalizeStoryboardSections(rawSections: unknown, sourceNarration: stri
 function buildStoryboardSectionsBlock(sections: StoryboardSourceSection[]): string {
   if (sections.length === 0) return "<turn_sections>\n</turn_sections>";
   const rows = sections.map((section) => {
-    const speaker = section.speaker ? ` speaker="${escapeStoryboardXml(section.speaker)}"` : "";
-    return `<section index="${section.index}" kind="${section.kind}"${speaker}>${escapeStoryboardXml(
+    const speaker = section.speaker ? ` speaker="${escapeXmlAttribute(section.speaker)}"` : "";
+    return `<section index="${section.index}" kind="${section.kind}"${speaker}>${escapeXmlAttribute(
       section.content,
     )}</section>`;
   });
@@ -5505,7 +5502,7 @@ function buildStoryboardRoleplayContextBlock(args: {
       ? `Current Character Tracker state: ${compactStoryboardText(JSON.stringify(presentCharacters.slice(0, 20)), 3000)}`
       : "",
   ].filter(Boolean);
-  return `<roleplay_context>\n${lines.map(escapeStoryboardXml).join("\n")}\n</roleplay_context>`;
+  return `<roleplay_context>\n${lines.map(escapeXmlAttribute).join("\n")}\n</roleplay_context>`;
 }
 
 async function loadStoryboardIllustratorSystemPrompt(args: {
@@ -10662,6 +10659,7 @@ export async function gameRoutes(app: FastifyInstance) {
   const listStoryboardsQuerySchema = z.object({
     messageId: z.string().min(1).optional(),
     swipeIndex: z.coerce.number().int().min(0).optional(),
+    limit: z.coerce.number().int().min(1).max(500).optional().default(250),
   });
 
   const generateStoryboardSchema = z.object({
@@ -10672,7 +10670,7 @@ export async function gameRoutes(app: FastifyInstance) {
       .array(
         z.object({
           index: z.number().int().min(0).max(1000),
-          kind: z.enum(["narration", "dialogue", "readable", "system"]),
+          kind: z.enum(["narration", "dialogue", "readable", "system", "user", "assistant"]),
           speaker: z.string().max(200).optional().nullable(),
           content: z.string().min(1).max(6000),
         }),
@@ -10700,29 +10698,29 @@ export async function gameRoutes(app: FastifyInstance) {
     debugMode: z.boolean().optional().default(false),
   });
 
-  app.get<{ Params: { chatId: string }; Querystring: { messageId?: string; swipeIndex?: string } }>(
-    "/storyboards/:chatId",
-    async (req, reply) => {
-      const { chatId } = req.params;
-      const query = listStoryboardsQuerySchema.parse(req.query);
-      const chats = createChatsStorage(app.db);
-      const chat = await chats.getById(chatId);
-      if (!chat) return reply.status(404).send({ error: "Chat not found" });
+  app.get<{
+    Params: { chatId: string };
+    Querystring: { messageId?: string; swipeIndex?: string; limit?: string };
+  }>("/storyboards/:chatId", async (req, reply) => {
+    const { chatId } = req.params;
+    const query = listStoryboardsQuerySchema.parse(req.query);
+    const chats = createChatsStorage(app.db);
+    const chat = await chats.getById(chatId);
+    if (!chat) return reply.status(404).send({ error: "Chat not found" });
 
-      const storyboards = createGameStoryboardsStorage(app.db);
-      const gallery = createGalleryStorage(app.db);
-      const sceneVideos = createGameSceneVideosStorage(app.db);
-      await recoverStaleGameStoryboards(storyboards, storyboardStaleRenderCutoff(), "storyboard list");
-      const rows = query.messageId
-        ? await storyboards.listForTurn(chatId, query.messageId, query.swipeIndex ?? 0)
-        : await storyboards.listByChatId(chatId);
-      return {
-        storyboards: await Promise.all(
-          rows.map((row) => serializeGameTurnStoryboard({ storyboards, gallery, sceneVideos, row })),
-        ),
-      };
-    },
-  );
+    const storyboards = createGameStoryboardsStorage(app.db);
+    const gallery = createGalleryStorage(app.db);
+    const sceneVideos = createGameSceneVideosStorage(app.db);
+    await recoverStaleGameStoryboards(storyboards, storyboardStaleRenderCutoff(), "storyboard list");
+    const rows = query.messageId
+      ? await storyboards.listForTurn(chatId, query.messageId, query.swipeIndex ?? 0)
+      : await storyboards.listRecentByChatId(chatId, query.limit);
+    return {
+      storyboards: await Promise.all(
+        rows.map((row) => serializeGameTurnStoryboard({ storyboards, gallery, sceneVideos, row })),
+      ),
+    };
+  });
 
   app.post("/storyboard/generate", async (req, reply) => {
     const input = generateStoryboardSchema.parse(req.body);
@@ -10824,8 +10822,14 @@ export async function gameRoutes(app: FastifyInstance) {
           allMessages,
           input.messageId,
         );
+        const previousSuccessfulMessageId = previousSuccessfulStoryboard?.messageId ?? null;
+        const previousSuccessfulMessageIndex = previousSuccessfulMessageId
+          ? allMessages.findIndex((candidate) => candidate.id === previousSuccessfulMessageId)
+          : -1;
+        const episodeCandidates =
+          previousSuccessfulMessageIndex >= 0 ? allMessages.slice(previousSuccessfulMessageIndex) : allMessages;
         const resolvedMessages = await Promise.all(
-          allMessages.map(async (candidate) => ({
+          episodeCandidates.map(async (candidate) => ({
             ...candidate,
             activeSwipeIndex: candidate.id === input.messageId ? input.swipeIndex : candidate.activeSwipeIndex,
             content:
@@ -10841,7 +10845,7 @@ export async function gameRoutes(app: FastifyInstance) {
         const episode = selectRoleplayStoryboardEpisode({
           messages: resolvedMessages,
           currentMessageId: input.messageId,
-          previousSuccessfulMessageId: previousSuccessfulStoryboard?.messageId ?? null,
+          previousSuccessfulMessageId,
           runInterval: meta.roleplayStoryboardRunInterval,
           automatic: input.automatic,
         });

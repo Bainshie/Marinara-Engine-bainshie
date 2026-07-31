@@ -67,8 +67,12 @@ function TemplateCollectionEditor({
     defaults.find((template) => template.promptTemplate.trim())?.promptTemplate ??
     "";
   const update = (id: string, patch: Partial<AgentPromptTemplateOption>) => {
-    if (required && patch.promptTemplate !== undefined && !patch.promptTemplate.trim()) return;
     onChange(templates.map((template) => (template.id === id ? { ...template, ...patch } : template)));
+  };
+  const restoreRequiredPrompt = (template: AgentPromptTemplateOption) => {
+    if (!required || template.promptTemplate.trim()) return;
+    const fallbackPrompt = defaultsById.get(template.id)?.promptTemplate || requiredPromptSeed;
+    if (fallbackPrompt) update(template.id, { promptTemplate: fallbackPrompt });
   };
 
   return (
@@ -147,6 +151,8 @@ function TemplateCollectionEditor({
             <MacroTextarea
               value={template.promptTemplate}
               onChange={(value) => update(template.id, { promptTemplate: value })}
+              onBlur={() => restoreRequiredPrompt(template)}
+              onExpandedClose={() => restoreRequiredPrompt(template)}
               rows={7}
               title={template.name}
               className="w-full resize-y rounded-lg bg-[var(--secondary)] px-3 py-2 font-mono text-xs leading-relaxed ring-1 ring-[var(--border)] focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
