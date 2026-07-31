@@ -202,13 +202,15 @@ export const packagedAgentDefinitionSchema = z
     runtimeDisabled: z.boolean().optional(),
     /** @deprecated Legacy package compatibility; author resultType in defaultSettings instead. */
     resultType: agentResultTypeSchema.optional(),
-    // Installed packages on disk may still list retired modes (e.g. "visual_novel").
-    // Drop them instead of failing the whole manifest parse, which used to crash startup.
+    // Installed packages on disk may still list the retired "visual_novel" mode.
+    // Normalize it to "roleplay" (its behavioural successor) rather than failing the
+    // whole manifest parse, which crashed server bootstrap. Dropping it instead would
+    // turn a visual_novel-only allowlist into an empty one, which means "every mode".
     modeAllowlist: z
       .preprocess(
         (value) =>
           Array.isArray(value)
-            ? value.filter((mode) => mode === "conversation" || mode === "roleplay" || mode === "game")
+            ? [...new Set(value.map((mode) => (mode === "visual_novel" ? "roleplay" : mode)))]
             : value,
         z.array(z.enum(["conversation", "roleplay", "game"])),
       )
