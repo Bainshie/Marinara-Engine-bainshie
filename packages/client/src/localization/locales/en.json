@@ -5488,6 +5488,7 @@
   "ui.noodle.noodlehome.comment": "comment",
   "ui.noodle.noodlehome.commentsNeedTextOrAnImage": "Comments need text or an image.",
   "ui.noodle.noodlehome.completed": "Completed",
+  "ui.noodle.noodlehome.contextWindowWarning": "Attention: Noodle uses a large amount of context and may not work reliably with tiny models. Use at least a 32K context window for small character cards; 128K is recommended. We plan to explore lower-context options in the future.",
   "ui.noodle.noodlehome.controlsGeneratedPostImagesAndWhetherCharactersCanReuse": "Controls generated post images and whether characters can reuse existing gallery images.",
   "ui.noodle.noodlehome.controlsHowManyEligibleCharactersOrRandomUsersAre": "Controls how many eligible characters or random users are active during one generation of the timeline.",
   "ui.noodle.noodlehome.controlsTheEditableBaseInstructionsUsedToWriteNoodle": "Controls the editable base instructions used to write Noodle timeline refreshes. Timeline voice and tone instructions are appended after this prompt.",
