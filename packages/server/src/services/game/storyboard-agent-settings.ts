@@ -49,11 +49,7 @@ export async function applyStoryboardAgentSettings(
     const active = hasActiveStoryboardAgent(meta);
     const defaultAutoIllustrations = settings.autoGenerateMode !== "manual";
     const defaultAutoAnimations = settings.autoGenerateMode === "animation";
-    const configuredRunInterval = Number(mergedSettings.runInterval);
-    const runInterval =
-      Number.isFinite(configuredRunInterval) && configuredRunInterval >= 1
-        ? Math.min(100, Math.floor(configuredRunInterval))
-        : 1;
+    const runInterval = settings.runInterval;
 
     if (ownerMode === "roleplay") {
       const autoGenerateMode =

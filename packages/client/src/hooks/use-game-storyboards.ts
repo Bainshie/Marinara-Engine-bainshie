@@ -16,7 +16,7 @@ export type GenerateGameTurnStoryboardInput = {
   swipeIndex?: number;
   sections?: Array<{
     index: number;
-    kind: "narration" | "dialogue" | "readable" | "system";
+    kind: "narration" | "dialogue" | "readable" | "system" | "user" | "assistant";
     speaker?: string | null;
     content: string;
   }>;

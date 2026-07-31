@@ -2308,6 +2308,7 @@ export const ChatMessage = memo(function ChatMessage({
     // Narrator messages
     if (isNarrator) {
       return (
+        <>
         <div
           ref={msgRef}
           className={cn(
@@ -2381,7 +2382,7 @@ export const ChatMessage = memo(function ChatMessage({
                 </div>
               )}
             </div>
-          </div>
+        </div>
           {!editing && (storyboard || storyboardGenerating) ? (
             <div className="mx-auto mt-2 w-full max-w-3xl">
               <RoleplayStoryboardMessageMedia
@@ -2391,6 +2392,7 @@ export const ChatMessage = memo(function ChatMessage({
               />
             </div>
           ) : null}
+          </div>
           {imageLightbox && (
             <ChatImageLightbox
               image={imageLightbox.image}
@@ -2400,7 +2402,7 @@ export const ChatMessage = memo(function ChatMessage({
               onClose={closeImageLightbox}
             />
           )}
-        </div>
+        </>
       );
     }
 

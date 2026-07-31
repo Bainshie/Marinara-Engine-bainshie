@@ -252,7 +252,10 @@ import { loadGameStoryboardImagePrompt } from "../../packages/server/src/service
 import { formatAgentFailuresToast, toAgentFailure } from "../../packages/client/src/lib/agent-failures.js";
 import { formatGenerationParameterError } from "../../packages/client/src/lib/generation-parameter-errors.js";
 import { normalizeCustomMusicSource } from "../../packages/client/src/components/chat/AgentAddSetupFields.js";
-import { selectRoleplayStoryboardEpisode } from "../../packages/server/src/services/roleplay/storyboard-episode.js";
+import {
+  selectPreviousSuccessfulStoryboard,
+  selectRoleplayStoryboardEpisode,
+} from "../../packages/server/src/services/roleplay/storyboard-episode.js";
 import { buildRoleplayStoryboardMessages } from "../../packages/server/src/services/roleplay/storyboard-prompts.js";
 
 const assistantCadenceMessages = [
@@ -741,7 +744,7 @@ const cases: RegressionCase[] = [
         { id: "user-2", role: "user", content: "I ask what she found." },
         { id: "assistant-2", role: "assistant", content: "She raises a brass star map.", activeSwipeIndex: 1 },
         { id: "user-3", role: "user", content: "I move closer." },
-        { id: "assistant-3", role: "assistant", content: "Blue constellations fill the room.", activeSwipeIndex: 0 },
+        { id: "assistant-3", role: "assistant", content: "Blue constellations fill the room.", activeSwipeIndex: 2 },
       ];
 
       const firstAutomaticRun = selectRoleplayStoryboardEpisode({
@@ -779,11 +782,39 @@ const cases: RegressionCase[] = [
       assert.equal(accumulatedEpisode.status, "ready");
       if (accumulatedEpisode.status !== "ready") return;
       assert.equal(accumulatedEpisode.assistantMessageCount, 2);
-      assert.equal(accumulatedEpisode.swipeIndex, 0);
+      assert.equal(accumulatedEpisode.swipeIndex, 2);
       assert.deepEqual(
         accumulatedEpisode.sections.map((section) => section.messageId),
         ["user-2", "assistant-2", "user-3", "assistant-3"],
       );
+
+      const missingAnchorEpisode = selectRoleplayStoryboardEpisode({
+        messages,
+        currentMessageId: "assistant-3",
+        previousSuccessfulMessageId: "missing-anchor",
+        runInterval: 10,
+        automatic: true,
+      });
+      assert.equal(missingAnchorEpisode.status, "ready");
+      if (missingAnchorEpisode.status !== "ready") return;
+      assert.deepEqual(
+        missingAnchorEpisode.sections.map((section) => section.messageId),
+        ["user-3", "assistant-3"],
+        "an unresolved anchor should fall back to the latest exchange without applying interval cadence",
+      );
+
+      const previousStoryboard = selectPreviousSuccessfulStoryboard(
+        [
+          { id: "future", messageId: "assistant-3", status: "complete", createdAt: "2026-07-31T05:00:00Z" },
+          { id: "older", messageId: "assistant-1", status: "complete", createdAt: "2026-07-31T04:00:00Z" },
+          { id: "nearest-old", messageId: "assistant-2", status: "partial", createdAt: "2026-07-31T02:00:00Z" },
+          { id: "nearest-new", messageId: "assistant-2", status: "complete", createdAt: "2026-07-31T03:00:00Z" },
+          { id: "failed", messageId: "assistant-2", status: "failed", createdAt: "2026-07-31T06:00:00Z" },
+        ],
+        messages,
+        "assistant-3",
+      );
+      assert.equal(previousStoryboard?.id, "nearest-new");
 
       const boundedEpisode = selectRoleplayStoryboardEpisode({
         messages: [
@@ -3412,6 +3443,7 @@ const cases: RegressionCase[] = [
       const roleplaySettingsStart = storyboardChatSettingsSource.indexOf(
         "function RoleplayStoryboardChatSettingsPanel",
       );
+      assert.ok(roleplaySettingsStart >= 0, "Roleplay Storyboard settings boundary should exist");
       const gameStoryboardChatSettingsSource = storyboardChatSettingsSource.slice(0, roleplaySettingsStart);
       const gameSurfaceSource = readFileSync(
         new URL("../../packages/client/src/components/game/GameSurface.tsx", import.meta.url),

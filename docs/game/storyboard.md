@@ -39,6 +39,8 @@ These Roleplay prompts do not replace the optimized Game Mode planner library. I
 
 ## Game Mode storyboards
 
+This section explains how to configure, generate, review, and animate storyboards for Game Mode turns.
+
 ## Before you start
 
 You need a few things set up before a storyboard can render.

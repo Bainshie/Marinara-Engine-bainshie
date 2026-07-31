@@ -1231,7 +1231,9 @@ export function AgentEditor() {
         ...(mayIncludeTurnData && localIncludeParallelResults ? { includeParallelResults: true } : {}),
         ...(!isStoryboardAgent && localContextSize !== "" ? { contextSize: Number(localContextSize) } : {}),
         ...(!isStoryboardAgent && localMaxTokens !== "" ? { maxTokens: clampAgentMaxTokens(localMaxTokens) } : {}),
-        ...(!isDirectorAgent && localRunInterval !== "" ? { runInterval: Number(localRunInterval) } : {}),
+        ...(!isDirectorAgent && !isStoryboardAgent && localRunInterval !== ""
+          ? { runInterval: Number(localRunInterval) }
+          : {}),
         ...(localInjectAsSection ? { injectAsSection: true } : {}),
         ...(isMusicAgent
           ? {
@@ -1425,7 +1427,9 @@ export function AgentEditor() {
       ...(mayIncludeTurnData && localIncludeParallelResults ? { includeParallelResults: true } : {}),
       ...(!isStoryboardAgent && localContextSize !== "" ? { contextSize: Number(localContextSize) } : {}),
       ...(!isStoryboardAgent && localMaxTokens !== "" ? { maxTokens: clampAgentMaxTokens(localMaxTokens) } : {}),
-      ...(!isDirectorAgent && localRunInterval !== "" ? { runInterval: Number(localRunInterval) } : {}),
+      ...(!isDirectorAgent && !isStoryboardAgent && localRunInterval !== ""
+        ? { runInterval: Number(localRunInterval) }
+        : {}),
       ...(localInjectAsSection ? { injectAsSection: true } : {}),
       ...(exportingMusicAgent
         ? {

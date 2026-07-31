@@ -1,6 +1,7 @@
 import { createPortal } from "react-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { useTranslation, useTranslation as useUiTranslation } from "react-i18next";
+import { toast } from "sonner";
 import {
   Suspense,
   lazy,
@@ -1548,15 +1549,21 @@ export function ChatRoleplaySurface({
   );
   const handleGenerateRoleplayStoryboard = useCallback(async () => {
     if (!latestStoryboardMessage) return;
-    const result = await generateRoleplayStoryboard.mutateAsync({
-      chatId: activeChatId,
-      messageId: latestStoryboardMessage.id,
-      swipeIndex: latestStoryboardMessage.activeSwipeIndex ?? 0,
-      automatic: false,
-      debugMode: useUIStore.getState().debugMode,
-    });
-    if ("storyboard" in result) storeGeneratedStoryboard(result.storyboard);
-  }, [activeChatId, generateRoleplayStoryboard, latestStoryboardMessage, storeGeneratedStoryboard]);
+    try {
+      const result = await generateRoleplayStoryboard.mutateAsync({
+        chatId: activeChatId,
+        messageId: latestStoryboardMessage.id,
+        swipeIndex: latestStoryboardMessage.activeSwipeIndex ?? 0,
+        automatic: false,
+        debugMode: useUIStore.getState().debugMode,
+      });
+      if ("storyboard" in result) storeGeneratedStoryboard(result.storyboard);
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : localizeUi("ui.chat.chatgallery.storyboardGenerationFailed"),
+      );
+    }
+  }, [activeChatId, generateRoleplayStoryboard, latestStoryboardMessage, localizeUi, storeGeneratedStoryboard]);
 
   useEffect(() => {
     automaticStoryboardMessageRef.current = undefined;
@@ -2025,7 +2032,7 @@ export function ChatRoleplaySurface({
                   const inlineStoryboard =
                     roleplayStoryboardByTurn.get(`${msg.id}:${msg.activeSwipeIndex ?? 0}`) ?? null;
                   const inlineStoryboardGenerating =
-                    msg.id === latestStoryboardMessage?.id &&
+                    msg.id === generateRoleplayStoryboard.variables?.messageId &&
                     generateRoleplayStoryboard.isPending &&
                     (generateRoleplayStoryboard.variables?.automatic !== true ||
                       roleplayStoryboardAutoMode === "illustration" ||

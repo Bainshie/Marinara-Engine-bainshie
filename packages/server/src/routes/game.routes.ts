@@ -242,7 +242,10 @@ import {
 } from "../services/storage/prompt-overrides.storage.js";
 import { createAppSettingsStorage } from "../services/storage/app-settings.storage.js";
 import { applyStoryboardAgentSettings } from "../services/game/storyboard-agent-settings.js";
-import { selectRoleplayStoryboardEpisode } from "../services/roleplay/storyboard-episode.js";
+import {
+  selectPreviousSuccessfulStoryboard,
+  selectRoleplayStoryboardEpisode,
+} from "../services/roleplay/storyboard-episode.js";
 import { buildRoleplayStoryboardMessages } from "../services/roleplay/storyboard-prompts.js";
 import {
   GAME_NARRATION_SUMMARIZER,
@@ -10816,8 +10819,10 @@ export async function gameRoutes(app: FastifyInstance) {
         ) {
           return { skipped: true, reason: "duplicate" };
         }
-        const previousSuccessfulStoryboard = (await storyboards.listByChatId(input.chatId)).find(
-          (row) => row.status === "complete" || row.status === "partial",
+        const previousSuccessfulStoryboard = selectPreviousSuccessfulStoryboard(
+          await storyboards.listByChatId(input.chatId),
+          allMessages,
+          input.messageId,
         );
         const resolvedMessages = await Promise.all(
           allMessages.map(async (candidate) => ({

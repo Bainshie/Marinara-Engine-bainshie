@@ -36,12 +36,20 @@ function uniqueTemplateId(prefix: string, templates: readonly AgentPromptTemplat
   return candidate;
 }
 
+function preserveTemplateSelection(
+  templates: readonly AgentPromptTemplateOption[],
+  selectedId: string | null,
+): string | null {
+  return templates.some((template) => template.id === selectedId) ? selectedId : (templates[0]?.id ?? null);
+}
+
 function TemplateCollectionEditor({
   title,
   description,
   templates,
   defaults,
   prefix,
+  required = false,
   onChange,
 }: {
   title: string;
@@ -49,11 +57,17 @@ function TemplateCollectionEditor({
   templates: AgentPromptTemplateOption[];
   defaults: AgentPromptTemplateOption[];
   prefix: string;
+  required?: boolean;
   onChange: (templates: AgentPromptTemplateOption[]) => void;
 }) {
   const { t: localizeUi } = useUiTranslation();
   const defaultsById = new Map(defaults.map((template) => [template.id, template]));
+  const requiredPromptSeed =
+    templates.find((template) => template.promptTemplate.trim())?.promptTemplate ??
+    defaults.find((template) => template.promptTemplate.trim())?.promptTemplate ??
+    "";
   const update = (id: string, patch: Partial<AgentPromptTemplateOption>) => {
+    if (required && patch.promptTemplate !== undefined && !patch.promptTemplate.trim()) return;
     onChange(templates.map((template) => (template.id === id ? { ...template, ...patch } : template)));
   };
 
@@ -66,6 +80,7 @@ function TemplateCollectionEditor({
         </div>
         <button
           type="button"
+          disabled={required && !requiredPromptSeed}
           onClick={() => {
             const id = uniqueTemplateId(prefix, templates);
             onChange([
@@ -74,11 +89,11 @@ function TemplateCollectionEditor({
                 id,
                 name: localizeUi("ui.agents.storyboard.customPrompt"),
                 description: "",
-                promptTemplate: "",
+                promptTemplate: required ? requiredPromptSeed : "",
               },
             ]);
           }}
-          className="flex items-center gap-1.5 rounded-lg bg-[var(--background)] px-2.5 py-1.5 text-[0.6875rem] font-medium ring-1 ring-[var(--border)] hover:bg-[var(--accent)]"
+          className="flex items-center gap-1.5 rounded-lg bg-[var(--background)] px-2.5 py-1.5 text-[0.6875rem] font-medium ring-1 ring-[var(--border)] hover:bg-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-40"
         >
           <Plus size="0.6875rem" /> {localizeUi("ui.agents.agenteditor.addOption")}
         </button>
@@ -115,8 +130,9 @@ function TemplateCollectionEditor({
               ) : null}
               <button
                 type="button"
+                disabled={required && templates.length <= 1}
                 onClick={() => onChange(templates.filter((entry) => entry.id !== template.id))}
-                className="flex h-8 w-8 items-center justify-center rounded-lg text-[var(--muted-foreground)] hover:bg-[var(--accent)]"
+                className="flex h-8 w-8 items-center justify-center rounded-lg text-[var(--muted-foreground)] hover:bg-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-35"
                 title={localizeUi("ui.agents.agenteditor.removePromptOption")}
               >
                 <Trash2 size="0.75rem" />
@@ -485,10 +501,9 @@ export function StoryboardAgentSettingsPanel({
             templates={settings.roleplayEpisodeTemplates}
             defaults={defaults.roleplayEpisodeTemplates}
             prefix="storyboard-roleplay-episode"
+            required
             onChange={(templates) => {
-              const selected = templates.some((template) => template.id === settings.roleplayEpisodeTemplateId)
-                ? settings.roleplayEpisodeTemplateId
-                : (templates[0]?.id ?? null);
+              const selected = preserveTemplateSelection(templates, settings.roleplayEpisodeTemplateId);
               update({ roleplayEpisodeTemplates: templates, roleplayEpisodeTemplateId: selected });
             }}
           />
@@ -498,10 +513,9 @@ export function StoryboardAgentSettingsPanel({
             templates={settings.roleplayStyleTemplates}
             defaults={defaults.roleplayStyleTemplates}
             prefix="storyboard-roleplay-style"
+            required
             onChange={(templates) => {
-              const selected = templates.some((template) => template.id === settings.roleplayStyleTemplateId)
-                ? settings.roleplayStyleTemplateId
-                : (templates[0]?.id ?? null);
+              const selected = preserveTemplateSelection(templates, settings.roleplayStyleTemplateId);
               update({ roleplayStyleTemplates: templates, roleplayStyleTemplateId: selected });
             }}
           />
@@ -511,10 +525,9 @@ export function StoryboardAgentSettingsPanel({
             templates={settings.roleplayAnimationTemplates}
             defaults={defaults.roleplayAnimationTemplates}
             prefix="storyboard-roleplay-animation"
+            required
             onChange={(templates) => {
-              const selected = templates.some((template) => template.id === settings.roleplayAnimationTemplateId)
-                ? settings.roleplayAnimationTemplateId
-                : (templates[0]?.id ?? null);
+              const selected = preserveTemplateSelection(templates, settings.roleplayAnimationTemplateId);
               update({ roleplayAnimationTemplates: templates, roleplayAnimationTemplateId: selected });
             }}
           />
@@ -524,10 +537,9 @@ export function StoryboardAgentSettingsPanel({
             templates={settings.roleplayOutputTemplates}
             defaults={defaults.roleplayOutputTemplates}
             prefix="storyboard-roleplay-output"
+            required
             onChange={(templates) => {
-              const selected = templates.some((template) => template.id === settings.roleplayOutputTemplateId)
-                ? settings.roleplayOutputTemplateId
-                : (templates[0]?.id ?? null);
+              const selected = preserveTemplateSelection(templates, settings.roleplayOutputTemplateId);
               update({ roleplayOutputTemplates: templates, roleplayOutputTemplateId: selected });
             }}
           />

@@ -53,10 +53,12 @@ function episodeMessagesSinceAnchor(
   messages: RoleplayStoryboardMessage[],
   currentIndex: number,
   previousSuccessfulMessageId: string | null,
-): RoleplayStoryboardMessage[] {
+): { messages: RoleplayStoryboardMessage[]; anchorResolved: boolean } {
   if (previousSuccessfulMessageId) {
     const anchorIndex = messages.findIndex((message) => message.id === previousSuccessfulMessageId);
-    if (anchorIndex >= 0 && anchorIndex < currentIndex) return messages.slice(anchorIndex + 1, currentIndex + 1);
+    if (anchorIndex >= 0 && anchorIndex < currentIndex) {
+      return { messages: messages.slice(anchorIndex + 1, currentIndex + 1), anchorResolved: true };
+    }
   }
 
   let startIndex = currentIndex;
@@ -64,7 +66,30 @@ function episodeMessagesSinceAnchor(
     if (isAssistantRole(messages[index]?.role ?? "")) break;
     startIndex = index;
   }
-  return messages.slice(startIndex, currentIndex + 1);
+  return { messages: messages.slice(startIndex, currentIndex + 1), anchorResolved: false };
+}
+
+export function selectPreviousSuccessfulStoryboard<T extends { messageId: string; status: string; createdAt: string }>(
+  storyboards: readonly T[],
+  messages: readonly Pick<RoleplayStoryboardMessage, "id">[],
+  currentMessageId: string,
+): T | null {
+  const messageOrder = new Map(messages.map((message, index) => [message.id, index]));
+  const currentMessageIndex = messageOrder.get(currentMessageId);
+  if (currentMessageIndex === undefined) return null;
+
+  const candidates: Array<{ storyboard: T; messageIndex: number }> = [];
+  for (const storyboard of storyboards) {
+    if (storyboard.status !== "complete" && storyboard.status !== "partial") continue;
+    const messageIndex = messageOrder.get(storyboard.messageId);
+    if (messageIndex === undefined || messageIndex >= currentMessageIndex) continue;
+    candidates.push({ storyboard, messageIndex });
+  }
+  candidates.sort(
+    (left, right) =>
+      right.messageIndex - left.messageIndex || right.storyboard.createdAt.localeCompare(left.storyboard.createdAt),
+  );
+  return candidates[0]?.storyboard ?? null;
 }
 
 function boundEpisodeMessages(messages: RoleplayStoryboardMessage[]): RoleplayStoryboardMessage[] {
@@ -104,15 +129,17 @@ export function selectRoleplayStoryboardEpisode(args: {
   const currentMessage = conversationMessages[currentIndex]!;
   if (!isAssistantRole(currentMessage.role)) return { status: "skip", reason: "unsupported_message" };
 
-  const sourceMessages = episodeMessagesSinceAnchor(
+  const episode = episodeMessagesSinceAnchor(
     conversationMessages,
     currentIndex,
     args.previousSuccessfulMessageId ?? null,
   );
+  const sourceMessages = episode.messages;
   const assistantMessageCount = sourceMessages.filter((message) => isAssistantRole(message.role)).length;
   if (
     args.automatic === true &&
     args.previousSuccessfulMessageId &&
+    episode.anchorResolved &&
     assistantMessageCount < normalizeRunInterval(args.runInterval)
   ) {
     return { status: "skip", reason: "interval" };

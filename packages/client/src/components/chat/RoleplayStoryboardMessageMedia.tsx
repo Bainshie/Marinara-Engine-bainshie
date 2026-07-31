@@ -1,6 +1,6 @@
 import type { GameTurnStoryboard, GameTurnStoryboardKeyframe } from "@marinara-engine/shared";
 import { ChevronLeft, ChevronRight, Loader2, PanelsTopLeft } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation as useUiTranslation } from "react-i18next";
 import { cn } from "../../lib/utils";
 import { isGameTurnStoryboardRendering } from "../../hooks/use-game-storyboards";
@@ -18,6 +18,7 @@ export function RoleplayStoryboardMessageMedia({
 }) {
   const { t: localizeUi } = useUiTranslation();
   const [activeFrameId, setActiveFrameId] = useState<string | null>(null);
+  const storyboardIdRef = useRef(storyboard?.id);
   const frames = storyboard?.keyframes ?? EMPTY_STORYBOARD_FRAMES;
   const firstVisibleFrame = useMemo(
     () => frames.find((frame) => frame.video || frame.image) ?? frames[0] ?? null,
@@ -33,8 +34,15 @@ export function RoleplayStoryboardMessageMedia({
   const rendering = generating || isGameTurnStoryboardRendering(storyboard);
 
   useEffect(() => {
-    setActiveFrameId(firstVisibleFrame?.id ?? null);
-  }, [firstVisibleFrame?.id, storyboard?.id]);
+    const storyboardChanged = storyboardIdRef.current !== storyboard?.id;
+    storyboardIdRef.current = storyboard?.id;
+    setActiveFrameId((currentFrameId) => {
+      if (storyboardChanged || !currentFrameId || !frames.some((frame) => frame.id === currentFrameId)) {
+        return firstVisibleFrame?.id ?? null;
+      }
+      return currentFrameId;
+    });
+  }, [firstVisibleFrame?.id, frames, storyboard?.id]);
 
   if (!storyboard && !rendering) return null;
 
