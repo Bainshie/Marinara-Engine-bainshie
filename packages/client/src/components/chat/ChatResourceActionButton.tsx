@@ -14,7 +14,8 @@ export function ChatResourceActionButton({
 }) {
   const { t } = useTranslation();
   const chat = useChatStore((state) => state.activeChat);
-  if (!chat || !resolveChatResourceDropAction(payload, chat)) return null;
+  const result = chat ? resolveChatResourceDropAction(payload, chat) : null;
+  if (!result || result.type === "blocked") return null;
 
   const label = t("ui.chat.chatresourceactionbutton.addToActiveChat", { name: payload.label });
   return (

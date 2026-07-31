@@ -24,12 +24,12 @@ assert.deepEqual(
   { type: "add-characters", ids: ["character-2"], label: "Two characters" },
 );
 
-assert.equal(
+assert.deepEqual(
   resolveChatResourceDropAction(
     { version: 1, kind: "character", ids: ["character-1"], label: "Existing character" },
     baseChat,
   ),
-  null,
+  { type: "blocked", reason: "already-active", label: "Existing character" },
 );
 assert.deepEqual(
   resolveChatResourceDropAction(
@@ -47,7 +47,7 @@ assert.deepEqual(
     label: "New background",
   },
 );
-assert.equal(
+assert.deepEqual(
   resolveChatResourceDropAction(
     {
       version: 1,
@@ -57,7 +57,7 @@ assert.equal(
     },
     baseChat,
   ),
-  null,
+  { type: "blocked", reason: "already-active", label: "Current background" },
 );
 
 assert.deepEqual(
@@ -68,12 +68,12 @@ assert.deepEqual(
   { type: "add-lorebooks", ids: ["lorebook-2"], label: "New lorebook" },
 );
 
-assert.equal(
+assert.deepEqual(
   resolveChatResourceDropAction(
     { version: 1, kind: "lorebook", ids: ["lorebook-1"], label: "Existing lorebook" },
     baseChat,
   ),
-  null,
+  { type: "blocked", reason: "already-active", label: "Existing lorebook" },
 );
 
 assert.deepEqual(
@@ -84,12 +84,12 @@ assert.deepEqual(
   { type: "add-agents", ids: ["agent-2"], label: "New agent", mustEnableAgents: true },
 );
 
-assert.equal(
+assert.deepEqual(
   resolveChatResourceDropAction(
     { version: 1, kind: "agent", ids: ["agent-1"], label: "Existing agent" },
     baseChat,
   ),
-  null,
+  { type: "blocked", reason: "already-active", label: "Existing agent" },
 );
 
 assert.deepEqual(
@@ -112,12 +112,12 @@ assert.deepEqual(
   ),
   { type: "set-persona", id: "persona-2", label: "New persona", replacesId: "persona-1" },
 );
-assert.equal(
+assert.deepEqual(
   resolveChatResourceDropAction(
     { version: 1, kind: "persona", ids: ["persona-1"], label: "Current persona" },
     baseChat,
   ),
-  null,
+  { type: "blocked", reason: "already-active", label: "Current persona" },
 );
 assert.deepEqual(
   resolveChatResourceDropAction(
@@ -126,12 +126,12 @@ assert.deepEqual(
   ),
   { type: "set-preset", id: "preset-2", label: "New preset", replacesId: "preset-1" },
 );
-assert.equal(
+assert.deepEqual(
   resolveChatResourceDropAction(
     { version: 1, kind: "preset", ids: ["preset-2"], label: "New preset" },
     { ...baseChat, mode: "conversation" },
   ),
-  null,
+  { type: "blocked", reason: "preset-unsupported-mode", label: "New preset" },
 );
 assert.deepEqual(
   resolveChatResourceDropAction(
@@ -140,12 +140,52 @@ assert.deepEqual(
   ),
   { type: "set-connection", id: "connection-2", label: "New connection", replacesId: "connection-1" },
 );
-assert.equal(
+assert.deepEqual(
   resolveChatResourceDropAction(
     { version: 1, kind: "connection", ids: ["connection-1"], label: "Current connection" },
     baseChat,
   ),
-  null,
+  { type: "blocked", reason: "already-active", label: "Current connection" },
+);
+
+assert.deepEqual(
+  resolveChatResourceDropAction(
+    {
+      version: 1,
+      kind: "connection",
+      ids: ["connection-image"],
+      label: "Image connection",
+      unsupported: "connection-kind",
+    },
+    baseChat,
+  ),
+  { type: "blocked", reason: "connection-kind", label: "Image connection" },
+);
+assert.deepEqual(
+  parseChatResourceDragPayload({
+    version: 1,
+    kind: "connection",
+    ids: ["connection-image"],
+    label: "Image connection",
+    unsupported: "connection-kind",
+  }),
+  {
+    version: 1,
+    kind: "connection",
+    ids: ["connection-image"],
+    label: "Image connection",
+    unsupported: "connection-kind",
+  },
+);
+assert.deepEqual(
+  parseChatResourceDragPayload({
+    version: 1,
+    kind: "connection",
+    ids: ["connection-1"],
+    label: "Text connection",
+    unsupported: "nonsense",
+  }),
+  { version: 1, kind: "connection", ids: ["connection-1"], label: "Text connection" },
 );
 
 console.info("Chat resource drop regressions passed.");

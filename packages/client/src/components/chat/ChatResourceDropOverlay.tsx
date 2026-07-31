@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Bot, BookOpen, FileText, Image, Link, UserPlus, VenetianMask } from "lucide-react";
+import { Ban, Bot, BookOpen, FileText, Image, Link, UserPlus, VenetianMask } from "lucide-react";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
 import type { Chat } from "@marinara-engine/shared";
@@ -21,7 +21,8 @@ import {
 } from "../../lib/chat-resource-drag";
 import {
   resolveChatResourceDropAction,
-  type ChatResourceDropAction,
+  type ChatResourceDropBlock,
+  type ChatResourceDropResult,
 } from "../../lib/chat-resource-drop-capabilities";
 import { getChatCharacterIds } from "../../lib/chat-macros";
 import { chatBackgroundMetadataToUrl, chatBackgroundUrlToMetadata } from "../../lib/backgrounds";
@@ -31,7 +32,7 @@ import { ChoiceSelectionModal } from "../presets/ChoiceSelectionModal";
 
 type OverlayState = {
   payload: ChatResourceDragPayload;
-  action: ChatResourceDropAction;
+  action: ChatResourceDropResult;
   rect: DOMRect;
 };
 
@@ -40,7 +41,8 @@ function findDropSurface(target: EventTarget | null) {
   return target.closest<HTMLElement>("[data-chat-resource-drop-surface]");
 }
 
-function getActionIcon(action: ChatResourceDropAction) {
+function getActionIcon(action: ChatResourceDropResult) {
+  if (action.type === "blocked") return <Ban size="1.25rem" />;
   if (action.type === "add-characters") return <UserPlus size="1.25rem" />;
   if (action.type === "add-lorebooks") return <BookOpen size="1.25rem" />;
   if (action.type === "add-agents") return <Bot size="1.25rem" />;
@@ -48,6 +50,12 @@ function getActionIcon(action: ChatResourceDropAction) {
   if (action.type === "set-preset") return <FileText size="1.25rem" />;
   if (action.type === "set-background") return <Image size="1.25rem" />;
   return <Link size="1.25rem" />;
+}
+
+function blockedKey(action: ChatResourceDropBlock) {
+  if (action.reason === "preset-unsupported-mode") return "ui.chat.chatresourcedropoverlay.presetUnsupportedMode";
+  if (action.reason === "connection-kind") return "ui.chat.chatresourcedropoverlay.connectionUnsupportedKind";
+  return "ui.chat.chatresourcedropoverlay.alreadyActive";
 }
 
 function sameIds(left: string[], right: string[]) {
@@ -84,10 +92,14 @@ export function ChatResourceDropOverlay({ chat }: { chat: Chat }) {
   const applyAction = useCallback(
     async (payload: ChatResourceDragPayload) => {
       let currentChat = useChatStore.getState().activeChat ?? chatRef.current;
-      if (useChatStore.getState().activeChatId !== currentChat.id) return;
+      if (useChatStore.getState().activeChatId !== currentChat.id) {
+        toast.info(t("ui.chat.chatresourcedropoverlay.chatChanged"));
+        return;
+      }
       let latestAction = resolveChatResourceDropAction(payload, currentChat);
-      if (!latestAction) {
-        toast.info(t("ui.chat.chatresourcedropoverlay.alreadyActive", { name: payload.label }));
+      if (!latestAction) return;
+      if (latestAction.type === "blocked") {
+        toast.info(t(blockedKey(latestAction), { name: latestAction.label }));
         return;
       }
 
@@ -145,6 +157,10 @@ export function ChatResourceDropOverlay({ chat }: { chat: Chat }) {
         currentChat = useChatStore.getState().activeChat ?? chatRef.current;
         latestAction = resolveChatResourceDropAction(payload, currentChat);
         if (!latestAction) return;
+        if (latestAction.type === "blocked") {
+          toast.info(t(blockedKey(latestAction), { name: latestAction.label }));
+          return;
+        }
         if (
           (latestAction.type === "set-persona" ||
             latestAction.type === "set-preset" ||
@@ -323,7 +339,7 @@ export function ChatResourceDropOverlay({ chat }: { chat: Chat }) {
         return;
       }
       event.preventDefault();
-      event.dataTransfer.dropEffect = "copy";
+      event.dataTransfer.dropEffect = next.action.type === "blocked" ? "none" : "copy";
       setOverlay(next);
     };
     const handleDrop = (event: DragEvent) => {
@@ -334,6 +350,10 @@ export function ChatResourceDropOverlay({ chat }: { chat: Chat }) {
       if (!next) return;
       event.preventDefault();
       event.stopPropagation();
+      if (next.action.type === "blocked") {
+        toast.info(t(blockedKey(next.action), { name: next.action.label }));
+        return;
+      }
       void applyAction(next.payload);
     };
     const clear = () => {
@@ -348,7 +368,7 @@ export function ChatResourceDropOverlay({ chat }: { chat: Chat }) {
       window.removeEventListener("drop", handleDrop, true);
       window.removeEventListener("dragend", clear, true);
     };
-  }, [applyAction, resolveOverlay]);
+  }, [applyAction, resolveOverlay, t]);
 
   useEffect(() => {
     const assign = (event: Event) => {
@@ -367,12 +387,26 @@ export function ChatResourceDropOverlay({ chat }: { chat: Chat }) {
       role="status"
       aria-live="polite"
     >
-      <div className="flex max-w-sm items-center gap-3 rounded-lg border border-[var(--primary)] bg-[var(--card)] px-4 py-3 text-[var(--foreground)] shadow-xl">
-        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-[var(--primary)] text-[var(--primary-foreground)]">
+      <div
+        className={
+          overlay.action.type === "blocked"
+            ? "flex max-w-sm items-center gap-3 rounded-lg border border-[var(--border)] bg-[var(--card)] px-4 py-3 text-[var(--muted-foreground)] shadow-xl"
+            : "flex max-w-sm items-center gap-3 rounded-lg border border-[var(--primary)] bg-[var(--card)] px-4 py-3 text-[var(--foreground)] shadow-xl"
+        }
+      >
+        <span
+          className={
+            overlay.action.type === "blocked"
+              ? "flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-[var(--secondary)] text-[var(--muted-foreground)]"
+              : "flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-[var(--primary)] text-[var(--primary-foreground)]"
+          }
+        >
           {getActionIcon(overlay.action)}
         </span>
         <span className="min-w-0 text-sm font-semibold">
-          {overlay.action.type === "add-characters"
+          {overlay.action.type === "blocked"
+            ? t(blockedKey(overlay.action), { name: overlay.payload.label })
+            : overlay.action.type === "add-characters"
             ? t("ui.chat.chatresourcedropoverlay.addCharacters", { name: overlay.payload.label })
             : overlay.action.type === "add-lorebooks"
               ? t("ui.chat.chatresourcedropoverlay.addLorebooks", { name: overlay.payload.label })

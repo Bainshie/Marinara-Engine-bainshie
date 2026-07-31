@@ -16,6 +16,8 @@ export type ChatResourceDragPayload = {
   kind: ChatResourceDragKind;
   ids: string[];
   label: string;
+  /** Set by a source that knows the resource can never be used in a chat, so the surface can say why. */
+  unsupported?: "connection-kind";
 };
 
 let activeChatResourceDrag: ChatResourceDragPayload | null = null;
@@ -42,7 +44,13 @@ export function parseChatResourceDragPayload(value: unknown): ChatResourceDragPa
   );
   if (ids.length === 0) return null;
   if (typeof payload.label !== "string" || !payload.label.trim()) return null;
-  return { version: 1, kind: payload.kind, ids, label: payload.label.trim() };
+  return {
+    version: 1,
+    kind: payload.kind,
+    ids,
+    label: payload.label.trim(),
+    ...(payload.unsupported === "connection-kind" ? { unsupported: "connection-kind" as const } : {}),
+  };
 }
 
 export function readChatResourceDragPayload(dataTransfer: DataTransfer): ChatResourceDragPayload | null {

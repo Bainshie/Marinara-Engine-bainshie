@@ -1079,11 +1079,15 @@ function ConnectionRow({
         </div>
       </div>
       <div className="absolute right-2 top-1/2 -translate-y-1/2 flex shrink-0 items-center gap-0.5 rounded-lg bg-[var(--sidebar)] px-1 py-0.5 opacity-0 shadow-sm ring-1 ring-foreground/10 transition-opacity group-hover:opacity-100 max-md:opacity-100">
-        {isLanguageGenerationConnection(conn) && (
-          <ChatResourceActionButton
-            payload={{ version: 1, kind: "connection", ids: [conn.id], label: conn.name }}
-          />
-        )}
+        <ChatResourceActionButton
+          payload={{
+            version: 1,
+            kind: "connection",
+            ids: [conn.id],
+            label: conn.name,
+            ...(isLanguageGenerationConnection(conn) ? {} : { unsupported: "connection-kind" as const }),
+          }}
+        />
         <button
           onClick={(e) => {
             e.stopPropagation();
@@ -1678,18 +1682,17 @@ export function ConnectionsPanel() {
         onDragStart={(event) => {
           const ids = getDraggedConnectionIds(conn.id);
           setDraggedConnectionId(conn.id);
-          event.dataTransfer.effectAllowed = isLanguageGenerationConnection(conn) ? "copyMove" : "move";
+          event.dataTransfer.effectAllowed = "copyMove";
           event.dataTransfer.setData("application/x-marinara-connection-ids", JSON.stringify(ids));
           event.dataTransfer.setData("application/x-marinara-connection-id", conn.id);
           event.dataTransfer.setData("text/plain", conn.id);
-          if (isLanguageGenerationConnection(conn)) {
-            writeChatResourceDragPayload(event.dataTransfer, {
-              version: 1,
-              kind: "connection",
-              ids: [conn.id],
-              label: conn.name,
-            });
-          }
+          writeChatResourceDragPayload(event.dataTransfer, {
+            version: 1,
+            kind: "connection",
+            ids: [conn.id],
+            label: conn.name,
+            ...(isLanguageGenerationConnection(conn) ? {} : { unsupported: "connection-kind" as const }),
+          });
         }}
         onDragEnd={() => {
           setDraggedConnectionId(null);
