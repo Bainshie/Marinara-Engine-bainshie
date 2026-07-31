@@ -8341,6 +8341,14 @@ test("Hierarchical Maps settings stay inside the active agent entry", async ({ p
       sessionStorage.setItem("maps-feature-detail-chat-seeded", "true");
     }, chats[0]!.id);
     await page.goto("/");
+    const worldMapsButton = page.getByRole("button", { name: "World Maps", exact: true });
+    await expect(worldMapsButton).toBeVisible();
+    await worldMapsButton.click();
+    await expect(page.getByRole("heading", { name: "Hierarchical Maps home" })).toBeVisible();
+    await expect(page.locator('[data-tour="panel-agents"]')).not.toHaveClass(/mari-topbar-panel-icon--active/);
+    await page.getByRole("button", { name: "Back to Agents" }).click();
+    await expect(page.getByTestId("hierarchical-maps-detail")).toHaveCount(0);
+
     await page.locator('[data-tour="panel-agents"]').click();
     const agentsPanel = page.locator('[data-component="RightPanelDesktop"]');
     const mapsCard = agentsPanel.locator('[data-agent-name="Hierarchical Maps"]');
