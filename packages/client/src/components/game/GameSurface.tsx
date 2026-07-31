@@ -2056,6 +2056,15 @@ function getGameMapId(map: GameMap | null | undefined, fallbackIndex = 0): strin
   return slugifyGameMapId(map.name || "") || `map-${fallbackIndex + 1}`;
 }
 
+function hasGeneratedGameSetupWorld(chatMeta: Record<string, unknown>): boolean {
+  if (chatMeta.gameSessionStatus === "ready" || chatMeta.gameSessionStatus === "active") return true;
+  if (typeof chatMeta.gameWorldOverview === "string" && chatMeta.gameWorldOverview.trim()) return true;
+  if (typeof chatMeta.gameStoryArc === "string" && chatMeta.gameStoryArc.trim()) return true;
+  if (chatMeta.gameBlueprint && typeof chatMeta.gameBlueprint === "object") return true;
+  if (chatMeta.gameMap && typeof chatMeta.gameMap === "object") return true;
+  return Array.isArray(chatMeta.gameNpcs) && chatMeta.gameNpcs.length > 0;
+}
+
 interface GameSurfaceProps {
   activeChatId: string;
   chat: Chat;
@@ -6450,6 +6459,22 @@ function GameSurfaceComponent({
     [generateSetupMapDraft, localizeUi],
   );
 
+  const handleSharedWorldSetupApplyError = useCallback(
+    (message: unknown) => {
+      setPendingSharedWorldSetupApply(null);
+      const detail = typeof message === "string" && message.trim() ? message.trim() : null;
+      toast.error(
+        detail
+          ? localizeUi("ui.game.gamesurfacecomponent.theGameWasCreatedButItsSharedWorldCouldNotBeLinkedValue1", {
+              value1: detail,
+            })
+          : localizeUi("ui.game.gamesurfacecomponent.theGameWasCreatedButItsSharedWorldCouldNotBeLinked"),
+        { duration: 10000 },
+      );
+    },
+    [localizeUi],
+  );
+
   const handleStartGameNow = useCallback(() => {
     if (startGame.isPending || startGameRequested || startGameGuardRef.current) return;
     startGameGuardRef.current = true;
@@ -9814,6 +9839,7 @@ function GameSurfaceComponent({
 
   // Does this chat need initial game creation?
   const needsCreation = !chatMeta.gameId;
+  const hasExistingGameWorld = !needsCreation && hasGeneratedGameSetupWorld(chatMeta);
   const initialSetupPartyCharacterIds = useMemo(
     () => getChatCharacterIds(chat.characterIds).filter((id) => id !== PROFESSOR_MARI_ID),
     [chat.characterIds],
@@ -9849,7 +9875,7 @@ function GameSurfaceComponent({
         >
           <GameSetupWizard
             onComplete={(config, preferences, conns, wizardGameName, mapPlan) => {
-              const runSetup = (chatId: string) => {
+              const queueSetupMapPlan = () => {
                 pendingSetupMapPlanRef.current =
                   mapPlan?.mode === "ai"
                     ? {
@@ -9857,6 +9883,9 @@ function GameSurfaceComponent({
                         connectionId: conns.gmConnectionId,
                       }
                     : (mapPlan ?? null);
+              };
+              const runSetup = (chatId: string) => {
+                queueSetupMapPlan();
                 gameSetup.mutate(
                   {
                     chatId,
@@ -9874,6 +9903,37 @@ function GameSurfaceComponent({
                     },
                   },
                 );
+              };
+              const continueExistingSetup = async (chatId: string) => {
+                queueSetupMapPlan();
+                const storedSetupConfig =
+                  chatMeta.gameSetupConfig &&
+                  typeof chatMeta.gameSetupConfig === "object" &&
+                  !Array.isArray(chatMeta.gameSetupConfig)
+                    ? (chatMeta.gameSetupConfig as Record<string, unknown>)
+                    : {};
+                try {
+                  await Promise.all([
+                    updateChat.mutateAsync({
+                      id: chatId,
+                      connectionId: conns.gmConnectionId ?? null,
+                      promptPresetId: config.promptPresetId ?? null,
+                    }),
+                    updateChatMetadata.mutateAsync({
+                      id: chatId,
+                      gameSetupConfig: { ...storedSetupConfig, ...config },
+                    }),
+                  ]);
+                  await completePostSetupMapPlan(chatId);
+                } catch (error) {
+                  pendingSetupMapPlanRef.current = null;
+                  toast.error(
+                    error instanceof Error && error.message.trim()
+                      ? error.message
+                      : localizeUi("ui.game.gamesurfacecomponent.couldNotUpdateTheExistingGameSetup"),
+                    { duration: 10000 },
+                  );
+                }
               };
 
               if (needsCreation) {
@@ -9894,6 +9954,8 @@ function GameSurfaceComponent({
                     },
                   },
                 );
+              } else if (hasExistingGameWorld) {
+                void continueExistingSetup(activeChatId);
               } else {
                 runSetup(activeChatId);
               }
@@ -9903,6 +9965,8 @@ function GameSurfaceComponent({
                 createGame.isPending ||
                 gameSetup.isPending ||
                 generateSetupMapDraft.isPending ||
+                updateChat.isPending ||
+                updateChatMetadata.isPending ||
                 activePendingSharedWorldSetupApply
               ) return;
               useGameModeStore.getState().setSetupActive(false);
@@ -9921,6 +9985,8 @@ function GameSurfaceComponent({
               createGame.isPending ||
               gameSetup.isPending ||
               generateSetupMapDraft.isPending ||
+              updateChat.isPending ||
+              updateChatMetadata.isPending ||
               Boolean(activePendingSharedWorldSetupApply)
             }
             isDraftingMap={generateSetupMapDraft.isPending}
@@ -9934,6 +10000,7 @@ function GameSurfaceComponent({
               packageId="hierarchical-maps"
               view="setup-apply"
               className="hidden"
+              onHostError={handleSharedWorldSetupApplyError}
               capabilityProps={{
                 chatId: activePendingSharedWorldSetupApply.chatId,
                 selection: activePendingSharedWorldSetupApply.selection,
@@ -9951,18 +10018,7 @@ function GameSurfaceComponent({
                     localizeUi("ui.game.gamesurfacecomponent.linkedToSharedWorldValue1", { value1: worldName }),
                   );
                 },
-                onError: (message: unknown) => {
-                  setPendingSharedWorldSetupApply(null);
-                  const detail = typeof message === "string" && message.trim() ? message.trim() : null;
-                  toast.error(
-                    detail
-                      ? localizeUi("ui.game.gamesurfacecomponent.theGameWasCreatedButItsSharedWorldCouldNotBeLinkedValue1", {
-                          value1: detail,
-                        })
-                      : localizeUi("ui.game.gamesurfacecomponent.theGameWasCreatedButItsSharedWorldCouldNotBeLinked"),
-                    { duration: 10000 },
-                  );
-                },
+                onError: handleSharedWorldSetupApplyError,
               }}
             />
           ) : null}

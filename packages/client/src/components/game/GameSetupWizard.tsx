@@ -91,6 +91,14 @@ interface CapabilitySetupSelection {
   payload: unknown;
 }
 
+function normalizeCapabilitySetupSelectionKind(
+  candidate: Record<string, unknown> | null,
+): CapabilitySetupSelection["kind"] | null {
+  if (candidate?.kind === "shared-world") return "shared-world";
+  if (candidate?.kind === undefined || candidate.kind === "template") return "template";
+  return null;
+}
+
 interface GameSetupWizardProps {
   onComplete: (
     config: GameSetupConfig,
@@ -837,11 +845,7 @@ export function GameSetupWizard({
     const candidate = selection && typeof selection === "object" && !Array.isArray(selection)
       ? (selection as Record<string, unknown>)
       : null;
-    const kind = candidate?.kind === "shared-world"
-      ? "shared-world"
-      : candidate?.kind === undefined || candidate.kind === "template"
-        ? "template"
-        : null;
+    const kind = normalizeCapabilitySetupSelectionKind(candidate);
     if (
       !candidate ||
       !kind ||
