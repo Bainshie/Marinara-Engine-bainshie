@@ -9,7 +9,12 @@ import {
   type InstalledCapabilityPackage,
 } from "@marinara-engine/shared";
 import { api } from "../lib/api-client";
-import { capabilityClientNeedsRefresh } from "../lib/capability-client-version";
+import {
+  beginCapabilityClientImport,
+  capabilityClientNeedsRefresh,
+  finishCapabilityClientImport,
+  getCapabilityClientImport,
+} from "../lib/capability-client-version";
 
 export const capabilityPackageKeys = {
   all: ["capability-packages"] as const,
@@ -196,6 +201,20 @@ export function useCapabilityClientModules() {
         });
         continue;
       }
+      const inFlight = getCapabilityClientImport(item.id);
+      if (inFlight) {
+        if (current.version !== item.version || current.status !== "loading") {
+          publishCapabilityClientModuleState({
+            packageId: item.id,
+            name: item.manifest.name,
+            version: item.version,
+            status: "loading",
+            error: null,
+            attempt,
+          });
+        }
+        continue;
+      }
       if (
         current.version === item.version &&
         (current.status === "loading" || current.status === "error" || current.status === "refresh-required")
@@ -211,14 +230,25 @@ export function useCapabilityClientModules() {
         attempt,
       });
       const source = `/api/capability-packages/${encodeURIComponent(item.id)}/client?v=${encodeURIComponent(item.version)}${attempt > 0 ? `&retry=${attempt}` : ""}`;
+      if (!beginCapabilityClientImport(item.id, { version: item.version, attempt })) continue;
       void import(/* @vite-ignore */ source)
         .then(() => {
           if (!customElements.get(tag)) {
             throw new Error(`Client module did not register ${tag}`);
           }
           loadedClientModules.set(item.id, item.version);
+          finishCapabilityClientImport(item.id, { version: item.version, attempt });
           const latest = getCapabilityClientModuleState(item.id);
-          if (latest.version !== item.version || latest.attempt !== attempt) return;
+          if (latest.version !== item.version || latest.attempt !== attempt) {
+            if (latest.version && customElements.get(tag)) {
+              publishCapabilityClientModuleState({
+                ...latest,
+                status: "refresh-required",
+                error: null,
+              });
+            }
+            return;
+          }
           publishCapabilityClientModuleState({
             packageId: item.id,
             name: item.manifest.name,
@@ -229,8 +259,25 @@ export function useCapabilityClientModules() {
           });
         })
         .catch((error) => {
+          finishCapabilityClientImport(item.id, { version: item.version, attempt });
           const latest = getCapabilityClientModuleState(item.id);
-          if (latest.version !== item.version || latest.attempt !== attempt) return;
+          if (latest.version !== item.version || latest.attempt !== attempt) {
+            if (latest.version && customElements.get(tag)) {
+              loadedClientModules.set(item.id, item.version);
+              publishCapabilityClientModuleState({
+                ...latest,
+                status: "refresh-required",
+                error: null,
+              });
+            } else if (latest.version) {
+              publishCapabilityClientModuleState({
+                ...latest,
+                status: "idle",
+                error: null,
+              });
+            }
+            return;
+          }
           publishCapabilityClientModuleState({
             packageId: item.id,
             name: item.manifest.name,
