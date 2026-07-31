@@ -920,6 +920,19 @@ export async function galleryRoutes(app: FastifyInstance) {
     return { videos: videos.map((video) => serializeSceneVideo(video)) };
   });
 
+  app.delete<{ Params: { chatId: string; id: string } }>("/scene-videos/:chatId/:id", async (req, reply) => {
+    const { chatId, id } = req.params;
+    if (!isValidChatId(chatId)) return reply.status(400).send({ error: "Invalid chatId" });
+
+    const sceneVideos = createGameSceneVideosStorage(app.db);
+    const video = await sceneVideos.getById(id);
+    if (!video || video.chatId !== chatId) return reply.status(404).send({ error: "Scene video not found" });
+
+    await removeSavedVideoFromDisk(video.filePath);
+    await sceneVideos.remove(video.id);
+    return { success: true };
+  });
+
   app.get<{ Params: { chatId: string; filename: string } }>(
     "/scene-videos/file/:chatId/:filename",
     async (req, reply) => {

@@ -45,6 +45,8 @@ This file is the release-notes source of truth for Marinara Engine. Reuse these 
 
 ### Fixed
 
+- Skipped corrupt or undecodable Noodle timeline images before captioning and multimodal generation, allowing the refresh to continue with text instead of forwarding invalid bytes to the model (#4310).
+- Added the missing delete action for generated scene videos in the Chat Gallery, including destructive confirmation, pinned-view cleanup, and removal of only the selected video file and metadata (#4314).
 - Made Professor Mari honor requests for only the last N chat messages or messages after a displayed post number, with range-aware pagination that no longer broadens those requests into whole-chat reads (#4308).
 - Trimmed leading and trailing whitespace from Character names when cards are saved or imported (#4303).
 - Made Memory Recall discard superseded message revisions and inject only the current edited message text (#4304).
