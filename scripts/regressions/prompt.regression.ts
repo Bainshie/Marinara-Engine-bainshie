@@ -453,7 +453,6 @@ import {
 import {
   buildRoleplayVideoDirectionUserPrompt,
   resolveRoleplayVideoDirection,
-  ROLEPLAY_VIDEO_DIRECTION_SYSTEM_PROMPT,
 } from "../../packages/server/src/services/video/roleplay-video-direction.js";
 import { resolveGameGmPromptTemplate } from "../../packages/server/src/services/generation/game-gm-prompt-runtime.js";
 import { countConversationMessagesAfterSummaryAnchor } from "../../packages/server/src/services/conversation/auto-summary.service.js";
@@ -599,7 +598,11 @@ import {
 import { executeToolCalls } from "../../packages/server/src/services/tools/tool-executor.js";
 import { parseRouterResponse } from "../../packages/server/src/services/agents/knowledge-router.js";
 import type { PromptOverridesStorage } from "../../packages/server/src/services/storage/prompt-overrides.storage.js";
-import { listPromptOverrideKeys } from "../../packages/server/src/services/prompt-overrides/index.js";
+import {
+  listPromptOverrideKeys,
+  loadPrompt,
+  ROLEPLAY_GALLERY_VIDEO_DIRECTOR,
+} from "../../packages/server/src/services/prompt-overrides/index.js";
 import {
   buildElevenLabsTextInput,
   detectTTSAudioMimeType,
@@ -3317,7 +3320,7 @@ const cases: RegressionCase[] = [
   },
   {
     name: "Roleplay Gallery Animate uses the selected image's source narration",
-    run() {
+    async run() {
       const messages = [
         {
           id: "source-request",
@@ -3398,10 +3401,41 @@ const cases: RegressionCase[] = [
         characterNames: ["Mira"],
         setting: "Ruined hall at night",
       });
-      assert.match(ROLEPLAY_VIDEO_DIRECTION_SYSTEM_PROMPT, /exact first frame at time zero/u);
-      assert.match(ROLEPLAY_VIDEO_DIRECTION_SYSTEM_PROMPT, /camera movement/u);
-      assert.match(ROLEPLAY_VIDEO_DIRECTION_SYSTEM_PROMPT, /ambient audio/u);
-      assert.match(ROLEPLAY_VIDEO_DIRECTION_SYSTEM_PROMPT, /Do not repeat a static image description/u);
+      const defaultDirectorPrompt = ROLEPLAY_GALLERY_VIDEO_DIRECTOR.defaultBuilder({ durationSeconds: 6 });
+      assert.match(defaultDirectorPrompt, /one 6-second image-to-video Roleplay clip/u);
+      assert.match(defaultDirectorPrompt, /inside the 6-second runtime/u);
+      assert.match(defaultDirectorPrompt, /exact first frame at time zero/u);
+      assert.match(defaultDirectorPrompt, /camera movement/u);
+      assert.match(defaultDirectorPrompt, /ambient audio/u);
+      assert.match(defaultDirectorPrompt, /Do not repeat a static image description/u);
+      assert.equal(listPromptOverrideKeys().includes("roleplay.galleryVideoDirector"), true);
+      const directorOverrideStorage = {
+        async get(key: string) {
+          if (key !== ROLEPLAY_GALLERY_VIDEO_DIRECTOR.key) return null;
+          return {
+            key,
+            template: "Direct one ${durationSeconds}-second Roleplay animation.",
+            enabled: true,
+            updatedAt: "2026-01-01T00:00:00.000Z",
+          };
+        },
+        async list() {
+          return [];
+        },
+        async upsert(input) {
+          return {
+            key: input.key,
+            template: input.template,
+            enabled: input.enabled,
+            updatedAt: "2026-01-01T00:00:00.000Z",
+          };
+        },
+        async remove() {},
+      } satisfies PromptOverridesStorage;
+      assert.equal(
+        await loadPrompt(directorOverrideStorage, ROLEPLAY_GALLERY_VIDEO_DIRECTOR, { durationSeconds: 12 }),
+        "Direct one 12-second Roleplay animation.",
+      );
       assert.match(directionUserPrompt, /<source_exchange>[\s\S]*Draw the blade/u);
       assert.match(directionUserPrompt, /<first_frame_generation_context>/u);
       assert.equal(
@@ -3430,7 +3464,8 @@ const cases: RegressionCase[] = [
       );
       assert.match(galleryRouteSource, /!promptDraft && chat\.mode === "roleplay"/u);
       assert.match(galleryRouteSource, /resolveIllustratorPromptRuntime/u);
-      assert.match(galleryRouteSource, /ROLEPLAY_VIDEO_DIRECTION_SYSTEM_PROMPT/u);
+      assert.match(galleryRouteSource, /loadPrompt\(promptOverridesStorage, ROLEPLAY_GALLERY_VIDEO_DIRECTOR/u);
+      assert.match(galleryRouteSource, /\{ role: "system", content: systemPrompt \}/u);
       assert.match(galleryRouteSource, /input\.promptOverride\?\.trim\(\) \?\? ""/u);
       assert.doesNotMatch(galleryRouteSource, /chat\.mode === "roleplay"[\s\S]{0,400}gameStoryboard/u);
     },

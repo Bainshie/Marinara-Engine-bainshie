@@ -24,6 +24,7 @@ import { createConnectionsStorage } from "../services/storage/connections.storag
 import { createAgentsStorage } from "../services/storage/agents.storage.js";
 import { createGameSceneVideosStorage } from "../services/storage/game-scene-videos.storage.js";
 import { createPromptOverridesStorage } from "../services/storage/prompt-overrides.storage.js";
+import { loadPrompt, ROLEPLAY_GALLERY_VIDEO_DIRECTOR } from "../services/prompt-overrides/index.js";
 import { createAppSettingsStorage } from "../services/storage/app-settings.storage.js";
 import { loadGameVideoPrompt } from "../services/video/game-video-prompt.js";
 import {
@@ -78,7 +79,6 @@ import { resolveSceneVideoPrompt, SceneVideoPromptReviewError } from "../service
 import {
   buildRoleplayVideoDirectionUserPrompt,
   resolveRoleplayVideoDirection,
-  ROLEPLAY_VIDEO_DIRECTION_SYSTEM_PROMPT,
 } from "../services/video/roleplay-video-direction.js";
 import { isDebugAgentsEnabled } from "../config/runtime-config.js";
 import { newId } from "../utils/id-generator.js";
@@ -766,17 +766,20 @@ export async function galleryRoutes(app: FastifyInstance) {
         characterNames,
         setting: buildRoleplayVideoSettingLine(chat, meta, videoRuntime.promptLimits.artStyle),
       });
+      const systemPrompt = await loadPrompt(promptOverridesStorage, ROLEPLAY_GALLERY_VIDEO_DIRECTOR, {
+        durationSeconds,
+      });
       const debugOverrideEnabled = input.debugMode === true || isDebugAgentsEnabled();
       logDebugOverride(
         debugOverrideEnabled,
         "[debug/gallery/roleplay-video-director] system:\n%s\nuser:\n%s",
-        ROLEPLAY_VIDEO_DIRECTION_SYSTEM_PROMPT,
+        systemPrompt,
         userPrompt,
       );
       try {
         const result = await promptRuntime.provider.chatComplete(
           [
-            { role: "system", content: ROLEPLAY_VIDEO_DIRECTION_SYSTEM_PROMPT },
+            { role: "system", content: systemPrompt },
             { role: "user", content: userPrompt },
           ],
           {

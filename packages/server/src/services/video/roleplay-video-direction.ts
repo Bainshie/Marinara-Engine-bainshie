@@ -11,17 +11,6 @@ export interface RoleplayVideoDirectionContext {
   setting: string;
 }
 
-export const ROLEPLAY_VIDEO_DIRECTION_SYSTEM_PROMPT = [
-  "You are an animation director for one short image-to-video Roleplay clip.",
-  "The supplied reference image is the exact first frame at time zero.",
-  "Plan only the action already happening in the source exchange or its immediate visual follow-through.",
-  "Describe one continuous shot with concrete subject motion, camera movement, point of view, environmental motion, spoken dialogue only when supported by the source, sound effects, and ambient audio.",
-  "Keep identities, clothing, objects, setting, lighting, and composition continuous with the first frame.",
-  "Do not repeat a static image description, list character traits, invent the user's next reply, continue into a new story beat, add cuts or a montage, or mention prompts, storyboards, keyframes, timestamps, or the reference image.",
-  "End on a stable hold that can loop or cut cleanly.",
-  'Return only JSON in this exact shape: {"narrationBeat":"one cohesive animation direction"}',
-].join("\n");
-
 export function buildRoleplayVideoDirectionUserPrompt(ctx: RoleplayVideoDirectionContext): string {
   const characterLine =
     ctx.characterNames.length > 0 ? ctx.characterNames.join(", ") : "Use only people visible in the scene.";
