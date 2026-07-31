@@ -29,6 +29,9 @@ import { chatBackgroundMetadataToUrl, chatBackgroundUrlToMetadata } from "../../
 import { useChatStore } from "../../stores/chat.store";
 import { useUIStore } from "../../stores/ui.store";
 import { ChoiceSelectionModal } from "../presets/ChoiceSelectionModal";
+import { ChatCharacterDropOptions } from "./ChatCharacterDropOptions";
+
+type CharacterDropOptions = { chatId: string; characterId: string; characterName: string; askGreeting: boolean };
 
 type OverlayState = {
   payload: ChatResourceDragPayload;
@@ -76,6 +79,7 @@ export function ChatResourceDropOverlay({ chat }: { chat: Chat }) {
   const chatRef = useRef(chat);
   const [overlay, setOverlay] = useState<OverlayState | null>(null);
   const [choicePresetId, setChoicePresetId] = useState<string | null>(null);
+  const [characterOptions, setCharacterOptions] = useState<CharacterDropOptions | null>(null);
   chatRef.current = chat;
 
   const resolveOverlay = useCallback((target: EventTarget | null, dataTransfer: DataTransfer) => {
@@ -180,6 +184,14 @@ export function ChatResourceDropOverlay({ chat }: { chat: Chat }) {
             id: currentChat.id,
             characterIds: nextIds,
           });
+          if (latestAction.ids.length === 1) {
+            setCharacterOptions({
+              chatId: currentChat.id,
+              characterId: latestAction.ids[0]!,
+              characterName: latestAction.label,
+              askGreeting: currentChat.mode !== "conversation",
+            });
+          }
           toast.success(t("ui.chat.chatresourcedropoverlay.addedToChat", { name: latestAction.label }), {
             action: {
               label: t("ui.chat.chatresourcedropoverlay.undo"),
@@ -189,6 +201,7 @@ export function ChatResourceDropOverlay({ chat }: { chat: Chat }) {
                   toast.info(t("ui.chat.chatresourcedropoverlay.undoUnavailable"));
                   return;
                 }
+                setCharacterOptions(null);
                 updateChat.mutate({ id: currentChat.id, characterIds: previousIds });
               },
             },
@@ -382,7 +395,9 @@ export function ChatResourceDropOverlay({ chat }: { chat: Chat }) {
   return (
     <>
       {overlay && createPortal(<div
-      className="pointer-events-none fixed z-[10010] flex items-center justify-center bg-[var(--background)]/35 p-6"
+      className={`mari-chat-drop-zone pointer-events-none fixed z-[10010] flex items-center justify-center p-6 ${
+        overlay.action.type === "blocked" ? "mari-chat-drop-zone--blocked" : ""
+      }`}
       style={{ left: overlay.rect.left, top: overlay.rect.top, width: overlay.rect.width, height: overlay.rect.height }}
       role="status"
       aria-live="polite"
@@ -390,15 +405,15 @@ export function ChatResourceDropOverlay({ chat }: { chat: Chat }) {
       <div
         className={
           overlay.action.type === "blocked"
-            ? "flex max-w-sm items-center gap-3 rounded-lg border border-[var(--border)] bg-[var(--card)] px-4 py-3 text-[var(--muted-foreground)] shadow-xl"
-            : "flex max-w-sm items-center gap-3 rounded-lg border border-[var(--primary)] bg-[var(--card)] px-4 py-3 text-[var(--foreground)] shadow-xl"
+            ? "mari-chat-drop-card flex max-w-sm items-center gap-3 rounded-xl border border-[var(--destructive)]/60 bg-[var(--card)]/95 px-4 py-3 text-[var(--muted-foreground)] shadow-2xl backdrop-blur-sm"
+            : "mari-chat-drop-card flex max-w-sm items-center gap-3 rounded-xl border border-[var(--primary)] bg-[var(--card)]/95 px-4 py-3 text-[var(--foreground)] shadow-2xl backdrop-blur-sm"
         }
       >
         <span
           className={
             overlay.action.type === "blocked"
-              ? "flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-[var(--secondary)] text-[var(--muted-foreground)]"
-              : "flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-[var(--primary)] text-[var(--primary-foreground)]"
+              ? "flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[var(--destructive)]/15 text-[var(--destructive)]"
+              : "mari-chat-drop-icon flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[var(--primary)] text-[var(--primary-foreground)]"
           }
         >
           {getActionIcon(overlay.action)}
@@ -419,6 +434,11 @@ export function ChatResourceDropOverlay({ chat }: { chat: Chat }) {
                     : overlay.action.type === "set-connection"
                       ? t("ui.chat.chatresourcedropoverlay.useConnection", { name: overlay.payload.label })
                       : t("ui.chat.chatresourcedropoverlay.useBackground", { name: overlay.payload.label })}
+          <span className="mt-0.5 block text-xs font-normal text-[var(--muted-foreground)]">
+            {overlay.action.type === "blocked"
+              ? t("ui.chat.chatresourcedropoverlay.cannotDropHint")
+              : t("ui.chat.chatresourcedropoverlay.releaseToDropHint")}
+          </span>
         </span>
       </div>
     </div>, document.body)}
@@ -430,6 +450,13 @@ export function ChatResourceDropOverlay({ chat }: { chat: Chat }) {
         existingChoices={{}}
         chatFloatingPanel
       />
+      {characterOptions && (
+        <ChatCharacterDropOptions
+          key={`${characterOptions.chatId}:${characterOptions.characterId}`}
+          {...characterOptions}
+          onClose={() => setCharacterOptions(null)}
+        />
+      )}
     </>
   );
 }

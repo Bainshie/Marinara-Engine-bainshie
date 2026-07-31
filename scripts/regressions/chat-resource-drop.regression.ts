@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { resolveChatResourceDropAction } from "../../packages/client/src/lib/chat-resource-drop-capabilities.js";
 import { parseChatResourceDragPayload } from "../../packages/client/src/lib/chat-resource-drag.js";
+import { readCharacterGreetings } from "../../packages/client/src/lib/character-greetings.js";
 
 const baseChat = {
   mode: "roleplay" as const,
@@ -187,5 +188,28 @@ assert.deepEqual(
   }),
   { version: 1, kind: "connection", ids: ["connection-1"], label: "Text connection" },
 );
+
+// Character drop follow-up: greetings offered after a character lands in the chat.
+assert.deepEqual(
+  readCharacterGreetings(
+    JSON.stringify({
+      first_mes: " Hello there ",
+      alternate_greetings: ["Hi again", "  ", 7],
+      extensions: { dialogueColor: "#ff0000" },
+    }),
+  ),
+  {
+    greetings: [
+      { text: "Hello there", alternateIndex: null },
+      { text: "Hi again", alternateIndex: 1 },
+    ],
+    dialogueColor: "#ff0000",
+  },
+);
+assert.deepEqual(readCharacterGreetings("not json"), { greetings: [] });
+assert.deepEqual(readCharacterGreetings({ alternate_greetings: ["Only alt"] }), {
+  greetings: [{ text: "Only alt", alternateIndex: 2 - 1 }],
+  dialogueColor: undefined,
+});
 
 console.info("Chat resource drop regressions passed.");
