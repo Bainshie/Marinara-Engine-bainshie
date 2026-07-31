@@ -81,6 +81,7 @@ import { useTranslation as useUiTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 import { Modal } from "../ui/Modal";
 import { clearActiveChatResourceDrag, writeChatResourceDragPayload } from "../../lib/chat-resource-drag";
+import { ChatResourceActionButton } from "../chat/ChatResourceActionButton";
 
 type JsonRecord = Record<string, unknown>;
 type NormalizedAgentImport = NonNullable<ReturnType<typeof normalizeAgentImportEntry>>;
@@ -1539,7 +1540,7 @@ function renderAgentCard({
         )}
       </button>
       <button
-        className={cn("min-w-0 flex-1 text-left", !selectionMode && (onDelete ? "pr-16" : "pr-10"))}
+        className={cn("min-w-0 flex-1 text-left", !selectionMode && (onDelete ? "pr-24" : "pr-16"))}
         onClick={(event) => {
           event.stopPropagation();
           if (suppressClickRef?.current) return;
@@ -1560,6 +1561,7 @@ function renderAgentCard({
       </button>
       {!selectionMode && (
         <div className="absolute right-2 top-1/2 flex -translate-y-1/2 shrink-0 items-center gap-0.5 rounded-lg bg-[var(--sidebar)] px-1 py-0.5 opacity-0 shadow-sm ring-1 ring-[var(--border)] transition-opacity group-hover:opacity-100 max-md:opacity-100">
+          <ChatResourceActionButton payload={{ version: 1, kind: "agent", ids: [id], label: name }} />
           <button
             className="mari-chrome-control mari-chrome-control--small p-1.5"
             title={localizeUi("ui.panels.agentcard.copyAgent")}

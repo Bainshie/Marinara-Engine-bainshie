@@ -56,6 +56,7 @@ import { SmoothFolderContent } from "../ui/SmoothFolderContent";
 import { TouchDragHandle } from "../ui/TouchDragHandle";
 import { PanelLoadMoreBar } from "./PanelLoadMoreBar";
 import { clearActiveChatResourceDrag, writeChatResourceDragPayload } from "../../lib/chat-resource-drag";
+import { ChatResourceActionButton } from "../chat/ChatResourceActionButton";
 
 type CharacterRow = {
   id: string;
@@ -1231,6 +1232,10 @@ export function CharactersPanel() {
                           data-character-row-actions
                           className="absolute right-1 top-1/2 flex -translate-y-1/2 items-center gap-0.5 rounded-lg bg-[var(--sidebar)] p-0.5 opacity-0 shadow-sm ring-1 ring-[var(--border)] transition-opacity group-hover/member:opacity-100 max-md:opacity-100"
                         >
+                          <ChatResourceActionButton
+                            payload={{ version: 1, kind: "character", ids: [memberId], label: memberName }}
+                            className="flex h-5 min-h-5 w-5 items-center justify-center rounded-md p-0"
+                          />
                           <button
                             type="button"
                             onClick={(e) => {
@@ -1480,7 +1485,7 @@ export function CharactersPanel() {
               </div>
 
               {/* Info */}
-              <div className={cn("min-w-0 flex-1", !selectionMode && "pr-[4.5rem] max-md:pr-16")}>
+              <div className={cn("min-w-0 flex-1", !selectionMode && "pr-[6.5rem] max-md:pr-20")}>
                 <div
                   data-character-row-name
                   className="truncate text-sm font-medium"
@@ -1545,8 +1550,12 @@ export function CharactersPanel() {
               {!selectionMode && (
                 <div
                   data-character-row-actions
-                  className="absolute right-2 top-1/2 grid w-16 -translate-y-1/2 grid-cols-2 gap-0.5 rounded-lg bg-[var(--sidebar)] p-1 opacity-0 shadow-sm ring-1 ring-[var(--border)] transition-opacity group-hover:opacity-100 max-md:w-14 max-md:opacity-100"
+                  className="absolute right-2 top-1/2 grid w-24 -translate-y-1/2 grid-cols-3 gap-0.5 rounded-lg bg-[var(--sidebar)] p-1 opacity-0 shadow-sm ring-1 ring-[var(--border)] transition-opacity group-hover:opacity-100 max-md:w-20 max-md:opacity-100"
                 >
+                  <ChatResourceActionButton
+                    payload={{ version: 1, kind: "character", ids: [char.id], label: charName }}
+                    className="mari-character-row-action flex w-full items-center justify-center"
+                  />
                   <button
                     type="button"
                     onClick={(e) => {
@@ -1600,7 +1609,7 @@ export function CharactersPanel() {
                         characterName: charName,
                       });
                     }}
-                    className="mari-chrome-control mari-character-row-action col-span-2 flex w-full items-center justify-center gap-1 border-[var(--marinara-chat-chrome-button-border-active)] bg-[var(--marinara-chat-chrome-button-bg-active)] text-[0.625rem] font-semibold text-[var(--marinara-chat-chrome-button-text-active)] max-md:text-[0.5625rem]"
+                    className="mari-chrome-control mari-character-row-action col-span-3 flex w-full items-center justify-center gap-1 border-[var(--marinara-chat-chrome-button-border-active)] bg-[var(--marinara-chat-chrome-button-bg-active)] text-[0.625rem] font-semibold text-[var(--marinara-chat-chrome-button-text-active)] max-md:text-[0.5625rem]"
                     title={localizeUi("ui.panels.characterspanel.startNewChatWithValue1", {
                       value1: charName,
                     })}

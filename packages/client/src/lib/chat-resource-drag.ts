@@ -1,4 +1,5 @@
 export const CHAT_RESOURCE_DRAG_MIME = "application/x-marinara-chat-resource";
+export const CHAT_RESOURCE_ASSIGN_EVENT = "marinara:assign-chat-resource";
 
 export type ChatResourceDragKind =
   | "character"
@@ -71,4 +72,8 @@ export function isChatResourceDrag(dataTransfer: DataTransfer) {
 
 export function isFileDrag(dataTransfer: DataTransfer) {
   return dataTransfer.types.includes("Files") || Array.from(dataTransfer.items).some((item) => item.kind === "file");
+}
+
+export function requestChatResourceAssignment(payload: ChatResourceDragPayload) {
+  window.dispatchEvent(new CustomEvent<ChatResourceDragPayload>(CHAT_RESOURCE_ASSIGN_EVENT, { detail: payload }));
 }

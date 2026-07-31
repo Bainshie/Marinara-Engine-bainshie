@@ -2322,6 +2322,7 @@
   "ui.chat.chatnotificationbubbles.couldNotAnswerTheCall": "Could not answer the call.",
   "ui.chat.chatnotificationbubbles.couldNotDeclineTheCall": "Could not decline the call.",
   "ui.chat.chatnotificationbubbles.value1Conversations": "{{value1}} conversations",
+  "ui.chat.chatresourceactionbutton.addToActiveChat": "Add {{name}} to the active chat",
   "ui.chat.chatresourcedropoverlay.addAgents": "Add {{name}} to this chat",
   "ui.chat.chatresourcedropoverlay.addCharacters": "Add {{name}} to this chat",
   "ui.chat.chatresourcedropoverlay.addedToChat": "Added {{name}} to this chat.",

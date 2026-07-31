@@ -11,6 +11,7 @@ import { useConnections } from "../../hooks/use-connections";
 import { showConfirmDialog } from "../../lib/app-dialogs";
 import {
   CHAT_RESOURCE_DRAG_MIME,
+  CHAT_RESOURCE_ASSIGN_EVENT,
   clearActiveChatResourceDrag,
   getActiveChatResourceDrag,
   readChatResourceDragPayload,
@@ -331,6 +332,15 @@ export function ChatResourceDropOverlay({ chat }: { chat: Chat }) {
       window.removeEventListener("dragend", clear, true);
     };
   }, [applyAction, resolveOverlay]);
+
+  useEffect(() => {
+    const assign = (event: Event) => {
+      const payload = (event as CustomEvent<ChatResourceDragPayload>).detail;
+      if (payload) void applyAction(payload);
+    };
+    window.addEventListener(CHAT_RESOURCE_ASSIGN_EVENT, assign);
+    return () => window.removeEventListener(CHAT_RESOURCE_ASSIGN_EVENT, assign);
+  }, [applyAction]);
 
   if (!overlay) return null;
   return createPortal(

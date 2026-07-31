@@ -41,6 +41,7 @@ import { TouchDragHandle } from "../../ui/TouchDragHandle";
 import { Modal } from "../../ui/Modal";
 import { useTranslation as useUiTranslation } from "react-i18next";
 import { clearActiveChatResourceDrag, writeChatResourceDragPayload } from "../../../lib/chat-resource-drag";
+import { ChatResourceActionButton } from "../../chat/ChatResourceActionButton";
 
 type BackgroundLibraryItem = {
   id: string;
@@ -812,6 +813,10 @@ export function BackgroundPicker({
                 "md:absolute md:bottom-2 md:right-2 md:flex-nowrap md:rounded-lg md:bg-black/60 md:px-0.5 md:pb-0.5 md:pt-0.5 md:opacity-0 md:backdrop-blur-sm md:transition-opacity md:group-hover:opacity-100 md:group-focus-within:opacity-100",
             )}
           >
+            <ChatResourceActionButton
+              payload={{ version: 1, kind: "background", ids: [background.url], label: title }}
+              className={cn(CARD_ACTION_CLASS, isFloatingActions && FLOATING_CARD_ACTION_CLASS)}
+            />
             <button
               type="button"
               data-background-move

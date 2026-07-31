@@ -66,6 +66,7 @@ import { useLocalizedUiText } from "../../localization/use-localized-ui-text";
 import { useTranslation as useUiTranslation } from "react-i18next";
 import { PanelLoadMoreBar } from "./PanelLoadMoreBar";
 import { clearActiveChatResourceDrag, writeChatResourceDragPayload } from "../../lib/chat-resource-drag";
+import { ChatResourceActionButton } from "../chat/ChatResourceActionButton";
 
 const CATEGORIES: Array<{ id: LorebookCategory | "all" | "active"; label: string }> = [
   { id: "all", label: "All" },
@@ -1226,7 +1227,7 @@ function LorebookRow({
           </span>
         </button>
       )}
-      <div className={cn("min-w-0 flex-1", !selectionMode && "pr-16")}>
+      <div className={cn("min-w-0 flex-1", !selectionMode && "pr-24")}>
         <div className="flex items-center gap-1.5">
           <span className="truncate text-sm font-medium">{lorebook.name}</span>
           {!lorebook.enabled && (
@@ -1247,6 +1248,9 @@ function LorebookRow({
       </div>
       {!selectionMode && (
         <div className="absolute right-2 top-1/2 -translate-y-1/2 flex shrink-0 items-center gap-0.5 rounded-lg bg-[var(--sidebar)] px-1 py-0.5 opacity-0 shadow-sm ring-1 ring-[var(--border)] transition-opacity group-hover:opacity-100 max-md:opacity-100">
+          <ChatResourceActionButton
+            payload={{ version: 1, kind: "lorebook", ids: [lorebook.id], label: lorebook.name }}
+          />
           <button
             onClick={(e) => {
               e.stopPropagation();

@@ -1675,6 +1675,50 @@ test("Characters can be dragged from the right panel into the active chat", asyn
   }
 });
 
+test("Character row actions can add a resource to the active chat without dragging", async ({ page, request }) => {
+  const suffix = Date.now().toString(36);
+  const characterName = `Chat Action Character ${suffix}`;
+  const characterResponse = await request.post("/api/characters", {
+    data: { data: { name: characterName } },
+  });
+  expect(characterResponse.ok()).toBeTruthy();
+  const character = (await characterResponse.json()) as { id: string };
+  const chatResponse = await request.post("/api/chats", {
+    data: { name: `Chat Action ${suffix}`, mode: "conversation", characterIds: [] },
+  });
+  expect(chatResponse.ok()).toBeTruthy();
+  const chat = (await chatResponse.json()) as { id: string };
+
+  try {
+    await page.goto("/");
+    await page.evaluate(async (chatId) => {
+      const module = await import("/src/stores/chat.store.ts");
+      module.useChatStore.getState().setActiveChatId(chatId);
+    }, chat.id);
+    await expect(page.locator('[data-chat-resource-drop-surface]')).toBeVisible();
+    await page.locator('[data-tour="panel-characters"]').click();
+
+    const characterRow = page.locator('[data-touch-drag-card="character"]').filter({ hasText: characterName });
+    const addAction = characterRow.locator('[data-chat-resource-action="character"]');
+    await expect(addAction).toBeVisible();
+    await addAction.click();
+
+    await expect
+      .poll(async () => {
+        const response = await request.get(`/api/chats/${chat.id}`);
+        const stored = (await response.json()) as { characterIds?: string[] | string };
+        return typeof stored.characterIds === "string" ? JSON.parse(stored.characterIds) : (stored.characterIds ?? []);
+      })
+      .toContain(character.id);
+    await expect(characterRow.locator('[data-chat-resource-action="character"]')).toHaveCount(0);
+  } finally {
+    await Promise.all([
+      request.delete(`/api/chats/${chat.id}`).catch(() => undefined),
+      request.delete(`/api/characters/${character.id}`).catch(() => undefined),
+    ]);
+  }
+});
+
 test("Dropping a persona confirms before replacing the active chat persona", async ({ page, request }, testInfo) => {
   test.skip(testInfo.project.name.includes("mobile"), "HTML resource dragging is covered on desktop.");
 
