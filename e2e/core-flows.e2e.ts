@@ -1785,14 +1785,15 @@ test("Characters can be dragged from the right panel into the active chat", asyn
       const module = await import("/src/stores/chat.store.ts");
       module.useChatStore.getState().setActiveChatId(chatId);
     }, chat.id);
-    await expect(page.locator('[data-chat-resource-drop-surface]')).toBeVisible();
+    const dropSurface = page.locator('[data-chat-resource-drop-surface]');
+    await expect(dropSurface).toBeVisible();
 
     await page.locator('[data-tour="panel-characters"]').click();
     const rightPanel = page.locator('[data-component="RightPanelDesktop"]');
     const characterRow = rightPanel.locator('[data-touch-drag-card="character"]').filter({ hasText: characterName });
     await expect(characterRow).toBeVisible();
 
-    await dragChatResource(page, characterRow, page.locator('[data-chat-resource-drop-surface]'));
+    await dragChatResource(page, characterRow, dropSurface);
 
     await expect.poll(() => getChatCharacterIds(request, chat.id)).toContain(character.id);
   } finally {

@@ -3120,7 +3120,10 @@ export function ChatSettingsDrawer({
     if (!open) return;
     const consumeRequest = () => {
       const ids = takePendingChatAgentSetupIds();
-      if (ids.length > 0) setAgentSetupQueue(ids);
+      if (ids.length > 0) {
+        // Dropped agents are already active by this point, so only dedupe against the setup queue.
+        setAgentSetupQueue((current) => Array.from(new Set([...current, ...ids])));
+      }
     };
     consumeRequest();
     window.addEventListener(CHAT_RESOURCE_AGENT_SETUP_EVENT, consumeRequest);

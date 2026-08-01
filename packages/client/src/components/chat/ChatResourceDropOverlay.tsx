@@ -52,6 +52,8 @@ type ResourceRegistryRow = {
   libraryHidden?: unknown;
 };
 
+type ResourceListRefetch = () => Promise<{ data?: unknown }>;
+
 function findDropSurface(target: EventTarget | null) {
   if (!(target instanceof Element) || target.closest("[data-chat-resource-drop-exclude]")) return null;
   return target.closest<HTMLElement>("[data-chat-resource-drop-surface]");
@@ -140,7 +142,10 @@ function sameAction(left: ChatResourceDropResult, right: ChatResourceDropResult)
   return false;
 }
 
-async function readAvailableResourceIds(kind: ChatResourceDragPayload["kind"]): Promise<Set<string>> {
+async function readAvailableResourceIds(
+  kind: ChatResourceDragPayload["kind"],
+  refetch: { presets: ResourceListRefetch; connections: ResourceListRefetch },
+): Promise<Set<string>> {
   if (kind === "agent") {
     const [manifests, configs] = await Promise.all([
       api.get<ResourceRegistryRow[]>("/capability-packages/agents"),
@@ -164,6 +169,14 @@ async function readAvailableResourceIds(kind: ChatResourceDragPayload["kind"]): 
     ]);
   }
 
+  if (kind === "preset" || kind === "connection") {
+    const result = await refetch[kind === "preset" ? "presets" : "connections"]();
+    const rows = Array.isArray(result.data) ? (result.data as ResourceRegistryRow[]) : [];
+    return new Set(
+      rows.map((row) => row.id).filter((id): id is string => typeof id === "string" && id.length > 0),
+    );
+  }
+
   const endpoint =
     kind === "character"
       ? "/characters"
@@ -171,11 +184,7 @@ async function readAvailableResourceIds(kind: ChatResourceDragPayload["kind"]): 
         ? "/characters/personas/list"
         : kind === "lorebook"
           ? "/lorebooks"
-          : kind === "preset"
-            ? "/prompts"
-            : kind === "connection"
-              ? "/connections"
-              : "/backgrounds";
+          : "/backgrounds";
   const rows = await api.get<ResourceRegistryRow[]>(endpoint);
   const field = kind === "background" ? "url" : "id";
   return new Set(
@@ -192,8 +201,8 @@ export function ChatResourceDropOverlay({ chat }: { chat: Chat }) {
   const updateChat = useUpdateChat();
   const updateMetadata = useUpdateChatMetadata();
   const { data: currentPersona } = usePersona(chat.personaId);
-  const { data: presets = [] } = usePresets();
-  const { data: connections = [] } = useConnections();
+  const { data: presets = [], refetch: refetchPresets } = usePresets();
+  const { data: connections = [], refetch: refetchConnections } = useConnections();
   const chatRef = useRef(chat);
   const overlayRef = useRef<OverlayState | null>(null);
   const [overlay, setOverlay] = useState<OverlayState | null>(null);
@@ -246,8 +255,18 @@ export function ChatResourceDropOverlay({ chat }: { chat: Chat }) {
         return;
       }
 
+      const targetChatId = currentChat.id;
       try {
-        latestAction = resolveChatResourceDropAction(payload, currentChat, await readAvailableResourceIds(payload.kind));
+        const availableResourceIds = await readAvailableResourceIds(payload.kind, {
+          presets: refetchPresets,
+          connections: refetchConnections,
+        });
+        if (useChatStore.getState().activeChatId !== targetChatId) {
+          toast.info(t("ui.chat.chatresourcedropoverlay.chatChanged"));
+          return;
+        }
+        currentChat = useChatStore.getState().activeChat ?? chatRef.current;
+        latestAction = resolveChatResourceDropAction(payload, currentChat, availableResourceIds);
       } catch (error) {
         toast.error(error instanceof Error ? error.message : t("ui.chat.chatresourcedropoverlay.failed"));
         return;
@@ -306,14 +325,15 @@ export function ChatResourceDropOverlay({ chat }: { chat: Chat }) {
               ? t("ui.chat.chatresourcedropoverlay.switch")
               : t("ui.chat.chatresourcedropoverlay.replace"),
         });
-        if (!confirmed || useChatStore.getState().activeChatId !== currentChat.id) return;
-        currentChat = useChatStore.getState().activeChat ?? chatRef.current;
+        if (!confirmed || useChatStore.getState().activeChatId !== targetChatId) return;
         try {
-          latestAction = resolveChatResourceDropAction(
-            payload,
-            currentChat,
-            await readAvailableResourceIds(payload.kind),
-          );
+          const availableResourceIds = await readAvailableResourceIds(payload.kind, {
+            presets: refetchPresets,
+            connections: refetchConnections,
+          });
+          if (useChatStore.getState().activeChatId !== targetChatId) return;
+          currentChat = useChatStore.getState().activeChat ?? chatRef.current;
+          latestAction = resolveChatResourceDropAction(payload, currentChat, availableResourceIds);
         } catch (error) {
           toast.error(error instanceof Error ? error.message : t("ui.chat.chatresourcedropoverlay.failed"));
           return;
@@ -497,7 +517,16 @@ export function ChatResourceDropOverlay({ chat }: { chat: Chat }) {
         toast.error(error instanceof Error ? error.message : t("ui.chat.chatresourcedropoverlay.failed"));
       }
     },
-    [connections, currentPersona?.name, presets, t, updateChat, updateMetadata],
+    [
+      connections,
+      currentPersona?.name,
+      presets,
+      refetchConnections,
+      refetchPresets,
+      t,
+      updateChat,
+      updateMetadata,
+    ],
   );
 
   useEffect(() => {
