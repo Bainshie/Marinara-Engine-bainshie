@@ -854,6 +854,7 @@ export function PresetsPanel() {
             onTouchStart={(event) => {
               startPresetTouchDrag(event, preset.id, {
                 allowInteractiveTarget: true,
+                chatResourcePayload: { version: 1, kind: "preset", ids: [preset.id], label: preset.name },
                 sourceElement: event.currentTarget.closest<HTMLElement>('[data-touch-drag-card="preset"]'),
               });
             }}

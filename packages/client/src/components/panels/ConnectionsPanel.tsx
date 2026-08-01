@@ -1706,6 +1706,13 @@ export function ConnectionsPanel() {
         onTouchStart={(event) => {
           startConnectionTouchDrag(event, conn.id, {
             allowInteractiveTarget: true,
+            chatResourcePayload: {
+              version: 1,
+              kind: "connection",
+              ids: [conn.id],
+              label: conn.name,
+              ...(isLanguageGenerationConnection(conn) ? {} : { unsupported: "connection-kind" as const }),
+            },
             sourceElement: event.currentTarget.closest<HTMLElement>('[data-touch-drag-card="connection"]'),
           });
         }}

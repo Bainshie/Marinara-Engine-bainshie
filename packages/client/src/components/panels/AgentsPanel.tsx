@@ -18,7 +18,6 @@ import {
   Check,
   FolderPlus,
   ArrowUpDown,
-  GripVertical,
   ShieldCheck,
   TriangleAlert,
 } from "lucide-react";
@@ -49,6 +48,8 @@ import { confirmNonEmptyFolderDelete, showChoiceDialog, showConfirmDialog } from
 import { cn } from "../../lib/utils";
 import { sortBasicPanelItems } from "../../lib/panel-sort";
 import { downloadZipFile } from "../../lib/download-zip";
+import { useTouchFolderDrag } from "../../hooks/use-touch-folder-drag";
+import { TouchDragHandle } from "../ui/TouchDragHandle";
 import {
   countSkippedAgentImportFunctions,
   createAgentFolderPackageFilename,
@@ -492,6 +493,44 @@ export function AgentsPanel() {
     [draggedAgentId, moveAgentItem],
   );
 
+  const finishAgentTouchDrag = useCallback(
+    (agentId: string, x: number, y: number) => {
+      const target = document.elementFromPoint(x, y);
+      const folderElement = target?.closest("[data-agent-folder-id]") as HTMLElement | null;
+      const rootElement = target?.closest("[data-agent-folder-root]") as HTMLElement | null;
+      if (folderElement?.dataset.agentFolderId) {
+        handleAgentDrop(folderElement.dataset.agentFolderId, getDraggedAgentIds(agentId));
+      } else if (rootElement) {
+        handleAgentDrop(null, getDraggedAgentIds(agentId));
+      }
+      setDraggedAgentId(null);
+      window.setTimeout(() => {
+        suppressAgentClickRef.current = false;
+      }, 0);
+    },
+    [getDraggedAgentIds, handleAgentDrop],
+  );
+
+  const cancelAgentTouchDrag = useCallback((_agentId: string, wasActive: boolean) => {
+    setDraggedAgentId(null);
+    if (wasActive) {
+      window.setTimeout(() => {
+        suppressAgentClickRef.current = false;
+      }, 0);
+    } else {
+      suppressAgentClickRef.current = false;
+    }
+  }, []);
+
+  const { startTouchDrag: startAgentTouchDrag } = useTouchFolderDrag({
+    onActivate: (agentId) => {
+      suppressAgentClickRef.current = true;
+      setDraggedAgentId(agentId);
+    },
+    onDrop: finishAgentTouchDrag,
+    onCancel: cancelAgentTouchDrag,
+  });
+
   const handleExportSelectedAgents = useCallback(async () => {
     if (selectedAgents.length === 0) {
       toast.error(localizeUi("ui.panels.agentspanel.selectAtLeastOneAgentToExport"));
@@ -776,6 +815,22 @@ export function AgentsPanel() {
           setDraggedAgentId(null);
           clearActiveChatResourceDrag();
         },
+        onTouchStart: (event) =>
+          startAgentTouchDrag(event, agent.id, {
+            allowInteractiveTarget: true,
+            sourceElement: event.currentTarget.closest<HTMLElement>('[data-touch-drag-card="agent"]'),
+            chatResourcePayload: {
+              version: 1,
+              kind: "agent",
+              ids: getDraggedAgentTypes(agent.id),
+              label:
+                getDraggedAgentIds(agent.id).length === 1
+                  ? getAgentLibraryDisplayName(agent)
+                  : localizeUi("ui.chat.chatresourcedropoverlay.agentCount", {
+                      count: getDraggedAgentIds(agent.id).length,
+                    }),
+            },
+          }),
         nativeDragEnabled: nativeAgentDragEnabled,
         touchSafeDragMode: touchSafeAgentDragMode,
         suppressClickRef: suppressAgentClickRef,
@@ -807,6 +862,7 @@ export function AgentsPanel() {
       handleDuplicateAgent,
       nativeAgentDragEnabled,
       openAgentDetail,
+      startAgentTouchDrag,
       selectedAgentIds,
       selectionMode,
       touchSafeAgentDragMode,
@@ -1182,6 +1238,22 @@ export function AgentsPanel() {
                     setDraggedAgentId(null);
                     clearActiveChatResourceDrag();
                   },
+                  onTouchStart: (event) =>
+                    startAgentTouchDrag(event, agent.id, {
+                      allowInteractiveTarget: true,
+                      sourceElement: event.currentTarget.closest<HTMLElement>('[data-touch-drag-card="agent"]'),
+                      chatResourcePayload: {
+                        version: 1,
+                        kind: "agent",
+                        ids: getDraggedAgentTypes(agent.id),
+                        label:
+                          getDraggedAgentIds(agent.id).length === 1
+                            ? agent.name
+                            : localizeUi("ui.chat.chatresourcedropoverlay.agentCount", {
+                                count: getDraggedAgentIds(agent.id).length,
+                              }),
+                      },
+                    }),
                   nativeDragEnabled: nativeAgentDragEnabled,
                   touchSafeDragMode: touchSafeAgentDragMode,
                   suppressClickRef: suppressAgentClickRef,
@@ -1249,6 +1321,22 @@ export function AgentsPanel() {
                   setDraggedAgentId(null);
                   clearActiveChatResourceDrag();
                 },
+                onTouchStart: (event) =>
+                  startAgentTouchDrag(event, agent.id, {
+                    allowInteractiveTarget: true,
+                    sourceElement: event.currentTarget.closest<HTMLElement>('[data-touch-drag-card="agent"]'),
+                    chatResourcePayload: {
+                      version: 1,
+                      kind: "agent",
+                      ids: getDraggedAgentTypes(agent.id),
+                      label:
+                        getDraggedAgentIds(agent.id).length === 1
+                          ? agent.name
+                          : localizeUi("ui.chat.chatresourcedropoverlay.agentCount", {
+                              count: getDraggedAgentIds(agent.id).length,
+                            }),
+                    },
+                  }),
                 nativeDragEnabled: nativeAgentDragEnabled,
                 touchSafeDragMode: touchSafeAgentDragMode,
                 suppressClickRef: suppressAgentClickRef,
@@ -1427,6 +1515,7 @@ function renderAgentCard({
   isDragging = false,
   onDragStart,
   onDragEnd,
+  onTouchStart,
   nativeDragEnabled = true,
   touchSafeDragMode = false,
   suppressClickRef,
@@ -1449,6 +1538,7 @@ function renderAgentCard({
   isDragging?: boolean;
   onDragStart?: (event: React.DragEvent<HTMLDivElement>) => void;
   onDragEnd?: () => void;
+  onTouchStart?: (event: React.TouchEvent<HTMLButtonElement>) => void;
   nativeDragEnabled?: boolean;
   touchSafeDragMode?: boolean;
   suppressClickRef?: { current: boolean };
@@ -1462,6 +1552,7 @@ function renderAgentCard({
     <div
       key={id}
       data-agent-card
+      data-touch-drag-card="agent"
       data-agent-name={name}
       draggable={nativeDragEnabled}
       onContextMenu={(event) => {
@@ -1489,6 +1580,9 @@ function renderAgentCard({
         touchSafeDragMode && "select-none",
       )}
     >
+      {onTouchStart && (
+        <TouchDragHandle label={localizeUi("ui.panels.agentcard.dragAgent")} onTouchStart={onTouchStart} />
+      )}
       {selectionMode && (
         <div
           className={cn(
@@ -1500,22 +1594,6 @@ function renderAgentCard({
         >
           {selected && <Check size="0.75rem" />}
         </div>
-      )}
-      {!selectionMode && (
-        <button
-          type="button"
-          aria-hidden="true"
-          tabIndex={-1}
-          title={localizeUi("ui.panels.agentcard.dragAgent")}
-          className="mari-chrome-accent-text-muted mari-accent-animated flex h-7 w-5 shrink-0 cursor-grab touch-none items-center justify-center rounded-md opacity-0 transition-all hover:bg-[var(--marinara-chat-chrome-highlight-bg)] hover:text-[var(--marinara-chat-chrome-button-text-hover)] active:cursor-grabbing active:scale-95 group-focus-within:opacity-100 group-hover:opacity-100 [@media(pointer:coarse)]:hidden"
-          onClick={(event) => event.stopPropagation()}
-          onContextMenu={(event) => {
-            event.preventDefault();
-            event.stopPropagation();
-          }}
-        >
-          <GripVertical size="0.8125rem" />
-        </button>
       )}
       <button
         type="button"

@@ -8,6 +8,7 @@ This file is the release-notes source of truth for Marinara Engine. Reuse these 
 
 ### Added
 
+- Added validated JSON export and import for Conversation character schedules. Imports load as unsaved drafts, preserve the existing schedule until explicitly saved, and move restored routines to the current week (#4414).
 - Added Z.AI as a native Image Generation service with GLM-Image and CogView 4 models, model-aware aspect-ratio sizing, authenticated native requests, and safe local storage of returned image URLs (#4350).
 - Added compact multi-selection and bulk deletion to Professor Mari's chat history, including a single destructive confirmation and automatic replacement when the active chat is removed (#4353).
 - Added Character-ID macros such as `{{V1StGXR8_Z5jdHi6B-myT}}` for loading another card's context into the system prompt without its greetings or example dialogue, while still applying normally activated attached lorebooks (#4336).
@@ -66,6 +67,7 @@ This file is the release-notes source of truth for Marinara Engine. Reuse these 
 ### Fixed
 
 - Updated Professor Mari's official Agent knowledge and public catalog counts to cover all 31 downloadable packages, including Long-Term Memory and Storyboard, and corrected her package-update guidance to match the user-confirmed update flow.
+- Kept Noodle and NoodleR navigation, search, stage-profile, and bulk-create icons on their blue and pink mode accents, and made lorebook entry-type descriptions inherit editor chrome text instead of the default pink foreground (#4417).
 - Corrected several Korean interface strings surfaced by the Korean documentation review: stale character-card update items are now labeled 오래됨 instead of the self-contradictory 적용 불가 (the modal lets you override and apply them), the Mini Mari setting keeps the product name in Latin script, Custom Sources follows the 사용자 지정 convention, the regenerate concept is unified on 재생성 across ten strings, the Verbosity parameter reads 상세도, and the release labels use the 릴리스 spelling (#4376).
 - Made Name Prefix carry each responding character's identity into post-processing Agent prompts in multi-character Roleplay while keeping rewrite agents' raw response text unchanged (#4351).
 - Painted submitted Roleplay user messages before waiting for message-query cancellation, removing the multi-second gap between pressing Send and seeing the local message (#4357).

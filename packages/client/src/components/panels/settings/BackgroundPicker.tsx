@@ -796,6 +796,7 @@ export function BackgroundPicker({
               cancelPendingClose();
               startBackgroundTouchDrag(event, background.id, {
                 allowInteractiveTarget: true,
+                chatResourcePayload: { version: 1, kind: "background", ids: [background.url], label: title },
                 sourceElement: event.currentTarget.closest<HTMLElement>('[data-touch-drag-card="background"]'),
               });
             }}
