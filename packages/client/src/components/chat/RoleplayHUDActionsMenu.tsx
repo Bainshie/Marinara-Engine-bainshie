@@ -278,7 +278,7 @@ export function RoleplayHUDActionsMenu({
               <div className="max-h-64 overflow-y-auto">
                 {diceRolls.slice().reverse().map((roll, i) => (
                   <div
-                    key={i}
+                    key={`${roll.timestamp}-${i}`}
                     className="border-b border-[var(--border)]/50 px-3 py-1.5"
                   >
                     <div className="flex items-center gap-1.5">

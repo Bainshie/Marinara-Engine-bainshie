@@ -510,11 +510,14 @@ export function useDeleteChat() {
       }
       toast.error("Couldn't delete the conversation. It has been restored.");
     },
-    onSettled: (_data, _err, input, context) => {
+    onSettled: (_data, err, input, context) => {
       const groupId = context?.groupId ?? getDeleteChatGroupId(input);
       qc.invalidateQueries({ queryKey: chatKeys.list() });
       if (groupId) {
         qc.invalidateQueries({ queryKey: chatKeys.group(groupId) });
+      }
+      if (!err) {
+        useUIStore.getState().clearDiceRollLog(getDeleteChatId(input));
       }
     },
   });
@@ -532,11 +535,12 @@ export function useDeleteChatGroup() {
       const groupId = typeof input === "string" ? input : input.groupId;
       await qc.cancelQueries({ queryKey: chatKeys.list() });
       const previous = qc.getQueryData<Chat[]>(chatKeys.list());
+      const deletedIds = previous?.filter((c) => c.groupId === groupId).map((c) => c.id) ?? [];
 
       qc.setQueryData<Chat[]>(chatKeys.list(), (old) => old?.filter((c) => c.groupId !== groupId));
       qc.setQueryData<Chat[]>(chatKeys.group(groupId), []);
 
-      return { previous, groupId };
+      return { previous, groupId, deletedIds };
     },
     onError: (_err, _input, context) => {
       if (context?.previous) qc.setQueryData(chatKeys.list(), context.previous);
@@ -544,10 +548,14 @@ export function useDeleteChatGroup() {
         qc.invalidateQueries({ queryKey: chatKeys.group(context.groupId) });
       }
     },
-    onSettled: (_data, _err, _input, context) => {
+    onSettled: (_data, err, _input, context) => {
       qc.invalidateQueries({ queryKey: chatKeys.list() });
       if (context?.groupId) {
         qc.invalidateQueries({ queryKey: chatKeys.group(context.groupId) });
+      }
+      if (!err && context?.deletedIds) {
+        const { clearDiceRollLog } = useUIStore.getState();
+        for (const id of context.deletedIds) clearDiceRollLog(id);
       }
     },
   });
