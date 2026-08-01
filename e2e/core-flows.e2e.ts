@@ -8303,7 +8303,7 @@ test("Illustrator owns the merged scene-video and Storyboard subsections while a
   }
 });
 
-test("Hierarchical Maps settings stay inside the active agent entry", async ({ page, request }, testInfo) => {
+test("World Maps stays in Agents and Chat Settings", async ({ page, request }, testInfo) => {
   test.skip(!testInfo.project.name.includes("desktop"), "Hierarchical Maps agent placement is covered on desktop.");
   test.setTimeout(90_000);
 
@@ -8470,13 +8470,10 @@ test("Hierarchical Maps settings stay inside the active agent entry", async ({ p
       sessionStorage.setItem("maps-feature-detail-chat-seeded", "true");
     }, chats[0]!.id);
     await page.goto("/");
-    const worldMapsButton = page.getByRole("button", { name: "World Maps", exact: true });
-    await expect(worldMapsButton).toBeVisible();
-    await worldMapsButton.click();
-    await expect(page.getByRole("heading", { name: "Hierarchical Maps home" })).toBeVisible();
-    await expect(page.locator('[data-tour="panel-agents"]')).not.toHaveClass(/mari-topbar-panel-icon--active/);
-    await page.getByRole("button", { name: "Back to Agents" }).click();
-    await expect(page.getByTestId("hierarchical-maps-detail")).toHaveCount(0);
+    await expect(page.locator('[data-tour="world-maps"]')).toHaveCount(0);
+    await expect(page.locator('[data-component="ChatSidebar"] button[aria-label="World Maps"]')).toHaveCount(0);
+
+    await page.locator('[data-tour="panel-agents"]').click();
     await expect(page.locator('[data-tour="panel-agents"]')).toHaveClass(/mari-topbar-panel-icon--active/);
 
     const agentsPanel = page.locator('[data-component="RightPanelDesktop"]');
