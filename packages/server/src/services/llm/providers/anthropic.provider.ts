@@ -133,6 +133,13 @@ function formatAnthropicTools(tools: LLMToolDefinition[] | undefined): Array<Rec
   }));
 }
 
+/** Anthropic's tool_choice shape: {type:"auto"} (default, omitted), {type:"any"} (force a tool), {type:"none"}. */
+function formatAnthropicToolChoice(toolChoice: ChatOptions["toolChoice"]): Record<string, unknown> | undefined {
+  if (toolChoice === "required") return { type: "any" };
+  if (toolChoice === "none") return { type: "none" };
+  return undefined;
+}
+
 function imageContentBlocks(images?: string[]): AnthropicContentBlock[] {
   if (!images?.length) return [];
   const blocks: AnthropicContentBlock[] = [];
@@ -325,6 +332,7 @@ export class AnthropicProvider extends BaseLLMProvider {
     const cacheControlMessageIndex = enableCaching
       ? resolveCacheControlMessageIndex(formattedMessages, normalizeCachingAtDepth(options.cachingAtDepth))
       : -1;
+    const toolChoice = formatAnthropicToolChoice(options.toolChoice);
 
     const body: Record<string, unknown> = {
       model: options.model,
@@ -332,6 +340,7 @@ export class AnthropicProvider extends BaseLLMProvider {
       ...(systemField !== undefined ? { system: systemField } : {}),
       messages: applyCacheControlToPayloadMessage(formattedMessages, cacheControlMessageIndex, cacheControl),
       tools: formatAnthropicTools(options.tools),
+      ...(toolChoice ? { tool_choice: toolChoice } : {}),
       stream: false,
       ...(this.shouldSendParameter(options, "temperature") && options.temperature !== undefined
         ? { temperature: clampAnthropicTemperature(options.temperature) }

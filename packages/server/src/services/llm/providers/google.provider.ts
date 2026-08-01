@@ -346,6 +346,13 @@ function formatGoogleTools(tools?: LLMToolDefinition[]): Array<Record<string, un
   ];
 }
 
+/** Gemini's functionCallingConfig.mode: AUTO (default), ANY (force a tool call), NONE (disable). */
+function formatGoogleToolChoiceMode(toolChoice: ChatOptions["toolChoice"]): "AUTO" | "ANY" | "NONE" {
+  if (toolChoice === "required") return "ANY";
+  if (toolChoice === "none") return "NONE";
+  return "AUTO";
+}
+
 function imageParts(images?: string[]): Array<Record<string, unknown>> {
   if (!images?.length) return [];
   const parts: Array<Record<string, unknown>> = [];
@@ -546,7 +553,7 @@ export class GoogleProvider extends BaseLLMProvider {
         ...(options.stop?.length ? { stopSequences: options.stop } : {}),
       },
       tools: formatGoogleTools(options.tools),
-      toolConfig: { functionCallingConfig: { mode: "AUTO" } },
+      toolConfig: { functionCallingConfig: { mode: formatGoogleToolChoiceMode(options.toolChoice) } },
     };
 
     if (systemMessages.length > 0) {
