@@ -477,8 +477,8 @@ async function installCatalogPackage(entry: CapabilityCatalogPackage, activateDu
 }
 
 export const capabilityPackageManager = {
-  async catalog(): Promise<CapabilityCatalog> {
-    const response = await safeFetch(CATALOG_URL, {
+  async catalog(fetchCatalog: typeof safeFetch = safeFetch): Promise<CapabilityCatalog> {
+    const response = await fetchCatalog(CATALOG_URL, {
       policy: { allowedProtocols: ["https:"] },
       maxResponseBytes: 2 * 1024 * 1024,
       allowedContentTypes: ["application/json", "text/plain"],

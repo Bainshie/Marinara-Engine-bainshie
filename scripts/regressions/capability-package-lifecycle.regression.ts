@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 const repositoryRoot = join(dirname(fileURLToPath(import.meta.url)), "../..");
 const dataDir = mkdtempSync(join(tmpdir(), "marinara-capability-lifecycle-"));
 process.env.DATA_DIR = dataDir;
+process.env.MARINARA_GIT_BRANCH = "staging";
 
 const packagesRoot = join(dataDir, "capability-packages");
 const registryPath = join(packagesRoot, "installed.json");
@@ -386,6 +387,29 @@ try {
   };
   const officialCatalogUrl = resolveCapabilityCatalogUrl("development", "", "main");
   const stagingCatalogUrl = resolveCapabilityCatalogUrl("development", "", "staging");
+  const activeCatalogUrl = resolveCapabilityCatalogUrl();
+  let requestedCatalogUrl: string | URL | undefined;
+  const normalizedCatalog = await capabilityPackageManager.catalog(async (url) => {
+    requestedCatalogUrl = url;
+    return new Response(
+      JSON.stringify({
+        schemaVersion: 1,
+        generatedAt: "2026-08-01T00:00:00.000Z",
+        packages: [canonicalArtifactEntry],
+      }),
+      { status: 200, headers: { "content-type": "application/json" } },
+    );
+  });
+  assert.equal(
+    requestedCatalogUrl,
+    activeCatalogUrl,
+    "The package manager must request the catalog URL selected for the current Engine channel",
+  );
+  assert.equal(
+    normalizedCatalog.packages[0]?.iconUrl,
+    "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/staging/artwork/agent-covers/legacy.png",
+    "The catalog response must expose artwork normalized through the active catalog URL",
+  );
   assert.equal(getCapabilityPackageArtifactSourceIssue(canonicalArtifactEntry, officialCatalogUrl), null);
   assert.equal(
     getCapabilityPackageArtifactSourceIssue(canonicalArtifactEntry, stagingCatalogUrl),
