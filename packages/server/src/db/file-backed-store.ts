@@ -567,6 +567,27 @@ async function quarantineUnrecoverableFiles(paths: string[], context: string): P
   return quarantined;
 }
 
+function isRowRecord(value: unknown): value is Row {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+async function preserveMalformedRowSource(path: string, table: string): Promise<QuarantinedFile[]> {
+  if (!existsSync(path)) return [];
+  const to = quarantinePath(path, corruptionTimestamp());
+  try {
+    await copyFile(path, to);
+    return [{ from: path, to }];
+  } catch (err) {
+    logger.error(
+      err,
+      "[file-storage] Failed to preserve table %s source %s before removing malformed rows.",
+      table,
+      path,
+    );
+    return [];
+  }
+}
+
 function parseJsonFile<T>(path: string, fallback: T): ParseResult<T> {
   if (!existsSync(path)) {
     const backupPath = `${path}.bak`;
@@ -1288,7 +1309,21 @@ class FileTableStore {
         recoveredFromFallback,
         unreadablePaths,
       } = parseJsonFile<Row[]>(path, []);
-      const source = Array.isArray(rows) ? rows : [];
+      const parsedRows = Array.isArray(rows) ? rows : [];
+      const source = parsedRows.filter(isRowRecord);
+      const malformedRowCount = parsedRows.length - source.length;
+      if (malformedRowCount > 0) {
+        const sourcePath = recoveredFromBackup && existsSync(`${path}.bak`) ? `${path}.bak` : path;
+        const files = await preserveMalformedRowSource(sourcePath, table);
+        if (files.length > 0) this.quarantinedTables.push({ table, files });
+        logger.error(
+          { table, file: sourcePath, malformedRowCount, preservedFiles: files.map((file) => file.to) },
+          "[file-storage] Skipped malformed table rows and preserved the source file for manual recovery.",
+        );
+        this.backupRecoveredPaths.add(path);
+        this.dirtyTables.add(table);
+        this.dirty = true;
+      }
       const migrate = table === "noodle_accounts"
         ? migrateLegacyNoodleAccountRow
         : (RETIRED_CHAT_MODE_TABLES as readonly string[]).includes(table)
