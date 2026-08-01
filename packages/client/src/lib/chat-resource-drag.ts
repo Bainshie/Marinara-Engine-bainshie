@@ -137,7 +137,7 @@ export function requestChatResourceAssignment(payload: ChatResourceDragPayload) 
 export function requestChatAgentSetup(chatId: string, ids: string[]) {
   const pendingIds = pendingChatAgentSetup?.chatId === chatId ? pendingChatAgentSetup.ids : [];
   pendingChatAgentSetup = { chatId, ids: Array.from(new Set([...pendingIds, ...ids.filter(Boolean)])) };
-  window.dispatchEvent(new CustomEvent(CHAT_RESOURCE_AGENT_SETUP_EVENT));
+  window.dispatchEvent(new CustomEvent<{ chatId: string }>(CHAT_RESOURCE_AGENT_SETUP_EVENT, { detail: { chatId } }));
 }
 
 export function takePendingChatAgentSetupIds(chatId: string) {
