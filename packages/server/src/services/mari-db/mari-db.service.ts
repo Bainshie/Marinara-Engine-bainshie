@@ -2205,6 +2205,7 @@ export class MariDbService {
           category: "uncategorized",
           isGlobal: "false",
           enabled: "true",
+          hiddenFromLibrary: "false",
           scanDepth: 2,
           tokenBudget: 2048,
           entryLimit: 100,

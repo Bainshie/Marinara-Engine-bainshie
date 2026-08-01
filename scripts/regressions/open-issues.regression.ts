@@ -909,6 +909,20 @@ try {
   );
 
   const mariDb = new MariDbService(db);
+  const professorMariLorebookId = "professor-mari-lorebook-create-regression";
+  const professorMariLorebookResult = await mariDb.executeAction({
+    action: "lorebook.create",
+    lorebookId: professorMariLorebookId,
+    data: {
+      name: "Professor Mari lorebook regression",
+      entries: [{ name: "Verified entry", content: "Saved with the lorebook.", keys: ["verified"] }],
+    },
+    apply: true,
+  });
+  assert.equal(professorMariLorebookResult.ok, true, "Professor Mari must create lorebooks after visibility was added");
+  const professorMariLorebook = await lorebookStorage.getById(professorMariLorebookId);
+  assert.equal(professorMariLorebook?.hiddenFromLibrary, false);
+  assert.equal((await lorebookStorage.listEntries(professorMariLorebookId)).length, 1);
   const rangedChatId = "professor-mari-range-regression";
   const rangedChatTimestamp = "2026-07-30T12:00:00.000Z";
   await db.insert(chats).values({
