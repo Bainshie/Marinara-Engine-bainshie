@@ -1,5 +1,5 @@
 import { spawn, spawnSync } from "node:child_process";
-import { basename } from "node:path";
+import { basename, resolve } from "node:path";
 import { resolveDevSharedBuildScript } from "./dev-shared-build.mjs";
 
 function parseIntegerEnv(name, fallback) {
@@ -13,6 +13,7 @@ const SERVER_PORT = parseIntegerEnv("PORT", 7860);
 const SERVER_HEALTH_URL = `http://127.0.0.1:${SERVER_PORT}/api/health`;
 const HEALTH_TIMEOUT_MS = parseIntegerEnv("DEV_SERVER_READY_TIMEOUT_MS", 120_000);
 const SHARED_BUILD_SCRIPT = resolveDevSharedBuildScript();
+const WORKSPACE_INSTALL_CHECK = resolve("scripts/check-workspace-install.mjs");
 
 const pnpmCliPath = process.env.npm_execpath;
 const npmUserAgent = process.env.npm_config_user_agent ?? "";
@@ -45,6 +46,14 @@ function runPnpm(args) {
       reject(new Error(`pnpm ${args.join(" ")} exited with ${signal ?? code}`));
     });
   });
+}
+
+function workspaceInstallIsCurrent() {
+  const result = spawnSync(process.execPath, [WORKSPACE_INSTALL_CHECK], {
+    stdio: "ignore",
+    windowsHide: true,
+  });
+  return result.status === 0;
 }
 
 function stopChildren(signal = "SIGTERM") {
@@ -88,6 +97,14 @@ process.on("SIGINT", () => stopChildren("SIGINT"));
 process.on("SIGTERM", () => stopChildren("SIGTERM"));
 
 try {
+  if (!workspaceInstallIsCurrent()) {
+    console.log("[dev] Workspace dependencies are missing or stale; synchronizing from pnpm-lock.yaml...");
+    await runPnpm(["install", "--frozen-lockfile"]);
+    if (!workspaceInstallIsCurrent()) {
+      throw new Error("Workspace dependency validation still fails after pnpm install");
+    }
+  }
+
   if (process.env.DEV_SKIP_SHARED_BUILD !== "true") {
     await runPnpm(["--filter", "@marinara-engine/shared", SHARED_BUILD_SCRIPT]);
   }
