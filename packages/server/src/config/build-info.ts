@@ -36,6 +36,17 @@ function isBuildMeta(value: unknown): value is BuildMeta {
   );
 }
 
+export function parseBuildMeta(value: string | null | undefined): BuildMeta | null {
+  if (value == null) return null;
+
+  try {
+    const parsed: unknown = JSON.parse(value);
+    return isBuildMeta(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
 function readBuildMeta() {
   if (cachedBuildMeta !== undefined) return cachedBuildMeta;
   if (!existsSync(BUILD_META_PATH)) {
@@ -44,8 +55,7 @@ function readBuildMeta() {
   }
 
   try {
-    const parsed: unknown = JSON.parse(readFileSync(BUILD_META_PATH, "utf8"));
-    cachedBuildMeta = isBuildMeta(parsed) ? parsed : null;
+    cachedBuildMeta = parseBuildMeta(readFileSync(BUILD_META_PATH, "utf8"));
   } catch {
     cachedBuildMeta = null;
   }
@@ -96,18 +106,24 @@ function normalizeBranch(value: string | undefined | null) {
   return trimmed || null;
 }
 
+export function resolveBuildBranch(
+  envBranch: string | null | undefined,
+  builtBranch: string | null | undefined,
+  gitBranch: string | null | undefined,
+) {
+  return normalizeBranch(envBranch) ?? normalizeBranch(builtBranch) ?? normalizeBranch(gitBranch);
+}
+
 export function getBuildBranch() {
   if (cachedBranch !== undefined) return cachedBranch;
 
-  const envBranch = normalizeBranch(process.env.MARINARA_GIT_BRANCH ?? process.env.GITHUB_REF_NAME);
-  if (envBranch) {
-    cachedBranch = envBranch;
-    return cachedBranch;
-  }
-
-  const builtBranch = normalizeBranch(readBuildMeta()?.branch);
-  if (builtBranch) {
-    cachedBranch = builtBranch;
+  const configuredBranch = resolveBuildBranch(
+    process.env.MARINARA_GIT_BRANCH ?? process.env.GITHUB_REF_NAME,
+    readBuildMeta()?.branch,
+    undefined,
+  );
+  if (configuredBranch) {
+    cachedBranch = configuredBranch;
     return cachedBranch;
   }
 
@@ -117,7 +133,9 @@ export function getBuildBranch() {
   }
 
   try {
-    cachedBranch = normalizeBranch(
+    cachedBranch = resolveBuildBranch(
+      undefined,
+      undefined,
       execFileSync("git", ["branch", "--show-current"], {
         cwd: MONOREPO_ROOT,
         encoding: "utf8",

@@ -10,6 +10,7 @@ import playwrightConfig from "../../playwright.config.js";
 import { resolveDevSharedBuildScript } from "../dev-shared-build.mjs";
 import { characterCardVersions, characters, chats, messages } from "../../packages/server/src/db/schema/index.js";
 import { eq } from "../../packages/server/src/db/file-query.js";
+import { parseBuildMeta, resolveBuildBranch } from "../../packages/server/src/config/build-info.js";
 
 const REPOSITORY_ROOT = fileURLToPath(new URL("../../", import.meta.url));
 import {
@@ -404,10 +405,12 @@ assert.strictEqual(
 );
 assert.strictEqual(parseDockerDefaultGatewayIp("Iface\tDestination\tGateway\tFlags\tMetric\n"), null);
 
-const buildInfoSource = readFileSync(join(REPOSITORY_ROOT, "packages/server/src/config/build-info.ts"), "utf8");
-assert.match(buildInfoSource, /normalizeBranch\(readBuildMeta\(\)\?\.branch\)/u);
-assert.match(buildInfoSource, /const parsed: unknown = JSON\.parse/u);
-assert.match(buildInfoSource, /cachedBuildMeta = isBuildMeta\(parsed\) \? parsed : null/u);
+const validBuildMeta = parseBuildMeta('{"commit":"abcdef123456","branch":"staging"}');
+assert.deepEqual(validBuildMeta, { commit: "abcdef123456", branch: "staging" });
+assert.equal(parseBuildMeta('{"commit":"abcdef123456","branch":42}'), null);
+assert.equal(parseBuildMeta(undefined), null);
+assert.equal(resolveBuildBranch(undefined, validBuildMeta?.branch, "main"), "staging");
+assert.equal(resolveBuildBranch(undefined, parseBuildMeta(undefined)?.branch, "refs/heads/feature/test"), "feature/test");
 const updatesRouteSource = readFileSync(join(REPOSITORY_ROOT, "packages/server/src/routes/updates.routes.ts"), "utf8");
 assert.match(updatesRouteSource, /gitInstall \? await getCurrentBranch\(root\)\.catch\(\(\) => null\) : getBuildBranch\(\)/u);
 assert.match(updatesRouteSource, /const currentChannel = await getUpdateChannelForCheckout\(root, currentBranch\)/u);

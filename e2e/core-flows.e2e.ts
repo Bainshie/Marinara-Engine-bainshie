@@ -6303,6 +6303,7 @@ test("right-panel controls keep their width with and without a scrollbar", async
   const characterIds: string[] = [];
   let personaId: string | undefined;
   const personaName = `Short Persona ${suffix}`;
+  let testFailure: { error: unknown } | null = null;
 
   try {
     const characterResponses = await Promise.all(
@@ -6347,13 +6348,22 @@ test("right-panel controls keep their width with and without a scrollbar", async
     expect(personaButtonBox).not.toBeNull();
     await expect(personaScroll).toHaveCSS("scrollbar-gutter", /stable/u);
     expect(Math.abs(characterButtonBox!.width - personaButtonBox!.width)).toBeLessThan(0.5);
-  } finally {
-    const cleanupRequests = characterIds.map((id) =>
-      request.delete(`/api/characters/${id}`).catch(() => undefined),
-    );
-    if (personaId) cleanupRequests.push(request.delete(`/api/characters/personas/${personaId}`).catch(() => undefined));
-    await Promise.all(cleanupRequests);
+  } catch (error) {
+    testFailure = { error };
   }
+
+  const cleanupRequests = characterIds.map((id) => request.delete(`/api/characters/${id}`));
+  if (personaId) cleanupRequests.push(request.delete(`/api/characters/personas/${personaId}`));
+  const cleanupResults = await Promise.allSettled(cleanupRequests);
+  const cleanupFailures: unknown[] = [];
+  for (const result of cleanupResults) {
+    if (result.status === "rejected") cleanupFailures.push(result.reason);
+    else if (!result.value.ok()) cleanupFailures.push(new Error(`Fixture cleanup failed with HTTP ${result.value.status()}`));
+  }
+
+  const failures = [...(testFailure ? [testFailure.error] : []), ...cleanupFailures];
+  if (failures.length > 1) throw new AggregateError(failures, "Test and fixture cleanup failed");
+  if (failures.length === 1) throw failures[0];
 });
 
 test("downloadable agent catalog is usable on desktop and mobile", async ({ page }, testInfo) => {
