@@ -1663,7 +1663,7 @@ test("Character favorite tags and stars inherit the configured accent color", as
     expect(await favoriteToggle.getAttribute("class")).not.toMatch(/amber|yellow/iu);
     await editor.getByTitle("Back").click();
 
-    await rightPanel.getByRole("button", { name: "Open Full Library" }).click();
+    await rightPanel.getByRole("button", { name: "Open Characters Library" }).click();
     const library = page.locator('[data-component="CharacterLibraryView"]');
     await library.getByPlaceholder('Search characters or -tag:"tag name"').fill(characterName);
 
@@ -1741,7 +1741,7 @@ test("Character Chat actions reuse mode selection and seed the chosen setup wiza
     await page.goto("/");
     await ensureCharacterPanelOpen();
 
-    await rightPanel.getByRole("button", { name: "Open Full Library" }).click();
+    await rightPanel.getByRole("button", { name: "Open Characters Library" }).click();
     const library = page.locator('[data-component="CharacterLibraryView"]');
     await library.getByPlaceholder('Search characters or -tag:"tag name"').fill(characterName);
     const editCharacter = library.getByRole("button", { name: "Edit Character", exact: true });
@@ -3995,7 +3995,15 @@ test("external Agent imports require the Danger Zone gate and explicit capabilit
     expect(enabledPolicy.ok()).toBeTruthy();
     await page.reload();
     await page.locator('[data-tour="panel-agents"]').click();
-    await expect(page.getByTitle("Import agents")).toHaveAttribute("aria-disabled", "false");
+    const importAgents = page.getByTitle("Import agents");
+    await expect(importAgents).toHaveCount(1);
+    await expect(importAgents).toHaveAttribute("aria-disabled", "false");
+    await expect(page.getByTitle("Import agent folder")).toHaveCount(0);
+    await importAgents.click();
+    const importSourceDialog = page.getByRole("dialog", { name: "Import agents" });
+    await expect(importSourceDialog.getByRole("button", { name: "Choose Files" })).toBeVisible();
+    await expect(importSourceDialog.getByRole("button", { name: "Choose Folder" })).toBeVisible();
+    await importSourceDialog.getByRole("button", { name: "Cancel" }).click();
 
     const packageInput = page
       .getByRole("region", { name: "Agents" })
@@ -6220,7 +6228,7 @@ test("Browser labels and the Persona full library stay available across viewport
   await closeCardLibrary.click();
 
   await page.locator('[data-tour="panel-personas"]').click();
-  const openPersonaLibrary = page.getByRole("button", { name: "Open Full Library" });
+  const openPersonaLibrary = page.getByRole("button", { name: "Open Personas Library" });
   await expect(openPersonaLibrary).toBeVisible();
   await openPersonaLibrary.click();
 
@@ -6287,6 +6295,75 @@ test("Character and Persona sidebars find cards by creator", async ({ page, requ
       request.delete(`/api/characters/personas/${persona.id}`).catch(() => undefined),
     ]);
   }
+});
+
+test("right-panel controls keep their width with and without a scrollbar", async ({ page, request }, testInfo) => {
+  test.skip(testInfo.project.name.includes("mobile"), "Desktop scrollbar geometry regression.");
+  const suffix = Date.now().toString(36);
+  const characterIds: string[] = [];
+  let personaId: string | undefined;
+  const personaName = `Short Persona ${suffix}`;
+  let testFailure: { error: unknown } | null = null;
+
+  try {
+    const characterResponses = await Promise.all(
+      Array.from({ length: 16 }, (_, index) =>
+        request.post("/api/characters", {
+          data: { data: { name: `Scrollbar Character ${suffix} ${index + 1}` } },
+        }),
+      ),
+    );
+    for (const response of characterResponses) {
+      if (response.ok()) {
+        const character = (await response.json()) as { id: string };
+        characterIds.push(character.id);
+      }
+    }
+    for (const response of characterResponses) expect(response.ok()).toBeTruthy();
+
+    const personaResponse = await request.post("/api/characters/personas", { data: { name: personaName } });
+    if (personaResponse.ok()) personaId = ((await personaResponse.json()) as { id: string }).id;
+    expect(personaResponse.ok()).toBeTruthy();
+
+    await page.goto("/");
+    const rightPanel = page.locator('[data-component="RightPanelDesktop"]');
+    await page.locator('[data-tour="panel-characters"]').click();
+    const characterScroll = rightPanel.locator('[data-component="CharactersPanelScroll"]');
+    await expect
+      .poll(() => characterScroll.evaluate((element) => element.scrollHeight > element.clientHeight))
+      .toBe(true);
+    const characterLibraryButton = rightPanel.getByRole("button", { name: "Open Characters Library" });
+    const characterButtonBox = await characterLibraryButton.boundingBox();
+    expect(characterButtonBox).not.toBeNull();
+    await expect(characterScroll).toHaveCSS("scrollbar-gutter", /stable/u);
+
+    await page.locator('[data-tour="panel-personas"]').click();
+    await rightPanel.getByPlaceholder("Search personas").fill(personaName);
+    const personaScroll = rightPanel.locator('[data-panel-key="personas"]');
+    await expect
+      .poll(() => personaScroll.evaluate((element) => element.scrollHeight <= element.clientHeight))
+      .toBe(true);
+    const personaLibraryButton = rightPanel.getByRole("button", { name: "Open Personas Library" });
+    const personaButtonBox = await personaLibraryButton.boundingBox();
+    expect(personaButtonBox).not.toBeNull();
+    await expect(personaScroll).toHaveCSS("scrollbar-gutter", /stable/u);
+    expect(Math.abs(characterButtonBox!.width - personaButtonBox!.width)).toBeLessThan(0.5);
+  } catch (error) {
+    testFailure = { error };
+  }
+
+  const cleanupRequests = characterIds.map((id) => request.delete(`/api/characters/${id}`));
+  if (personaId) cleanupRequests.push(request.delete(`/api/characters/personas/${personaId}`));
+  const cleanupResults = await Promise.allSettled(cleanupRequests);
+  const cleanupFailures: unknown[] = [];
+  for (const result of cleanupResults) {
+    if (result.status === "rejected") cleanupFailures.push(result.reason);
+    else if (!result.value.ok()) cleanupFailures.push(new Error(`Fixture cleanup failed with HTTP ${result.value.status()}`));
+  }
+
+  const failures = [...(testFailure ? [testFailure.error] : []), ...cleanupFailures];
+  if (failures.length > 1) throw new AggregateError(failures, "Test and fixture cleanup failed");
+  if (failures.length === 1) throw failures[0];
 });
 
 test("downloadable agent catalog is usable on desktop and mobile", async ({ page }, testInfo) => {
@@ -6407,7 +6484,7 @@ test("downloadable agent catalog is usable on desktop and mobile", async ({ page
   });
   await page.goto("/");
   await page.locator('[data-tour="panel-characters"]').click();
-  await page.getByRole("button", { name: "Open Full Library" }).click();
+  await page.getByRole("button", { name: "Open Characters Library" }).click();
   await expect(page.getByRole("heading", { name: "Browse your characters" })).toBeVisible();
   await expect(
     page.locator('[data-component="CharacterLibraryView"]').getByPlaceholder('Search characters or -tag:"tag name"'),
@@ -8765,6 +8842,45 @@ test("Professor Mari chat fills the mobile home viewport and keeps its composer 
       );
     })
     .toBe(true);
+});
+
+test("Professor Mari bulk chat deletion follows the active accent", async ({ page }) => {
+  const firstResponse = await page.request.get("/api/chats/internal/professor-mari");
+  expect(firstResponse.ok()).toBeTruthy();
+  const firstChat = (await firstResponse.json()) as { id: string };
+  const secondResponse = await page.request.post("/api/chats/internal/professor-mari/restart");
+  expect(secondResponse.ok()).toBeTruthy();
+  const secondChat = (await secondResponse.json()) as { id: string };
+
+  try {
+    await page.goto("/");
+    await setAppAccentColor(page, "#14b8a6");
+    const activeAccentColor = await readCssVariableColor(page, "--marinara-chat-chrome-button-text-active");
+    await page
+      .locator('[data-component="HomeProfessorMariChat.MariPanel"]')
+      .getByRole("button", { name: "Ask Professor Mari" })
+      .click();
+
+    const window = page.locator('[data-component="HomeProfessorMariChat.Window"]');
+    await window.getByRole("button", { name: "Chats" }).click();
+    await window.getByRole("button", { name: "Select", exact: true }).click();
+    await window
+      .locator(`[data-professor-mari-chat-id="${firstChat.id}"]`)
+      .getByRole("button", { name: /Professor Mari/u })
+      .click();
+
+    const deleteSelected = window.getByRole("button", { name: "Delete selected" });
+    await expect(deleteSelected).toBeEnabled();
+    await expect(deleteSelected).toHaveClass(/mari-chrome-control--primary/u);
+    await expect(deleteSelected).toHaveCSS("color", activeAccentColor);
+    expect(await deleteSelected.getAttribute("class")).not.toMatch(/danger|destructive|pink|red|rose/iu);
+  } finally {
+    await Promise.all(
+      [firstChat.id, secondChat.id].map((id) =>
+        page.request.delete(`/api/chats/internal/professor-mari/chats/${id}`).catch(() => undefined),
+      ),
+    );
+  }
 });
 
 test("Professor Mari dependency and sensitive-file reviews stay explicit across viewports", async ({ page }) => {

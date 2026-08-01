@@ -10,6 +10,7 @@ import playwrightConfig from "../../playwright.config.js";
 import { resolveDevSharedBuildScript } from "../dev-shared-build.mjs";
 import { characterCardVersions, characters, chats, messages } from "../../packages/server/src/db/schema/index.js";
 import { eq } from "../../packages/server/src/db/file-query.js";
+import { parseBuildMeta, resolveBuildBranch } from "../../packages/server/src/config/build-info.js";
 
 const REPOSITORY_ROOT = fileURLToPath(new URL("../../", import.meta.url));
 import {
@@ -195,6 +196,7 @@ import {
   buildAgentAddMetadataPatch,
   buildInitialAgentAddSetupState,
 } from "../../packages/client/src/components/chat/AgentAddSetupFields.js";
+import { resolveSpriteTransition } from "../../packages/client/src/lib/sprite-transition.js";
 import {
   parseIllustratorPromptReviewOverride,
   resolveIllustratorPromptSubmission,
@@ -302,6 +304,9 @@ assert.equal(toAutonomousPresenceStatus("active"), "active");
 assert.equal(toAutonomousPresenceStatus("dnd"), "dnd");
 assert.equal(shouldSuppressAutonomousMessages("active"), false);
 assert.equal(shouldSuppressAutonomousMessages("dnd"), true);
+assert.equal(resolveSpriteTransition("full-body", "none"), "crossfade");
+assert.equal(resolveSpriteTransition("full-body", "shake"), "shake");
+assert.equal(resolveSpriteTransition("expressions", "none"), "none");
 assert.deepEqual(findMissingComfyReferenceSlots(comfyReferenceWorkflow, "reference_image", 1), [1]);
 assert.deepEqual(findMissingComfyReferenceSlots(comfyReferenceWorkflow, "reference_image_name", 1), [2]);
 assert.equal(numberedComfyReferencePlaceholder("reference_image_name", 2), "%reference_image_name_03%");
@@ -399,6 +404,25 @@ assert.strictEqual(
   "172.17.0.1",
 );
 assert.strictEqual(parseDockerDefaultGatewayIp("Iface\tDestination\tGateway\tFlags\tMetric\n"), null);
+
+const validBuildMeta = parseBuildMeta('{"commit":"abcdef123456","branch":"staging"}');
+assert.deepEqual(validBuildMeta, { commit: "abcdef123456", branch: "staging" });
+assert.equal(parseBuildMeta('{"commit":"abcdef123456","branch":42}'), null);
+assert.equal(parseBuildMeta(undefined), null);
+assert.equal(resolveBuildBranch(undefined, validBuildMeta?.branch, "main"), "staging");
+assert.equal(resolveBuildBranch(undefined, parseBuildMeta(undefined)?.branch, "refs/heads/feature/test"), "feature/test");
+const updatesRouteSource = readFileSync(join(REPOSITORY_ROOT, "packages/server/src/routes/updates.routes.ts"), "utf8");
+assert.match(updatesRouteSource, /gitInstall \? await getCurrentBranch\(root\)\.catch\(\(\) => null\) : getBuildBranch\(\)/u);
+assert.match(updatesRouteSource, /const currentChannel = await getUpdateChannelForCheckout\(root, currentBranch\)/u);
+for (const dockerfile of ["Dockerfile", "Dockerfile.lite"]) {
+  const dockerSource = readFileSync(join(REPOSITORY_ROOT, dockerfile), "utf8");
+  assert.match(dockerSource, /^ARG BUILD_BRANCH$/mu, `${dockerfile} must accept the source ref as build metadata`);
+  assert.match(dockerSource, /meta\.branch = process\.env\.BUILD_BRANCH/u);
+}
+for (const workflow of ["build-container.yml", "build-container-lite.yml"]) {
+  const workflowSource = readFileSync(join(REPOSITORY_ROOT, ".github/workflows", workflow), "utf8");
+  assert.match(workflowSource, /BUILD_BRANCH=\$\{\{ github\.ref_name \}\}/u);
+}
 
 assert.equal(resolveGroupGenerationMode("conversation", "individual"), "individual");
 assert.equal(resolveGroupGenerationMode("conversation", "merged"), "merged");
