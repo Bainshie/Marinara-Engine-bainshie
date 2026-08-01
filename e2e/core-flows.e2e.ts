@@ -2650,6 +2650,166 @@ test("Conversation membership notices begin only after the chat starts", async (
   }
 });
 
+test("character schedules export the live draft and import safely", async ({ page, request }) => {
+  const suffix = Date.now().toString(36);
+  const characterName = `Schedule Transfer ${suffix}`;
+  const characterResponse = await request.post("/api/characters", {
+    data: { data: { name: characterName, first_mes: "Good morning." } },
+  });
+  expect(characterResponse.ok()).toBeTruthy();
+  const character = (await characterResponse.json()) as { id: string };
+  const chatResponse = await request.post("/api/chats", {
+    data: { name: `Schedule Transfer ${suffix}`, mode: "conversation", characterIds: [character.id] },
+  });
+  expect(chatResponse.ok()).toBeTruthy();
+  const chat = (await chatResponse.json()) as { id: string };
+  const emptyDays = () => ({
+    Monday: [] as Array<{ time: string; activity: string; status: string }>,
+    Tuesday: [] as Array<{ time: string; activity: string; status: string }>,
+    Wednesday: [] as Array<{ time: string; activity: string; status: string }>,
+    Thursday: [] as Array<{ time: string; activity: string; status: string }>,
+    Friday: [] as Array<{ time: string; activity: string; status: string }>,
+    Saturday: [] as Array<{ time: string; activity: string; status: string }>,
+    Sunday: [] as Array<{ time: string; activity: string; status: string }>,
+  });
+  const originalSchedule = {
+    weekStart: "2026-07-20T00:00:00.000Z",
+    days: {
+      ...emptyDays(),
+      Monday: [{ time: "09:00-17:00", activity: "Original research", status: "dnd" }],
+    },
+    inactivityThresholdMinutes: 120,
+    autonomousDailyCapOverride: null,
+    routineSummary: "An exacting weekly routine.",
+    routineSummaryGeneratedAt: "2026-07-20T12:00:00.000Z",
+    disabledAutonomousIntents: [],
+    talkativeness: 50,
+  };
+  const metadataResponse = await request.patch(`/api/chats/${chat.id}/metadata`, {
+    data: {
+      conversationSetupComplete: true,
+      conversationSchedulesEnabled: true,
+      characterSchedules: { [character.id]: originalSchedule },
+    },
+  });
+  expect(metadataResponse.ok()).toBeTruthy();
+
+  const storedSchedule = async () => {
+    const response = await request.get(`/api/chats/${chat.id}`);
+    const stored = (await response.json()) as { metadata: string | Record<string, unknown> };
+    const metadata =
+      typeof stored.metadata === "string"
+        ? (JSON.parse(stored.metadata) as Record<string, unknown>)
+        : stored.metadata;
+    return (metadata.characterSchedules as Record<string, typeof originalSchedule>)[character.id];
+  };
+  const openScheduleEditor = async () => {
+    const drawer = page.locator(".mari-chat-settings-drawer");
+    if (!(await drawer.isVisible())) {
+      const settingsButton = page.getByRole("button", { name: "Chat Settings", exact: true }).filter({ visible: true });
+      if ((page.viewportSize()?.width ?? 0) < 768) {
+        await page.getByRole("button", { name: "More options", exact: true }).click();
+      }
+      await settingsButton.click();
+    }
+    await expect(drawer).toBeVisible();
+    const section = drawer.locator('[data-chat-settings-section="conversation-autonomous-messaging"]');
+    const sectionHeader = section.locator('[role="button"][aria-expanded]').first();
+    if ((await sectionHeader.getAttribute("aria-expanded")) !== "true") await sectionHeader.click();
+    await section.getByRole("button").filter({ hasText: characterName }).click();
+    const dialog = page.getByRole("dialog", { name: `Edit ${characterName} Schedule` });
+    await expect(dialog).toBeVisible();
+    return dialog;
+  };
+  const expandMonday = async (dialog: Locator) => {
+    const monday = dialog.locator("section").filter({ hasText: /^Monday/ }).first();
+    await monday.getByRole("button").first().click();
+    return dialog.getByLabel("Monday block activity");
+  };
+
+  await page.addInitScript((chatId) => localStorage.setItem("marinara-active-chat-id", chatId), chat.id);
+  try {
+    await page.goto("/");
+    let dialog = await openScheduleEditor();
+    let activity = await expandMonday(dialog);
+    await activity.fill("Unsaved export draft");
+
+    const downloadPromise = page.waitForEvent("download");
+    await dialog.getByRole("button", { name: "Export schedule", exact: true }).click();
+    const download = await downloadPromise;
+    expect(download.suggestedFilename()).toBe(`${characterName.replaceAll(" ", "_")}.marinara-schedule.json`);
+    const downloadPath = await download.path();
+    expect(downloadPath).not.toBeNull();
+    const exported = JSON.parse(readFileSync(downloadPath!, "utf8")) as {
+      kind: string;
+      version: number;
+      schedule: typeof originalSchedule;
+    };
+    expect(exported.kind).toBe("marinara.character-schedule");
+    expect(exported.version).toBe(1);
+    expect(exported.schedule.days.Monday[0]?.activity).toBe("Unsaved export draft");
+
+    const fileInput = dialog.locator('input[type="file"][accept*=".json"]');
+    await fileInput.setInputFiles({ name: "invalid.json", mimeType: "application/json", buffer: Buffer.from("{}") });
+    await expect(page.getByText("That file does not contain a valid character schedule.", { exact: true })).toBeVisible();
+    await expect(activity).toHaveValue("Unsaved export draft");
+    await fileInput.setInputFiles({
+      name: "oversized.json",
+      mimeType: "application/json",
+      buffer: Buffer.alloc(1024 * 1024 + 1, 0x20),
+    });
+    await expect(page.getByText("Schedule files must be smaller than 1 MB.", { exact: true })).toBeVisible();
+    await expect(activity).toHaveValue("Unsaved export draft");
+
+    const importedSchedule = {
+      ...originalSchedule,
+      days: {
+        ...emptyDays(),
+        Monday: [{ time: "10:00-18:00", activity: "Imported current format", status: "online" }],
+      },
+      inactivityThresholdMinutes: 75,
+      talkativeness: 70,
+    };
+    await fileInput.setInputFiles({
+      name: "current.json",
+      mimeType: "application/json",
+      buffer: Buffer.from(
+        JSON.stringify({ kind: "marinara.character-schedule", version: 1, schedule: importedSchedule }),
+      ),
+    });
+    await expect(page.getByText("Schedule imported as an unsaved draft.", { exact: true })).toBeVisible();
+    await expect(activity).toHaveValue("Imported current format");
+    await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
+    await expect.poll(async () => (await storedSchedule()).days.Monday[0]?.activity).toBe("Original research");
+
+    dialog = await openScheduleEditor();
+    activity = await expandMonday(dialog);
+    await expect(activity).toHaveValue("Original research");
+    const legacySchedule = {
+      ...originalSchedule,
+      days: {
+        ...emptyDays(),
+        Monday: [{ time: "11:00-19:00", activity: "Imported legacy format", status: "idle" }],
+      },
+      talkativeness: 90,
+    };
+    await dialog.locator('input[type="file"][accept*=".json"]').setInputFiles({
+      name: "legacy.json",
+      mimeType: "application/json",
+      buffer: Buffer.from(JSON.stringify(legacySchedule)),
+    });
+    await expect(activity).toHaveValue("Imported legacy format");
+    await dialog.getByRole("button", { name: "Save schedule", exact: true }).click();
+    await expect.poll(async () => (await storedSchedule()).days.Monday[0]?.activity).toBe("Imported legacy format");
+    expect((await storedSchedule()).talkativeness).toBe(90);
+  } finally {
+    await Promise.allSettled([
+      request.delete(`/api/chats/${chat.id}`),
+      request.delete(`/api/characters/${character.id}`),
+    ]);
+  }
+});
+
 test("provider concurrency errors appear in generation toasts", async ({ page }, testInfo) => {
   test.skip(!testInfo.project.name.includes("desktop"), "Generation error toast regression is covered on desktop.");
 
