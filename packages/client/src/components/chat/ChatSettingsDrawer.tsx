@@ -138,6 +138,7 @@ import {
 import { useUpdateGameWidgets } from "../../hooks/use-game";
 import { useRegexScripts, useUpdateRegexScript, type RegexScriptRow } from "../../hooks/use-regex-scripts";
 import { api } from "../../lib/api-client";
+import { readCharacterGreetings, type CharacterGreeting } from "../../lib/character-greetings";
 import { trackChatMetadataSave, waitForPendingChatMetadataSaves } from "../../lib/chat-metadata-save-barrier";
 import { appendLocalSidecarConnectionOption, filterLanguageGenerationConnections } from "../../lib/connection-filters";
 import {
@@ -279,7 +280,6 @@ import {
   type MusicProvider,
 } from "./AgentAddSetupFields";
 import { CHAT_RESOURCE_AGENT_SETUP_EVENT, takePendingChatAgentSetupIds } from "../../lib/chat-resource-drag";
-import { readCharacterGreetings, type CharacterGreeting } from "../../lib/character-greetings";
 import { GameWidgetFileControls, GameWidgetSetupEditor, normalizeGameHudWidgets } from "../game/GameWidgetSetupEditor";
 
 const QuickPresetSectionsEditor = lazy(() =>

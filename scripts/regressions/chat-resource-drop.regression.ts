@@ -118,7 +118,7 @@ assert.equal(
   parseChatResourceDragPayload({
     version: 1,
     kind: "character",
-    ids: Array.from({ length: 101 }, (_, index) => `character-${index}`),
+    ids: Array.from({ length: 101 }, (_value, index) => `character-${index}`),
     label: "Too many",
   }),
   null,

@@ -2368,7 +2368,7 @@
   "ui.chat.chatresourcedropoverlay.hintAgents": "It starts running alongside this chat.",
   "ui.chat.chatresourcedropoverlay.hintBackground": "It becomes the scene behind this chat.",
   "ui.chat.chatresourcedropoverlay.hintCharacters": "They join the cast and can reply in this chat.",
-  "ui.chat.chatresourcedropoverlay.hintConnection": "This chat uses it to generate responses from now on.",
+  "ui.chat.chatresourcedropoverlay.hintConnection": "Future responses in this chat use this connection.",
   "ui.chat.chatresourcedropoverlay.hintLorebooks": "Its entries become available as context here.",
   "ui.chat.chatresourcedropoverlay.hintPersona": "You speak as this persona from now on.",
   "ui.chat.chatresourcedropoverlay.hintPreset": "It takes over the prompt setup for this chat.",

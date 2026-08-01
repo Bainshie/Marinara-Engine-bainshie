@@ -400,6 +400,8 @@ pnpm regression:prompt
 pnpm smoke:ui
 ```
 
+`pnpm regression:prompt` is required before merge: the `LorebooksPanel.tsx` change affects lorebook activation, which feeds prompt assembly.
+
 ## Risks and Mitigations
 
 ### Existing Folder Drag Conflict
