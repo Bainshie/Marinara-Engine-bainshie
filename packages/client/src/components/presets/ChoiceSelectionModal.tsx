@@ -81,6 +81,9 @@ function sanitizeChoiceSelection(
 
 function fallbackChoiceSelection(variable: VariableData): string | string[] | undefined {
   if (variable.multiSelect) return [];
+  if (variable.randomPick && variable.options.length > 0) {
+    return variable.options[Math.floor(Math.random() * variable.options.length)].value;
+  }
   return variable.options[0]?.value;
 }
 
@@ -147,8 +150,8 @@ export function ChoiceSelectionModal({
         initial[v.variableName] = sanitizeChoiceSelection(v, saved) ?? fallbackChoiceSelection(v) ?? "";
       } else if (v.multiSelect) {
         initial[v.variableName] = [];
-      } else if (v.options.length > 0) {
-        initial[v.variableName] = v.options[0].value;
+      } else {
+        initial[v.variableName] = fallbackChoiceSelection(v) ?? (v.options[0]?.value ?? "");
       }
     }
     return initial;
@@ -185,6 +188,22 @@ export function ChoiceSelectionModal({
       updatePreset.mutate({ id: presetId, defaultChoices: selections });
     }
   }, [chatId, presetId, selections, saveAsDefault, updateMetadata, updatePreset, onClose]);
+
+  // Auto-confirm when all variables use randomPick — no user interaction needed.
+  const autoConfirmedRef = useRef(false);
+  const allRandomPick = variables.length > 0 && variables.every((v) => v.randomPick);
+  useEffect(() => {
+    if (!open || isLoading || !allRandomPick || !allSelected || autoConfirmedRef.current) return;
+    autoConfirmedRef.current = true;
+    handleConfirm();
+  }, [open, isLoading, allRandomPick, allSelected, handleConfirm]);
+
+  // Reset auto-confirm flag when modal re-opens
+  useEffect(() => {
+    if (open && !prevOpenRef.current) {
+      autoConfirmedRef.current = false;
+    }
+  }, [open]);
 
   // Toggle a single option in a multi-select variable
   const toggleMulti = useCallback(
@@ -417,7 +436,7 @@ export function ChoiceSelectionModal({
             </div>
             <div className="flex gap-2">
               <button
-                onClick={onClose}
+                onClick={handleConfirm}
                 className="rounded-xl px-4 py-2 text-xs font-medium text-[var(--muted-foreground)] hover:bg-[var(--accent)]"
               >
                 Skip

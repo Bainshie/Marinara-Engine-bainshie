@@ -54,6 +54,7 @@ import {
   Shield,
   ShieldCheck,
   Shuffle,
+  CheckCircle2,
 } from "lucide-react";
 import { useDeleteAgent } from "../../hooks/use-agents";
 import { useLorebooks, useEntriesAcrossLorebooks } from "../../hooks/use-lorebooks";
@@ -511,6 +512,7 @@ export function AgentEditor() {
   const [localInjectAsSection, setLocalInjectAsSection] = useState(false);
   const [localIncludePreGenInjections, setLocalIncludePreGenInjections] = useState(false);
   const [localIncludeParallelResults, setLocalIncludeParallelResults] = useState(false);
+  const [localDefaultEnabled, setLocalDefaultEnabled] = useState(false);
   const [localEnabledTools, setLocalEnabledTools] = useState<string[]>([]);
   const [toolsSectionOpen, setToolsSectionOpen] = useState(false);
   const [localLorebookWriteEnabled, setLocalLorebookWriteEnabled] = useState(false);
@@ -677,6 +679,7 @@ export function AgentEditor() {
       );
       setLocalCustomCapabilities(normalizeCustomAgentCapabilities(settings));
       setLocalResultType(normalizeCustomResultType(settings.resultType));
+      setLocalDefaultEnabled(settings.defaultEnabled === true);
       setLocalIncludePreGenInjections(settings.includePreGenInjections === true);
       setLocalIncludeParallelResults(settings.includeParallelResults === true);
       setLocalPrompt(dbConfig.promptTemplate || "");
@@ -717,6 +720,7 @@ export function AgentEditor() {
       setLocalSecretPlotRunInterval(normalizePositiveInteger(defaultSettings.secretPlotRunInterval, 8, 100));
       setLocalCustomCapabilities({});
       setLocalResultType("context_injection");
+      setLocalDefaultEnabled(false);
       setLocalIncludePreGenInjections(false);
       setLocalIncludeParallelResults(false);
       setLocalLorebookWriteEnabled(false);
@@ -768,6 +772,7 @@ export function AgentEditor() {
       setLocalSecretPlotRunInterval(8);
       setLocalCustomCapabilities({});
       setLocalResultType("context_injection");
+      setLocalDefaultEnabled(false);
       setLocalIncludePreGenInjections(false);
       setLocalIncludeParallelResults(false);
       setLocalLorebookWriteEnabled(false);
@@ -1033,6 +1038,7 @@ export function AgentEditor() {
           : {}),
         ...(mayIncludeTurnData && localIncludePreGenInjections ? { includePreGenInjections: true } : {}),
         ...(mayIncludeTurnData && localIncludeParallelResults ? { includeParallelResults: true } : {}),
+        ...(localDefaultEnabled ? { defaultEnabled: true } : {}),
         ...(localContextSize !== "" ? { contextSize: Number(localContextSize) } : {}),
         ...(localMaxTokens !== "" ? { maxTokens: clampAgentMaxTokens(localMaxTokens) } : {}),
         ...(!isDirectorAgent && localRunInterval !== "" ? { runInterval: Number(localRunInterval) } : {}),
@@ -1215,6 +1221,7 @@ export function AgentEditor() {
       ...(activationKeywords.length > 0 ? { activationKeywords, activationScanDepth } : {}),
       ...(mayIncludeTurnData && localIncludePreGenInjections ? { includePreGenInjections: true } : {}),
       ...(mayIncludeTurnData && localIncludeParallelResults ? { includeParallelResults: true } : {}),
+      ...(localDefaultEnabled ? { defaultEnabled: true } : {}),
       ...(localContextSize !== "" ? { contextSize: Number(localContextSize) } : {}),
       ...(localMaxTokens !== "" ? { maxTokens: clampAgentMaxTokens(localMaxTokens) } : {}),
       ...(!isDirectorAgent && localRunInterval !== "" ? { runInterval: Number(localRunInterval) } : {}),
@@ -1966,7 +1973,23 @@ export function AgentEditor() {
           )}
 
           <FieldGroup
-            label="Agent Budget"
+            label="Default Enabled"
+            icon={<CheckCircle2 size="0.875rem" className="text-[var(--primary)]" />}
+            help="When enabled, this agent will be automatically activated for new chats without needing to manually select it each time."
+          >
+            <EditorSwitchRow
+              label="Auto-enable for new chats"
+              checked={localDefaultEnabled}
+              onChange={(checked) => {
+                setLocalDefaultEnabled(checked);
+                markDirty();
+              }}
+              description="If toggled on, this agent will be automatically included when creating new chats. You can still remove it manually per chat."
+            />
+          </FieldGroup>
+
+          <FieldGroup
+            label="Context & Output"
             icon={<Clock size="0.875rem" className="text-[var(--primary)]" />}
             help="Controls how much recent chat context the agent reads and how much output room it reserves. If max output is too high for the model context, prompt context can be trimmed."
           >

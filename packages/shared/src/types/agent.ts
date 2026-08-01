@@ -300,7 +300,7 @@ export interface AgentCallDebugMessage {
 }
 
 export interface AgentCallDebugEvent {
-  stage: "request" | "response" | "retry_request" | "retry_response" | "error";
+  stage: "request" | "response" | "retry_request" | "retry_response" | "error" | "tool_call";
   agentId: string;
   agentType: string;
   agentName: string;
@@ -322,6 +322,9 @@ export interface AgentCallDebugEvent {
   responsePreview?: string;
   error?: string;
   batchedAgentTypes?: string[];
+  /** Tool name and result — only present when stage is "tool_call". */
+  toolName?: string;
+  toolResult?: string;
 }
 
 /** Shared context passed to every agent. */

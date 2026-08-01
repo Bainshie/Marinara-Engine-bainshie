@@ -42,6 +42,7 @@ import { resolveConversationSelfieSetup } from "../../lib/conversation-selfie-se
 import { getAgentRunIntervalMeta } from "../../lib/agent-cadence";
 import { characterMatchesSearch, getCharacterTitle, parseCharacterDisplayData } from "../../lib/character-display";
 import { addSilentGreetingSwipes } from "../../lib/message-swipes";
+import { resolveMessageMacros } from "../../lib/chat-macros";
 import { ChoiceSelectionModal } from "../presets/ChoiceSelectionModal";
 import {
   CONVERSATION_COMMAND_AGENT_IDS,
@@ -1838,6 +1839,16 @@ function RoleplaySetupWizard({ chat, onFinish }: ChatSetupWizardProps) {
     return agents;
   }, [activeChatMode, agentConfigs, agentConfigsByType, installedAgentIds, installedAgentManifests]);
 
+  const defaultEnabledAgentIds = useMemo(() => {
+    const ids: string[] = [];
+    for (const agent of availableAgents) {
+      const config = agentConfigsByType.get(agent.id);
+      const mergedSettings = mergeBuiltInAgentSettings(agent.id, config?.settings);
+      if (mergedSettings.defaultEnabled === true) ids.push(agent.id);
+    }
+    return ids;
+  }, [availableAgents, agentConfigsByType]);
+
   const getPromptOptionsForAgent = useCallback(
     (agentId: string) => {
       const config = agentConfigsByType.get(agentId);
@@ -1959,9 +1970,14 @@ function RoleplaySetupWizard({ chat, onFinish }: ChatSetupWizardProps) {
         const firstMes = (parsed as { first_mes?: string }).first_mes;
         const altGreetings = (parsed as { alternate_greetings?: string[] }).alternate_greetings ?? [];
         if (firstMes) {
-          const msg = await createMessage.mutateAsync({ role: "assistant", content: firstMes, characterId: charId });
-          if (msg?.id && altGreetings.length > 0) {
-            await addSilentGreetingSwipes(chat.id, msg.id, altGreetings);
+          // Resolve preset choice variables ({{genre}}, {{setting}}, etc.) in the greeting
+          const metadata = readChatMetadata(chat);
+          const presetChoices = (metadata.presetChoices ?? {}) as Record<string, string>;
+          const resolvedFirstMes = resolveMessageMacros(firstMes, { variables: presetChoices });
+          const resolvedAltGreetings = altGreetings.map((g) => resolveMessageMacros(g, { variables: presetChoices }));
+          const msg = await createMessage.mutateAsync({ role: "assistant", content: resolvedFirstMes, characterId: charId });
+          if (msg?.id && resolvedAltGreetings.length > 0) {
+            await addSilentGreetingSwipes(chat.id, msg.id, resolvedAltGreetings);
             queryClient.invalidateQueries({ queryKey: chatKeys.messages(chat.id) });
           }
         }
@@ -1969,7 +1985,7 @@ function RoleplaySetupWizard({ chat, onFinish }: ChatSetupWizardProps) {
         /* ignore */
       }
     },
-    [characters, chat.id, createMessage, queryClient],
+    [characters, chat, createMessage, queryClient],
   );
 
   const toggleCharacter = useCallback(
@@ -2055,11 +2071,13 @@ function RoleplaySetupWizard({ chat, onFinish }: ChatSetupWizardProps) {
       id: chat.id,
       chatParameters: customizeParameters ? generationParameters : null,
     });
+    await autoEnableDefaultAgents();
     for (const charId of chatCharIds) {
       await createInitialGreetingForCharacter(charId);
     }
     onFinish();
   }, [
+    autoEnableDefaultAgents,
     chat.id,
     chatCharIds,
     createInitialGreetingForCharacter,
@@ -2086,6 +2104,7 @@ function RoleplaySetupWizard({ chat, onFinish }: ChatSetupWizardProps) {
   const handleShortcutApply = useCallback(async () => {
     if (!shortcutPresetId) {
       await seedInitialGreetingsIfEmpty();
+      await autoEnableDefaultAgents();
       onFinish();
       return;
     }
@@ -2096,10 +2115,11 @@ function RoleplaySetupWizard({ chat, onFinish }: ChatSetupWizardProps) {
       /* fall through — still close the wizard */
     } finally {
       await seedInitialGreetingsIfEmpty();
+      await autoEnableDefaultAgents();
       setShortcutApplying(false);
       onFinish();
     }
-  }, [shortcutPresetId, chat.id, applyChatPreset, onFinish, seedInitialGreetingsIfEmpty]);
+  }, [shortcutPresetId, chat.id, applyChatPreset, autoEnableDefaultAgents, onFinish, seedInitialGreetingsIfEmpty]);
 
   // Search state for character & lorebook pickers
   const [charSearch, setCharSearch] = useState("");
@@ -2249,6 +2269,108 @@ function RoleplaySetupWizard({ chat, onFinish }: ChatSetupWizardProps) {
     installedAgentManifests,
     metadata,
     readLatestActiveAgentIds,
+    supportsNarrativeDirectorSecretPlot,
+    updateAgentConfig,
+    updateMeta,
+  ]);
+
+  const autoEnableDefaultAgents = useCallback(async () => {
+    if (defaultEnabledAgentIds.length === 0) return;
+    const latestActiveAgentIds = readLatestActiveAgentIds();
+    const toAdd = defaultEnabledAgentIds.filter((id) => !latestActiveAgentIds.includes(id));
+    if (toAdd.length === 0) return;
+
+    const metaPatch: Record<string, unknown> = {};
+    const newActiveIds = [...latestActiveAgentIds];
+
+    for (const agentId of toAdd) {
+      const agent = availableAgents.find((a) => a.id === agentId);
+      if (!agent) continue;
+      const config = agentConfigsByType.get(agentId) ?? null;
+      const mergedSettings = mergeBuiltInAgentSettings(agentId, config?.settings);
+      const builtInMeta = installedAgentManifests.find((entry) => entry.id === agentId) ?? null;
+
+      const setup = buildInitialAgentAddSetupState({
+        agentId,
+        settings: mergedSettings,
+        metadata,
+        musicPlayerSource,
+        roleplaySpriteScale,
+        allowSecretPlot: supportsNarrativeDirectorSecretPlot,
+      });
+
+      let nextSettings: Record<string, unknown> = {
+        ...mergedSettings,
+        contextSize: normalizePositiveInteger(mergedSettings.contextSize, DEFAULT_AGENT_CONTEXT_SIZE, 200),
+        maxTokens: normalizeAgentMaxTokens(mergedSettings.maxTokens),
+      };
+      const intervalMeta = getAgentRunIntervalMeta(agentId, !!builtInMeta);
+      if (intervalMeta && typeof mergedSettings.runInterval === "number") {
+        nextSettings.runInterval = mergedSettings.runInterval;
+      }
+      nextSettings = applyAgentAddSetupToAgentSettings(agentId, setup, nextSettings, {
+        allowSecretPlot: supportsNarrativeDirectorSecretPlot,
+      });
+
+      const nextEnabledTools = nextSettings.enabledTools;
+      if (
+        builtInMeta &&
+        (!Array.isArray(nextEnabledTools) ||
+          (agentId === "spotify" && nextSettings.musicProvider === "spotify" && nextEnabledTools.length === 0))
+      ) {
+        nextSettings.enabledTools = DEFAULT_AGENT_TOOLS[agentId] ?? [];
+      }
+
+      try {
+        if (builtInMeta?.execution === "feature") {
+          // Feature packages own their settings and runtime; chat activation is enough.
+        } else if (config) {
+          await updateAgentConfig.mutateAsync({ id: config.id, settings: nextSettings });
+        } else if (builtInMeta) {
+          await createAgent.mutateAsync({
+            type: builtInMeta.id,
+            name: agent.name,
+            description: agent.description,
+            phase: normalizeAgentPhaseForType(agentId, agent.phase),
+            connectionId: null,
+            promptTemplate: "",
+            settings: nextSettings,
+          });
+        }
+
+        Object.assign(metaPatch, buildAgentAddMetadataPatch(agentId, setup, metadata, {
+          allowSecretPlot: supportsNarrativeDirectorSecretPlot,
+          defaultPromptTemplateId: resolveDefaultAgentPromptTemplateId(nextSettings),
+          illustratorDefaults: {
+            includeCharacterAppearance: nextSettings.includeCharacterAppearance === true,
+            useAvatarReferences: nextSettings.useAvatarReferences === true,
+          },
+        }));
+        newActiveIds.push(agentId);
+      } catch {
+        // Skip agents that fail to enable
+      }
+    }
+
+    if (newActiveIds.length > latestActiveAgentIds.length) {
+      await updateMeta.mutateAsync({
+        id: chat.id,
+        enableAgents: true,
+        activeAgentIds: Array.from(new Set(newActiveIds)),
+        ...metaPatch,
+      });
+    }
+  }, [
+    agentConfigsByType,
+    availableAgents,
+    chat.id,
+    createAgent,
+    defaultEnabledAgentIds,
+    installedAgentManifests,
+    metadata,
+    musicPlayerSource,
+    readLatestActiveAgentIds,
+    roleplaySpriteScale,
     supportsNarrativeDirectorSecretPlot,
     updateAgentConfig,
     updateMeta,
@@ -2681,13 +2803,17 @@ function RoleplaySetupWizard({ chat, onFinish }: ChatSetupWizardProps) {
     return (
       <div className="space-y-3">
         <button
-          onClick={() =>
-            updateMeta.mutate({
-              id: chat.id,
-              enableAgents: !agentsEnabled,
-              activeAgentIds: !agentsEnabled ? readLatestActiveAgentIds() : [],
-            })
-          }
+          onClick={() => {
+            if (!agentsEnabled && defaultEnabledAgentIds.length > 0) {
+              void autoEnableDefaultAgents();
+            } else {
+              updateMeta.mutate({
+                id: chat.id,
+                enableAgents: !agentsEnabled,
+                activeAgentIds: !agentsEnabled ? readLatestActiveAgentIds() : [],
+              });
+            }
+          }}
           className={cn(
             "mari-chat-option-field flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-left transition-all",
             agentsEnabled && "mari-chat-option-field--active",

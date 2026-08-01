@@ -4,6 +4,7 @@ import {
   Check,
   ChevronDown,
   Code2,
+  Dices,
   Pencil,
   RefreshCw,
   Sparkles,
@@ -18,6 +19,7 @@ import {
   toAgentFailure,
   type AgentFailure,
 } from "../../lib/agent-failures";
+import { useUIStore } from "../../stores/ui.store";
 import { ContextInjectionPanel } from "../agents/ContextInjectionPanel";
 import { ContinuityIssueChecklist } from "../agents/ContinuityIssueChecklist";
 
@@ -28,7 +30,9 @@ interface ThoughtBubble {
   timestamp: number;
 }
 
-type AgentsMenuTab = "activity" | "injections";
+const EMPTY_DICE_ROLLS: never[] = [];
+
+type AgentsMenuTab = "activity" | "injections" | "dice";
 
 interface RoleplayHUDActionsMenuProps {
   chatId: string;
@@ -100,8 +104,11 @@ export function RoleplayHUDActionsMenu({
     [agentConfigs, enabledAgentTypes],
   );
   const hasAnyActivity = isAgentProcessing || thoughtBubbles.length > 0 || hasCustomRuns || customAgentRunsLoading;
+  const diceRolls = useUIStore((s) => s.diceRollLog[chatId] ?? EMPTY_DICE_ROLLS);
+  const clearDiceRollLog = useUIStore((s) => s.clearDiceRollLog);
   const tabs = [
     { id: "activity" as const, label: "Activity" },
+    { id: "dice" as const, label: `Dice${diceRolls.length > 0 ? ` (${diceRolls.length})` : ""}` },
     ...(showInjectionsTab ? [{ id: "injections" as const, label: "Injections" }] : []),
   ] as const;
   const currentTabIndex = tabs.findIndex((t) => t.id === tab);
@@ -247,6 +254,53 @@ export function RoleplayHUDActionsMenu({
             />
           )}
         </>
+      )}
+
+      {activeTab === "dice" && (
+        <div className="flex flex-col">
+          {diceRolls.length === 0 ? (
+            <div className="px-3 py-4 text-center text-[0.625rem] text-[var(--muted-foreground)]">
+              No dice rolls yet
+            </div>
+          ) : (
+            <>
+              <div className="flex items-center justify-between border-b border-[var(--border)] px-3 py-1.5">
+                <span className="text-[0.625rem] text-[var(--muted-foreground)]">
+                  {diceRolls.length} roll{diceRolls.length !== 1 ? "s" : ""}
+                </span>
+                <button
+                  onClick={() => clearDiceRollLog(chatId)}
+                  className="text-[0.625rem] text-[var(--muted-foreground)] transition-colors hover:text-[var(--foreground)]"
+                >
+                  Clear
+                </button>
+              </div>
+              <div className="max-h-64 overflow-y-auto">
+                {diceRolls.slice().reverse().map((roll, i) => (
+                  <div
+                    key={i}
+                    className="border-b border-[var(--border)]/50 px-3 py-1.5"
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <Dices size="0.75rem" className="text-[var(--muted-foreground)]" />
+                      <span className="text-[0.625rem] font-mono font-semibold text-[var(--foreground)]">
+                        {roll.notation}
+                      </span>
+                      <span className="ml-auto text-[0.6875rem] font-bold text-[var(--foreground)]">
+                        {roll.total}
+                      </span>
+                    </div>
+                    {roll.display && (
+                      <div className="mt-0.5 text-[0.5625rem] text-[var(--muted-foreground)]">
+                        {roll.display}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
       )}
 
       {showFooterActions && (

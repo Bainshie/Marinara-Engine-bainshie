@@ -311,8 +311,12 @@ export async function assemblePrompt(input: AssemblerInput): Promise<AssemblerOu
         variableValues[cb.variableName] = Array.isArray(selected) ? (selected[0] ?? "") : selected;
       }
     } else {
-      // Default to first option's value if no selection yet
-      if (opts.length > 0 && opts[0]) variableValues[cb.variableName] = opts[0].value;
+      // No selection yet — random pick if enabled, otherwise first option
+      if (isRandom && opts.length > 0) {
+        variableValues[cb.variableName] = opts[Math.floor(Math.random() * opts.length)].value;
+      } else if (opts.length > 0 && opts[0]) {
+        variableValues[cb.variableName] = opts[0].value;
+      }
     }
   }
   // Build macro context (character names and primary card fields resolved from IDs)

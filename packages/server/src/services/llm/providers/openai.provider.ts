@@ -1305,7 +1305,7 @@ export class OpenAIProvider extends BaseLLMProvider {
       (!suppressModelParameters || this.allowsToolCalling)
     ) {
       body.tools = options.tools;
-      body.tool_choice = "auto";
+      body.tool_choice = options.toolChoice ?? "auto";
     }
 
     if (!suppressModelParameters) {

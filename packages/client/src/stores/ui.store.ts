@@ -412,6 +412,14 @@ export interface CustomTheme {
   installedAt: string;
 }
 
+interface DiceRollEntry {
+  notation: string;
+  total: number;
+  display: string;
+  timestamp: number;
+  action?: string;
+}
+
 interface UIState {
   sidebarOpen: boolean;
   sidebarWidth: number;
@@ -532,6 +540,9 @@ interface UIState {
   editorDirty: boolean;
   /** Mobile-only return target for detail editors opened from a right panel */
   detailReturnRightPanel: Panel | null;
+
+  /** Per-chat dice roll log, keyed by chatId. */
+  diceRollLog: Record<string, DiceRollEntry[]>;
 
   // ── Settings (persisted) ──
   fontSize: FontSize;
@@ -861,6 +872,8 @@ interface UIState {
   setFontFamily: (family: string) => void;
   setEnableStreaming: (v: boolean) => void;
   setDebugMode: (v: boolean) => void;
+  addDiceRoll: (chatId: string, entry: DiceRollEntry) => void;
+  clearDiceRollLog: (chatId: string) => void;
   setStreamingSpeed: (v: number) => void;
   setGameInstantTextReveal: (v: boolean) => void;
   setGameMiddleMouseNav: (v: boolean) => void;
@@ -1238,6 +1251,7 @@ export const useUIStore = create<UIState>()(
       fontFamily: "",
       enableStreaming: true,
       debugMode: false,
+      diceRollLog: {} as Record<string, DiceRollEntry[]>,
       streamingSpeed: 50,
       gameInstantTextReveal: false,
       gameMiddleMouseNav: false,
@@ -1959,6 +1973,18 @@ export const useUIStore = create<UIState>()(
       setFontFamily: (family) => set({ fontFamily: family }),
       setEnableStreaming: (v) => set({ enableStreaming: v }),
       setDebugMode: (v) => set({ debugMode: v }),
+      addDiceRoll: (chatId, entry) =>
+        set((state) => {
+          const existing = state.diceRollLog[chatId] ?? [];
+          const updated = [...existing, entry].slice(-100);
+          return { diceRollLog: { ...state.diceRollLog, [chatId]: updated } };
+        }),
+      clearDiceRollLog: (chatId) =>
+        set((state) => {
+          const next = { ...state.diceRollLog };
+          delete next[chatId];
+          return { diceRollLog: next };
+        }),
       setStreamingSpeed: (v) => set({ streamingSpeed: Math.max(1, Math.min(100, v)) }),
       setGameInstantTextReveal: (v) => set({ gameInstantTextReveal: v }),
       setGameMiddleMouseNav: (v) => set({ gameMiddleMouseNav: v }),
@@ -2782,6 +2808,7 @@ export const useUIStore = create<UIState>()(
         return persisted;
       },
       partialize: (state) => ({
+        diceRollLog: state.diceRollLog,
         sidebarOpen: state.sidebarOpen,
         sidebarWidth: state.sidebarWidth,
         rightPanelOpen: state.rightPanelOpen,

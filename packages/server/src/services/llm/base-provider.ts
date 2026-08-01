@@ -120,6 +120,8 @@ export interface ChatOptions {
   stop?: string[];
   /** Tool/function definitions for function calling */
   tools?: LLMToolDefinition[];
+  /** Control when the model may invoke tools: "auto" (default), "required" (force), or "none" (disable) */
+  toolChoice?: "auto" | "required" | "none";
   /** Enable provider-native prompt caching when supported */
   enableCaching?: boolean;
   /** Anthropic only: use 1-hour prompt-cache TTL instead of the default 5-minute TTL */

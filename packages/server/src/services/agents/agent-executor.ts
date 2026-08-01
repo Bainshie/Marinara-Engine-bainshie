@@ -891,6 +891,14 @@ async function executeAgentWithTools(
         throw err;
       }
       logger.info("[agent-tools] %s %s completed", config.type, tc.function.name);
+      // Emit a tool_call debug event so the client can surface it (e.g. dice toast)
+      emitAgentDebug(context, {
+        stage: "tool_call",
+        ...agentDebugBase(config, model, temperature, maxTokens),
+        messageCount: loopMessages.length,
+        toolName: tc.function.name,
+        toolResult,
+      });
       if (debugAgentsEnabled) {
         logger.debug("[agent-tools] %s result: %s", config.type, formatToolPayloadForLog(toolResult));
       }

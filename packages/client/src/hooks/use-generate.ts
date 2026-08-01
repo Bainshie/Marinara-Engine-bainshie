@@ -1873,10 +1873,23 @@ export function useGenerate() {
             }
 
             case "agent_debug": {
+              const agentDebugData = event.data as AgentCallDebugEvent;
+              // Surface tool_call events (e.g. dice rolls) as toasts regardless of debug mode
+              if (agentDebugData.stage === "tool_call" && agentDebugData.toolName === "roll_dice") {
+                try {
+                  const parsed = JSON.parse(agentDebugData.toolResult ?? "{}");
+                  const total = parsed.total ?? "?";
+                  const notation = parsed.notation ?? "1d20";
+                  const display = parsed.display ?? `Rolled ${notation}: ${total}`;
+                  toast.success(`🎲 ${display}`, { duration: 4000 });
+                } catch {
+                  toast.success(`🎲 Dice rolled (${agentDebugData.toolResult ?? "result"})`, { duration: 4000 });
+                }
+              }
               if (!debugMode) break;
               addDebugEntry({
                 phase: "agent_call",
-                agentCall: event.data as AgentCallDebugEvent,
+                agentCall: agentDebugData,
               });
               break;
             }
@@ -1896,8 +1909,22 @@ export function useGenerate() {
             }
 
             case "tool_result": {
-              if (!debugMode) break;
               const data = event.data as { name?: unknown; result?: unknown; success?: unknown };
+              // Capture roll_dice results for the persistent dice log regardless of debug mode
+              if (typeof data.name === "string" && data.name === "roll_dice") {
+                try {
+                  const resultStr = typeof data.result === "string" ? data.result : JSON.stringify(data.result ?? "");
+                  const parsed = JSON.parse(resultStr);
+                  if (parsed && typeof parsed.total === "number") {
+                    useUIStore.getState().addDiceRoll(params.chatId, {
+                      notation: parsed.notation || "1d20",
+                      total: parsed.total,
+                      display: parsed.display || `🎲 ${parsed.notation || "1d20"}: ${parsed.total}`,
+                    });
+                  }
+                } catch { /* ignore parse errors */ }
+              }
+              if (!debugMode) break;
               addDebugEntry({
                 phase: "tool_result",
                 toolResult: {

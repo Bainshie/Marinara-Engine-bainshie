@@ -467,6 +467,7 @@ import {
   buildSummaryWriteApprovalProposal,
   isAgentWriteApprovalEnvelope,
 } from "./generate/agent-write-approval.js";
+import { rollDice } from "../services/game/dice.service.js";
 
 function scopeLorebookPromptMessagesForCharacter(
   messages: GenerationPromptMessage[],
@@ -5203,6 +5204,8 @@ export async function generateRoutes(app: FastifyInstance) {
             }
           };
 
+
+          let hadRealDiceRoll = false;
           if (enableChatTools && provider.chatComplete) {
             const maxToolRounds = getMaxToolRounds();
             let loopMessages: ChatMessage[] = initialProviderMessages;
@@ -5273,6 +5276,7 @@ export async function generateRoutes(app: FastifyInstance) {
                   minP: minP || undefined,
                   stop: stopSequences.length ? stopSequences : undefined,
                   tools: toolDefs,
+                  toolChoice: round === 0 && chatResolvedToolNames.has("roll_dice") ? "required" : "auto",
                   enableCaching: conn.enableCaching === "true",
                   anthropicExtendedCacheTtl: conn.anthropicExtendedCacheTtl === "true",
                   cachingAtDepth: conn.cachingAtDepth ?? 5,
@@ -5368,6 +5372,10 @@ export async function generateRoutes(app: FastifyInstance) {
                     ? (targetCharId ?? input.forCharacterId ?? null)
                     : null,
               });
+              if (executedToolResults.some((tr) => tr.name === "roll_dice" && tr.success)) {
+                hadRealDiceRoll = true;
+              }
+              console.log("[DICE-DIAG] toolCalls=" + JSON.stringify(result.toolCalls.map(c => c.function.name)) + " hadRealDiceRoll=" + hadRealDiceRoll);
               const toolResultsById = new Map(
                 [...executedToolResults, ...deniedToolResults].map((result) => [result.toolCallId, result]),
               );
@@ -5607,6 +5615,48 @@ export async function generateRoutes(app: FastifyInstance) {
 
           const durationMs = Date.now() - genStartTime;
 
+          let contentReplaced = false;
+          // Post-processing: replace hallucinated dice rolls with real ones
+          console.log("[DICE-DIAG] fixer check: hasRollDice=" + chatResolvedToolNames.has("roll_dice") + " hadRealDiceRoll=" + hadRealDiceRoll);
+          if (chatResolvedToolNames.has("roll_dice") && !hadRealDiceRoll) {
+            const dicePattern = /([^\n]*?\|\s*Roll:\s*(\d+)\s*\|\s*Result:\s*([A-Z\s]+))/gi;
+            const dcPattern = /DC\s*(\d+)/i;
+            let diceMatch;
+            const replacements = [];
+            while ((diceMatch = dicePattern.exec(fullResponse)) !== null) {
+              const fullMatch = diceMatch[0];
+              const dcMatch = dcPattern.exec(fullMatch);
+              const dc = dcMatch ? parseInt(dcMatch[1], 10) : 10;
+              const realResult = rollDice("1d20");
+              const realRoll = realResult.total;
+              const isCritSuccess = realRoll === 20;
+              const isCritFail = realRoll === 1;
+              const newResult = isCritSuccess ? "CRITICAL SUCCESS" : isCritFail ? "CRITICAL FAILURE" : realRoll >= dc ? "SUCCESS" : "FAILURE";
+              const newMatch = fullMatch
+                .replace(/Roll:\s*\d+/, "Roll: " + realRoll)
+                .replace(/Result:\s*[A-Z\s]+/, "Result: " + newResult);
+              replacements.push({ old: fullMatch, new: newMatch });
+              reply.raw.write("data: " + JSON.stringify({
+                type: "tool_result",
+                data: {
+                  name: "roll_dice",
+                  result: JSON.stringify({ notation: "1d20", rolls: realResult.rolls, sum: realRoll, modifier: 0, total: realRoll, display: "\u{1F3B2} 1d20 (server-side fix): [" + realResult.rolls.join(", ") + "] = " + realRoll }),
+                  success: true,
+                },
+              }) + "\n\n");
+            }
+            if (replacements.length > 0) {
+              for (const r of replacements) {
+                fullResponse = fullResponse.replace(r.old, r.new);
+              }
+              contentReplaced = true;
+              if (!holdForTextRewrite) {
+                reply.raw.write("data: " + JSON.stringify({ type: "content_replace", data: fullResponse }) + "\n\n");
+              }
+              logger.info("[generate] Replaced %d hallucinated dice roll(s) with real server-side rolls", replacements.length);
+            }
+          }
+
           if (input.debugMode && chatMode === "game") {
             debugLog(
               "[generate/game/raw] chatId=%s characterId=%s chars=%d BEGIN",
@@ -5676,7 +5726,6 @@ export async function generateRoutes(app: FastifyInstance) {
           let parsedCommandCharacterIds: (string | null)[] | null = null;
           let parsedRawCommandCount = 0;
           let conversationCommandContent: string | null = null;
-          let contentReplaced = false;
           if (tailMessages.assistantPrefillInjected && assistantPrefill && fullResponse.startsWith(assistantPrefill)) {
             const responseAfterPrefill = fullResponse.slice(assistantPrefill.length);
             if (responseAfterPrefill.startsWith(assistantPrefill)) {
