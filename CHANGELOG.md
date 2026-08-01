@@ -8,6 +8,7 @@ This file is the release-notes source of truth for Marinara Engine. Reuse these 
 
 ### Added
 
+- Added validated JSON export and import for Conversation character schedules. Imports load as unsaved drafts, preserve the existing schedule until explicitly saved, and move restored routines to the current week (#4414).
 - Added Z.AI as a native Image Generation service with GLM-Image and CogView 4 models, model-aware aspect-ratio sizing, authenticated native requests, and safe local storage of returned image URLs (#4350).
 - Added compact multi-selection and bulk deletion to Professor Mari's chat history, including a single destructive confirmation and automatic replacement when the active chat is removed (#4353).
 - Added Character-ID macros such as `{{V1StGXR8_Z5jdHi6B-myT}}` for loading another card's context into the system prompt without its greetings or example dialogue, while still applying normally activated attached lorebooks (#4336).
