@@ -1162,6 +1162,7 @@
 }
 
 .mari-chrome-sort-field {
+  width: 6.5rem;
   border-color: var(--marinara-chat-chrome-button-border);
   color: var(--marinara-chat-chrome-button-text-active);
 }

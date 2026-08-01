@@ -1256,6 +1256,68 @@ test("bulk chat deletion uses the shared primary accent control", async ({ page 
   }
 });
 
+test("empty chat hover previews inherit the configured accent", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name.includes("mobile"), "Chat row hover previews are desktop-only.");
+
+  const response = await page.request.post("/api/chats", {
+    data: { name: "Empty Chat Accent Preview", mode: "conversation", characterIds: [] },
+  });
+  expect(response.ok()).toBeTruthy();
+  const chat = (await response.json()) as { id: string };
+
+  try {
+    await page.addInitScript(() => {
+      localStorage.setItem(
+        "marinara-engine-ui",
+        JSON.stringify({
+          state: {
+            hasCompletedOnboarding: true,
+            sidebarOpen: true,
+          },
+          version: 75,
+        }),
+      );
+    });
+    await page.goto("/");
+    await setAppAccentColor(page, "#14b8a6");
+    const activeAccentColor = await readCssVariableColor(page, "--marinara-chat-chrome-button-text-active");
+
+    const chatRow = page.locator(`[data-component="ChatSidebar"] [data-chat-id="${chat.id}"]`);
+    await expect(chatRow).toBeVisible();
+    await chatRow.hover();
+
+    const emptyPreview = page.getByRole("tooltip").getByText("No messages yet", { exact: true });
+    await expect(emptyPreview).toBeVisible();
+    await expect(emptyPreview).toHaveCSS("color", activeAccentColor);
+    expect(await emptyPreview.getAttribute("class")).not.toMatch(/pink|red|rose/iu);
+  } finally {
+    await page.request.delete(`/api/chats/${chat.id}`).catch(() => undefined);
+  }
+});
+
+test("resource panel sort fields share the canonical width", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name.includes("mobile"), "Desktop resource panel control geometry is covered here.");
+
+  await page.goto("/");
+  const rightPanel = page.locator('[data-component="RightPanelDesktop"]');
+
+  await page.locator('[data-tour="panel-lorebooks"]').click();
+  const lorebookSort = rightPanel.locator("select.mari-chrome-sort-field:visible");
+  await expect(lorebookSort).toBeVisible();
+  const lorebookWidth = await lorebookSort.evaluate((element) => element.getBoundingClientRect().width);
+
+  await page.locator('[data-tour="panel-personas"]').click();
+  const personaSort = rightPanel.locator("select.mari-chrome-sort-field:visible");
+  await expect(personaSort).toBeVisible();
+  const personaWidth = await personaSort.evaluate((element) => element.getBoundingClientRect().width);
+  const rootFontSize = await page.locator("html").evaluate((element) =>
+    Number.parseFloat(getComputedStyle(element).fontSize),
+  );
+
+  expect(lorebookWidth / rootFontSize).toBeCloseTo(6.5, 2);
+  expect(lorebookWidth).toBe(personaWidth);
+});
+
 test("destructive confirmation actions use the shared accent button treatment", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name.includes("mobile"), "Desktop confirmation-dialog chrome is covered here.");
 
