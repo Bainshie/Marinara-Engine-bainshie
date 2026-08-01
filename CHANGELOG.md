@@ -56,6 +56,7 @@ This file is the release-notes source of truth for Marinara Engine. Reuse these 
 
 ### Security
 
+- Updated the production web server, static-file serving, request client, archive, image-processing, HTML-sanitization, MCP transport, and supporting transitive dependencies to their patched releases; the shipped dependency graph now passes the production vulnerability audit with no known advisories.
 - Required normal authorization for proxy-forwarded Docker traffic by default while retaining `REQUIRE_AUTH_FOR_DOCKER_PROXY=false` as an explicit legacy opt-out for fully trusted upstream clients. Direct same-host Docker bridge/gateway traffic remains compatible with `BYPASS_AUTH_DOCKER`.
 - Pinned bundled llama.cpp, MLX, and uv runtime inputs to reviewed revisions and release assets with repository-owned sizes and SHA-256 digests, and locked every MLX Python dependency to hash-verified packages. Downloads now fail before extraction or execution when their content differs, cancellation remains effective between retries, and installed runtime stamps force explicit Engine-reviewed upgrades instead of following upstream `latest` or `main`.
 - Bounded NovelAI ZIP image decompression to 64 MiB, rejected oversized declared output before inflation, and required actual output to match the archive metadata so malformed or highly expanding provider responses fail safely.
