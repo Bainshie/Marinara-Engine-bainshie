@@ -222,6 +222,7 @@ export function ChatResourceDropOverlay({ chat }: { chat: Chat }) {
   const [choicePresetId, setChoicePresetId] = useState<string | null>(null);
   const [characterOptions, setCharacterOptions] = useState<CharacterDropOptions | null>(null);
   const [assigning, setAssigning] = useState(false);
+  const agentSetupHandoffRef = useRef(false);
   chatRef.current = chat;
 
   const resolveOverlay = useCallback((target: EventTarget | null, dataTransfer: DataTransfer) => {
@@ -419,7 +420,11 @@ export function ChatResourceDropOverlay({ chat }: { chat: Chat }) {
             [key]: nextIds,
             ...(latestAction.type === "add-agents" && latestAction.mustEnableAgents ? { enableAgents: true } : {}),
           });
-          if (latestAction.type === "add-agents") requestChatAgentSetup(currentChat.id, latestAction.ids);
+          if (latestAction.type === "add-agents") {
+            requestChatAgentSetup(currentChat.id, latestAction.ids);
+            // The setup drawer owns the panel restore from here, so it happens after its modal.
+            agentSetupHandoffRef.current = true;
+          }
           toast.success(
             t(
               latestAction.type === "add-lorebooks"
@@ -607,6 +612,10 @@ export function ChatResourceDropOverlay({ chat }: { chat: Chat }) {
   // its follow-up modals are gone, put the user back in the panel they were dragging from.
   useEffect(() => {
     if (assigning || characterOptions || choicePresetId !== null) return;
+    if (agentSetupHandoffRef.current) {
+      agentSetupHandoffRef.current = false;
+      return;
+    }
     const panel = takePendingChatResourcePanelRestore();
     // Respect wherever the user navigated to in the meantime.
     if (panel && !useUIStore.getState().rightPanelOpen) useUIStore.getState().openRightPanel(panel);
