@@ -3785,6 +3785,55 @@ const cases: RegressionCase[] = [
         }),
         ["2B-"],
       );
+      assert.deepEqual(
+        selectStoryboardAppearanceCharacterNames({
+          sourceNarration: "Grish joins Elowen, Rowan, Tusk, and Voss beside the gate.",
+          sections: [],
+          allowedCharacterNames: [
+            "Old Grish",
+            "Young Elowen",
+            "Elder Rowan",
+            "Great Tusk",
+            "Captain Voss",
+            "Amber Slime",
+            "Blue Ooze",
+            "Violet Myconid",
+          ],
+        }),
+        ["Old Grish", "Young Elowen", "Elder Rowan", "Great Tusk", "Captain Voss"],
+      );
+      assert.deepEqual(
+        selectStoryboardAppearanceCharacterNames({
+          sourceNarration: "Amber light turns the old stone blue beside a violet banner.",
+          sections: [],
+          allowedCharacterNames: ["Old Grish", "Amber Slime", "Blue Ooze", "Violet Myconid"],
+        }),
+        [],
+      );
+      assert.deepEqual(
+        selectStoryboardAppearanceCharacterNames({
+          sourceNarration: "Grish raises his lantern.",
+          sections: [],
+          allowedCharacterNames: ["Old Grish", "Young Grish"],
+        }),
+        [],
+      );
+      assert.deepEqual(
+        selectStoryboardAppearanceCharacterNames({
+          sourceNarration: "Old Grish raises his lantern.",
+          sections: [],
+          allowedCharacterNames: ["Old Grish", "Young Grish"],
+        }),
+        ["Old Grish"],
+      );
+      assert.deepEqual(
+        selectStoryboardAppearanceCharacterNames({
+          sourceNarration: "Old waits beside the gate.",
+          sections: [],
+          allowedCharacterNames: ["Old"],
+        }),
+        ["Old"],
+      );
 
       const narrationSummaryMessages = await buildIllustrationNarrationSummaryMessages({
         illustration: {

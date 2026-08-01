@@ -375,6 +375,58 @@ test("default dialogue color fills only cards without their own dialogue color",
   }
 });
 
+test("roleplay hides contentless user anchors without hiding visible payloads", async ({ page }) => {
+  const chatResponse = await page.request.post("/api/chats", {
+    data: { name: "Spatial-only Message Visibility Smoke", mode: "roleplay", characterIds: [] },
+  });
+  expect(chatResponse.ok()).toBeTruthy();
+  const chat = (await chatResponse.json()) as { id: string };
+
+  try {
+    const anchorResponse = await page.request.post(`/api/chats/${chat.id}/messages`, {
+      data: { role: "user", characterId: null, content: "" },
+    });
+    expect(anchorResponse.ok()).toBeTruthy();
+    const anchor = (await anchorResponse.json()) as { id: string };
+
+    const textResponse = await page.request.post(`/api/chats/${chat.id}/messages`, {
+      data: { role: "user", characterId: null, content: "We enter the kitchen." },
+    });
+    expect(textResponse.ok()).toBeTruthy();
+    const textMessage = (await textResponse.json()) as { id: string };
+
+    const attachmentResponse = await page.request.post(`/api/chats/${chat.id}/messages`, {
+      data: { role: "user", characterId: null, content: "" },
+    });
+    expect(attachmentResponse.ok()).toBeTruthy();
+    const attachmentMessage = (await attachmentResponse.json()) as { id: string };
+    const attachmentExtraResponse = await page.request.patch(
+      `/api/chats/${chat.id}/messages/${attachmentMessage.id}/extra`,
+      {
+        data: {
+          attachments: [
+            {
+              type: "image",
+              data: `data:image/gif;base64,${TRANSPARENT_GIF_BASE64}`,
+              filename: "spatial-only-control.gif",
+            },
+          ],
+        },
+      },
+    );
+    expect(attachmentExtraResponse.ok()).toBeTruthy();
+
+    await page.addInitScript((chatId) => localStorage.setItem("marinara-active-chat-id", chatId), chat.id);
+    await page.goto("/");
+
+    await expect(page.locator(`[data-message-id="${anchor.id}"]`)).toHaveCount(0);
+    await expect(page.locator(`[data-message-id="${textMessage.id}"]`)).toContainText("We enter the kitchen.");
+    await expect(page.locator(`[data-message-id="${attachmentMessage.id}"]`)).toBeVisible();
+  } finally {
+    await page.request.delete(`/api/chats/${chat.id}`).catch(() => undefined);
+  }
+});
+
 test("Chat Settings adds a formatted greeting after the setup wizard is skipped", async ({
   page,
   request,
@@ -8408,7 +8460,15 @@ test("Hierarchical Maps settings stay inside the active agent entry", async ({ p
       sessionStorage.setItem("maps-feature-detail-chat-seeded", "true");
     }, chats[0]!.id);
     await page.goto("/");
-    await page.locator('[data-tour="panel-agents"]').click();
+    const worldMapsButton = page.getByRole("button", { name: "World Maps", exact: true });
+    await expect(worldMapsButton).toBeVisible();
+    await worldMapsButton.click();
+    await expect(page.getByRole("heading", { name: "Hierarchical Maps home" })).toBeVisible();
+    await expect(page.locator('[data-tour="panel-agents"]')).not.toHaveClass(/mari-topbar-panel-icon--active/);
+    await page.getByRole("button", { name: "Back to Agents" }).click();
+    await expect(page.getByTestId("hierarchical-maps-detail")).toHaveCount(0);
+    await expect(page.locator('[data-tour="panel-agents"]')).toHaveClass(/mari-topbar-panel-icon--active/);
+
     const agentsPanel = page.locator('[data-component="RightPanelDesktop"]');
     const mapsCard = agentsPanel.locator('[data-agent-name="Hierarchical Maps"]');
     await expect(mapsCard).toBeVisible();
@@ -8420,6 +8480,7 @@ test("Hierarchical Maps settings stay inside the active agent entry", async ({ p
     await expect(page.getByText("System Prompt", { exact: true })).toHaveCount(0);
     await page.getByRole("button", { name: "Back to Agents" }).click();
     await expect(page.getByTestId("hierarchical-maps-detail")).toHaveCount(0);
+    await expect(page.locator('[data-tour="panel-agents"]')).toHaveClass(/mari-topbar-panel-icon--active/);
 
     for (const chat of chats) {
       await page.evaluate((chatId) => localStorage.setItem("marinara-active-chat-id", chatId), chat.id);
