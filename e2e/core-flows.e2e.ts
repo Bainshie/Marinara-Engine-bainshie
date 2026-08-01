@@ -177,13 +177,21 @@ test("What's New opens once for each Marinara Engine version", async ({ page }) 
   const announcement = page.getByRole("dialog", { name: "What's New?" });
   await expect(announcement).toBeVisible();
   await expect(announcement.getByText(`Version ${APP_VERSION}`, { exact: true })).toBeVisible();
-  await expect(
-    announcement.getByRole("heading", { name: "Broader horizons, finer control, stronger foundations." }),
-  ).toBeVisible();
-  await expect(announcement.getByText(/Z\.AI image generation/)).toBeVisible();
-  await expect(announcement.getByText(/smarter Roleplay animation planning/)).toBeVisible();
-  await expect(announcement.getByText(/four new documentation languages/)).toBeVisible();
-  await expect(announcement.getByText(/runtime security/)).toBeVisible();
+  await expect(announcement.getByRole("heading", { name: "The extensions are back!" })).toBeVisible();
+  await expect(announcement.getByText(/new Personas icon/)).toBeVisible();
+  await expect(announcement.getByText(/edit presets, characters, personas, and lorebooks/)).toBeVisible();
+  await expect(announcement.getByText(/three new Agents/)).toBeVisible();
+  await expect(announcement.getByText(/many bug fixes and QoL updates/)).toBeVisible();
+  await expect(announcement.locator('[data-release-story="2.4.0"] img')).toHaveCount(12);
+  await expect(announcement.getByAltText("The new Personas icon in Marinara Engine")).toHaveAttribute(
+    "src",
+    "https://i.imgur.com/K4Z9rSA.png",
+  );
+  const announcementScrollArea = announcement.locator('[data-component="WhatsNewModal"]').locator("..");
+  await expect.poll(() => announcementScrollArea.evaluate((element) => getComputedStyle(element).overflowY)).toBe("auto");
+  await expect
+    .poll(() => announcementScrollArea.evaluate((element) => element.scrollHeight > element.clientHeight))
+    .toBe(true);
   await expect(announcement.getByText("Marinara Engine has been updated.", { exact: true })).toHaveCount(0);
   await expect(announcement.getByText("Tactical Combat Mode in Games")).toHaveCount(0);
   await expect(announcement.getByRole("link", { name: "View release" })).toHaveAttribute(
