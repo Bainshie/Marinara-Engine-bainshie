@@ -6248,23 +6248,30 @@ test("Character and Persona sidebars find cards by creator", async ({ page, requ
 test("right-panel controls keep their width with and without a scrollbar", async ({ page, request }, testInfo) => {
   test.skip(testInfo.project.name.includes("mobile"), "Desktop scrollbar geometry regression.");
   const suffix = Date.now().toString(36);
-  const characterResponses = await Promise.all(
-    Array.from({ length: 16 }, (_, index) =>
-      request.post("/api/characters", {
-        data: { data: { name: `Scrollbar Character ${suffix} ${index + 1}` } },
-      }),
-    ),
-  );
-  for (const response of characterResponses) expect(response.ok()).toBeTruthy();
-  const characters = (await Promise.all(characterResponses.map((response) => response.json()))) as Array<{
-    id: string;
-  }>;
+  const characterIds: string[] = [];
+  let personaId: string | undefined;
   const personaName = `Short Persona ${suffix}`;
-  const personaResponse = await request.post("/api/characters/personas", { data: { name: personaName } });
-  expect(personaResponse.ok()).toBeTruthy();
-  const persona = (await personaResponse.json()) as { id: string };
 
   try {
+    const characterResponses = await Promise.all(
+      Array.from({ length: 16 }, (_, index) =>
+        request.post("/api/characters", {
+          data: { data: { name: `Scrollbar Character ${suffix} ${index + 1}` } },
+        }),
+      ),
+    );
+    for (const response of characterResponses) {
+      if (response.ok()) {
+        const character = (await response.json()) as { id: string };
+        characterIds.push(character.id);
+      }
+    }
+    for (const response of characterResponses) expect(response.ok()).toBeTruthy();
+
+    const personaResponse = await request.post("/api/characters/personas", { data: { name: personaName } });
+    if (personaResponse.ok()) personaId = ((await personaResponse.json()) as { id: string }).id;
+    expect(personaResponse.ok()).toBeTruthy();
+
     await page.goto("/");
     const rightPanel = page.locator('[data-component="RightPanelDesktop"]');
     await page.locator('[data-tour="panel-characters"]').click();
@@ -6289,10 +6296,11 @@ test("right-panel controls keep their width with and without a scrollbar", async
     await expect(personaScroll).toHaveCSS("scrollbar-gutter", /stable/u);
     expect(Math.abs(characterButtonBox!.width - personaButtonBox!.width)).toBeLessThan(0.5);
   } finally {
-    await Promise.all([
-      ...characters.map((character) => request.delete(`/api/characters/${character.id}`).catch(() => undefined)),
-      request.delete(`/api/characters/personas/${persona.id}`).catch(() => undefined),
-    ]);
+    const cleanupRequests = characterIds.map((id) =>
+      request.delete(`/api/characters/${id}`).catch(() => undefined),
+    );
+    if (personaId) cleanupRequests.push(request.delete(`/api/characters/personas/${personaId}`).catch(() => undefined));
+    await Promise.all(cleanupRequests);
   }
 });
 

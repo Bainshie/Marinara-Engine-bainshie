@@ -12,14 +12,28 @@ const MONOREPO_ROOT = resolve(SERVER_ROOT, "../..");
 const BUILD_META_PATH = resolve(__dirname, "build-meta.json");
 const COMMIT_LENGTH = 12;
 
+type BuildMeta = {
+  commit?: string | null;
+  branch?: string | null;
+};
+
 let cachedCommit: string | null | undefined;
 let cachedBranch: string | null | undefined;
-let cachedBuildMeta: { commit?: string | null; branch?: string | null } | null | undefined;
+let cachedBuildMeta: BuildMeta | null | undefined;
 
 function normalizeCommit(value: string | undefined | null) {
   const trimmed = value?.trim();
   if (!trimmed) return null;
   return trimmed.slice(0, COMMIT_LENGTH);
+}
+
+function isBuildMeta(value: unknown): value is BuildMeta {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
+  const candidate = value as { commit?: unknown; branch?: unknown };
+  return (
+    (candidate.commit === undefined || candidate.commit === null || typeof candidate.commit === "string") &&
+    (candidate.branch === undefined || candidate.branch === null || typeof candidate.branch === "string")
+  );
 }
 
 function readBuildMeta() {
@@ -30,10 +44,8 @@ function readBuildMeta() {
   }
 
   try {
-    cachedBuildMeta = JSON.parse(readFileSync(BUILD_META_PATH, "utf8")) as {
-      commit?: string | null;
-      branch?: string | null;
-    };
+    const parsed: unknown = JSON.parse(readFileSync(BUILD_META_PATH, "utf8"));
+    cachedBuildMeta = isBuildMeta(parsed) ? parsed : null;
   } catch {
     cachedBuildMeta = null;
   }

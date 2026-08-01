@@ -406,6 +406,8 @@ assert.strictEqual(parseDockerDefaultGatewayIp("Iface\tDestination\tGateway\tFla
 
 const buildInfoSource = readFileSync(join(REPOSITORY_ROOT, "packages/server/src/config/build-info.ts"), "utf8");
 assert.match(buildInfoSource, /normalizeBranch\(readBuildMeta\(\)\?\.branch\)/u);
+assert.match(buildInfoSource, /const parsed: unknown = JSON\.parse/u);
+assert.match(buildInfoSource, /cachedBuildMeta = isBuildMeta\(parsed\) \? parsed : null/u);
 const updatesRouteSource = readFileSync(join(REPOSITORY_ROOT, "packages/server/src/routes/updates.routes.ts"), "utf8");
 assert.match(updatesRouteSource, /gitInstall \? await getCurrentBranch\(root\)\.catch\(\(\) => null\) : getBuildBranch\(\)/u);
 assert.match(updatesRouteSource, /const currentChannel = await getUpdateChannelForCheckout\(root, currentBranch\)/u);
