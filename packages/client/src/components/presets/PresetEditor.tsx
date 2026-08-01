@@ -2102,46 +2102,48 @@ function VariableCard({
                 Allow users to select multiple options instead of just one.
               </p>
 
-              {isMultiSelect && (
-                <div className="space-y-2 border-t border-[var(--border)] pt-2">
-                  {/* Random Pick Toggle */}
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-1.5">
-                      <Shuffle size="0.75rem" className="mari-chrome-accent-icon mari-accent-animated" />
-                      <span className="text-[0.625rem] font-medium text-[var(--foreground)]">Random Pick</span>
-                    </div>
-                    <SettingsSwitch
-                      ariaLabel={isRandomPick ? "Disable random pick" : "Enable random pick"}
-                      checked={isRandomPick}
-                      onChange={(checked) => update({ randomPick: checked })}
-                      className="p-0 hover:bg-transparent"
-                    />
+              <div className="space-y-2 border-t border-[var(--border)] pt-2">
+                {/* Random Pick Toggle */}
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5">
+                    <Shuffle size="0.75rem" className="mari-chrome-accent-icon mari-accent-animated" />
+                    <span className="text-[0.625rem] font-medium text-[var(--foreground)]">Random Pick</span>
                   </div>
-                  <p className="text-[0.5625rem] text-[var(--muted-foreground)]">
-                    {isRandomPick
-                      ? "One of the user's selected options will be randomly picked each generation."
-                      : "All selected options will be joined together with the separator below."}
-                  </p>
-
-                  {/* Separator (only shown when not random pick) */}
-                  {!isRandomPick && (
-                    <div className="flex items-center gap-2">
-                      <label className="shrink-0 text-[0.625rem] font-medium text-[var(--muted-foreground)]">
-                        Separator
-                      </label>
-                      <OptionFieldInput
-                        value={separatorValue}
-                        onCommit={(value) => update({ separator: value })}
-                        className="mari-editor-field w-20 px-1.5 py-0.5 text-center font-mono text-xs"
-                        placeholder=", "
-                      />
-                      <span className="text-[0.5625rem] text-[var(--muted-foreground)]">
-                        e.g. ", " becomes Romance, Fantasy, Action
-                      </span>
-                    </div>
-                  )}
+                  <SettingsSwitch
+                    ariaLabel={isRandomPick ? "Disable random pick" : "Enable random pick"}
+                    checked={isRandomPick}
+                    onChange={(checked) => update({ randomPick: checked })}
+                    className="p-0 hover:bg-transparent"
+                  />
                 </div>
-              )}
+                <p className="text-[0.5625rem] text-[var(--muted-foreground)]">
+                  {isMultiSelect
+                    ? isRandomPick
+                      ? "One of the user's selected options will be randomly picked each generation."
+                      : "All selected options will be joined together with the separator below."
+                    : isRandomPick
+                      ? "A random option is rolled once when the variable picker is confirmed. Users can still override it by picking a different option manually."
+                      : "The first option is used by default until the user picks one."}
+                </p>
+
+                {/* Separator (only shown for multi-select, and not random pick) */}
+                {isMultiSelect && !isRandomPick && (
+                  <div className="flex items-center gap-2">
+                    <label className="shrink-0 text-[0.625rem] font-medium text-[var(--muted-foreground)]">
+                      Separator
+                    </label>
+                    <OptionFieldInput
+                      value={separatorValue}
+                      onCommit={(value) => update({ separator: value })}
+                      className="mari-editor-field w-20 px-1.5 py-0.5 text-center font-mono text-xs"
+                      placeholder=", "
+                    />
+                    <span className="text-[0.5625rem] text-[var(--muted-foreground)]">
+                      e.g. ", " becomes Romance, Fantasy, Action
+                    </span>
+                  </div>
+                )}
+              </div>
             </div>
           )}
 

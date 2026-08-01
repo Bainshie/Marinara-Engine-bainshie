@@ -22,10 +22,11 @@ const __dirname = dirname(__filename);
 
 const LEGACY_MARINARA_PRESET_NAME = "Default";
 const MARINARA_PRESET_NAME = "Marinara's Universal Preset";
-const MARINARA_PRESET_DESCRIPTION = "Marinara's universal roleplay preset. Serves as a good base.";
+const MARINARA_PRESET_DESCRIPTION = "Marinara’s universal roleplay preset. Serves as a good base.";
 const MARINARA_PRESET_AUTHOR = "Marinara";
 const MARINARA_PRESET_SEED_HASH_KEY = "seed:marinara-universal-preset:sha256";
 const MARINARA_PRESET_SNAPSHOT_KEY = "seed:marinara-universal-preset:snapshot-sha256";
+const GM_ENGINE_PRESET_BUNDLE_FILENAME = "default-preset-gm-engine.json";
 
 type BundledPresetEnvelope = {
   type: "marinara_preset";
@@ -39,14 +40,18 @@ type BundledPresetEnvelope = {
   };
 };
 
-function readBundledDefaultPreset(): { hash: string; envelope: BundledPresetEnvelope } {
-  const jsonPath = join(__dirname, "default-preset.json");
+function readBundledPreset(filename: string): { hash: string; envelope: BundledPresetEnvelope } {
+  const jsonPath = join(__dirname, filename);
   const raw = readFileSync(jsonPath, "utf-8");
   const envelope = JSON.parse(raw) as BundledPresetEnvelope;
   return {
     hash: createHash("sha256").update(raw).digest("hex"),
     envelope,
   };
+}
+
+function readBundledDefaultPreset(): { hash: string; envelope: BundledPresetEnvelope } {
+  return readBundledPreset("default-preset.json");
 }
 
 function parseJsonField<T>(value: unknown, fallback: T): T {
@@ -457,4 +462,19 @@ export async function seedDefaultPreset(db: DB) {
   await appSettings.set(MARINARA_PRESET_SEED_HASH_KEY, bundled.hash);
   const seededSnapshotHash = await computePresetSnapshotHash(storage, presetId);
   if (seededSnapshotHash) await appSettings.set(MARINARA_PRESET_SNAPSHOT_KEY, seededSnapshotHash);
+
+  // Also seed the bundled GM Engine preset on a fresh install, so both ship
+  // out of the box. Marinara's Universal Preset stays the active default.
+  const gmEngineBundle = readBundledPreset(GM_ENGINE_PRESET_BUNDLE_FILENAME);
+  const gmEngineResult = await importMarinara(gmEngineBundle.envelope, db);
+  if (!gmEngineResult.success || gmEngineResult.type !== "marinara_preset") {
+    logger.error("[seed] Failed to import GM Engine preset: %j", gmEngineResult);
+    return;
+  }
+  const gmEnginePresetId = (gmEngineResult as { id: string }).id;
+  await storage.update(gmEnginePresetId, {
+    conversationPrompt: bundledConversationPrompt(gmEngineBundle.envelope.data.preset),
+    gamePrompt: bundledGamePrompt(gmEngineBundle.envelope.data.preset),
+    defaultChoices: parseJsonField(gmEngineBundle.envelope.data.preset.defaultChoices, {}),
+  });
 }

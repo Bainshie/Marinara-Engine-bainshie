@@ -252,15 +252,12 @@ export function ChoiceSelectionModal({
                 )}
                 {v.multiSelect && (
                   <span className="flex items-center gap-0.5 rounded bg-[var(--accent)] px-1.5 py-0.5 text-[0.5625rem] font-medium text-[var(--foreground)]">
-                    {v.randomPick ? (
-                      <>
-                        <Shuffle size="0.5625rem" /> Random pick
-                      </>
-                    ) : (
-                      <>
-                        <ListChecks size="0.5625rem" /> Multi-select
-                      </>
-                    )}
+                    <ListChecks size="0.5625rem" /> Multi-select
+                  </span>
+                )}
+                {v.randomPick && (
+                  <span className="flex items-center gap-0.5 rounded bg-[var(--accent)] px-1.5 py-0.5 text-[0.5625rem] font-medium text-[var(--foreground)]">
+                    <Shuffle size="0.5625rem" /> Random pick
                   </span>
                 )}
               </div>
