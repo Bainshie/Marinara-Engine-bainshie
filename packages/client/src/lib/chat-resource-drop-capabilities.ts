@@ -1,5 +1,6 @@
 import { isAgentAvailableInChatMode, type Chat } from "@marinara-engine/shared";
 import { chatBackgroundMetadataToUrl, chatBackgroundUrlToMetadata } from "./backgrounds";
+import { parseChatMetadata } from "./chat-display";
 import type { ChatResourceDragPayload } from "./chat-resource-drag";
 
 export type ChatResourceDropAction =
@@ -30,8 +31,7 @@ export function resolveChatResourceDropAction(
   payload: ChatResourceDragPayload,
   chat: Pick<Chat, "characterIds" | "metadata" | "mode" | "personaId" | "promptPresetId" | "connectionId">,
 ): ChatResourceDropResult | null {
-  const metadata: Record<string, unknown> =
-    chat.metadata && typeof chat.metadata === "object" ? chat.metadata : {};
+  const metadata = parseChatMetadata(chat.metadata);
   if (payload.unsupported) {
     return { type: "blocked", reason: payload.unsupported, label: payload.label };
   }

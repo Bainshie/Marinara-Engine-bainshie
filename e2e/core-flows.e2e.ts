@@ -1808,6 +1808,7 @@ test("Dropping a persona confirms before replacing the active chat persona", asy
     await expect(dialog).toContainText(currentPersona.name);
     await expect(dialog).toContainText(nextPersona.name);
     await dialog.getByRole("button", { name: "Cancel" }).click();
+    await expect(dialog).toBeHidden();
     expect(((await (await request.get(`/api/chats/${chat.id}`)).json()) as { personaId: string }).personaId).toBe(
       currentPersona.id,
     );

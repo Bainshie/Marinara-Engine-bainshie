@@ -138,6 +138,7 @@ import {
 import { useUpdateGameWidgets } from "../../hooks/use-game";
 import { useRegexScripts, useUpdateRegexScript, type RegexScriptRow } from "../../hooks/use-regex-scripts";
 import { api } from "../../lib/api-client";
+import { readCharacterGreetings, type CharacterGreeting } from "../../lib/character-greetings";
 import { trackChatMetadataSave, waitForPendingChatMetadataSaves } from "../../lib/chat-metadata-save-barrier";
 import { appendLocalSidecarConnectionOption, filterLanguageGenerationConnections } from "../../lib/connection-filters";
 import {
@@ -311,10 +312,7 @@ interface ChatSettingsDrawerProps {
   onOpenScheduleEditor?: (characterId: string, options?: { initialDay?: string | null }) => void;
 }
 
-type GreetingOption = {
-  text: string;
-  alternateIndex: number | null;
-};
+type GreetingOption = CharacterGreeting;
 
 const SPOTIFY_SOURCE_OPTIONS: Array<{ id: SpotifySourceType; label: string; description: string }> = [
   { id: "liked", label: "Liked Songs", description: "Pick from the user's saved tracks first." },
@@ -2340,37 +2338,15 @@ export function ChatSettingsDrawer({
             if (isConversation) return;
             const char = characters.find((c) => c.id === charId);
             if (!char) return;
-            try {
-              const parsed = typeof char.data === "string" ? JSON.parse(char.data) : char.data;
-              const firstMes = (parsed as { first_mes?: unknown }).first_mes;
-              const alternateGreetings = (parsed as { alternate_greetings?: unknown }).alternate_greetings;
-              const greetings: GreetingOption[] = [];
-              if (typeof firstMes === "string" && firstMes.trim()) {
-                greetings.push({ text: firstMes.trim(), alternateIndex: null });
-              }
-              if (Array.isArray(alternateGreetings)) {
-                alternateGreetings.forEach((greeting, index) => {
-                  if (typeof greeting !== "string" || !greeting.trim()) return;
-                  greetings.push({ text: greeting.trim(), alternateIndex: index + 1 });
-                });
-              }
-              if (greetings.length > 0) {
-                const extensions = (parsed as { extensions?: unknown }).extensions;
-                const dialogueColor =
-                  extensions && typeof extensions === "object"
-                    ? (extensions as { dialogueColor?: unknown }).dialogueColor
-                    : undefined;
-                setFirstMesConfirm({
-                  charId,
-                  charName: charName(char),
-                  dialogueColor:
-                    typeof dialogueColor === "string" && dialogueColor.trim() ? dialogueColor.trim() : undefined,
-                  greetings,
-                  selectedIndex: 0,
-                });
-              }
-            } catch {
-              /* ignore parse errors */
+            const { greetings, dialogueColor } = readCharacterGreetings(char.data);
+            if (greetings.length > 0) {
+              setFirstMesConfirm({
+                charId,
+                charName: charName(char),
+                dialogueColor,
+                greetings,
+                selectedIndex: 0,
+              });
             }
           },
         },

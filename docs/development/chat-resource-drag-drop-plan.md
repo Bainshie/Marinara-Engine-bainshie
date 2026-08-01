@@ -397,9 +397,10 @@ Required commands:
 pnpm localization:check
 pnpm check
 pnpm smoke:ui
+pnpm regression:prompt
 ```
 
-Run `pnpm regression:prompt` only if implementation changes prompt assembly or generation request shaping. The current plan explicitly avoids those changes.
+`pnpm regression:prompt` is required before merge: the `LorebooksPanel.tsx` change affects lorebook activation, which feeds prompt assembly.
 
 ## Risks and Mitigations
 

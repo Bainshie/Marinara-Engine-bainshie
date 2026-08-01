@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
 import { api } from "../../lib/api-client";
 import { readCharacterGreetings } from "../../lib/character-greetings";
+import { parseChatMetadata } from "../../lib/chat-display";
 import { addSilentGreetingSwipes } from "../../lib/message-swipes";
 import { useCreateMessage, useUpdateChatMetadata } from "../../hooks/use-chats";
 import { useCharacter } from "../../hooks/use-characters";
@@ -71,10 +72,8 @@ export function ChatCharacterDropOptions({
     setSaving(true);
     try {
       if (excludedIds.length > 0) {
-        const metadata = useChatStore.getState().activeChat?.metadata;
-        const current = readStringArray(
-          metadata && typeof metadata === "object" ? (metadata as Record<string, unknown>).excludedLorebookIds : null,
-        );
+        const metadata = parseChatMetadata(useChatStore.getState().activeChat?.metadata);
+        const current = readStringArray(metadata.excludedLorebookIds);
         await updateMetadata.mutateAsync({
           id: chatId,
           excludedLorebookIds: Array.from(new Set([...current, ...excludedIds])),

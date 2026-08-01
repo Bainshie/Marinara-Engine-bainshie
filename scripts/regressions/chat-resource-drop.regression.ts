@@ -105,6 +105,16 @@ assert.deepEqual(
 assert.equal(parseChatResourceDragPayload({ version: 2, kind: "character", ids: ["character-1"], label: "A" }), null);
 assert.equal(parseChatResourceDragPayload({ version: 1, kind: "unknown", ids: ["resource-1"], label: "A" }), null);
 assert.equal(parseChatResourceDragPayload({ version: 1, kind: "agent", ids: [], label: "A" }), null);
+assert.equal(
+  parseChatResourceDragPayload({
+    version: 1,
+    kind: "character",
+    ids: Array.from({ length: 101 }, (_value, index) => `character-${index}`),
+    label: "Too many",
+  }),
+  null,
+);
+assert.equal(parseChatResourceDragPayload({ version: 1, kind: "character", ids: ["character-1"], label: "   " }), null);
 
 assert.deepEqual(
   resolveChatResourceDropAction(

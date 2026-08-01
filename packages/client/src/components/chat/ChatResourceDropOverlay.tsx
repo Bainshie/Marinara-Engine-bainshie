@@ -26,6 +26,7 @@ import {
   type ChatResourceDropResult,
 } from "../../lib/chat-resource-drop-capabilities";
 import { getChatCharacterIds } from "../../lib/chat-macros";
+import { parseChatMetadata } from "../../lib/chat-display";
 import { chatBackgroundMetadataToUrl, chatBackgroundUrlToMetadata } from "../../lib/backgrounds";
 import { useChatStore } from "../../stores/chat.store";
 import { useUIStore } from "../../stores/ui.store";
@@ -240,8 +241,7 @@ export function ChatResourceDropOverlay({ chat }: { chat: Chat }) {
             },
           });
         } else if (latestAction.type === "add-lorebooks" || latestAction.type === "add-agents") {
-          const metadata: Record<string, unknown> =
-            currentChat.metadata && typeof currentChat.metadata === "object" ? currentChat.metadata : {};
+          const metadata = parseChatMetadata(currentChat.metadata);
           const key = latestAction.type === "add-lorebooks" ? "activeLorebookIds" : "activeAgentIds";
           const previousIds = Array.isArray(metadata[key])
             ? metadata[key].filter((id): id is string => typeof id === "string")
@@ -265,8 +265,7 @@ export function ChatResourceDropOverlay({ chat }: { chat: Chat }) {
                 label: t("ui.chat.chatresourcedropoverlay.undo"),
                 onClick: () => {
                   const activeChat = useChatStore.getState().activeChat;
-                  const activeMetadata: Record<string, unknown> =
-                    activeChat?.metadata && typeof activeChat.metadata === "object" ? activeChat.metadata : {};
+                  const activeMetadata = parseChatMetadata(activeChat?.metadata);
                   const activeIds = Array.isArray(activeMetadata[key])
                     ? activeMetadata[key].filter((id): id is string => typeof id === "string")
                     : [];
@@ -285,7 +284,7 @@ export function ChatResourceDropOverlay({ chat }: { chat: Chat }) {
           );
         } else if (latestAction.type === "set-background") {
           const previousBackground = chatBackgroundUrlToMetadata(
-            chatBackgroundMetadataToUrl(currentChat.metadata?.background),
+            chatBackgroundMetadataToUrl(parseChatMetadata(currentChat.metadata).background),
           );
           const previousBackgroundUrl = useUIStore.getState().chatBackground;
           const nextBackground = chatBackgroundUrlToMetadata(latestAction.id);
@@ -302,7 +301,7 @@ export function ChatResourceDropOverlay({ chat }: { chat: Chat }) {
               onClick: () => {
                 const activeChat = useChatStore.getState().activeChat;
                 const activeBackground = chatBackgroundUrlToMetadata(
-                  chatBackgroundMetadataToUrl(activeChat?.metadata?.background),
+                  chatBackgroundMetadataToUrl(parseChatMetadata(activeChat?.metadata).background),
                 );
                 if (!activeChat || activeChat.id !== currentChat.id || activeBackground !== nextBackground) {
                   toast.info(t("ui.chat.chatresourcedropoverlay.undoUnavailable"));
@@ -321,8 +320,7 @@ export function ChatResourceDropOverlay({ chat }: { chat: Chat }) {
                 ? "promptPresetId"
                 : "connectionId";
           const previousId = latestAction.replacesId;
-          const metadata: Record<string, unknown> =
-            currentChat.metadata && typeof currentChat.metadata === "object" ? currentChat.metadata : {};
+          const metadata = parseChatMetadata(currentChat.metadata);
           const previousPresetChoices = metadata.presetChoices;
           if (latestAction.type === "set-preset") {
             await updateMetadata.mutateAsync({ id: currentChat.id, presetChoices: {} });
@@ -350,8 +348,7 @@ export function ChatResourceDropOverlay({ chat }: { chat: Chat }) {
               label: t("ui.chat.chatresourcedropoverlay.undo"),
               onClick: () => {
                 const activeChat = useChatStore.getState().activeChat;
-                const activeMetadata: Record<string, unknown> =
-                  activeChat?.metadata && typeof activeChat.metadata === "object" ? activeChat.metadata : {};
+                const activeMetadata = parseChatMetadata(activeChat?.metadata);
                 if (
                   !activeChat ||
                   activeChat.id !== currentChat.id ||
