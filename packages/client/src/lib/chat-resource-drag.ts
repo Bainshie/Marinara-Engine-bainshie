@@ -1,3 +1,5 @@
+import type { Panel } from "../stores/ui.store";
+
 export const CHAT_RESOURCE_DRAG_MIME = "application/x-marinara-chat-resource";
 export const CHAT_RESOURCE_ASSIGN_EVENT = "marinara:assign-chat-resource";
 export const CHAT_RESOURCE_AGENT_SETUP_EVENT = "marinara:setup-chat-agent";
@@ -22,6 +24,46 @@ export type ChatResourceDragPayload = {
 
 let activeChatResourceDrag: ChatResourceDragPayload | null = null;
 let pendingChatAgentSetup: { chatId: string; ids: string[] } | null = null;
+
+/**
+ * Touch drags have no `dataTransfer`, so the payload lives here for the duration of the gesture and
+ * the mobile drop dock subscribes to it (the dock has to render while the finger is still down).
+ */
+let activeChatResourceTouchDrag: ChatResourceDragPayload | null = null;
+const touchDragListeners = new Set<() => void>();
+
+export function subscribeChatResourceTouchDrag(listener: () => void) {
+  touchDragListeners.add(listener);
+  return () => {
+    touchDragListeners.delete(listener);
+  };
+}
+
+/**
+ * The mobile dock closes the library panel so the drop result is visible. Remember which panel that
+ * was, so the flow can put the user back where they were once the follow-up modal is gone.
+ */
+let pendingChatResourcePanelRestore: Panel | null = null;
+
+export function setPendingChatResourcePanelRestore(panel: Panel | null) {
+  pendingChatResourcePanelRestore = panel;
+}
+
+export function takePendingChatResourcePanelRestore() {
+  const panel = pendingChatResourcePanelRestore;
+  pendingChatResourcePanelRestore = null;
+  return panel;
+}
+
+export function getActiveChatResourceTouchDrag() {
+  return activeChatResourceTouchDrag;
+}
+
+export function beginChatResourceTouchDrag(payload: ChatResourceDragPayload) {
+  activeChatResourceDrag = payload;
+  activeChatResourceTouchDrag = payload;
+  touchDragListeners.forEach((listener) => listener());
+}
 
 export function parseChatResourceDragPayload(value: unknown): ChatResourceDragPayload | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
@@ -74,6 +116,10 @@ export function getActiveChatResourceDrag() {
 
 export function clearActiveChatResourceDrag() {
   activeChatResourceDrag = null;
+  if (activeChatResourceTouchDrag) {
+    activeChatResourceTouchDrag = null;
+    touchDragListeners.forEach((listener) => listener());
+  }
 }
 
 export function isChatResourceDrag(dataTransfer: DataTransfer) {

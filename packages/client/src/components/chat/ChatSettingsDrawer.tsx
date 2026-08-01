@@ -279,7 +279,11 @@ import {
   type CustomMusicSource,
   type MusicProvider,
 } from "./AgentAddSetupFields";
-import { CHAT_RESOURCE_AGENT_SETUP_EVENT, takePendingChatAgentSetupIds } from "../../lib/chat-resource-drag";
+import {
+  CHAT_RESOURCE_AGENT_SETUP_EVENT,
+  takePendingChatAgentSetupIds,
+  takePendingChatResourcePanelRestore,
+} from "../../lib/chat-resource-drag";
 import { GameWidgetFileControls, GameWidgetSetupEditor, normalizeGameHudWidgets } from "../game/GameWidgetSetupEditor";
 
 const QuickPresetSectionsEditor = lazy(() =>
@@ -3120,6 +3124,16 @@ export function ChatSettingsDrawer({
     setAgentAddPreview(null);
     setAgentSetupQueue([]);
   }, [chat.id]);
+
+  // A mobile dock drop closed the library panel and handed the restore to this drawer, so the user
+  // only goes back to the library once the agent setup modal is done with.
+  useEffect(() => {
+    if (!open) return;
+    return () => {
+      const panel = takePendingChatResourcePanelRestore();
+      if (panel && !useUIStore.getState().rightPanelOpen) useUIStore.getState().openRightPanel(panel);
+    };
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;

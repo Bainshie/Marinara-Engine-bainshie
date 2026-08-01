@@ -90,6 +90,7 @@ import {
   shouldAutoplayGeneratedTTS,
 } from "../../lib/tts-autoplay";
 import { CHAT_SCROLL_TO_BOTTOM_EVENT, type ChatScrollToBottomDetail } from "../../lib/chat-scroll-events";
+import { CHAT_RESOURCE_AGENT_SETUP_EVENT } from "../../lib/chat-resource-drag";
 import { blurActiveChatFloatingUiControl, CHAT_FLOATING_UI_DISMISS_EVENT } from "../../lib/chat-floating-ui-events";
 import {
   CHAT_TOOLBAR_ACTION_EVENT,
@@ -714,6 +715,13 @@ export function ChatArea() {
     setPeekPromptData(null);
     setDeleteDialogMessageId(null);
   }, []);
+  // A dropped agent parks a setup request; open chat settings so its modal can run.
+  useEffect(() => {
+    const openAgentSetup = () => handleOpenSettingsPanel();
+    window.addEventListener(CHAT_RESOURCE_AGENT_SETUP_EVENT, openAgentSetup);
+    return () => window.removeEventListener(CHAT_RESOURCE_AGENT_SETUP_EVENT, openAgentSetup);
+  }, [handleOpenSettingsPanel]);
+
   useEffect(() => {
     window.addEventListener(CHAT_TOOLBAR_ACTION_EVENT, closeFloatingChatDrawers);
     window.addEventListener(CHAT_FLOATING_UI_DISMISS_EVENT, closeFloatingChatDrawers);
