@@ -6589,11 +6589,28 @@ test("downloadable agent catalog is usable on desktop and mobile", async ({ page
     await expect(allAgentsButton).toBeHidden();
   }
   await expect(catalogView.getByText("Marinara Engine v2.3.0+")).toBeVisible();
-  await expect(catalogView.getByRole("link", { name: "Read how this agent works" })).toHaveAttribute(
+  const documentationLink = catalogView.getByRole("link", { name: "Read how this agent works" });
+  await expect(documentationLink).toHaveAttribute(
     "href",
     "https://github.com/Pasta-Devs/Marinara-Agents#uno",
   );
-  await expect(catalogView.getByRole("button", { name: "Install", exact: true })).toBeVisible();
+  const installButton = catalogView.getByRole("button", { name: "Install", exact: true });
+  await expect(installButton).toBeVisible();
+  await expect(documentationLink).toHaveClass(/mari-chrome-control--primary/u);
+  expect(await documentationLink.getAttribute("class")).toBe(await installButton.getAttribute("class"));
+  const readActionStyles = async (selector: typeof documentationLink) =>
+    selector.evaluate((element) => {
+      const styles = getComputedStyle(element);
+      return {
+        borderRadius: styles.borderRadius,
+        fontFamily: styles.fontFamily,
+        fontSize: styles.fontSize,
+        fontWeight: styles.fontWeight,
+        minHeight: styles.minHeight,
+        padding: styles.padding,
+      };
+    });
+  expect(await readActionStyles(documentationLink)).toEqual(await readActionStyles(installButton));
   await catalogView.getByRole("button", { name: "Custom Sources" }).click();
   const customSources = page.getByRole("dialog", { name: "Custom Agent Repositories" });
   await expect(customSources.getByText(/not affiliated with or vetted by PastaDevs/u)).toBeVisible();
