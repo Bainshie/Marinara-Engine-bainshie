@@ -1,0 +1,10 @@
+[
+  {
+    "id": "features-settings-map",
+    "name": "features-settings-map",
+    "description": "Quick reference for where Marinara Engine's features and settings live in the UI, and what each one does. Use this first for 'does Marinara support X', 'where do I turn on Y', or 'what does Y do' questions instead of exploring source code.",
+    "enabled": true,
+    "createdAt": "2026-08-01T19:25:03.598Z",
+    "updatedAt": "2026-08-01T19:25:03.598Z"
+  }
+]

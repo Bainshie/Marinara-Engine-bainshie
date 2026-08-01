@@ -152,7 +152,9 @@ export function FunctionCallingSection({
                     </div>
                     <p className="text-[0.625rem] text-[var(--muted-foreground)]">
                       Regex (no delimiters/flags) used to find hallucinated dice-roll lines in the AI's text so they
-                      can be swapped for a real roll. Applied with the "gi" flags.
+                      can be swapped for a real roll. Applied with the "gi" flags. While left at the default, the AI
+                      is also automatically told to use this exact format — switching to a custom pattern turns that
+                      off, so your preset or character needs to teach the format itself.
                     </p>
                     <input
                       id={dicePatternInputId}

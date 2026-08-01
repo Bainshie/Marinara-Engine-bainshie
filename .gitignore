@@ -40,7 +40,12 @@ Thumbs.db
 data/
 # The in-app documentation category folder is not user data
 !docs/data/
-packages/server/data/
+!packages/server/data/
+packages/server/data/*
+# Professor Mari workspace skills are shared, maintained knowledge, not per-user data
+!packages/server/data/.mari-workspace
+packages/server/data/.mari-workspace/*
+!packages/server/data/.mari-workspace/skills
 
 # Logs
 *.log

@@ -552,6 +552,32 @@ const CONVERSATION_CONTEXT_MACRO_ALIASES: Record<ConversationContextMacroKey, st
   aboutMe: ["char_about", "persona_about"],
 };
 
+/**
+ * True when the chat has no valid custom dice-roll fixer pattern configured, i.e. the
+ * fixer will fall back to DEFAULT_DICE_ROLL_FIXER_PATTERN. Shared by the Force Dice
+ * Rolls format-teaching injection and the post-hoc fixer so both always agree on which
+ * pattern is actually in effect.
+ */
+function isUsingDefaultDiceRollFixerPattern(pattern: unknown): boolean {
+  return !(typeof pattern === "string" && pattern.trim() && isValidDiceRollFixerPattern(pattern));
+}
+
+/**
+ * Force Dice Rolls only forces tool_choice and post-hoc-fixes hallucinated text — it never
+ * taught the model what output format to use. That job was left entirely to preset authors
+ * (e.g. the GM Engine preset's own "Action Resolution" section), so any other preset/character
+ * had no matching convention for the fixer's regex to find. Inject the format directly so it
+ * always matches what DEFAULT_DICE_ROLL_FIXER_PATTERN parses, regardless of preset. Skipped
+ * when a custom pattern is configured, since we can't infer prose for an arbitrary regex — a
+ * custom pattern implies the user's own preset already teaches its own convention.
+ */
+const DICE_ROLL_FORMAT_INSTRUCTION =
+  "DICE ROLLS: For any action with an uncertain outcome, call the roll_dice tool (e.g. notation \"1d20\") " +
+  "instead of inventing a result. After the tool returns, report the outcome inline in this exact format so it " +
+  "can be tracked: <brief description> | DC: <number> | Roll: <total from the tool> | Result: " +
+  "SUCCESS/FAILURE/CRITICAL SUCCESS/CRITICAL FAILURE. Never write a Roll or Result value without first calling " +
+  "the tool for it.";
+
 function conversationContextMacroPattern(key: ConversationContextMacroKey): RegExp {
   const aliases = CONVERSATION_CONTEXT_MACRO_ALIASES[key].map((alias) => alias.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
   return new RegExp(`\\{\\{\\s*(?:${aliases.join("|")})\\s*\\}\\}`, "gi");
@@ -5050,6 +5076,17 @@ export async function generateRoutes(app: FastifyInstance) {
               });
             }
           }
+          if (
+            chatResolvedToolNames.has("roll_dice") &&
+            chatMeta.forceDiceRollTool === true &&
+            isUsingDefaultDiceRollFixerPattern(chatMeta.diceRollFixerPattern)
+          ) {
+            preparedMessagesForGen.push({
+              role: "system",
+              content: DICE_ROLL_FORMAT_INSTRUCTION,
+              contextKind: "injection",
+            });
+          }
           // Defense in depth: the relocation decode pass should have consumed
           // every token already; strip any that slipped through so no control
           // sentinel reaches the provider (#3448).
@@ -5639,9 +5676,7 @@ export async function generateRoutes(app: FastifyInstance) {
             const configuredPattern =
               typeof chatMeta.diceRollFixerPattern === "string" ? chatMeta.diceRollFixerPattern : "";
             const dicePattern = new RegExp(
-              configuredPattern && isValidDiceRollFixerPattern(configuredPattern)
-                ? configuredPattern
-                : DEFAULT_DICE_ROLL_FIXER_PATTERN,
+              isUsingDefaultDiceRollFixerPattern(configuredPattern) ? DEFAULT_DICE_ROLL_FIXER_PATTERN : configuredPattern,
               "gi",
             );
             const dcPattern = /DC\s*(\d+)/i;
