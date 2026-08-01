@@ -5375,7 +5375,11 @@ export async function generateRoutes(app: FastifyInstance) {
               if (executedToolResults.some((tr) => tr.name === "roll_dice" && tr.success)) {
                 hadRealDiceRoll = true;
               }
-              console.log("[DICE-DIAG] toolCalls=" + JSON.stringify(result.toolCalls.map(c => c.function.name)) + " hadRealDiceRoll=" + hadRealDiceRoll);
+              logger.debug(
+                "[generate] toolCalls=%s hadRealDiceRoll=%s",
+                JSON.stringify(result.toolCalls.map((c) => c.function.name)),
+                hadRealDiceRoll,
+              );
               const toolResultsById = new Map(
                 [...executedToolResults, ...deniedToolResults].map((result) => [result.toolCallId, result]),
               );
@@ -5617,7 +5621,11 @@ export async function generateRoutes(app: FastifyInstance) {
 
           let contentReplaced = false;
           // Post-processing: replace hallucinated dice rolls with real ones
-          console.log("[DICE-DIAG] fixer check: hasRollDice=" + chatResolvedToolNames.has("roll_dice") + " hadRealDiceRoll=" + hadRealDiceRoll);
+          logger.debug(
+            "[generate] dice fixer check: hasRollDice=%s hadRealDiceRoll=%s",
+            chatResolvedToolNames.has("roll_dice"),
+            hadRealDiceRoll,
+          );
           if (chatResolvedToolNames.has("roll_dice") && !hadRealDiceRoll) {
             const dicePattern = /([^\n]*?\|\s*Roll:\s*(\d+)\s*\|\s*Result:\s*([A-Z\s]+))/gi;
             const dcPattern = /DC\s*(\d+)/i;
