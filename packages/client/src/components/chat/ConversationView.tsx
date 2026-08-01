@@ -420,6 +420,7 @@ export function ConversationView({
   // default stops without collapsing Marinara's two-color background.
   const convoGradient = useUIStore((s) => s.convoGradient);
   const theme = useUIStore((s) => s.theme);
+  const disableAutoScrollDuringStream = useUIStore((s) => s.disableAutoScrollDuringStream);
   const gradientStyle = useMemo(() => {
     const g = convoGradient[theme];
     const defaults = theme === "dark" ? { from: "#0a0a0e", to: "#1c2133" } : { from: "#f2eff7", to: "#eae6f0" };
@@ -515,13 +516,14 @@ export function ConversationView({
     messagesEndRef.current?.scrollIntoView({ behavior });
   }, []);
   const scheduleStreamScrollToBottom = useCallback(() => {
+    if (disableAutoScrollDuringStream) return;
     if (streamScrollFrameRef.current) return;
     streamScrollFrameRef.current = requestAnimationFrame(() => {
       streamScrollFrameRef.current = 0;
       if (isLoadingMoreRef.current || !isNearBottomRef.current || userScrolledAwayRef.current) return;
       scrollToMessagesBottom("auto");
     });
-  }, [scrollToMessagesBottom]);
+  }, [disableAutoScrollDuringStream, scrollToMessagesBottom]);
   useEffect(
     () => () => {
       if (streamScrollFrameRef.current) cancelAnimationFrame(streamScrollFrameRef.current);
@@ -1112,10 +1114,11 @@ export function ConversationView({
 
   // Auto-scroll when staggered parts are revealed
   useEffect(() => {
+    if (hasLiveStream && disableAutoScrollDuringStream) return;
     if (!isLoadingMoreRef.current && isNearBottomRef.current && !userScrolledAwayRef.current) {
       scrollToMessagesBottom("smooth");
     }
-  }, [scrollToMessagesBottom, visiblePartCounts, visibleSegmentCounts]);
+  }, [disableAutoScrollDuringStream, hasLiveStream, scrollToMessagesBottom, visiblePartCounts, visibleSegmentCounts]);
 
   return (
     <div

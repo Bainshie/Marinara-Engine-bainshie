@@ -511,6 +511,7 @@ export function ChatArea() {
   const intuitiveSwipeNavigation = useUIStore((s) => s.intuitiveSwipeNavigation);
   const intuitiveSwipeRerollLatest = useUIStore((s) => s.intuitiveSwipeRerollLatest);
   const editLastMessageOnArrowUp = useUIStore((s) => s.editLastMessageOnArrowUp);
+  const disableAutoScrollDuringStream = useUIStore((s) => s.disableAutoScrollDuringStream);
   const ttsLineVolume = useUIStore((s) => s.ttsLineVolume);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -2365,6 +2366,7 @@ export function ChatArea() {
     messagesEndRef.current?.scrollIntoView({ behavior });
   }, []);
   const scheduleStreamScrollToBottom = useCallback(() => {
+    if (disableAutoScrollDuringStream) return;
     if (streamScrollFrameRef.current) return;
     streamScrollFrameRef.current = requestAnimationFrame(() => {
       streamScrollFrameRef.current = 0;
@@ -2374,7 +2376,7 @@ export function ChatArea() {
       // the typewriter and bottom-follow motion stutter.
       scrollToMessagesBottom("auto");
     });
-  }, [scrollToMessagesBottom]);
+  }, [disableAutoScrollDuringStream, scrollToMessagesBottom]);
   useEffect(
     () => () => {
       if (streamScrollFrameRef.current) cancelAnimationFrame(streamScrollFrameRef.current);

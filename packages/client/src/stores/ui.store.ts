@@ -558,6 +558,12 @@ interface UIState {
   /** When true, Game mode narration segments are revealed in full as soon as they become active. */
   gameInstantTextReveal: boolean;
   /**
+   * When true, the chat view no longer auto-scrolls to the bottom while a response is
+   * streaming in. Prevents yanking the viewport away from a message the user has scrolled
+   * up to read, particularly on mobile.
+   */
+  disableAutoScrollDuringStream: boolean;
+  /**
    * When true, the mouse wheel skips through past assistant turns in Game mode (up = back,
    * down = forward) and clicking the scene background acts like the Next button. While
    * scrolled into the past, the Next button changes to "Return" so the player can jump back
@@ -876,6 +882,7 @@ interface UIState {
   clearDiceRollLog: (chatId: string) => void;
   setStreamingSpeed: (v: number) => void;
   setGameInstantTextReveal: (v: boolean) => void;
+  setDisableAutoScrollDuringStream: (v: boolean) => void;
   setGameMiddleMouseNav: (v: boolean) => void;
   setGameDialogueDisplayMode: (v: GameDialogueDisplayMode) => void;
   setGameTextSpeed: (v: number) => void;
@@ -1067,6 +1074,7 @@ export function pickSyncedSettings(state: UIState) {
     enableStreaming: state.enableStreaming,
     streamingSpeed: state.streamingSpeed,
     gameInstantTextReveal: state.gameInstantTextReveal,
+    disableAutoScrollDuringStream: state.disableAutoScrollDuringStream,
     gameMiddleMouseNav: state.gameMiddleMouseNav,
     gameDialogueDisplayMode: state.gameDialogueDisplayMode,
     gameTextSpeed: state.gameTextSpeed,
@@ -1254,6 +1262,7 @@ export const useUIStore = create<UIState>()(
       diceRollLog: {} as Record<string, DiceRollEntry[]>,
       streamingSpeed: 50,
       gameInstantTextReveal: false,
+      disableAutoScrollDuringStream: false,
       gameMiddleMouseNav: false,
       gameDialogueDisplayMode: "classic" as GameDialogueDisplayMode,
       gameTextSpeed: 50,
@@ -1987,6 +1996,7 @@ export const useUIStore = create<UIState>()(
         }),
       setStreamingSpeed: (v) => set({ streamingSpeed: Math.max(1, Math.min(100, v)) }),
       setGameInstantTextReveal: (v) => set({ gameInstantTextReveal: v }),
+      setDisableAutoScrollDuringStream: (v) => set({ disableAutoScrollDuringStream: v }),
       setGameMiddleMouseNav: (v) => set({ gameMiddleMouseNav: v }),
       setGameDialogueDisplayMode: (v) => set({ gameDialogueDisplayMode: v }),
       setGameTextSpeed: (v) => set({ gameTextSpeed: Math.max(1, Math.min(100, v)) }),
@@ -2878,6 +2888,7 @@ export const useUIStore = create<UIState>()(
         debugMode: state.debugMode,
         streamingSpeed: state.streamingSpeed,
         gameInstantTextReveal: state.gameInstantTextReveal,
+        disableAutoScrollDuringStream: state.disableAutoScrollDuringStream,
         gameMiddleMouseNav: state.gameMiddleMouseNav,
         gameDialogueDisplayMode: state.gameDialogueDisplayMode,
         gameTextSpeed: state.gameTextSpeed,

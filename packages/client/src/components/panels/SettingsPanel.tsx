@@ -551,6 +551,14 @@ const SETTINGS_SEARCHABLE_CONTROLS: readonly SettingsSearchableControlMeta[] = [
     kind: "Slider",
   },
   {
+    id: "disable-auto-scroll-during-stream",
+    sectionId: "responses",
+    label: "Disable auto-scroll while streaming",
+    description: "Stop the chat from jumping to the bottom while a response is still being written.",
+    aliases: ["scroll", "autoscroll", "stream", "mobile", "jump"],
+    kind: "Toggle",
+  },
+  {
     id: "trim-incomplete-output",
     sectionId: "responses",
     label: "Trim incomplete model endings",
@@ -2557,6 +2565,8 @@ function GeneralSettings() {
   const setEnableStreaming = useUIStore((s) => s.setEnableStreaming);
   const streamingSpeed = useUIStore((s) => s.streamingSpeed);
   const setStreamingSpeed = useUIStore((s) => s.setStreamingSpeed);
+  const disableAutoScrollDuringStream = useUIStore((s) => s.disableAutoScrollDuringStream);
+  const setDisableAutoScrollDuringStream = useUIStore((s) => s.setDisableAutoScrollDuringStream);
   const gameInstantTextReveal = useUIStore((s) => s.gameInstantTextReveal);
   const setGameInstantTextReveal = useUIStore((s) => s.setGameInstantTextReveal);
   const gameMiddleMouseNav = useUIStore((s) => s.gameMiddleMouseNav);
@@ -2723,6 +2733,14 @@ function GeneralSettings() {
               <span>Fast</span>
             </div>
           </label>
+
+          <ToggleSetting
+            anchorId={getSettingsControlAnchorId("disable-auto-scroll-during-stream")}
+            label="Disable auto-scroll while streaming"
+            checked={disableAutoScrollDuringStream}
+            onChange={setDisableAutoScrollDuringStream}
+            help="When on, the chat won't jump to the bottom while a response is still streaming in — useful on mobile so scrolling up to read doesn't keep getting interrupted. You can still scroll down manually to follow along."
+          />
 
           <ToggleSetting
             anchorId={getSettingsControlAnchorId("trim-incomplete-output")}
