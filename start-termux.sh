@@ -14,16 +14,21 @@ echo ""
 cd "$(dirname "$0")"
 
 SKIP_UPDATE=0
+FORCE_BUILD=0
 for arg in "$@"; do
     case "$arg" in
         --skip-update|--no-update)
             SKIP_UPDATE=1
             ;;
+        --build)
+            FORCE_BUILD=1
+            ;;
         -h|--help)
-            echo "Usage: ./start-termux.sh [--skip-update]"
+            echo "Usage: ./start-termux.sh [--skip-update] [--build]"
             echo ""
             echo "  ./start-termux.sh               Check for updates, then start Marinara Engine"
             echo "  ./start-termux.sh --skip-update Start the current local install without checking for updates"
+            echo "  ./start-termux.sh --build       Force a full rebuild before starting, even if dist looks current"
             exit 0
             ;;
         *)
@@ -345,7 +350,12 @@ if [ ! -d "node_modules" ] || [ "$TERMUX_FORCE_INSTALL" = "1" ] || ! node script
     install_workspace_dependencies
 fi
 
-# ── Build if needed ──
+# ── Build if needed (or forced via --build) ──
+if [ "$FORCE_BUILD" = "1" ]; then
+    echo "  [..] --build specified: forcing a full rebuild..."
+    rm -rf packages/shared/dist packages/server/dist packages/client/dist
+    rm -f packages/shared/tsconfig.tsbuildinfo packages/server/tsconfig.tsbuildinfo packages/client/tsconfig.tsbuildinfo
+fi
 if [ ! -d "packages/shared/dist" ]; then
     echo "  [..] Building shared types..."
     run_pnpm --filter @marinara-engine/shared build

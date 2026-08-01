@@ -38,7 +38,7 @@ Useful entry points:
 - `pnpm dev` starts the server and client with hot reload.
 - `pnpm dev:server` starts only the API server.
 - `pnpm dev:client` starts only the Vite frontend.
-- `start.bat`, `start.sh`, and `start-termux.sh` run the launcher flow, including git-based auto-update and optional browser auto-open.
+- `start.bat`, `start.sh`, and `start-termux.sh` run the launcher flow, including git-based auto-update and optional browser auto-open. Pass `--build` to force a full rebuild before starting, even if the launcher thinks `dist` is current.
 
 Copy `.env.example` to `.env` when you need to change ports, HTTPS settings, or launcher behavior such as `AUTO_OPEN_BROWSER=false`.
 

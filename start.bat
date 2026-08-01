@@ -10,8 +10,15 @@ echo  +==========================================+
 echo.
 
 set "SKIP_UPDATE="
+set "FORCE_BUILD="
+:parse_args
+if "%~1"=="" goto :args_done
 if /I "%~1"=="--skip-update" set "SKIP_UPDATE=1"
 if /I "%~1"=="--no-update" set "SKIP_UPDATE=1"
+if /I "%~1"=="--build" set "FORCE_BUILD=1"
+shift
+goto :parse_args
+:args_done
 
 :: Load launcher settings before the update decision. Server settings are reused below.
 if not exist .env goto :early_env_done
@@ -289,10 +296,14 @@ call :run_pnpm backgroundremover:install -- --if-missing
 if errorlevel 1 echo  [WARN] Optional background remover install failed; built-in cleanup will still work.
 :skip_bgremover
 
-:: Build if needed
+:: Build if needed (or forced via --build)
 if not exist "packages\shared\dist\constants\defaults.js" set "BUILD_REQUIRED=1"
 if not exist "packages\server\dist\index.js" set "BUILD_REQUIRED=1"
 if not exist "packages\client\dist\index.html" set "BUILD_REQUIRED=1"
+if defined FORCE_BUILD (
+    echo  [..] --build specified: forcing a full rebuild...
+    set "BUILD_REQUIRED=1"
+)
 if "!BUILD_REQUIRED!"=="1" (
     echo  [..] Cleaning stale build artifacts...
     call :run_pnpm clean:stale-client

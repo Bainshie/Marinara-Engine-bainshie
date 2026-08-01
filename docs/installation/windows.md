@@ -189,6 +189,8 @@ When you launch the app with the desktop shortcut or **start.bat** from a Git ba
 
 Run `start.bat --skip-update` to skip one check. To keep the installed Engine version across launches, add `AUTO_UPDATE_ENABLED=false` to `.env`. Manual checks, in-app apply, and manual Git updates remain available.
 
+Run `start.bat --build` to force a full rebuild, even if the launcher thinks the build is current.
+
 If you have unsaved local changes to the code, the launcher tries to set them aside safely. It puts them back after updating. If it cannot, it keeps your current version and prints a note.
 
 ### In-app updates

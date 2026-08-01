@@ -10,7 +10,8 @@ echo  +==========================================+
 echo.
 
 :: This launcher intentionally does not run git or install dependencies.
-:: It rebuilds the current local checkout before launch.
+:: It always rebuilds the current local checkout before launch, so --build
+:: is accepted (and implied) for consistency with the other launchers.
 
 where node >nul 2>&1
 if errorlevel 1 (

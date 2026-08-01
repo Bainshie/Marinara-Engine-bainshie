@@ -14,11 +14,16 @@ echo ""
 cd "$(dirname "$0")"
 
 SKIP_UPDATE=0
+FORCE_BUILD=0
 for arg in "$@"; do
     case "$arg" in
         --skip-update|--no-update) SKIP_UPDATE=1 ;;
+        --build) FORCE_BUILD=1 ;;
         -h|--help)
-            echo "Usage: ./start.sh [--skip-update]"
+            echo "Usage: ./start.sh [--skip-update] [--build]"
+            echo ""
+            echo "  --skip-update  Skip the git auto-update check"
+            echo "  --build        Force a full rebuild before starting, even if dist looks current"
             exit 0
             ;;
         *)
@@ -266,7 +271,12 @@ case "$BACKGROUNDREMOVER_AUTO_INSTALL_NORMALIZED" in
     ;;
 esac
 
-# ── Build if needed ──
+# ── Build if needed (or forced via --build) ──
+if [ "$FORCE_BUILD" = "1" ]; then
+    echo "  [..] --build specified: forcing a full rebuild..."
+    rm -rf packages/shared/dist packages/server/dist packages/client/dist
+    rm -f packages/shared/tsconfig.tsbuildinfo packages/server/tsconfig.tsbuildinfo packages/client/tsconfig.tsbuildinfo
+fi
 if [ ! -d "packages/shared/dist" ]; then
     echo "  [..] Building shared types..."
     run_pnpm --filter @marinara-engine/shared build

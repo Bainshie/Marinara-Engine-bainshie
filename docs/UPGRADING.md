@@ -41,6 +41,8 @@ The launcher fetches the latest code, reinstalls what changed, rebuilds the app,
 
 For one launch, run `start.bat --skip-update`. To keep the installed Engine version across launches, set `AUTO_UPDATE_ENABLED=false` in the project `.env`. This only disables automatic Engine updates; manual commands and **Settings → Advanced → Check for Updates** remain available.
 
+If the app seems out of date even though the launcher says it's current, run `start.bat --build` to force a full rebuild.
+
 If the launcher says Node.js is too old, install Node.js 24 LTS, then start Marinara again. LTS means Long Term Support, the recommended stable release of Node.js.
 
 You can also download the newest installer from the GitHub Releases page and run it. It uses the same git-based path, so future updates still run through the launcher.
@@ -56,6 +58,8 @@ Close Marinara Engine, then run the launcher from your Marinara folder.
 The launcher fetches the latest code, reinstalls changed dependencies, rebuilds, and starts the new version.
 
 Use `./start.sh --skip-update` for one launch, or set `AUTO_UPDATE_ENABLED=false` in `.env` for a persistent opt-out. Manual update commands and the in-app update controls remain available.
+
+If the app seems out of date even though the launcher says it's current, run `./start.sh --build` to force a full rebuild.
 
 If it says Node.js is too old, install Node.js 24 LTS, then run the launcher again.
 
@@ -97,6 +101,8 @@ cd Marinara-Engine
 ```
 
 For a persistent opt-out, set `AUTO_UPDATE_ENABLED=false` in the project `.env`. This affects only launcher-managed Engine updates; manual updates and the in-app update controls remain available.
+
+If the app seems out of date even though the launcher says it's current, run `./start-termux.sh --build` to force a full rebuild.
 
 If you use the Android app icon (the APK), open it and tap **Install / Start Marinara**. The APK is a sideloaded app, which means you installed it outside the official app store. It is a shell over Termux, so it updates the same Termux copy behind it.
 

@@ -226,6 +226,8 @@ When you start Marinara with `./start.sh` from a Git download, the launcher chec
 
 Run `./start.sh --skip-update` to skip one check. To keep the installed Engine version across launches, add `AUTO_UPDATE_ENABLED=false` to `.env`. You can still check or update manually from **Settings → Advanced → Updates** or with Git commands.
 
+Run `./start.sh --build` to force a full rebuild, even if the launcher thinks the build is current.
+
 You can also check from inside the app. Open **Settings**, go to the **Advanced** tab, and find the **Updates** section. Click **Check for Updates** to see if a newer release exists. The **Apply Update** button is turned off by default. To turn it on, set a few server options. Then save an admin secret under **Settings**, **Advanced**, **Admin Access**. If you do not turn it on, just relaunch with `./start.sh` to update.
 
 For the full update steps, including how to back up first and how to switch release channels, see the upgrading guide linked below.

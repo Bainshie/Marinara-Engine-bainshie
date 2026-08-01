@@ -69,6 +69,13 @@ cd Marinara-Engine
 ./start-termux.sh --skip-update
 ```
 
+To force a full rebuild even if the launcher thinks the build is current, add `--build`:
+
+```
+cd Marinara-Engine
+./start-termux.sh --build
+```
+
 The launcher also removes unreferenced packages from its local pnpm cache during dependency updates. This keeps old releases from accumulating several gigabytes on the phone; it does not touch Marinara chats, settings, or other user data.
 
 ## Access from another device
