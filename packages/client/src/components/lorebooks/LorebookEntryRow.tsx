@@ -847,8 +847,8 @@ export function LorebookEntryRow({
                   patch({ position: n });
                 }}
                 options={[
-                  { value: "0", label: localizeUi("ui.lorebooks.lorebookentryrow.beforeChat") },
-                  { value: "1", label: localizeUi("ui.lorebooks.lorebookentryrow.afterChat") },
+                  { value: "0", label: localizeUi("ui.lorebooks.lorebookentryrow.beforeCharacter") },
+                  { value: "1", label: localizeUi("ui.lorebooks.lorebookentryrow.afterCharacter") },
                   { value: "2", label: localizeUi("ui.lorebooks.lorebookentryrow.atDepth") },
                   { value: "7", label: localizeUi("ui.lorebooks.lorebookentryrow.outlet") },
                 ]}
@@ -922,7 +922,7 @@ export function LorebookEntryRow({
               setLocalPosition(n);
               patch({ position: n });
             }}
-            title={localizeUi("ui.lorebooks.lorebookentryrow.positionInThePromptBeforeChatAfterChatOr")}
+            title={localizeUi("ui.lorebooks.lorebookentryrow.positionInThePromptBeforeCharacterAfterCharacterOr")}
             options={[
               { value: "0", label: localizeUi("ui.lorebooks.lorebookentryrow.beforeCompact") },
               { value: "1", label: localizeUi("ui.lorebooks.lorebookentryrow.afterCompact") },

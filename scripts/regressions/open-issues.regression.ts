@@ -411,6 +411,20 @@ assert.equal(parseBuildMeta('{"commit":"abcdef123456","branch":42}'), null);
 assert.equal(parseBuildMeta(undefined), null);
 assert.equal(resolveBuildBranch(undefined, validBuildMeta?.branch, "main"), "staging");
 assert.equal(resolveBuildBranch(undefined, parseBuildMeta(undefined)?.branch, "refs/heads/feature/test"), "feature/test");
+const lorebookEnglishLocale = JSON.parse(
+  readFileSync(join(REPOSITORY_ROOT, "packages/client/src/localization/locales/en.json"), "utf8"),
+) as Record<string, unknown>;
+const lorebookKoreanLocale = JSON.parse(
+  readFileSync(join(REPOSITORY_ROOT, "packages/client/src/localization/locales/ko.json"), "utf8"),
+) as Record<string, unknown>;
+assert.equal(lorebookKoreanLocale["ui.lorebooks.lorebookeditor.es"], "");
+assert.equal(lorebookKoreanLocale["ui.noodle.stageprofileview.s"], "");
+assert.equal(lorebookEnglishLocale["ui.lorebooks.lorebookentryrow.beforeCharacter"], "Before character definitions");
+assert.equal(lorebookEnglishLocale["ui.lorebooks.lorebookentryrow.afterCharacter"], "After character definitions");
+assert.match(
+  String(lorebookEnglishLocale["ui.lorebooks.lorebookentryrow.positionInThePromptBeforeCharacterAfterCharacterOr"]),
+  /Before Character Definitions, After Character Definitions/u,
+);
 const updatesRouteSource = readFileSync(join(REPOSITORY_ROOT, "packages/server/src/routes/updates.routes.ts"), "utf8");
 assert.match(updatesRouteSource, /gitInstall \? await getCurrentBranch\(root\)\.catch\(\(\) => null\) : getBuildBranch\(\)/u);
 assert.match(updatesRouteSource, /const currentChannel = await getUpdateChannelForCheckout\(root, currentBranch\)/u);
