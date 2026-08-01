@@ -84,6 +84,25 @@ async function bestEffortDelete(request: APIRequestContext, url: string) {
   await request.delete(url, { timeout: 5_000 }).catch(() => undefined);
 }
 
+async function getChatCharacterIds(request: APIRequestContext, chatId: string): Promise<string[]> {
+  const response = await request.get(`/api/chats/${chatId}`);
+  const stored = (await response.json()) as { characterIds?: string[] | string };
+  return typeof stored.characterIds === "string" ? JSON.parse(stored.characterIds) : (stored.characterIds ?? []);
+}
+
+async function dragChatResource(page: Page, source: Locator, target: Locator) {
+  const dataTransfer = await page.evaluateHandle(() => new DataTransfer());
+  try {
+    await source.dispatchEvent("dragstart", { dataTransfer });
+    await target.dispatchEvent("dragenter", { dataTransfer });
+    await target.dispatchEvent("dragover", { dataTransfer });
+    await target.dispatchEvent("drop", { dataTransfer });
+    await source.dispatchEvent("dragend", { dataTransfer });
+  } finally {
+    await dataTransfer.dispose();
+  }
+}
+
 async function expectHomeContentFits(page: Page) {
   const home = page.locator('[data-component="ChatArea.EmptyState"]');
   await expect
@@ -1741,6 +1760,144 @@ test("Character favorite tags and stars inherit the configured accent color", as
     }
   } finally {
     await request.delete(`/api/characters/${character.id}`).catch(() => undefined);
+  }
+});
+
+test("Characters can be dragged from the right panel into the active chat", async ({ page, request }, testInfo) => {
+  test.skip(testInfo.project.name.includes("mobile"), "HTML resource dragging is covered on desktop.");
+
+  const suffix = Date.now().toString(36);
+  const characterName = `Chat Drop Character ${suffix}`;
+  const characterResponse = await request.post("/api/characters", {
+    data: { data: { name: characterName } },
+  });
+  expect(characterResponse.ok()).toBeTruthy();
+  const character = (await characterResponse.json()) as { id: string };
+  const chatResponse = await request.post("/api/chats", {
+    data: { name: `Chat Drop ${suffix}`, mode: "conversation", characterIds: [] },
+  });
+  expect(chatResponse.ok()).toBeTruthy();
+  const chat = (await chatResponse.json()) as { id: string };
+
+  try {
+    await page.goto("/");
+    await page.evaluate(async (chatId) => {
+      const module = await import("/src/stores/chat.store.ts");
+      module.useChatStore.getState().setActiveChatId(chatId);
+    }, chat.id);
+    const dropSurface = page.locator('[data-chat-resource-drop-surface]');
+    await expect(dropSurface).toBeVisible();
+
+    await page.locator('[data-tour="panel-characters"]').click();
+    const rightPanel = page.locator('[data-component="RightPanelDesktop"]');
+    const characterRow = rightPanel.locator('[data-touch-drag-card="character"]').filter({ hasText: characterName });
+    await expect(characterRow).toBeVisible();
+
+    await dragChatResource(page, characterRow, dropSurface);
+
+    await expect.poll(() => getChatCharacterIds(request, chat.id)).toContain(character.id);
+  } finally {
+    await Promise.all([
+      request.delete(`/api/chats/${chat.id}`).catch(() => undefined),
+      request.delete(`/api/characters/${character.id}`).catch(() => undefined),
+    ]);
+  }
+});
+
+test("Character row actions can add a resource to the active chat without dragging", async ({ page, request }) => {
+  const suffix = Date.now().toString(36);
+  const characterName = `Chat Action Character ${suffix}`;
+  const characterResponse = await request.post("/api/characters", {
+    data: { data: { name: characterName } },
+  });
+  expect(characterResponse.ok()).toBeTruthy();
+  const character = (await characterResponse.json()) as { id: string };
+  const chatResponse = await request.post("/api/chats", {
+    data: { name: `Chat Action ${suffix}`, mode: "conversation", characterIds: [] },
+  });
+  expect(chatResponse.ok()).toBeTruthy();
+  const chat = (await chatResponse.json()) as { id: string };
+
+  try {
+    await page.goto("/");
+    await page.evaluate(async (chatId) => {
+      const module = await import("/src/stores/chat.store.ts");
+      module.useChatStore.getState().setActiveChatId(chatId);
+    }, chat.id);
+    await expect(page.locator('[data-chat-resource-drop-surface]')).toBeVisible();
+    await page.locator('[data-tour="panel-characters"]').click();
+
+    const characterRow = page.locator('[data-touch-drag-card="character"]').filter({ hasText: characterName });
+    const addAction = characterRow.locator('[data-chat-resource-action="character"]');
+    await expect(addAction).toBeVisible();
+    await addAction.click();
+
+    await expect.poll(() => getChatCharacterIds(request, chat.id)).toContain(character.id);
+    await expect(characterRow.locator('[data-chat-resource-action="character"]')).toHaveCount(0);
+  } finally {
+    await Promise.all([
+      request.delete(`/api/chats/${chat.id}`).catch(() => undefined),
+      request.delete(`/api/characters/${character.id}`).catch(() => undefined),
+    ]);
+  }
+});
+
+test("Dropping a persona confirms before replacing the active chat persona", async ({ page, request }, testInfo) => {
+  test.skip(testInfo.project.name.includes("mobile"), "HTML resource dragging is covered on desktop.");
+
+  const suffix = Date.now().toString(36);
+  const currentResponse = await request.post("/api/characters/personas", {
+    data: { name: `Current Drop Persona ${suffix}` },
+  });
+  const nextResponse = await request.post("/api/characters/personas", {
+    data: { name: `Next Drop Persona ${suffix}` },
+  });
+  expect(currentResponse.ok()).toBeTruthy();
+  expect(nextResponse.ok()).toBeTruthy();
+  const currentPersona = (await currentResponse.json()) as { id: string; name: string };
+  const nextPersona = (await nextResponse.json()) as { id: string; name: string };
+  const chatResponse = await request.post("/api/chats", {
+    data: { name: `Persona Drop ${suffix}`, mode: "roleplay", characterIds: [], personaId: currentPersona.id },
+  });
+  expect(chatResponse.ok()).toBeTruthy();
+  const chat = (await chatResponse.json()) as { id: string };
+
+  try {
+    await page.goto("/");
+    await page.evaluate(async (chatId) => {
+      const module = await import("/src/stores/chat.store.ts");
+      module.useChatStore.getState().setActiveChatId(chatId);
+    }, chat.id);
+    await expect(page.locator('[data-chat-resource-drop-surface]')).toBeVisible();
+    await page.locator('[data-tour="panel-personas"]').click();
+    const personaRow = page.locator('[data-touch-drag-card="persona"]').filter({ hasText: nextPersona.name });
+    const dropSurface = page.locator('[data-chat-resource-drop-surface]');
+    await expect(personaRow).toBeVisible();
+
+    await dragChatResource(page, personaRow, dropSurface);
+    const dialog = page.getByRole("dialog", { name: "Replace chat persona?" });
+    await expect(dialog).toContainText(currentPersona.name);
+    await expect(dialog).toContainText(nextPersona.name);
+    await dialog.getByRole("button", { name: "Cancel" }).click();
+    await expect(dialog).toBeHidden();
+    expect(((await (await request.get(`/api/chats/${chat.id}`)).json()) as { personaId: string }).personaId).toBe(
+      currentPersona.id,
+    );
+
+    await dragChatResource(page, personaRow, dropSurface);
+    await page
+      .getByRole("dialog", { name: "Replace chat persona?" })
+      .getByRole("button", { name: "Replace", exact: true })
+      .click();
+    await expect
+      .poll(async () => ((await (await request.get(`/api/chats/${chat.id}`)).json()) as { personaId: string }).personaId)
+      .toBe(nextPersona.id);
+  } finally {
+    await Promise.all([
+      request.delete(`/api/chats/${chat.id}`).catch(() => undefined),
+      request.delete(`/api/characters/personas/${currentPersona.id}`).catch(() => undefined),
+      request.delete(`/api/characters/personas/${nextPersona.id}`).catch(() => undefined),
+    ]);
   }
 });
 
