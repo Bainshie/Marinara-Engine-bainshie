@@ -8393,7 +8393,15 @@ test("Hierarchical Maps settings stay inside the active agent entry", async ({ p
       sessionStorage.setItem("maps-feature-detail-chat-seeded", "true");
     }, chats[0]!.id);
     await page.goto("/");
-    await page.locator('[data-tour="panel-agents"]').click();
+    const worldMapsButton = page.getByRole("button", { name: "World Maps", exact: true });
+    await expect(worldMapsButton).toBeVisible();
+    await worldMapsButton.click();
+    await expect(page.getByRole("heading", { name: "Hierarchical Maps home" })).toBeVisible();
+    await expect(page.locator('[data-tour="panel-agents"]')).not.toHaveClass(/mari-topbar-panel-icon--active/);
+    await page.getByRole("button", { name: "Back to Agents" }).click();
+    await expect(page.getByTestId("hierarchical-maps-detail")).toHaveCount(0);
+    await expect(page.locator('[data-tour="panel-agents"]')).toHaveClass(/mari-topbar-panel-icon--active/);
+
     const agentsPanel = page.locator('[data-component="RightPanelDesktop"]');
     const mapsCard = agentsPanel.locator('[data-agent-name="Hierarchical Maps"]');
     await expect(mapsCard).toBeVisible();
@@ -8405,6 +8413,7 @@ test("Hierarchical Maps settings stay inside the active agent entry", async ({ p
     await expect(page.getByText("System Prompt", { exact: true })).toHaveCount(0);
     await page.getByRole("button", { name: "Back to Agents" }).click();
     await expect(page.getByTestId("hierarchical-maps-detail")).toHaveCount(0);
+    await expect(page.locator('[data-tour="panel-agents"]')).toHaveClass(/mari-topbar-panel-icon--active/);
 
     for (const chat of chats) {
       await page.evaluate((chatId) => localStorage.setItem("marinara-active-chat-id", chatId), chat.id);
