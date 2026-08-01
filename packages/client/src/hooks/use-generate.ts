@@ -1874,17 +1874,19 @@ export function useGenerate() {
 
             case "agent_debug": {
               const agentDebugData = event.data as AgentCallDebugEvent;
-              // Surface tool_call events (e.g. dice rolls) as toasts regardless of debug mode
+              // Capture agent-rolled dice for the persistent dice log regardless of debug mode
               if (agentDebugData.stage === "tool_call" && agentDebugData.toolName === "roll_dice") {
                 try {
                   const parsed = JSON.parse(agentDebugData.toolResult ?? "{}");
-                  const total = parsed.total ?? "?";
-                  const notation = parsed.notation ?? "1d20";
-                  const display = parsed.display ?? `Rolled ${notation}: ${total}`;
-                  toast.success(`🎲 ${display}`, { duration: 4000 });
-                } catch {
-                  toast.success(`🎲 Dice rolled (${agentDebugData.toolResult ?? "result"})`, { duration: 4000 });
-                }
+                  if (parsed && typeof parsed.total === "number") {
+                    useUIStore.getState().addDiceRoll(params.chatId, {
+                      notation: parsed.notation || "1d20",
+                      total: parsed.total,
+                      display: parsed.display || `🎲 ${parsed.notation || "1d20"}: ${parsed.total}`,
+                      timestamp: Date.now(),
+                    });
+                  }
+                } catch { /* ignore parse errors */ }
               }
               if (!debugMode) break;
               addDebugEntry({
