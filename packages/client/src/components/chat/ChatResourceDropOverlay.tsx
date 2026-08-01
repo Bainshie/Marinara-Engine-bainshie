@@ -253,6 +253,20 @@ export function ChatResourceDropOverlay({ chat }: { chat: Chat }) {
     setOverlay(next);
   }, []);
 
+  const ensureConnectionReady = useCallback(
+    (action: ChatResourceDropResult, rows: ResourceRegistryRow[] | null) => {
+      if (action.type !== "set-connection") return true;
+      const connection = rows?.find((item) => item.id === action.id);
+      const model = typeof connection?.model === "string" ? connection.model.trim() : "";
+      const provider = typeof connection?.provider === "string" ? connection.provider : "";
+      if (model || provider === "grok_subscription") return true;
+      useUIStore.getState().openConnectionDetail(action.id);
+      toast.info(t("ui.chat.chatresourcedropoverlay.connectionNeedsSetup", { name: action.label }));
+      return false;
+    },
+    [t],
+  );
+
   const applyAction = useCallback(
     async (payload: ChatResourceDragPayload) => {
       let currentChat = useChatStore.getState().activeChat ?? chatRef.current;
@@ -294,19 +308,7 @@ export function ChatResourceDropOverlay({ chat }: { chat: Chat }) {
         return;
       }
 
-      if (latestAction.type === "set-connection") {
-        const connectionId = latestAction.id;
-        const connection = (validatedConnectionRows ?? (connections as ResourceRegistryRow[])).find(
-          (item) => item.id === connectionId,
-        );
-        const model = typeof connection?.model === "string" ? connection.model.trim() : "";
-        const provider = typeof connection?.provider === "string" ? connection.provider : "";
-        if (!model && provider !== "grok_subscription") {
-          useUIStore.getState().openConnectionDetail(connectionId);
-          toast.info(t("ui.chat.chatresourcedropoverlay.connectionNeedsSetup", { name: latestAction.label }));
-          return;
-        }
-      }
+      if (!ensureConnectionReady(latestAction, validatedConnectionRows)) return;
 
       if (
         (latestAction.type === "set-persona" ||
@@ -360,6 +362,7 @@ export function ChatResourceDropOverlay({ chat }: { chat: Chat }) {
           toast.info(t(blockedKey(latestAction), { name: latestAction.label }));
           return;
         }
+        if (!ensureConnectionReady(latestAction, validatedConnectionRows)) return;
         if (
           (latestAction.type === "set-persona" ||
             latestAction.type === "set-preset" ||
@@ -537,6 +540,7 @@ export function ChatResourceDropOverlay({ chat }: { chat: Chat }) {
     [
       connections,
       currentPersona?.name,
+      ensureConnectionReady,
       presets,
       refetchConnections,
       refetchPresets,

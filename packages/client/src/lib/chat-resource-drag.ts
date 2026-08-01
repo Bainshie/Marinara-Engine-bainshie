@@ -96,6 +96,7 @@ export function requestChatAgentSetup(chatId: string, ids: string[]) {
 
 export function takePendingChatAgentSetupIds(chatId: string) {
   const pending = pendingChatAgentSetup;
+  if (pending?.chatId !== chatId) return [];
   pendingChatAgentSetup = null;
-  return pending?.chatId === chatId ? pending.ids : [];
+  return pending.ids;
 }
