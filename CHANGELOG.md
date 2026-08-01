@@ -39,6 +39,7 @@ This file is the release-notes source of truth for Marinara Engine. Reuse these 
 
 ### Changed
 
+- Made Noodle and NoodleR switch to their existing mobile layouts whenever the center pane falls below the desktop width, including when sidebars reduce the available space on a desktop device.
 - Standardized resource-panel sorting controls on the shared width used by the Chats tab, so the Lorebooks selector no longer expands beyond neighboring tabs.
 - Made the empty **No messages yet** chat hover preview inherit the configured app accent instead of the default theme's fixed lavender-pink.
 - Kept World Maps navigation inside the **Agents** tab and **Chat Settings** by removing its dedicated launchers from the Chats sidebar and top bar.

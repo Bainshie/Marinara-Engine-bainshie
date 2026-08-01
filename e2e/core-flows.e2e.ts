@@ -10761,6 +10761,42 @@ test("Noodle only bumps posts when another account replies to the persona's comm
   }
 });
 
+test("Noodle uses its mobile shell when the desktop center pane is narrow", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name.includes("mobile"), "Desktop center-pane responsiveness is covered here.");
+
+  const errors = collectUnexpectedErrors(page);
+  await page.goto("/");
+  await page.locator('[data-tour="noodle-tab"]').click();
+
+  const center = page.locator('[data-component="CenterContent"]');
+  const noodle = page.locator('[data-component="NoodleView"]');
+  const desktopAccountSwitcher = noodle.locator('[data-component="NoodleView.AccountSwitcher"]');
+  const mobileHeader = noodle.locator('[data-component="NoodleView.MobileHeader"]');
+  const mobileBottomNav = noodle.locator('[data-component="NoodleView.MobileBottomNav"]');
+
+  await expect(desktopAccountSwitcher).toBeVisible();
+  await expect(mobileHeader).toBeHidden();
+  await expect(mobileBottomNav).toBeHidden();
+
+  await page.locator('[data-tour="sidebar-toggle"]').click();
+  await page.locator('[data-tour="panel-settings"]').click();
+  await expect.poll(() => center.evaluate((element) => element.getBoundingClientRect().width)).toBeLessThan(1024);
+  await expect(mobileHeader).toBeVisible();
+  await expect(mobileBottomNav).toBeVisible();
+  await expect(desktopAccountSwitcher).toBeHidden();
+
+  await page.locator('[data-tour="panel-settings"]').click();
+  await page.locator('[data-tour="sidebar-toggle"]').click();
+  await expect(desktopAccountSwitcher).toBeVisible();
+  await expect(mobileBottomNav).toBeHidden();
+
+  await page.setViewportSize({ width: 900, height: 800 });
+  await expect(mobileHeader).toBeVisible();
+  await expect(mobileBottomNav).toBeVisible();
+  await expect(desktopAccountSwitcher).toBeHidden();
+  expect(errors).toEqual([]);
+});
+
 test("Noodle mobile shell keeps navigation usable across every view", async ({ page }, testInfo) => {
   test.skip(!testInfo.project.name.includes("mobile"), "The responsive Noodle shell is covered on mobile.");
 
