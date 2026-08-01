@@ -95,7 +95,8 @@ async function readLocale(filename) {
     if (!KEY_PATTERN.test(key)) {
       throw new Error(`${filename}: ${key} is not a semantic localization key`);
     }
-    const intentionallyEmpty = code !== DEFAULT_LOCALE && INTENTIONALLY_EMPTY_TRANSLATION_KEYS.has(key);
+    const intentionallyEmpty =
+      value === "" && code !== DEFAULT_LOCALE && INTENTIONALLY_EMPTY_TRANSLATION_KEYS.has(key);
     if (typeof value !== "string" || (!value.trim() && !intentionallyEmpty)) {
       throw new Error(`${filename}: ${key} must contain non-empty text`);
     }

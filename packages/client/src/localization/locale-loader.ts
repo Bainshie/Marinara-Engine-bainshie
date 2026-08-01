@@ -101,7 +101,8 @@ export function normalizeLocaleResource(locale: string, input: unknown): LoadedL
   const messages: Record<string, string> = {};
   for (const [key, value] of Object.entries(resource)) {
     if (key === "_meta") continue;
-    const intentionallyEmpty = locale !== DEFAULT_APP_LANGUAGE && INTENTIONALLY_EMPTY_TRANSLATION_KEYS.has(key);
+    const intentionallyEmpty =
+      value === "" && locale !== DEFAULT_APP_LANGUAGE && INTENTIONALLY_EMPTY_TRANSLATION_KEYS.has(key);
     if (typeof value !== "string" || (!value.trim() && !intentionallyEmpty)) {
       throw new Error(`${locale}.json key ${key} must contain non-empty text`);
     }

@@ -421,9 +421,19 @@ assert.equal(lorebookKoreanLocale["ui.lorebooks.lorebookeditor.es"], "");
 assert.equal(lorebookKoreanLocale["ui.noodle.stageprofileview.s"], "");
 assert.equal(lorebookEnglishLocale["ui.lorebooks.lorebookentryrow.beforeCharacter"], "Before character definitions");
 assert.equal(lorebookEnglishLocale["ui.lorebooks.lorebookentryrow.afterCharacter"], "After character definitions");
+assert.equal(lorebookEnglishLocale["ui.lorebooks.lorebookentryrow.beforeCompact"], "↑Char");
+assert.equal(lorebookEnglishLocale["ui.lorebooks.lorebookentryrow.afterCompact"], "↓Char");
 assert.match(
   String(lorebookEnglishLocale["ui.lorebooks.lorebookentryrow.positionInThePromptBeforeCharacterAfterCharacterOr"]),
   /Before Character Definitions, After Character Definitions/u,
+);
+assert.equal(lorebookKoreanLocale["ui.lorebooks.lorebookentryrow.beforeCharacter"], "캐릭터 정의 전");
+assert.equal(lorebookKoreanLocale["ui.lorebooks.lorebookentryrow.afterCharacter"], "캐릭터 정의 후");
+assert.equal(lorebookKoreanLocale["ui.lorebooks.lorebookentryrow.beforeCompact"], "↑캐릭터");
+assert.equal(lorebookKoreanLocale["ui.lorebooks.lorebookentryrow.afterCompact"], "↓캐릭터");
+assert.match(
+  String(lorebookKoreanLocale["ui.lorebooks.lorebookentryrow.positionInThePromptBeforeCharacterAfterCharacterOr"]),
+  /캐릭터 정의 전, 캐릭터 정의 후/u,
 );
 const updatesRouteSource = readFileSync(join(REPOSITORY_ROOT, "packages/server/src/routes/updates.routes.ts"), "utf8");
 assert.match(updatesRouteSource, /gitInstall \? await getCurrentBranch\(root\)\.catch\(\(\) => null\) : getBuildBranch\(\)/u);
@@ -937,6 +947,30 @@ try {
   const professorMariLorebook = await lorebookStorage.getById(professorMariLorebookId);
   assert.equal(professorMariLorebook?.hiddenFromLibrary, false);
   assert.equal((await lorebookStorage.listEntries(professorMariLorebookId)).length, 1);
+  await lorebookStorage.remove(professorMariLorebookId);
+  assert.equal(await lorebookStorage.getById(professorMariLorebookId), null);
+  assert.equal((await lorebookStorage.listEntries(professorMariLorebookId)).length, 0);
+
+  const professorMariCliLorebookId = "professor-mari-cli-lorebook-create-regression";
+  const professorMariCliLorebookResult = await mariDb.executeCli({
+    argv: [
+      "lorebooks",
+      "create",
+      "--id",
+      professorMariCliLorebookId,
+      "--name",
+      "Professor Mari CLI lorebook regression",
+      "--apply",
+    ],
+  });
+  assert.equal(
+    professorMariCliLorebookResult.ok,
+    true,
+    `Professor Mari CLI must create visible lorebooks: ${JSON.stringify(professorMariCliLorebookResult)}`,
+  );
+  assert.equal((await lorebookStorage.getById(professorMariCliLorebookId))?.hiddenFromLibrary, false);
+  await lorebookStorage.remove(professorMariCliLorebookId);
+  assert.equal(await lorebookStorage.getById(professorMariCliLorebookId), null);
   const rangedChatId = "professor-mari-range-regression";
   const rangedChatTimestamp = "2026-07-30T12:00:00.000Z";
   await db.insert(chats).values({
