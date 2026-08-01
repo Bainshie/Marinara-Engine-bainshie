@@ -6627,7 +6627,7 @@ test("downloadable agent catalog is usable on desktop and mobile", async ({ page
   expect(errors).toEqual([]);
 });
 
-test("Agent updates require consent and remain available after No", async ({ page }, testInfo) => {
+test("Agent updates share one dismissible prompt and remain available after Not now", async ({ page }, testInfo) => {
   const errors = collectUnexpectedErrors(page);
   const installedManifest = {
     schemaVersion: 1,
@@ -6643,31 +6643,36 @@ test("Agent updates require consent and remain available after No", async ({ pag
     restartRequired: false,
   };
   const catalogManifest = { ...installedManifest, version: "1.1.0" };
-  let declined = false;
+  const availableUpdates = [
+    {
+      id: "prose-guardian",
+      name: "Prose Guardian",
+      installedVersion: "1.0.0",
+      version: "1.1.0",
+      restartRequired: false,
+    },
+    {
+      id: "world-builder",
+      name: "World Builder",
+      installedVersion: "2.0.0",
+      version: "2.1.0",
+      restartRequired: true,
+    },
+  ];
+  const declinedUpdateIds = new Set<string>();
   let declineRequests = 0;
 
   await page.route("**/api/capability-packages/updates/pending", async (route) => {
     await route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify(
-        declined
-          ? []
-          : [
-              {
-                id: "prose-guardian",
-                name: "Prose Guardian",
-                installedVersion: "1.0.0",
-                version: "1.1.0",
-                restartRequired: false,
-              },
-            ],
-      ),
+      body: JSON.stringify(availableUpdates.filter((update) => !declinedUpdateIds.has(update.id))),
     });
   });
-  await page.route("**/api/capability-packages/prose-guardian/updates/1.1.0/decline", async (route) => {
+  await page.route("**/api/capability-packages/*/updates/*/decline", async (route) => {
     declineRequests += 1;
-    declined = true;
+    const packageId = decodeURIComponent(new URL(route.request().url()).pathname.split("/")[3] ?? "");
+    declinedUpdateIds.add(packageId);
     await route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -6724,12 +6729,13 @@ test("Agent updates require consent and remain available after No", async ({ pag
 
   await page.goto("/");
 
-  const updateDialog = page.getByRole("dialog", { name: "Agent Prose Guardian has been updated" });
+  const updateDialog = page.getByRole("dialog", { name: "Agent updates available" });
   await expect(updateDialog).toBeVisible();
-  await expect(updateDialog.getByText(/Version 1\.1\.0 is available/u)).toBeVisible();
-  await expect(updateDialog.getByText(/update it later in Download Agents/u)).toBeVisible();
-  await expect(updateDialog.getByRole("button", { name: "Yes", exact: true })).toBeVisible();
-  await expect(updateDialog.getByRole("button", { name: "No", exact: true })).toBeVisible();
+  await expect(updateDialog.getByText(/update Agents later in Download Agents/u)).toBeVisible();
+  await expect(updateDialog).toContainText("• Prose Guardian (1.0.0 → 1.1.0)");
+  await expect(updateDialog).toContainText("• World Builder (2.0.0 → 2.1.0)");
+  await expect(updateDialog.getByRole("button", { name: "Update all", exact: true })).toBeVisible();
+  await expect(updateDialog.getByRole("button", { name: "Not now", exact: true })).toBeVisible();
   await expect
     .poll(async () => {
       const box = await updateDialog.boundingBox();
@@ -6745,8 +6751,9 @@ test("Agent updates require consent and remain available after No", async ({ pag
     })
     .toBe(true);
 
-  await updateDialog.getByRole("button", { name: "No", exact: true }).click();
-  await expect.poll(() => declineRequests).toBe(1);
+  await updateDialog.getByRole("button", { name: "Not now", exact: true }).click();
+  await expect.poll(() => declineRequests).toBe(2);
+  expect([...declinedUpdateIds].sort()).toEqual(["prose-guardian", "world-builder"]);
   await expect(updateDialog).toBeHidden();
 
   await page.locator('[data-tour="panel-agents"]').click();
