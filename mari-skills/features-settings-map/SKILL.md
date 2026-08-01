@@ -6,8 +6,7 @@ description: "Quick reference for where Marinara Engine's features and settings 
 # Marinara Engine — Features & Settings Map
 
 A compact map of the app's surface. This is a living reference, not exhaustive — if
-something you need isn't here, still fall back to workspace files/live app data, and
-consider adding what you learn back into this skill for next time.
+something you need isn't here, still fall back to workspace files/live app data.
 
 ## Chat Modes
 
@@ -54,17 +53,95 @@ consider adding what you learn back into this skill for next time.
 
 ## Settings Panel Tabs
 
-- **General** — language; **Enable streaming** + **Streaming speed** slider; **Disable
-  auto-scroll while streaming** (stops the chat view jumping to bottom mid-response, e.g.
-  on mobile while reading up-scroll); **Trim incomplete model endings**; **Messages per
-  page**.
-- **Appearance** — theme, app/chat background, accent color. **Notification Sounds** live
-  here (Settings → Appearance → Notification Sounds), NOT browser-only — separate toggles
-  for Conversation mode and Roleplay mode.
+- **General** — see **General Tab, Setting by Setting** below for the full breakdown.
+- **Appearance** — theme, app/chat background, accent color.
 - **Themes** — custom theme management/sync.
 - **Extensions** — misc feature toggles.
 - **Import** — SillyTavern migration.
 - **Advanced** — debug mode and lower-level settings.
+
+## General Tab, Setting by Setting
+
+The General tab is organized into sections, top to bottom:
+
+**App Behavior**
+- **Language** — app language picker. Only English ships today; persisted for future
+  translation PRs.
+- **Confirm before deleting** — shows a confirmation dialog before permanently deleting
+  chats, characters, or other items. Recommended on.
+- **Achievements** — shows the Home achievements button and unlock notifications. When
+  off, tracking stays silent in the current profile.
+- **Music Player** — shows the compact Music Player (Spotify/YouTube/Custom, switchable
+  from the player itself or the Music DJ agent settings).
+- **Mini Mari surprise visits** — allows the rare Chibi Professor Mari message to appear
+  while scrolling.
+- **Professor Mari suggestions** — shows Professor Mari's quick suggestion chips and
+  guided option chips after her replies.
+
+**Notifications**
+- **Notification Sounds** — plays a ping on new messages while you're on a different
+  chat. Separate toggles for **Conversation mode**, **Roleplay mode**, **Game mode**, and
+  **Only when Marinara is unfocused**.
+- **Background Notifications** — private OS notification when an autonomous Conversation
+  message arrives while Marinara isn't focused (message content hidden). Separate
+  **Browser** (uses browser notification permission) and **Mobile app** (native Android,
+  requires the installed Marinara app) toggles.
+- **Generation Completion Notifications** — same private OS notification, but for a
+  manually-started reply finishing in Conversation, Roleplay, Visual Novel, or Game mode
+  while unfocused. Same **Browser** / **Mobile app** toggle split.
+
+**Responses**
+- **Enable streaming** — AI responses appear word-by-word as generated; off shows the
+  full response at once after completion.
+- **Streaming speed** — slider controlling typewriter speed of streamed tokens (only
+  matters when streaming is on).
+- **Disable auto-scroll while streaming** — stops the chat view jumping to bottom
+  mid-response; useful on mobile so scrolling up to read isn't interrupted.
+- **Trim incomplete model endings** — trims a trailing unfinished sentence from AI
+  responses before saving; leaves complete responses and command-only endings alone.
+- **Messages per page** — how many messages load at a time (Load More reveals older
+  ones). 0 loads all messages at once.
+
+**Input & Editing**
+- **Send on Enter** — per-mode toggle (Roleplay / Conversations / Game) for whether
+  Enter sends the message; off makes Enter a newline and requires the send button.
+- **Quick replies** — adds alternate draft actions beside Send (one shows directly,
+  multiple open from an ellipsis). Sub-options: **Post only** (add persona message
+  without triggering a reply), **Guide reply** (use the draft as a `/guided` direction),
+  **Impersonate** (generate a persona-side user reply).
+- **Speech-to-text microphone** — shows a mic button on chat input bars for browser
+  dictation.
+- **Intuitive swipe navigation** — in Conversation/Roleplay, Left/Right Arrow (desktop)
+  or horizontal touch swipes (mobile) move between alternate generations on the latest
+  assistant message.
+- **Reroll past the newest swipe** — with intuitive swipes on, Right Arrow/swipe-left on
+  the newest swipe of the latest assistant message creates a new reroll instead of doing
+  nothing.
+- **Up Arrow edits last message** — in Conversation/Roleplay, Up Arrow with an empty
+  chat input opens the most recent message (yours or the AI's) for editing.
+- **Double-click edits messages** — double-click/double-tap a Roleplay message to open it
+  for editing; off avoids accidental edits (edit buttons/shortcuts still work).
+
+**Text Rules**
+- **Bold dialogue in quotes** — bolds text inside dialogue quotation marks (`"..."`,
+  `「...」`, `『...』`) in addition to the dialogue highlight color.
+- **Convert LaTeX symbols** — turns model-written LaTeX commands (`\rightarrow`, `\neq`,
+  `\times`, `\alpha`, etc.) into regular symbols for display; code snippets are left
+  alone; saved message text is unchanged.
+- **Quote style** — unifies straight/smart quotation marks in chat inputs and displayed
+  AI output.
+
+**Game Playback**
+- **Instantly reveal game text** — Game mode narration appears fully immediately,
+  skipping the typewriter effect (hides the narration speed control below).
+- **Mouse-wheel + click navigation** — in Game mode, scroll up/down to step back/forward
+  through past assistant turns; clicking the scene background advances like Next. While
+  reviewing the past, Next becomes Return (clicking the background or pressing Return
+  jumps back to where you were reading).
+- **Game narration speed** — typewriter speed for Game mode narration text (hidden when
+  instant reveal is on).
+- **Game auto-play segment delay** — pause between narration segments when auto-play is
+  enabled (▶ button next to Next).
 
 ## Per-Chat Settings (Chat Settings drawer)
 
@@ -94,6 +171,40 @@ consider adding what you learn back into this skill for next time.
   steer into the roleplay's next generation), `<note>` (durable, capped-budget memory
   injected every generation until cleared), `<ooc>` (roleplay character breaks character
   into the connected conversation chat).
+
+## App Data Storage — JSON Files, Not SQL
+
+Marinara has **no SQL database**. There is no sqlite file, no `SELECT`/`INSERT` SQL
+syntax, and no query engine to connect to. All user data (chats, messages, characters,
+personas, lorebooks, presets, connections, themes, agents, etc.) lives as plain JSON
+files on disk under `DATA_DIR/storage/tables/<table>.json` — one JSON array of row
+objects per table, plus a `manifest.json` index. Writes are debounced and saved
+atomically with a `.bak` backup per file. Never write or suggest SQL against this data —
+it will not run against anything.
+
+**To inspect or edit live app data, use the `mari db` CLI command group** (Professor
+Mari's own tool for this, dry-run by default so nothing is saved without `--apply`):
+
+- **Discovery** — `mari db status`, `tables` (list all table names), `schema <table>`
+  (columns + primary key), `counts` (row count per table), `data-dir`.
+- **Read** — `mari db list <table> [--limit <n>] [--offset <n>] [--parsed]`,
+  `get <table> <id>`, `select <table> --where <expr>`, `search <table|all> <query>`
+  (case-insensitive substring match across the whole row).
+- **Write** — `insert|patch|replace|delete|transform <table> ...` — always dry-run
+  unless `--apply` is passed; applying shows a Keep/Restore review card so changes stay
+  reversible.
+
+`--where <expr>` is **not SQL** — it's a JS boolean expression evaluated with `row` bound
+to the parsed row object, e.g. `row.name === 'Foo' && row.enabled === 'true'`. Note many
+boolean-looking columns are stored as the literal text `"true"`/`"false"`, not real
+booleans, so compare them as strings. Some columns (e.g. `characters.data`,
+`chats.metadata`) hold JSON-encoded text; `select`/`search` auto-parse them, and `list`/
+`get` need `--parsed` to decode them.
+
+For the common entities, prefer the friendlier wrapper command groups over raw `mari db`
+table/column access — they use named fields instead of raw column names: `mari
+characters`, `mari personas`, `mari lorebooks`, `mari chats` (read-only), `mari themes`.
+Each supports `--help` for its exact subcommands.
 
 ## Notes for Future Edits
 
