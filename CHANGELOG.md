@@ -58,6 +58,7 @@ This file is the release-notes source of truth for Marinara Engine. Reuse these 
 
 ### Security
 
+- Updated the production web server, static-file serving, request client, archive, image-processing, HTML-sanitization, MCP transport, and supporting transitive dependencies to their patched releases; the shipped dependency graph now passes the production vulnerability audit with no known advisories.
 - Required normal authorization for proxy-forwarded Docker traffic by default while retaining `REQUIRE_AUTH_FOR_DOCKER_PROXY=false` as an explicit legacy opt-out for fully trusted upstream clients. Direct same-host Docker bridge/gateway traffic remains compatible with `BYPASS_AUTH_DOCKER`.
 - Pinned bundled llama.cpp, MLX, and uv runtime inputs to reviewed revisions and release assets with repository-owned sizes and SHA-256 digests, and locked every MLX Python dependency to hash-verified packages. Downloads now fail before extraction or execution when their content differs, cancellation remains effective between retries, and installed runtime stamps force explicit Engine-reviewed upgrades instead of following upstream `latest` or `main`.
 - Bounded NovelAI ZIP image decompression to 64 MiB, rejected oversized declared output before inflation, and required actual output to match the archive metadata so malformed or highly expanding provider responses fail safely.
@@ -66,6 +67,7 @@ This file is the release-notes source of truth for Marinara Engine. Reuse these 
 
 ### Fixed
 
+- Updated Professor Mari's official Agent knowledge and public catalog counts to cover all 31 downloadable packages, including Long-Term Memory and Storyboard, and corrected her package-update guidance to match the user-confirmed update flow.
 - Kept Noodle and NoodleR navigation, search, stage-profile, and bulk-create icons on their blue and pink mode accents, and made lorebook entry-type descriptions inherit editor chrome text instead of the default pink foreground (#4417).
 - Corrected several Korean interface strings surfaced by the Korean documentation review: stale character-card update items are now labeled 오래됨 instead of the self-contradictory 적용 불가 (the modal lets you override and apply them), the Mini Mari setting keeps the product name in Latin script, Custom Sources follows the 사용자 지정 convention, the regenerate concept is unified on 재생성 across ten strings, the Verbosity parameter reads 상세도, and the release labels use the 릴리스 spelling (#4376).
 - Made Name Prefix carry each responding character's identity into post-processing Agent prompts in multi-character Roleplay while keeping rewrite agents' raw response text unchanged (#4351).

@@ -2199,6 +2199,10 @@ const chatSettingsDrawerSource = readFileSync(
   new URL("../../packages/client/src/components/chat/ChatSettingsDrawer.tsx", import.meta.url),
   "utf8",
 );
+const characterGreetingsSource = readFileSync(
+  new URL("../../packages/client/src/lib/character-greetings.ts", import.meta.url),
+  "utf8",
+);
 assert.match(
   chatSettingsDrawerSource,
   /CHAT_SETTINGS_SURFACES\[chatMode\]/u,
@@ -2436,7 +2440,7 @@ assert.match(
   /PanelSection title=\{localizeUi\("ui\.panels\.presetspanel\.prompts"\)\}/u,
   "The prompt-preset section must be labelled Prompts alongside Regexes and Functions",
 );
-assert.match(chatSettingsDrawerSource, /type GreetingOption = \{[\s\S]*alternateIndex: number \| null;/u);
+assert.match(characterGreetingsSource, /type CharacterGreeting = \{[^}]*alternateIndex: number \| null[^}]*\};/u);
 assert.match(chatSettingsDrawerSource, /setFirstMesConfirm\(null\);[\s\S]*addSilentGreetingSwipes/u);
 assert.equal(
   chatSettingsDrawerSource.match(/<GenerationSettingsLink/gu)?.length,
