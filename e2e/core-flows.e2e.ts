@@ -177,12 +177,13 @@ test("What's New opens once for each Marinara Engine version", async ({ page }) 
   const announcement = page.getByRole("dialog", { name: "What's New?" });
   await expect(announcement).toBeVisible();
   await expect(announcement.getByText(`Version ${APP_VERSION}`, { exact: true })).toBeVisible();
-  await expect(announcement.getByRole("heading", { name: "More control, polished down to the card." })).toBeVisible();
-  await expect(announcement.getByText(/custom quick replies/)).toBeVisible();
-  await expect(announcement.getByText(/richer translation controls/)).toBeVisible();
-  await expect(announcement.getByText(/Atlas image and video generation/)).toBeVisible();
-  await expect(announcement.getByText(/interface localization/)).toBeVisible();
-  await expect(announcement.getByText(/Character and Persona cards/)).toBeVisible();
+  await expect(
+    announcement.getByRole("heading", { name: "Broader horizons, finer control, stronger foundations." }),
+  ).toBeVisible();
+  await expect(announcement.getByText(/Z\.AI image generation/)).toBeVisible();
+  await expect(announcement.getByText(/smarter Roleplay animation planning/)).toBeVisible();
+  await expect(announcement.getByText(/four new documentation languages/)).toBeVisible();
+  await expect(announcement.getByText(/runtime security/)).toBeVisible();
   await expect(announcement.getByText("Marinara Engine has been updated.", { exact: true })).toHaveCount(0);
   await expect(announcement.getByText("Tactical Combat Mode in Games")).toHaveCount(0);
   await expect(announcement.getByRole("link", { name: "View release" })).toHaveAttribute(
@@ -1273,6 +1274,68 @@ test("bulk chat deletion uses the shared primary accent control", async ({ page 
   } finally {
     await Promise.all(chats.map((chat) => page.request.delete(`/api/chats/${chat.id}`).catch(() => undefined)));
   }
+});
+
+test("empty chat hover previews inherit the configured accent", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name.includes("mobile"), "Chat row hover previews are desktop-only.");
+
+  const response = await page.request.post("/api/chats", {
+    data: { name: "Empty Chat Accent Preview", mode: "conversation", characterIds: [] },
+  });
+  expect(response.ok()).toBeTruthy();
+  const chat = (await response.json()) as { id: string };
+
+  try {
+    await page.addInitScript(() => {
+      localStorage.setItem(
+        "marinara-engine-ui",
+        JSON.stringify({
+          state: {
+            hasCompletedOnboarding: true,
+            sidebarOpen: true,
+          },
+          version: 75,
+        }),
+      );
+    });
+    await page.goto("/");
+    await setAppAccentColor(page, "#14b8a6");
+    const activeAccentColor = await readCssVariableColor(page, "--marinara-chat-chrome-button-text-active");
+
+    const chatRow = page.locator(`[data-component="ChatSidebar"] [data-chat-id="${chat.id}"]`);
+    await expect(chatRow).toBeVisible();
+    await chatRow.hover();
+
+    const emptyPreview = page.getByRole("tooltip").getByText("No messages yet", { exact: true });
+    await expect(emptyPreview).toBeVisible();
+    await expect(emptyPreview).toHaveCSS("color", activeAccentColor);
+    expect(await emptyPreview.getAttribute("class")).not.toMatch(/pink|red|rose/iu);
+  } finally {
+    await page.request.delete(`/api/chats/${chat.id}`).catch(() => undefined);
+  }
+});
+
+test("resource panel sort fields share the canonical width", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name.includes("mobile"), "Desktop resource panel control geometry is covered here.");
+
+  await page.goto("/");
+  const rightPanel = page.locator('[data-component="RightPanelDesktop"]');
+
+  await page.locator('[data-tour="panel-lorebooks"]').click();
+  const lorebookSort = rightPanel.locator("select.mari-chrome-sort-field:visible");
+  await expect(lorebookSort).toBeVisible();
+  const lorebookWidth = await lorebookSort.evaluate((element) => element.getBoundingClientRect().width);
+
+  await page.locator('[data-tour="panel-personas"]').click();
+  const personaSort = rightPanel.locator("select.mari-chrome-sort-field:visible");
+  await expect(personaSort).toBeVisible();
+  const personaWidth = await personaSort.evaluate((element) => element.getBoundingClientRect().width);
+  const rootFontSize = await page.locator("html").evaluate((element) =>
+    Number.parseFloat(getComputedStyle(element).fontSize),
+  );
+
+  expect(lorebookWidth / rootFontSize).toBeCloseTo(6.5, 2);
+  expect(lorebookWidth).toBe(personaWidth);
 });
 
 test("destructive confirmation actions use the shared accent button treatment", async ({ page }, testInfo) => {
@@ -6683,11 +6746,28 @@ test("downloadable agent catalog is usable on desktop and mobile", async ({ page
     await expect(allAgentsButton).toBeHidden();
   }
   await expect(catalogView.getByText("Marinara Engine v2.3.0+")).toBeVisible();
-  await expect(catalogView.getByRole("link", { name: "Read how this agent works" })).toHaveAttribute(
+  const documentationLink = catalogView.getByRole("link", { name: "Read how this agent works" });
+  await expect(documentationLink).toHaveAttribute(
     "href",
     "https://github.com/Pasta-Devs/Marinara-Agents#uno",
   );
-  await expect(catalogView.getByRole("button", { name: "Install", exact: true })).toBeVisible();
+  const installButton = catalogView.getByRole("button", { name: "Install", exact: true });
+  await expect(installButton).toBeVisible();
+  await expect(documentationLink).toHaveClass(/mari-chrome-control--primary/u);
+  expect(await documentationLink.getAttribute("class")).toBe(await installButton.getAttribute("class"));
+  const readActionStyles = async (selector: typeof documentationLink) =>
+    selector.evaluate((element) => {
+      const styles = getComputedStyle(element);
+      return {
+        borderRadius: styles.borderRadius,
+        fontFamily: styles.fontFamily,
+        fontSize: styles.fontSize,
+        fontWeight: styles.fontWeight,
+        minHeight: styles.minHeight,
+        padding: styles.padding,
+      };
+    });
+  expect(await readActionStyles(documentationLink)).toEqual(await readActionStyles(installButton));
   await catalogView.getByRole("button", { name: "Custom Sources" }).click();
   const customSources = page.getByRole("dialog", { name: "Custom Agent Repositories" });
   await expect(customSources.getByText(/not affiliated with or vetted by PastaDevs/u)).toBeVisible();
@@ -6703,7 +6783,7 @@ test("downloadable agent catalog is usable on desktop and mobile", async ({ page
   expect(errors).toEqual([]);
 });
 
-test("Agent updates require consent and remain available after No", async ({ page }, testInfo) => {
+test("Agent updates share one dismissible prompt and remain available after Not now", async ({ page }, testInfo) => {
   const errors = collectUnexpectedErrors(page);
   const installedManifest = {
     schemaVersion: 1,
@@ -6719,31 +6799,36 @@ test("Agent updates require consent and remain available after No", async ({ pag
     restartRequired: false,
   };
   const catalogManifest = { ...installedManifest, version: "1.1.0" };
-  let declined = false;
+  const availableUpdates = [
+    {
+      id: "prose-guardian",
+      name: "Prose Guardian",
+      installedVersion: "1.0.0",
+      version: "1.1.0",
+      restartRequired: false,
+    },
+    {
+      id: "world-builder",
+      name: "World Builder",
+      installedVersion: "2.0.0",
+      version: "2.1.0",
+      restartRequired: true,
+    },
+  ];
+  const declinedUpdateIds = new Set<string>();
   let declineRequests = 0;
 
   await page.route("**/api/capability-packages/updates/pending", async (route) => {
     await route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify(
-        declined
-          ? []
-          : [
-              {
-                id: "prose-guardian",
-                name: "Prose Guardian",
-                installedVersion: "1.0.0",
-                version: "1.1.0",
-                restartRequired: false,
-              },
-            ],
-      ),
+      body: JSON.stringify(availableUpdates.filter((update) => !declinedUpdateIds.has(update.id))),
     });
   });
-  await page.route("**/api/capability-packages/prose-guardian/updates/1.1.0/decline", async (route) => {
+  await page.route("**/api/capability-packages/*/updates/*/decline", async (route) => {
     declineRequests += 1;
-    declined = true;
+    const packageId = decodeURIComponent(new URL(route.request().url()).pathname.split("/")[3] ?? "");
+    declinedUpdateIds.add(packageId);
     await route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -6800,12 +6885,13 @@ test("Agent updates require consent and remain available after No", async ({ pag
 
   await page.goto("/");
 
-  const updateDialog = page.getByRole("dialog", { name: "Agent Prose Guardian has been updated" });
+  const updateDialog = page.getByRole("dialog", { name: "Agent updates available" });
   await expect(updateDialog).toBeVisible();
-  await expect(updateDialog.getByText(/Version 1\.1\.0 is available/u)).toBeVisible();
-  await expect(updateDialog.getByText(/update it later in Download Agents/u)).toBeVisible();
-  await expect(updateDialog.getByRole("button", { name: "Yes", exact: true })).toBeVisible();
-  await expect(updateDialog.getByRole("button", { name: "No", exact: true })).toBeVisible();
+  await expect(updateDialog.getByText(/update Agents later in Download Agents/u)).toBeVisible();
+  await expect(updateDialog).toContainText("• Prose Guardian (1.0.0 → 1.1.0)");
+  await expect(updateDialog).toContainText("• World Builder (2.0.0 → 2.1.0)");
+  await expect(updateDialog.getByRole("button", { name: "Update all", exact: true })).toBeVisible();
+  await expect(updateDialog.getByRole("button", { name: "Not now", exact: true })).toBeVisible();
   await expect
     .poll(async () => {
       const box = await updateDialog.boundingBox();
@@ -6821,8 +6907,9 @@ test("Agent updates require consent and remain available after No", async ({ pag
     })
     .toBe(true);
 
-  await updateDialog.getByRole("button", { name: "No", exact: true }).click();
-  await expect.poll(() => declineRequests).toBe(1);
+  await updateDialog.getByRole("button", { name: "Not now", exact: true }).click();
+  await expect.poll(() => declineRequests).toBe(2);
+  expect([...declinedUpdateIds].sort()).toEqual(["prose-guardian", "world-builder"]);
   await expect(updateDialog).toBeHidden();
 
   await page.locator('[data-tour="panel-agents"]').click();
@@ -8459,7 +8546,7 @@ test("Illustrator owns the merged scene-video and Storyboard subsections while a
   }
 });
 
-test("Hierarchical Maps settings stay inside the active agent entry", async ({ page, request }, testInfo) => {
+test("World Maps stays in Agents and Chat Settings", async ({ page, request }, testInfo) => {
   test.skip(!testInfo.project.name.includes("desktop"), "Hierarchical Maps agent placement is covered on desktop.");
   test.setTimeout(90_000);
 
@@ -8626,13 +8713,10 @@ test("Hierarchical Maps settings stay inside the active agent entry", async ({ p
       sessionStorage.setItem("maps-feature-detail-chat-seeded", "true");
     }, chats[0]!.id);
     await page.goto("/");
-    const worldMapsButton = page.getByRole("button", { name: "World Maps", exact: true });
-    await expect(worldMapsButton).toBeVisible();
-    await worldMapsButton.click();
-    await expect(page.getByRole("heading", { name: "Hierarchical Maps home" })).toBeVisible();
-    await expect(page.locator('[data-tour="panel-agents"]')).not.toHaveClass(/mari-topbar-panel-icon--active/);
-    await page.getByRole("button", { name: "Back to Agents" }).click();
-    await expect(page.getByTestId("hierarchical-maps-detail")).toHaveCount(0);
+    await expect(page.locator('[data-tour="world-maps"]')).toHaveCount(0);
+    await expect(page.locator('[data-component="ChatSidebar"] button[aria-label="World Maps"]')).toHaveCount(0);
+
+    await page.locator('[data-tour="panel-agents"]').click();
     await expect(page.locator('[data-tour="panel-agents"]')).toHaveClass(/mari-topbar-panel-icon--active/);
 
     const agentsPanel = page.locator('[data-component="RightPanelDesktop"]');
@@ -8978,7 +9062,7 @@ test("Professor Mari chat fills the mobile home viewport and keeps its composer 
 
   const topBar = page.locator('[data-component="TopBar"]');
   const window = page.locator('[data-component="HomeProfessorMariChat.Window"]');
-  const composer = window.getByPlaceholder("Ask Professor Mari...");
+  const composer = window.getByPlaceholder("Ask Professor Mari");
   await expect(window).toBeVisible();
   await expect(composer).toBeVisible();
   await expect
@@ -10858,6 +10942,43 @@ test("Noodle only bumps posts when another account replies to the persona's comm
   }
 });
 
+test("Noodle uses its mobile shell when the desktop center pane is narrow", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name.includes("mobile"), "Desktop center-pane responsiveness is covered here.");
+
+  const errors = collectUnexpectedErrors(page);
+  await page.goto("/");
+  await page.locator('[data-tour="noodle-tab"]').click();
+
+  const center = page.locator('[data-component="CenterContent"]');
+  const noodle = page.locator('[data-component="NoodleView"]');
+  const desktopAccountSwitcher = noodle.locator('[data-component="NoodleView.AccountSwitcher"]');
+  const mobileHeader = noodle.locator('[data-component="NoodleView.MobileHeader"]');
+  const mobileBottomNav = noodle.locator('[data-component="NoodleView.MobileBottomNav"]');
+
+  await expect(desktopAccountSwitcher).toBeVisible();
+  await expect(mobileHeader).toBeHidden();
+  await expect(mobileBottomNav).toBeHidden();
+
+  await page.locator('[data-tour="sidebar-toggle"]').click();
+  await page.locator('[data-tour="panel-settings"]').click();
+  await expect.poll(() => center.evaluate((element) => element.getBoundingClientRect().width)).toBeLessThan(1024);
+  await expect(mobileHeader).toBeVisible();
+  await expect(mobileBottomNav).toBeVisible();
+  await expect(desktopAccountSwitcher).toBeHidden();
+
+  await page.locator('[data-tour="panel-settings"]').click();
+  await page.locator('[data-tour="sidebar-toggle"]').click();
+  await expect(desktopAccountSwitcher).toBeVisible();
+  await expect(mobileHeader).toBeHidden();
+  await expect(mobileBottomNav).toBeHidden();
+
+  await page.setViewportSize({ width: 900, height: 800 });
+  await expect(mobileHeader).toBeVisible();
+  await expect(mobileBottomNav).toBeVisible();
+  await expect(desktopAccountSwitcher).toBeHidden();
+  expect(errors).toEqual([]);
+});
+
 test("Noodle mobile shell keeps navigation usable across every view", async ({ page }, testInfo) => {
   test.skip(!testInfo.project.name.includes("mobile"), "The responsive Noodle shell is covered on mobile.");
 
@@ -11589,7 +11710,7 @@ test("Conversation media searches match GIFs and internal presses keep the picke
     await mediaButton.click();
     const mediaPicker = page.locator("[data-conversation-media-picker]:visible");
     await expect(mediaPicker).toBeVisible();
-    const emojiSearchInput = page.locator('input[placeholder="Search emojis..."]:visible');
+    const emojiSearchInput = page.getByRole("textbox", { name: "Search emojis", exact: true });
     const emojiSearchStyle = await emojiSearchInput.evaluate((input) => {
       const style = getComputedStyle(input);
       const shellStyle = getComputedStyle(input.parentElement!);
@@ -11789,8 +11910,9 @@ test("mobile topbar remains reachable while sidebars switch", async ({ page }, t
   expect((await mobileChatSidebar.boundingBox())?.width ?? 0).toBeGreaterThan(
     (await page.evaluate(() => innerWidth)) * 0.9,
   );
-  await page.waitForTimeout(70);
-  expect((await mobileChatSidebar.boundingBox())?.x ?? 0).toBeLessThan(openMobileSidebarX - 8);
+  await expect
+    .poll(async () => (await mobileChatSidebar.boundingBox())?.x ?? Number.POSITIVE_INFINITY)
+    .toBeLessThan(openMobileSidebarX - 8);
   await expect(mobileChatSidebar).toHaveAttribute("aria-hidden", "true");
 
   await page.locator('[data-tour="sidebar-toggle"]').click();
