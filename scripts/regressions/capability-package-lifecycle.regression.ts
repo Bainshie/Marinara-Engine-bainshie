@@ -183,6 +183,7 @@ try {
     resolveOfficialAgentBranch,
     resolveCapabilityCatalogUrl,
     resolveCapabilityPackageArtifactUrl,
+    resolveCapabilityPackageIconUrl,
   } = await import(
     "../../packages/server/src/services/capability-packages/package-manager.service.js"
   );
@@ -381,6 +382,7 @@ try {
       sha256: "1".repeat(64),
       bytes: 1,
     },
+    iconUrl: "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/legacy.png",
   };
   const officialCatalogUrl = resolveCapabilityCatalogUrl("development", "", "main");
   const stagingCatalogUrl = resolveCapabilityCatalogUrl("development", "", "staging");
@@ -394,6 +396,11 @@ try {
     resolveCapabilityPackageArtifactUrl(canonicalArtifactEntry, stagingCatalogUrl),
     "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/staging/artifacts/legacy-1.0.0.zip",
     "Engine staging must download official artifacts from Marinara-Agents staging even when generated metadata remains stable",
+  );
+  assert.equal(
+    resolveCapabilityPackageIconUrl(canonicalArtifactEntry, stagingCatalogUrl),
+    "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/staging/artwork/agent-covers/legacy.png",
+    "Engine staging must load official artwork from Marinara-Agents staging even when generated metadata remains stable",
   );
   assert.match(
     getCapabilityPackageArtifactSourceIssue(
@@ -427,6 +434,14 @@ try {
     ),
     "https://packages.example/legacy.zip",
     "Explicit custom catalogs must retain their configured artifact URLs",
+  );
+  assert.equal(
+    resolveCapabilityPackageIconUrl(
+      { ...canonicalArtifactEntry, iconUrl: "https://packages.example/legacy.png" },
+      "https://catalog.example.test/custom.json",
+    ),
+    "https://packages.example/legacy.png",
+    "Explicit custom catalogs must retain their configured artwork URLs",
   );
   const {
     buildHierarchicalMapsSelectionCorrectionPatch,
