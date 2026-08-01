@@ -1,12 +1,13 @@
-import { rm, mkdir, readFile, writeFile } from "node:fs/promises";
+import { rm, mkdir, readFile, readdir, stat, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
-import { basename, join } from "node:path";
+import { basename, join, resolve } from "node:path";
 import type {
   MariWorkspaceSkillDetail,
   MariWorkspaceSkillSummary,
   MariWorkspaceSkillsResponse,
 } from "@marinara-engine/shared";
 import { DATA_DIR } from "../../utils/data-dir.js";
+import { getMonorepoRoot } from "../../config/runtime-config.js";
 import { now } from "../../utils/id-generator.js";
 import { logger } from "../../lib/logger.js";
 
@@ -40,6 +41,16 @@ const SAFE_SKILL_ID_PATTERN = /^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/;
 
 function rootDir() {
   return join(DATA_DIR, ".mari-workspace", "skills");
+}
+
+/**
+ * Skills shipped with Marinara Engine itself (tracked in git, read-only from the Skills
+ * UI) live outside DATA_DIR so they resolve correctly even when DATA_DIR is overridden
+ * to an external volume — same reasoning as docs.routes.ts resolving DOCS_DIR from the
+ * monorepo root instead of the runtime data directory.
+ */
+function bundledRootDir() {
+  return resolve(getMonorepoRoot(), "mari-skills");
 }
 
 function indexPath() {
@@ -161,15 +172,66 @@ function summarizeRecord(record: SkillRecord, content: string): MariWorkspaceSki
     updatedAt: record.updatedAt,
     size: Buffer.byteLength(content, "utf8"),
     filePath: skillFilePath(record.id),
+    source: "user",
   };
+}
+
+/**
+ * Scan mari-skills/<id>/SKILL.md for skills shipped with Marinara Engine itself.
+ * Always enabled, never mutated through the CRUD API — edit the file and open a PR.
+ */
+async function readBundledSkills(): Promise<{ skills: MariWorkspaceSkillDetail[]; diagnostics: string[] }> {
+  const root = bundledRootDir();
+  const diagnostics: string[] = [];
+  if (!existsSync(root)) return { skills: [], diagnostics };
+
+  let entries: string[];
+  try {
+    entries = await readdir(root);
+  } catch (err) {
+    diagnostics.push(`Bundled skills could not be listed: ${err instanceof Error ? err.message : String(err)}`);
+    return { skills: [], diagnostics };
+  }
+
+  const skills: MariWorkspaceSkillDetail[] = [];
+  for (const entry of entries) {
+    const id = normalizeSkillId(entry, entry);
+    if (!SAFE_SKILL_ID_PATTERN.test(id)) continue;
+    const filePath = join(root, entry, "SKILL.md");
+    if (!existsSync(filePath)) continue;
+    try {
+      const [raw, fileStat] = await Promise.all([readFile(filePath, "utf8"), stat(filePath)]);
+      const frontmatter = parseFrontmatter(raw);
+      const name = normalizeSkillName(frontmatter.name, entry);
+      const description = normalizeDescription(frontmatter.description, raw);
+      const content = skillInstructions(raw);
+      skills.push({
+        id,
+        name,
+        description,
+        enabled: true,
+        createdAt: fileStat.birthtime.toISOString(),
+        updatedAt: fileStat.mtime.toISOString(),
+        size: Buffer.byteLength(raw, "utf8"),
+        filePath,
+        source: "bundled",
+        content,
+      });
+    } catch (err) {
+      diagnostics.push(`Bundled skill ${entry} could not be read: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
+  return { skills, diagnostics };
 }
 
 export class ProfessorMariWorkspaceSkillsService {
   async list(): Promise<MariWorkspaceSkillsResponse> {
     await this.ensureStorage();
     const records = await this.readRecords();
-    const diagnostics: string[] = [];
-    const skills: MariWorkspaceSkillDetail[] = [];
+    const bundled = await readBundledSkills();
+    const diagnostics: string[] = [...bundled.diagnostics];
+    const skills: MariWorkspaceSkillDetail[] = [...bundled.skills];
 
     for (const record of records) {
       try {
@@ -192,9 +254,14 @@ export class ProfessorMariWorkspaceSkillsService {
     await this.ensureStorage();
     this.assertContent(input.content);
     const records = await this.readRecords();
+    const bundled = await readBundledSkills();
     const frontmatter = parseFrontmatter(input.content);
     const name = normalizeSkillName(input.name ?? frontmatter.name, titleFromBody(input.content) || titleFromFileName(input.fileName));
-    const id = this.uniqueId(name, records);
+    const id = this.uniqueId(
+      name,
+      records,
+      bundled.skills.map((skill) => skill.id),
+    );
     const description = normalizeDescription(input.description, input.content);
     const timestamp = now();
     const record: SkillRecord = {
@@ -294,8 +361,8 @@ export class ProfessorMariWorkspaceSkillsService {
     await writeFile(indexPath(), JSON.stringify(records, null, 2), "utf8");
   }
 
-  private uniqueId(baseName: string, records: SkillRecord[]) {
-    const existing = new Set(records.map((record) => record.id));
+  private uniqueId(baseName: string, records: SkillRecord[], reservedIds: Iterable<string> = []) {
+    const existing = new Set([...records.map((record) => record.id), ...reservedIds]);
     let id = baseName;
     let suffix = 2;
     while (existing.has(id)) {

@@ -101,3 +101,6 @@ consider adding what you learn back into this skill for next time.
   drift with the code. Keep entries to "what it is / where it lives / what it does."
 - When a new setting or feature ships, add a line here in the same style rather than
   relying on this assistant to re-discover it from source every time.
+- This file ships with Marinara Engine (tracked in git, not per-user data) and is loaded
+  automatically alongside any local custom skills. It's read-only from the Skills UI —
+  edit this file directly and open a PR to change it.

@@ -226,6 +226,8 @@ export interface MariWorkspaceSkillSummary {
   updatedAt: string;
   size: number;
   filePath: string;
+  /** "bundled" skills ship with Marinara Engine (tracked in git, read-only from the UI); "user" skills are local and fully editable. */
+  source: "bundled" | "user";
 }
 
 export interface MariWorkspaceSkillDetail extends MariWorkspaceSkillSummary {

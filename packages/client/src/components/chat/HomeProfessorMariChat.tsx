@@ -1768,6 +1768,11 @@ function ProfessorMariSkillsMenu({
                         <span className="truncate text-[0.75rem] font-semibold text-[var(--foreground)]">
                           {skill.name}
                         </span>
+                        {skill.source === "bundled" && (
+                          <span className="shrink-0 rounded-full bg-[var(--muted)]/50 px-1.5 py-0.5 text-[0.5625rem] font-semibold text-[var(--muted-foreground)]">
+                            Built-in
+                          </span>
+                        )}
                       </span>
                       <span className="mt-0.5 block truncate text-[0.65rem] text-[var(--muted-foreground)]">
                         {skill.description}
@@ -1775,14 +1780,23 @@ function ProfessorMariSkillsMenu({
                     </span>
                   </button>
                   <span className="flex shrink-0 items-center pr-1">
-                    <SettingsSwitch
-                      ariaLabel={skill.enabled ? "Disable skill" : "Enable skill"}
-                      title={skill.enabled ? "Enabled" : "Disabled"}
-                      checked={skill.enabled}
-                      onChange={() => onToggle(skill)}
-                      disabled={saving}
-                      className="p-0 hover:bg-transparent"
-                    />
+                    {skill.source === "bundled" ? (
+                      <span
+                        title="Built-in skills are always active"
+                        className="px-1.5 text-[0.6rem] text-[var(--muted-foreground)]"
+                      >
+                        Always on
+                      </span>
+                    ) : (
+                      <SettingsSwitch
+                        ariaLabel={skill.enabled ? "Disable skill" : "Enable skill"}
+                        title={skill.enabled ? "Enabled" : "Disabled"}
+                        checked={skill.enabled}
+                        onChange={() => onToggle(skill)}
+                        disabled={saving}
+                        className="p-0 hover:bg-transparent"
+                      />
+                    )}
                   </span>
                 </div>
               );
@@ -1804,12 +1818,19 @@ function ProfessorMariSkillsMenu({
           <div className="border-t border-[var(--border)]/50 p-2.5">
             {selectedSkill ? (
               <div className="space-y-2">
+                {selectedSkill.source === "bundled" && (
+                  <p className="rounded-md bg-[var(--muted)]/40 px-2 py-1.5 text-[0.65rem] text-[var(--muted-foreground)]">
+                    Built-in skill — ships with Marinara Engine and always stays active. Edit{" "}
+                    <code className="font-mono">mari-skills/{selectedSkill.id}/SKILL.md</code> in the repo to change
+                    it.
+                  </p>
+                )}
                 <label className="block text-[0.6875rem] font-semibold text-[var(--muted-foreground)]">
                   Name
                   <input
                     value={draft.name}
                     onChange={(event) => onDraftChange({ ...draft, name: event.target.value })}
-                    disabled={saving}
+                    disabled={saving || selectedSkill.source === "bundled"}
                     className="mt-1 h-8 w-full rounded-md border border-[var(--border)] bg-[var(--card)] px-2 text-xs text-[var(--foreground)] outline-none transition-colors focus:border-[var(--primary)]/55 disabled:cursor-not-allowed disabled:opacity-70"
                   />
                 </label>
@@ -1818,7 +1839,7 @@ function ProfessorMariSkillsMenu({
                   <input
                     value={draft.description}
                     onChange={(event) => onDraftChange({ ...draft, description: event.target.value })}
-                    disabled={saving}
+                    disabled={saving || selectedSkill.source === "bundled"}
                     className="mt-1 h-8 w-full rounded-md border border-[var(--border)] bg-[var(--card)] px-2 text-xs text-[var(--foreground)] outline-none transition-colors focus:border-[var(--primary)]/55 disabled:cursor-not-allowed disabled:opacity-70"
                   />
                 </label>
@@ -1827,31 +1848,33 @@ function ProfessorMariSkillsMenu({
                   <textarea
                     value={draft.content}
                     onChange={(event) => onDraftChange({ ...draft, content: event.target.value })}
-                    disabled={saving}
+                    disabled={saving || selectedSkill.source === "bundled"}
                     rows={9}
                     className="mt-1 min-h-40 w-full resize-y rounded-md border border-[var(--border)] bg-[var(--card)] px-2 py-2 font-mono text-[0.6875rem] leading-relaxed text-[var(--foreground)] outline-none transition-colors focus:border-[var(--primary)]/55 disabled:cursor-not-allowed disabled:opacity-70"
                   />
                 </label>
-                <div className="flex items-center justify-between gap-2">
-                  <button
-                    type="button"
-                    onClick={() => onDelete(selectedSkill.id)}
-                    disabled={saving}
-                    className="inline-flex h-8 items-center gap-1.5 rounded-md px-2 text-[0.6875rem] font-semibold text-[var(--destructive)] transition-colors hover:bg-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-45"
-                  >
-                    <Trash2 size="0.75rem" />
-                    Delete
-                  </button>
-                  <button
-                    type="button"
-                    onClick={onSave}
-                    disabled={saving}
-                    className="inline-flex h-8 items-center gap-1.5 rounded-md bg-[var(--primary)] px-2.5 text-[0.6875rem] font-semibold text-[var(--primary-foreground)] transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-45"
-                  >
-                    {saving ? <Loader2 size="0.75rem" className="animate-spin" /> : <Save size="0.75rem" />}
-                    Save
-                  </button>
-                </div>
+                {selectedSkill.source !== "bundled" && (
+                  <div className="flex items-center justify-between gap-2">
+                    <button
+                      type="button"
+                      onClick={() => onDelete(selectedSkill.id)}
+                      disabled={saving}
+                      className="inline-flex h-8 items-center gap-1.5 rounded-md px-2 text-[0.6875rem] font-semibold text-[var(--destructive)] transition-colors hover:bg-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-45"
+                    >
+                      <Trash2 size="0.75rem" />
+                      Delete
+                    </button>
+                    <button
+                      type="button"
+                      onClick={onSave}
+                      disabled={saving}
+                      className="inline-flex h-8 items-center gap-1.5 rounded-md bg-[var(--primary)] px-2.5 text-[0.6875rem] font-semibold text-[var(--primary-foreground)] transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-45"
+                    >
+                      {saving ? <Loader2 size="0.75rem" className="animate-spin" /> : <Save size="0.75rem" />}
+                      Save
+                    </button>
+                  </div>
+                )}
               </div>
             ) : (
               <div className="rounded-lg border border-dashed border-[var(--border)] px-3 py-6 text-center text-xs text-[var(--muted-foreground)]">
