@@ -969,6 +969,7 @@ export function PersonasPanel() {
                             onTouchStart={(event) => {
                               startPersonaTouchDrag(event, pid, {
                                 allowInteractiveTarget: true,
+                                chatResourcePayload: { version: 1, kind: "persona", ids: [pid], label: p.name },
                                 sourceElement: event.currentTarget.closest<HTMLElement>(
                                   '[data-touch-drag-card="persona"]',
                                 ),
@@ -1150,6 +1151,12 @@ export function PersonasPanel() {
                 onTouchStart={(event) => {
                   startPersonaTouchDrag(event, persona.id, {
                     allowInteractiveTarget: true,
+                    chatResourcePayload: {
+                      version: 1,
+                      kind: "persona",
+                      ids: [persona.id],
+                      label: persona.name,
+                    },
                     sourceElement: event.currentTarget.closest<HTMLElement>('[data-touch-drag-card="persona"]'),
                   });
                 }}

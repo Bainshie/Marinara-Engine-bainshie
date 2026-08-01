@@ -676,6 +676,17 @@ export function LorebooksPanel() {
           onTouchStart={(event) => {
             startLorebookTouchDrag(event, lb.id, {
               allowInteractiveTarget: true,
+              chatResourcePayload: {
+                version: 1,
+                kind: "lorebook",
+                ids: getDraggedLorebookIds(lb.id),
+                label:
+                  getDraggedLorebookIds(lb.id).length === 1
+                    ? lb.name
+                    : localizeUi("ui.chat.chatresourcedropoverlay.lorebookCount", {
+                        count: getDraggedLorebookIds(lb.id).length,
+                      }),
+              },
               sourceElement: event.currentTarget.closest<HTMLElement>('[data-touch-drag-card="lorebook"]'),
             });
           }}

@@ -62,7 +62,7 @@ function findDropSurface(target: EventTarget | null) {
   return target.closest<HTMLElement>("[data-chat-resource-drop-surface]");
 }
 
-function getActionIcon(action: ChatResourceDropResult) {
+export function getChatResourceActionIcon(action: ChatResourceDropResult) {
   if (action.type === "blocked") return <Ban size="1.5rem" />;
   if (action.type === "add-characters") return <UserPlus size="1.5rem" />;
   if (action.type === "add-lorebooks") return <BookOpen size="1.5rem" />;
@@ -74,7 +74,7 @@ function getActionIcon(action: ChatResourceDropResult) {
 }
 
 /** Each resource keeps its library colour (lorebooks amber, personas emerald, …) while it is dragged. */
-const ACTION_ACCENT_CLASS: Record<ChatResourceDropAction["type"], string> = {
+export const CHAT_RESOURCE_ACTION_ACCENT_CLASS: Record<ChatResourceDropAction["type"], string> = {
   "add-characters": "mari-panel-gradient--characters",
   "add-lorebooks": "mari-panel-gradient--lorebooks",
   "add-agents": "mari-panel-gradient--agents",
@@ -84,7 +84,7 @@ const ACTION_ACCENT_CLASS: Record<ChatResourceDropAction["type"], string> = {
   "set-background": "mari-panel-gradient--backgrounds",
 };
 
-const ACTION_TITLE_KEY: Record<ChatResourceDropAction["type"], string> = {
+export const CHAT_RESOURCE_ACTION_TITLE_KEY: Record<ChatResourceDropAction["type"], string> = {
   "add-characters": "ui.chat.chatresourcedropoverlay.addCharacters",
   "add-lorebooks": "ui.chat.chatresourcedropoverlay.addLorebooks",
   "add-agents": "ui.chat.chatresourcedropoverlay.addAgents",
@@ -104,7 +104,7 @@ const ACTION_HINT_KEY: Record<ChatResourceDropAction["type"], string> = {
   "set-background": "ui.chat.chatresourcedropoverlay.hintBackground",
 };
 
-function blockedKey(action: ChatResourceDropBlock) {
+export function chatResourceBlockedKey(action: ChatResourceDropBlock) {
   if (action.reason === "preset-unsupported-mode") return "ui.chat.chatresourcedropoverlay.presetUnsupportedMode";
   if (action.reason === "agent-unsupported-mode") return "ui.chat.chatresourcedropoverlay.agentUnsupportedMode";
   if (action.reason === "connection-kind") return "ui.chat.chatresourcedropoverlay.connectionUnsupportedKind";
@@ -277,7 +277,7 @@ export function ChatResourceDropOverlay({ chat }: { chat: Chat }) {
       let latestAction = resolveChatResourceDropAction(payload, currentChat);
       if (!latestAction) return;
       if (latestAction.type === "blocked") {
-        toast.info(t(blockedKey(latestAction), { name: latestAction.label }));
+        toast.info(t(chatResourceBlockedKey(latestAction), { name: latestAction.label }));
         return;
       }
 
@@ -304,7 +304,7 @@ export function ChatResourceDropOverlay({ chat }: { chat: Chat }) {
         return;
       }
       if (latestAction.type === "blocked") {
-        toast.info(t(blockedKey(latestAction), { name: latestAction.label }));
+        toast.info(t(chatResourceBlockedKey(latestAction), { name: latestAction.label }));
         return;
       }
 
@@ -359,7 +359,7 @@ export function ChatResourceDropOverlay({ chat }: { chat: Chat }) {
         }
         if (!latestAction) return;
         if (latestAction.type === "blocked") {
-          toast.info(t(blockedKey(latestAction), { name: latestAction.label }));
+          toast.info(t(chatResourceBlockedKey(latestAction), { name: latestAction.label }));
           return;
         }
         if (!ensureConnectionReady(latestAction, validatedConnectionRows)) return;
@@ -571,7 +571,7 @@ export function ChatResourceDropOverlay({ chat }: { chat: Chat }) {
       event.preventDefault();
       event.stopPropagation();
       if (next.action.type === "blocked") {
-        toast.info(t(blockedKey(next.action), { name: next.action.label }));
+        toast.info(t(chatResourceBlockedKey(next.action), { name: next.action.label }));
         return;
       }
       void applyAction(next.payload);
@@ -607,7 +607,7 @@ export function ChatResourceDropOverlay({ chat }: { chat: Chat }) {
             className={`mari-chat-drop-zone pointer-events-none fixed z-[10010] flex items-center justify-center p-8 ${
               overlay.action.type === "blocked"
                 ? "mari-chat-drop-zone--blocked"
-                : ACTION_ACCENT_CLASS[overlay.action.type]
+                : CHAT_RESOURCE_ACTION_ACCENT_CLASS[overlay.action.type]
             }`}
             style={{
               left: overlay.rect.left,
@@ -630,13 +630,13 @@ export function ChatResourceDropOverlay({ chat }: { chat: Chat }) {
                     : "mari-chat-drop-icon flex h-14 w-14 shrink-0 items-center justify-center rounded-xl"
                 }
               >
-                {getActionIcon(overlay.action)}
+                {getChatResourceActionIcon(overlay.action)}
               </span>
               <span className="min-w-0">
                 <span className="block text-base font-semibold leading-snug">
                   {overlay.action.type === "blocked"
-                    ? t(blockedKey(overlay.action), { name: overlay.payload.label })
-                    : t(ACTION_TITLE_KEY[overlay.action.type], { name: overlay.payload.label })}
+                    ? t(chatResourceBlockedKey(overlay.action), { name: overlay.payload.label })
+                    : t(CHAT_RESOURCE_ACTION_TITLE_KEY[overlay.action.type], { name: overlay.payload.label })}
                 </span>
                 <span className="mt-1 block text-xs font-normal leading-relaxed text-[var(--muted-foreground)]">
                   {overlay.action.type === "blocked"

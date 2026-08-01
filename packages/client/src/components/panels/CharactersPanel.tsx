@@ -1131,6 +1131,17 @@ export function CharactersPanel() {
                         onTouchStart={(event) => {
                           startCharacterTouchDrag(event, memberId, {
                             allowInteractiveTarget: true,
+                            chatResourcePayload: {
+                              version: 1,
+                              kind: "character",
+                              ids: getDraggedCharacterIds(memberId),
+                              label:
+                                getDraggedCharacterIds(memberId).length === 1
+                                  ? memberName
+                                  : localizeUi("ui.chat.chatresourcedropoverlay.characterCount", {
+                                      count: getDraggedCharacterIds(memberId).length,
+                                    }),
+                            },
                             sourceElement: event.currentTarget.closest<HTMLElement>(
                               '[data-touch-drag-card="character"]',
                             ),
@@ -1456,6 +1467,17 @@ export function CharactersPanel() {
                 onTouchStart={(event) => {
                   startCharacterTouchDrag(event, char.id, {
                     allowInteractiveTarget: true,
+                    chatResourcePayload: {
+                      version: 1,
+                      kind: "character",
+                      ids: getDraggedCharacterIds(char.id),
+                      label:
+                        getDraggedCharacterIds(char.id).length === 1
+                          ? charName
+                          : localizeUi("ui.chat.chatresourcedropoverlay.characterCount", {
+                              count: getDraggedCharacterIds(char.id).length,
+                            }),
+                    },
                     sourceElement: event.currentTarget.closest<HTMLElement>('[data-touch-drag-card="character"]'),
                   });
                 }}

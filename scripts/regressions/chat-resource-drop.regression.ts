@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import { resolveChatResourceDropAction } from "../../packages/client/src/lib/chat-resource-drop-capabilities.js";
-import { parseChatResourceDragPayload } from "../../packages/client/src/lib/chat-resource-drag.js";
+import {
+  beginChatResourceTouchDrag,
+  clearActiveChatResourceDrag,
+  getActiveChatResourceTouchDrag,
+  parseChatResourceDragPayload,
+  subscribeChatResourceTouchDrag,
+} from "../../packages/client/src/lib/chat-resource-drag.js";
 import { readCharacterGreetings } from "../../packages/client/src/lib/character-greetings.js";
 
 const baseChat = {
@@ -233,5 +239,32 @@ assert.deepEqual(readCharacterGreetings({ alternate_greetings: ["Only alt"] }), 
   greetings: [{ text: "Only alt", alternateIndex: 2 - 1 }],
   dialogueColor: undefined,
 });
+
+// The mobile drop dock renders off this state, so begin/clear must both notify subscribers.
+{
+  const touchPayload = { version: 1 as const, kind: "lorebook" as const, ids: ["lorebook-9"], label: "Lore" };
+  let notifications = 0;
+  const unsubscribe = subscribeChatResourceTouchDrag(() => {
+    notifications += 1;
+  });
+
+  assert.equal(getActiveChatResourceTouchDrag(), null);
+  beginChatResourceTouchDrag(touchPayload);
+  assert.deepEqual(getActiveChatResourceTouchDrag(), touchPayload);
+  assert.equal(notifications, 1);
+
+  clearActiveChatResourceDrag();
+  assert.equal(getActiveChatResourceTouchDrag(), null);
+  assert.equal(notifications, 2);
+
+  // Clearing again must stay quiet, otherwise every desktop drag end re-renders the dock.
+  clearActiveChatResourceDrag();
+  assert.equal(notifications, 2);
+
+  unsubscribe();
+  beginChatResourceTouchDrag(touchPayload);
+  assert.equal(notifications, 2);
+  clearActiveChatResourceDrag();
+}
 
 console.info("Chat resource drop regressions passed.");
