@@ -2066,6 +2066,119 @@ function RoleplaySetupWizard({ chat, onFinish }: ChatSetupWizardProps) {
 
   const [shortcutApplying, setShortcutApplying] = useState(false);
 
+  const autoEnableDefaultAgents = useCallback(async () => {
+    if (defaultEnabledAgentIds.length === 0) return;
+    const latestActiveAgentIds = readLatestActiveAgentIds();
+    const toAdd = defaultEnabledAgentIds.filter((id) => !latestActiveAgentIds.includes(id));
+    if (toAdd.length === 0) return;
+
+    const metaPatch: Record<string, unknown> = {};
+    const newActiveIds = [...latestActiveAgentIds];
+
+    for (const agentId of toAdd) {
+      const agent = availableAgents.find((a) => a.id === agentId);
+      if (!agent) continue;
+      const config = agentConfigsByType.get(agentId) ?? null;
+      const mergedSettings = mergeBuiltInAgentSettings(agentId, config?.settings);
+      const builtInMeta = installedAgentManifests.find((entry) => entry.id === agentId) ?? null;
+
+      const setup = buildInitialAgentAddSetupState({
+        agentId,
+        settings: mergedSettings,
+        metadata,
+        musicPlayerSource,
+        roleplaySpriteScale,
+        allowSecretPlot: supportsNarrativeDirectorSecretPlot,
+      });
+
+      let nextSettings: Record<string, unknown> = {
+        ...mergedSettings,
+        contextSize: normalizePositiveInteger(mergedSettings.contextSize, DEFAULT_AGENT_CONTEXT_SIZE, 200),
+        maxTokens: normalizeAgentMaxTokens(mergedSettings.maxTokens),
+      };
+      const intervalMeta = getAgentRunIntervalMeta(agentId, !!builtInMeta);
+      if (intervalMeta && typeof mergedSettings.runInterval === "number") {
+        nextSettings.runInterval = mergedSettings.runInterval;
+      }
+      nextSettings = applyAgentAddSetupToAgentSettings(agentId, setup, nextSettings, {
+        allowSecretPlot: supportsNarrativeDirectorSecretPlot,
+      });
+
+      const nextEnabledTools = nextSettings.enabledTools;
+      if (
+        builtInMeta &&
+        (!Array.isArray(nextEnabledTools) ||
+          (agentId === "spotify" && nextSettings.musicProvider === "spotify" && nextEnabledTools.length === 0))
+      ) {
+        nextSettings.enabledTools = DEFAULT_AGENT_TOOLS[agentId] ?? [];
+      }
+
+      try {
+        if (builtInMeta?.execution === "feature") {
+          // Feature packages own their settings and runtime; chat activation is enough.
+        } else if (config) {
+          await updateAgentConfig.mutateAsync({ id: config.id, settings: nextSettings });
+        } else if (builtInMeta) {
+          await createAgent.mutateAsync({
+            type: builtInMeta.id,
+            name: agent.name,
+            description: agent.description,
+            phase: normalizeAgentPhaseForType(agentId, agent.phase),
+            connectionId: null,
+            promptTemplate: "",
+            settings: nextSettings,
+          });
+        }
+
+        Object.assign(metaPatch, buildAgentAddMetadataPatch(agentId, setup, metadata, {
+          allowSecretPlot: supportsNarrativeDirectorSecretPlot,
+          defaultPromptTemplateId: resolveDefaultAgentPromptTemplateId(nextSettings),
+          illustratorDefaults: {
+            includeCharacterAppearance: nextSettings.includeCharacterAppearance === true,
+            useAvatarReferences: nextSettings.useAvatarReferences === true,
+          },
+        }));
+        newActiveIds.push(agentId);
+      } catch {
+        // Skip agents that fail to enable
+      }
+    }
+
+    if (newActiveIds.length > latestActiveAgentIds.length) {
+      await updateMeta.mutateAsync({
+        id: chat.id,
+        enableAgents: true,
+        activeAgentIds: Array.from(new Set(newActiveIds)),
+        ...metaPatch,
+      });
+    }
+  }, [
+    agentConfigsByType,
+    availableAgents,
+    chat.id,
+    createAgent,
+    defaultEnabledAgentIds,
+    installedAgentManifests,
+    metadata,
+    musicPlayerSource,
+    readLatestActiveAgentIds,
+    roleplaySpriteScale,
+    supportsNarrativeDirectorSecretPlot,
+    updateAgentConfig,
+    updateMeta,
+  ]);
+
+  // Apply default-enabled agents as soon as they're known, not just at the end of the
+  // wizard — otherwise the agent list shows "Add" for agents that will be auto-enabled
+  // anyway, since it renders off metadata.activeAgentIds rather than defaultEnabledAgentIds.
+  const autoEnabledDefaultsAppliedRef = useRef(false);
+  useEffect(() => {
+    if (autoEnabledDefaultsAppliedRef.current) return;
+    if (defaultEnabledAgentIds.length === 0) return;
+    autoEnabledDefaultsAppliedRef.current = true;
+    void autoEnableDefaultAgents();
+  }, [defaultEnabledAgentIds, autoEnableDefaultAgents]);
+
   const finishWizard = useCallback(async () => {
     await updateMeta.mutateAsync({
       id: chat.id,
@@ -2269,108 +2382,6 @@ function RoleplaySetupWizard({ chat, onFinish }: ChatSetupWizardProps) {
     installedAgentManifests,
     metadata,
     readLatestActiveAgentIds,
-    supportsNarrativeDirectorSecretPlot,
-    updateAgentConfig,
-    updateMeta,
-  ]);
-
-  const autoEnableDefaultAgents = useCallback(async () => {
-    if (defaultEnabledAgentIds.length === 0) return;
-    const latestActiveAgentIds = readLatestActiveAgentIds();
-    const toAdd = defaultEnabledAgentIds.filter((id) => !latestActiveAgentIds.includes(id));
-    if (toAdd.length === 0) return;
-
-    const metaPatch: Record<string, unknown> = {};
-    const newActiveIds = [...latestActiveAgentIds];
-
-    for (const agentId of toAdd) {
-      const agent = availableAgents.find((a) => a.id === agentId);
-      if (!agent) continue;
-      const config = agentConfigsByType.get(agentId) ?? null;
-      const mergedSettings = mergeBuiltInAgentSettings(agentId, config?.settings);
-      const builtInMeta = installedAgentManifests.find((entry) => entry.id === agentId) ?? null;
-
-      const setup = buildInitialAgentAddSetupState({
-        agentId,
-        settings: mergedSettings,
-        metadata,
-        musicPlayerSource,
-        roleplaySpriteScale,
-        allowSecretPlot: supportsNarrativeDirectorSecretPlot,
-      });
-
-      let nextSettings: Record<string, unknown> = {
-        ...mergedSettings,
-        contextSize: normalizePositiveInteger(mergedSettings.contextSize, DEFAULT_AGENT_CONTEXT_SIZE, 200),
-        maxTokens: normalizeAgentMaxTokens(mergedSettings.maxTokens),
-      };
-      const intervalMeta = getAgentRunIntervalMeta(agentId, !!builtInMeta);
-      if (intervalMeta && typeof mergedSettings.runInterval === "number") {
-        nextSettings.runInterval = mergedSettings.runInterval;
-      }
-      nextSettings = applyAgentAddSetupToAgentSettings(agentId, setup, nextSettings, {
-        allowSecretPlot: supportsNarrativeDirectorSecretPlot,
-      });
-
-      const nextEnabledTools = nextSettings.enabledTools;
-      if (
-        builtInMeta &&
-        (!Array.isArray(nextEnabledTools) ||
-          (agentId === "spotify" && nextSettings.musicProvider === "spotify" && nextEnabledTools.length === 0))
-      ) {
-        nextSettings.enabledTools = DEFAULT_AGENT_TOOLS[agentId] ?? [];
-      }
-
-      try {
-        if (builtInMeta?.execution === "feature") {
-          // Feature packages own their settings and runtime; chat activation is enough.
-        } else if (config) {
-          await updateAgentConfig.mutateAsync({ id: config.id, settings: nextSettings });
-        } else if (builtInMeta) {
-          await createAgent.mutateAsync({
-            type: builtInMeta.id,
-            name: agent.name,
-            description: agent.description,
-            phase: normalizeAgentPhaseForType(agentId, agent.phase),
-            connectionId: null,
-            promptTemplate: "",
-            settings: nextSettings,
-          });
-        }
-
-        Object.assign(metaPatch, buildAgentAddMetadataPatch(agentId, setup, metadata, {
-          allowSecretPlot: supportsNarrativeDirectorSecretPlot,
-          defaultPromptTemplateId: resolveDefaultAgentPromptTemplateId(nextSettings),
-          illustratorDefaults: {
-            includeCharacterAppearance: nextSettings.includeCharacterAppearance === true,
-            useAvatarReferences: nextSettings.useAvatarReferences === true,
-          },
-        }));
-        newActiveIds.push(agentId);
-      } catch {
-        // Skip agents that fail to enable
-      }
-    }
-
-    if (newActiveIds.length > latestActiveAgentIds.length) {
-      await updateMeta.mutateAsync({
-        id: chat.id,
-        enableAgents: true,
-        activeAgentIds: Array.from(new Set(newActiveIds)),
-        ...metaPatch,
-      });
-    }
-  }, [
-    agentConfigsByType,
-    availableAgents,
-    chat.id,
-    createAgent,
-    defaultEnabledAgentIds,
-    installedAgentManifests,
-    metadata,
-    musicPlayerSource,
-    readLatestActiveAgentIds,
-    roleplaySpriteScale,
     supportsNarrativeDirectorSecretPlot,
     updateAgentConfig,
     updateMeta,

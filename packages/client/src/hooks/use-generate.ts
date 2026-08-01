@@ -1920,6 +1920,7 @@ export function useGenerate() {
                       notation: parsed.notation || "1d20",
                       total: parsed.total,
                       display: parsed.display || `🎲 ${parsed.notation || "1d20"}: ${parsed.total}`,
+                      timestamp: Date.now(),
                     });
                   }
                 } catch { /* ignore parse errors */ }

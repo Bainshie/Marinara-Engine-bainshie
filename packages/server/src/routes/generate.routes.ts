@@ -5626,7 +5626,7 @@ export async function generateRoutes(app: FastifyInstance) {
             while ((diceMatch = dicePattern.exec(fullResponse)) !== null) {
               const fullMatch = diceMatch[0];
               const dcMatch = dcPattern.exec(fullMatch);
-              const dc = dcMatch ? parseInt(dcMatch[1], 10) : 10;
+              const dc = dcMatch?.[1] ? parseInt(dcMatch[1], 10) : 10;
               const realResult = rollDice("1d20");
               const realRoll = realResult.total;
               const isCritSuccess = realRoll === 20;

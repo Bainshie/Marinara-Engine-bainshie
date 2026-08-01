@@ -312,8 +312,9 @@ export async function assemblePrompt(input: AssemblerInput): Promise<AssemblerOu
       }
     } else {
       // No selection yet — random pick if enabled, otherwise first option
-      if (isRandom && opts.length > 0) {
-        variableValues[cb.variableName] = opts[Math.floor(Math.random() * opts.length)].value;
+      const randomOpt = isRandom && opts.length > 0 ? opts[Math.floor(Math.random() * opts.length)] : undefined;
+      if (randomOpt) {
+        variableValues[cb.variableName] = randomOpt.value;
       } else if (opts.length > 0 && opts[0]) {
         variableValues[cb.variableName] = opts[0].value;
       }
