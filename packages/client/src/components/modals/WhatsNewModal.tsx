@@ -110,10 +110,6 @@ const RELEASE_ANNOUNCEMENTS: Record<string, ReleaseAnnouncement> = {
         ],
       },
       {
-        id: "library-workflows",
-        copyKey: "ui.modals.whatsnewmodal.release240.paragraphs.libraryWorkflows",
-      },
-      {
         id: "agent-intro",
         copyKey: "ui.modals.whatsnewmodal.release240.paragraphs.agentIntro",
       },
