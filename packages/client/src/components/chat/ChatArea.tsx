@@ -719,12 +719,12 @@ export function ChatArea() {
   useEffect(() => {
     const openAgentSetup = (event: Event) => {
       const chatId = (event as CustomEvent<{ chatId?: string }>).detail?.chatId;
-      if (chatId && chatId !== activeChatId) return;
+      if (chatId && chatId !== useChatStore.getState().activeChatId) return;
       handleOpenSettingsPanel();
     };
     window.addEventListener(CHAT_RESOURCE_AGENT_SETUP_EVENT, openAgentSetup);
     return () => window.removeEventListener(CHAT_RESOURCE_AGENT_SETUP_EVENT, openAgentSetup);
-  }, [activeChatId, handleOpenSettingsPanel]);
+  }, [handleOpenSettingsPanel]);
 
   useEffect(() => {
     window.addEventListener(CHAT_TOOLBAR_ACTION_EVENT, closeFloatingChatDrawers);

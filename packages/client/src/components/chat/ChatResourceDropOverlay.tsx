@@ -557,6 +557,20 @@ export function ChatResourceDropOverlay({ chat }: { chat: Chat }) {
     ],
   );
 
+  // Both entry points funnel through here: applyAction rejects outside its own try/catch when a
+  // confirmation or a registry lookup fails, and an event listener has nowhere to report that.
+  const runAssignment = useCallback(
+    (payload: ChatResourceDragPayload) => {
+      setAssigning(true);
+      void applyAction(payload)
+        .catch((error) => {
+          toast.error(error instanceof Error ? error.message : t("ui.chat.chatresourcedropoverlay.failed"));
+        })
+        .finally(() => setAssigning(false));
+    },
+    [applyAction, t],
+  );
+
   useEffect(() => {
     const handleDragOver = (event: DragEvent) => {
       if (!event.dataTransfer) return;
@@ -581,7 +595,7 @@ export function ChatResourceDropOverlay({ chat }: { chat: Chat }) {
         toast.info(t(chatResourceBlockedKey(next.action), { name: next.action.label }));
         return;
       }
-      void applyAction(next.payload);
+      runAssignment(next.payload);
     };
     const clear = () => {
       updateOverlay(null);
@@ -595,22 +609,16 @@ export function ChatResourceDropOverlay({ chat }: { chat: Chat }) {
       window.removeEventListener("drop", handleDrop, true);
       window.removeEventListener("dragend", clear, true);
     };
-  }, [applyAction, resolveOverlay, t, updateOverlay]);
+  }, [resolveOverlay, runAssignment, t, updateOverlay]);
 
   useEffect(() => {
     const assign = (event: Event) => {
       const payload = (event as CustomEvent<ChatResourceDragPayload>).detail;
-      if (!payload) return;
-      setAssigning(true);
-      void applyAction(payload)
-        .catch((error) => {
-          toast.error(error instanceof Error ? error.message : t("ui.chat.chatresourcedropoverlay.failed"));
-        })
-        .finally(() => setAssigning(false));
+      if (payload) runAssignment(payload);
     };
     window.addEventListener(CHAT_RESOURCE_ASSIGN_EVENT, assign);
     return () => window.removeEventListener(CHAT_RESOURCE_ASSIGN_EVENT, assign);
-  }, [applyAction, t]);
+  }, [runAssignment]);
 
   // A mobile dock drop closes the library panel to show the result; once the drop is fully done and
   // its follow-up modals are gone, put the user back in the panel they were dragging from.
