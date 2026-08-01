@@ -15,12 +15,16 @@ import {
   type IllustratorRetryTarget,
 } from "../lib/agent-failures";
 import { chatBackgroundMetadataToUrl, chatBackgroundUrlToMetadata } from "../lib/backgrounds";
+import { hasVisibleUserMessagePayload } from "../lib/chat-message-visibility";
 import { formatGenerationParameterError } from "../lib/generation-parameter-errors";
+import { sanitizeAppCss } from "../lib/theme-css";
 import {
-  getTypewriterRevealCharsPerSecond,
+  getStreamingCharsPerSecond,
+  getTypewriterFrameBudget,
   isGenerationStartBlocked,
   reconcileTypewriterReplacement,
   shouldKeepStreamLiveThroughPostProcessing,
+  takeTypewriterCharacters,
 } from "../lib/generation-stream-policy";
 import { requestChatScrollToBottom } from "../lib/chat-scroll-events";
 import { startSceneWithPromptPreferences } from "../lib/scene-generation";
@@ -171,7 +175,7 @@ function applyAgentFrontendStyle(chatId: string, raw: unknown) {
   }
   const token = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
   style.dataset.agentStyleToken = token;
-  style.textContent = css;
+  style.textContent = sanitizeAppCss(css);
   window.setTimeout(() => {
     const current = document.getElementById(id) as HTMLStyleElement | null;
     if (current?.dataset.agentStyleToken === token) current.remove();
@@ -340,11 +344,7 @@ function latestNewMessageByRole(
   );
 }
 
-function latestChangedAssistantMessage(
-  qc: QueryClient,
-  chatId: string,
-  snapshot: MessageSnapshot,
-): Message | null {
+function latestChangedAssistantMessage(qc: QueryClient, chatId: string, snapshot: MessageSnapshot): Message | null {
   if (!snapshot.cacheWasLoaded) return null;
   return latestAssistantMessage(
     getCachedMessages(qc, chatId).filter(
@@ -382,7 +382,6 @@ function replyNotificationTitle(mode: Chat["mode"] | undefined, characterName: s
   if (mode === "game") return "Game turn is ready";
   if (characterName) return undefined;
   if (mode === "roleplay") return "Roleplay reply is ready";
-  if (mode === "visual_novel") return "Visual Novel reply is ready";
   if (mode === "conversation") return "New message is ready";
   return "Reply is ready";
 }
@@ -594,7 +593,7 @@ function mergeCachedGeneratedMessage(existing: Message, incoming: Message): Mess
   return merged;
 }
 
-function upsertPersistedMessages(qc: QueryClient, chatId: string, incoming: Message[]) {
+export function upsertPersistedMessages(qc: QueryClient, chatId: string, incoming: Message[]) {
   if (incoming.length === 0) return;
 
   const sortedIncoming = sortMessagesByCreatedAt(
@@ -912,7 +911,7 @@ function createLeadingSpeakerPrefixFilter(initialLabels: string[]) {
 function shouldRefreshGameStateAfterGeneration(qc: QueryClient, chatId: string) {
   const chat = getCachedChatForGeneration(qc, chatId);
   if (chat?.mode === "game") return true;
-  if (chat?.mode !== "roleplay" && chat?.mode !== "visual_novel") return false;
+  if (chat?.mode !== "roleplay") return false;
   const enableAgents = parseChatMetadata(chat.metadata).enableAgents;
   return enableAgents === true || enableAgents === "true";
 }
@@ -921,6 +920,7 @@ const pendingVisibleGameStateRefreshes = new Map<string, Promise<void>>();
 const activeGenerateLocks = new Set<string>();
 const PASSIVE_STREAM_SETTLE_POLL_MS = 1_500;
 const PASSIVE_STREAM_SETTLE_MAX_WAIT_MS = 30 * 60_000;
+const STREAM_TYPEWRITER_PREBUFFER_MS = 320;
 
 function wait(ms: number, signal?: AbortSignal) {
   if (!signal) return new Promise<void>((resolve) => setTimeout(resolve, ms));
@@ -1166,6 +1166,7 @@ export function useGenerate() {
 
       // Create an AbortController so the stop button can cancel this generation.
       const abortController = new AbortController();
+      const submittedUserTurn = params.userMessage !== undefined;
       try {
         useChatStore.getState().setAbortController(params.chatId, abortController);
         useChatStore.getState().setBackgroundIllustration(params.chatId, false);
@@ -1186,8 +1187,11 @@ export function useGenerate() {
       // Background generations (e.g. autonomous messaging) run silently,
       // tracked only by abortControllers.
       if (isActiveChat()) {
-        setStreaming(true, params.chatId);
+        // Remove any completed response before exposing the next streaming state.
+        // Otherwise the old buffer can render beneath the new user message until
+        // the first token of the new response arrives.
         clearStreamBuffer(params.chatId);
+        setStreaming(true, params.chatId);
         clearThoughtBubbles();
         clearCyoaChoices();
         clearMariChips();
@@ -1202,21 +1206,14 @@ export function useGenerate() {
       // A stale in-flight message refetch can overwrite the saved assistant
       // message after it is upserted into the cache. Cancel early so the
       // post-save refresh owns the query lifecycle for this generation.
-      await qc.cancelQueries({ queryKey: chatKeys.messages(params.chatId), exact: true });
-      const assistantMessagesBeforeGeneration = snapshotMessagesByRole(qc, params.chatId, "assistant");
-      const expectedPersistedRole: Message["role"] = params.impersonate ? "user" : "assistant";
-      const expectedMessagesBeforeGeneration =
-        expectedPersistedRole === "assistant"
-          ? assistantMessagesBeforeGeneration
-          : snapshotMessagesByRole(qc, params.chatId, expectedPersistedRole);
-      if (params.regenerateMessageId) {
-        forgetRecentMessageContentEdit(params.chatId, params.regenerateMessageId);
-      }
-
+      const cancellation = qc.cancelQueries(
+        { queryKey: chatKeys.messages(params.chatId), exact: true },
+        { silent: true, revert: false },
+      );
       const pendingAttachments = params.attachments ?? [];
 
       // Optimistically show the user message in the chat immediately
-      if ((params.userMessage || pendingAttachments.length > 0 || params.pendingSpatialTransition) && !params.impersonate) {
+      if (hasVisibleUserMessagePayload(params.userMessage, pendingAttachments) && !params.impersonate) {
         // Build persona snapshot for per-message persona tracking
         const cachedPersonas = qc.getQueryData<
           Array<{
@@ -1288,6 +1285,17 @@ export function useGenerate() {
         requestChatScrollToBottom({ chatId: params.chatId, behavior: "auto" });
       }
 
+      await cancellation;
+      const assistantMessagesBeforeGeneration = snapshotMessagesByRole(qc, params.chatId, "assistant");
+      const expectedPersistedRole: Message["role"] = params.impersonate ? "user" : "assistant";
+      const expectedMessagesBeforeGeneration =
+        expectedPersistedRole === "assistant"
+          ? assistantMessagesBeforeGeneration
+          : snapshotMessagesByRole(qc, params.chatId, expectedPersistedRole);
+      if (params.regenerateMessageId) {
+        forgetRecentMessageContentEdit(params.chatId, params.regenerateMessageId);
+      }
+
       // ── SillyTavern-style smooth streaming ──
       // Tokens arrive in bursts from the server. Instead of dumping them
       // immediately, we feed them character-by-character from a queue
@@ -1311,8 +1319,6 @@ export function useGenerate() {
       ]);
       let fullBuffer = ""; // What the user sees (or accumulates silently when streaming is off)
       let pendingText = ""; // Tokens waiting to be typed out
-      let lastVisibleChunkAt = 0;
-      let observedArrivalCharsPerSecond: number | null = null;
       let receivedContent = false; // Whether any actual message content was received
       let receivedThinking = false; // Whether provider-native thinking chunks were received
       let gameTurnLoadedSoundPlayed = false;
@@ -1321,11 +1327,14 @@ export function useGenerate() {
       let illustrationSettled = false;
       let passiveStreamRecovered = false;
       let spatialTransitionCommitted = false;
+      let spatialCapabilityRefreshDispatched = false;
       let passiveStreamSettled = false;
       let passiveRecoveryDurableMessage: Message | null = null;
       let typingActive = false;
       let typewriterDone: (() => void) | null = null;
       let rafId = 0;
+      let typewriterStarted = false;
+      let typewriterBufferUntil = 0;
       const persistedMessages = new Map<string, Message>();
       let sawGroupTurn = false;
       let currentGroupTurnSavedMessage: Message | null = null;
@@ -1350,18 +1359,9 @@ export function useGenerate() {
         }
         if (!normalizedChunk) return;
         if (streamingEnabled && shouldDisplayRawStream) {
-          const now = performance.now();
-          if (lastVisibleChunkAt > 0) {
-            const elapsedMs = now - lastVisibleChunkAt;
-            if (elapsedMs >= 16 && elapsedMs <= 5000) {
-              const sampleRate = (normalizedChunk.length * 1000) / elapsedMs;
-              observedArrivalCharsPerSecond =
-                observedArrivalCharsPerSecond === null
-                  ? sampleRate
-                  : observedArrivalCharsPerSecond * 0.5 + sampleRate * 0.5;
-            }
+          if (!typewriterStarted && typewriterBufferUntil === 0) {
+            typewriterBufferUntil = performance.now() + STREAM_TYPEWRITER_PREBUFFER_MS;
           }
-          lastVisibleChunkAt = now;
           pendingText += normalizedChunk;
           startTypewriter();
         } else {
@@ -1389,20 +1389,13 @@ export function useGenerate() {
         if (flushed.visible) appendGeneratedChunk(flushed.visible);
       };
 
-      // Compute visible characters per second from the user's streamingSpeed setting (1–100).
-      // Read per-tick so changes to the slider take effect immediately.
-      // speed 1   → slow read-along reveal
-      // speed 30  → deliberate typewriter pace
-      // speed 100 → flush instantly
+      // Read per tick so slider and reduced-motion changes apply immediately.
+      // Values 1–99 are literal visible characters per second; 100 is instant.
+      const reducedMotionMedia =
+        typeof window.matchMedia === "function" ? window.matchMedia("(prefers-reduced-motion: reduce)") : null;
       const getCharsPerSecond = () => {
         const speed = useUIStore.getState().streamingSpeed;
-        if (speed >= 100) return Infinity;
-        const normalized = Math.max(0, Math.min(1, (speed - 1) / 98));
-        return 12 + Math.pow(normalized, 1.65) * 248;
-      };
-      const getMaxCharsPerTypewriterFrame = (charsPerSecond: number) => {
-        if (charsPerSecond === Infinity) return Infinity;
-        return Math.max(1, Math.ceil(charsPerSecond / 60));
+        return getStreamingCharsPerSecond(speed, reducedMotionMedia?.matches === true);
       };
 
       const TYPEWRITER_MAX_FRAME_MS = 120;
@@ -1468,16 +1461,22 @@ export function useGenerate() {
             }
             return;
           }
+          const selectedCharsPerSecond = getCharsPerSecond();
+          if (
+            !typewriterStarted &&
+            selectedCharsPerSecond !== Infinity &&
+            !sawDoneEvent &&
+            now < typewriterBufferUntil
+          ) {
+            rafId = requestAnimationFrame(tick);
+            return;
+          }
+          typewriterStarted = true;
           if (!lastTypewriterPaintAt) lastTypewriterPaintAt = now;
           const elapsedMs = Math.min(TYPEWRITER_MAX_FRAME_MS, Math.max(0, now - lastTypewriterPaintAt));
           lastTypewriterPaintAt = now;
 
-          const charsPerSecond = getTypewriterRevealCharsPerSecond({
-            selectedCharsPerSecond: getCharsPerSecond(),
-            pendingCharacters: pendingText.length,
-            observedArrivalCharsPerSecond,
-            streamComplete: sawDoneEvent,
-          });
+          const charsPerSecond = selectedCharsPerSecond;
           if (charsPerSecond === Infinity) {
             fullBuffer += pendingText;
             pendingText = "";
@@ -1486,17 +1485,17 @@ export function useGenerate() {
             return;
           }
 
-          typewriterRemainder += (charsPerSecond * elapsedMs) / 1000;
-          const maxCharsThisFrame = getMaxCharsPerTypewriterFrame(charsPerSecond);
-          const n = Math.min(Math.floor(typewriterRemainder), maxCharsThisFrame, pendingText.length);
+          const frameBudget = getTypewriterFrameBudget(charsPerSecond, elapsedMs, typewriterRemainder);
+          typewriterRemainder = frameBudget.accruedCharacters;
+          const n = Math.min(Math.floor(typewriterRemainder), frameBudget.maxCharacters, pendingText.length);
           if (n < 1) {
             rafId = requestAnimationFrame(tick);
             return;
           }
-          typewriterRemainder -= n;
-          const batch = pendingText.slice(0, n);
-          pendingText = pendingText.slice(n);
-          fullBuffer += batch;
+          const reveal = takeTypewriterCharacters(pendingText, n);
+          typewriterRemainder -= reveal.characterCount;
+          pendingText = reveal.pendingText;
+          fullBuffer += reveal.visibleText;
           setStreamBuffer(fullBuffer, params.chatId);
           rafId = requestAnimationFrame(tick);
         };
@@ -1562,6 +1561,7 @@ export function useGenerate() {
           userActivity,
           debugMode,
           trimIncompleteModelOutput,
+          continueAddsNewline,
           musicPlayerEnabled,
           musicPlayerSource,
         } = useUIStore.getState();
@@ -1584,6 +1584,7 @@ export function useGenerate() {
             userTimeZone,
             debugMode,
             trimIncompleteModelOutput,
+            continueAddsNewline,
             musicPlayerEnabled,
             musicPlayerSource,
             streaming: transportStreaming,
@@ -1601,9 +1602,14 @@ export function useGenerate() {
                 | undefined;
               if (transitionData?.chatId === params.chatId && transitionData.commandId) {
                 spatialTransitionCommitted = true;
-                useChatStore
-                  .getState()
-                  .clearPendingSpatialTransition(params.chatId, transitionData.commandId);
+                spatialCapabilityRefreshDispatched = true;
+                useChatStore.getState().clearPendingSpatialTransition(params.chatId, transitionData.commandId);
+                dispatchCapabilityClientEvent({
+                  packageId: "hierarchical-maps",
+                  type: event.type,
+                  chatId: params.chatId,
+                  data: event.data,
+                });
                 void qc.invalidateQueries({ queryKey: spatialContextKeys.detail(params.chatId) });
                 void qc.invalidateQueries({ queryKey: chatKeys.detail(params.chatId) });
               }
@@ -1963,7 +1969,7 @@ export function useGenerate() {
                     );
                   const chatList = qc.getQueryData<Chat[]>(chatKeys.list());
                   const thisChat = chatList?.find((c) => c.id === params.chatId);
-                  const isRpMode = thisChat?.mode === "roleplay" || thisChat?.mode === "visual_novel";
+                  const isRpMode = thisChat?.mode === "roleplay";
                   const soundOn = isRpMode
                     ? useUIStore.getState().rpNotificationSound
                     : useUIStore.getState().convoNotificationSound;
@@ -1975,6 +1981,8 @@ export function useGenerate() {
                 // Reset the stream buffer for the new character
                 fullBuffer = "";
                 pendingText = "";
+                typewriterStarted = false;
+                typewriterBufferUntil = 0;
                 leadingSpeakerPrefixFilter.reset();
                 thinkingStreamFilter.reset();
                 setStreamBuffer("", params.chatId);
@@ -2241,14 +2249,14 @@ export function useGenerate() {
                 }
                 break;
               }
-              // The server saves fresh Roleplay output before post-processing
-              // agents start. Keep the live stream authoritative until `done`,
-              // otherwise the complete persisted row replaces the animated
-              // buffer as soon as agents begin their work.
+              // Keep the durable row in cache even while the live presentation
+              // remains authoritative. The Roleplay surface shadows the row that
+              // owns the current stream, then reveals it as soon as another
+              // response starts (for example while Illustrator is still working).
               if (!keepStreamLiveThroughPostProcessing) {
                 rememberContinuedMessageContent(savedMessage);
-                upsertPersistedMessages(qc, params.chatId, [savedMessage]);
               }
+              upsertPersistedMessages(qc, params.chatId, [savedMessage]);
               break;
             }
 
@@ -2700,7 +2708,7 @@ export function useGenerate() {
         flushLeadingSpeakerPrefix();
         flushTypewriterBuffer();
         // Abort is intentional — don't log or toast
-        if (isAbortError(error)) return receivedContent || spatialTransitionCommitted;
+        if (isAbortError(error)) return submittedUserTurn || receivedContent || spatialTransitionCommitted;
         if (isPassiveStreamDisconnect(error, pageWasHiddenDuringStream, abortController.signal)) {
           passiveStreamRecovered = true;
           if (isActiveChat()) useChatStore.getState().setGenerationPhase("Finishing in background...");
@@ -2729,12 +2737,15 @@ export function useGenerate() {
               );
             }
           }
-          return abortController.signal.aborted ? receivedContent || spatialTransitionCommitted : true;
+          return abortController.signal.aborted
+            ? submittedUserTurn || receivedContent || spatialTransitionCommitted
+            : true;
         }
         if (params.pendingSpatialTransition) {
-          const payload = error instanceof ApiError && error.payload && typeof error.payload === "object"
-            ? (error.payload as Record<string, unknown>)
-            : null;
+          const payload =
+            error instanceof ApiError && error.payload && typeof error.payload === "object"
+              ? (error.payload as Record<string, unknown>)
+              : null;
           const spatialErrorCode = typeof payload?.code === "string" ? payload.code : null;
           if (spatialErrorCode === "spatial_transition_already_applied") {
             spatialTransitionCommitted = true;
@@ -2742,8 +2753,7 @@ export function useGenerate() {
             try {
               const current = await api.get<SpatialContextResponse>(`/chats/${params.chatId}/spatial-context`);
               qc.setQueryData(spatialContextKeys.detail(params.chatId), current);
-              spatialTransitionCommitted =
-                current.currentLocationId === params.pendingSpatialTransition.destinationId;
+              spatialTransitionCommitted = current.currentLocationId === params.pendingSpatialTransition.destinationId;
             } catch {
               /* Preserve the pending command when current state cannot be confirmed. */
             }
@@ -2784,6 +2794,24 @@ export function useGenerate() {
         }
         const stillOwnerAtCleanupStart =
           useChatStore.getState().abortControllers.get(params.chatId) === abortController;
+        if (
+          (chatModeForGeneration === "roleplay" || chatModeForGeneration === "game") &&
+          !spatialCapabilityRefreshDispatched
+        ) {
+          // Narrated Maps transitions commit near the end of the server stream.
+          // Reconcile both client caches when the transition SSE was missed.
+          dispatchCapabilityClientEvent({
+            packageId: "hierarchical-maps",
+            type: "spatial_context_refresh",
+            chatId: params.chatId,
+            data: null,
+          });
+          void qc.invalidateQueries({
+            queryKey: spatialContextKeys.detail(params.chatId),
+            exact: true,
+            refetchType: "active",
+          });
+        }
         if (stillOwnerAtCleanupStart) {
           useChatStore.getState().clearPerChatState(params.chatId);
           useChatStore.getState().setAbortController(params.chatId, null);
@@ -2841,7 +2869,7 @@ export function useGenerate() {
               .getState()
               .addNotification(params.chatId, identity.name ?? "Character", identity.avatarUrl, identity.avatarCrop);
           }
-          const isRp = chat?.mode === "roleplay" || chat?.mode === "visual_novel";
+          const isRp = chat?.mode === "roleplay";
           const isGame = chat?.mode === "game" || isGameGeneration;
           const uiState = useUIStore.getState();
           const soundEnabled = isGame
@@ -3025,10 +3053,6 @@ export function useGenerate() {
             const meta = parseChatMetadata(chatData?.metadata);
             if (meta.autoTranslate) {
               const store = useTranslationStore.getState();
-              const chatSystemPrompt =
-                typeof meta.translationPrompt === "string" && meta.translationPrompt.trim().length > 0
-                  ? meta.translationPrompt
-                  : store.config.systemPrompt;
               for (const [id, msg] of persistedMessages) {
                 const textToTranslate =
                   chatData?.mode === "game" ? stripGmTagsKeepReadables(msg.content ?? "").trim() : (msg.content ?? "");
@@ -3043,19 +3067,20 @@ export function useGenerate() {
                     .post<{ translatedText: string }>("/translate", {
                       text: textToTranslate,
                       provider: store.config.provider,
-                      targetLanguage: store.config.targetLanguage,
+                      targetLanguage: store.config.outputTargetLanguage,
                       connectionId: store.config.connectionId,
-                      systemPrompt: chatSystemPrompt,
+                      systemPrompt: store.config.outputSystemPrompt,
                       deeplApiKey: store.config.deeplApiKey,
                       deeplxUrl: store.config.deeplxUrl,
                     })
                     .then((result) => {
-                      store.setTranslation(id, result.translatedText);
+                      store.setTranslation(id, result.translatedText, textToTranslate);
                       store.setTranslating(id, false);
                       // Persist to message extra
                       api
                         .patch(`/chats/${params.chatId}/messages/${id}/extra`, {
                           translation: result.translatedText,
+                          translationSource: textToTranslate,
                           translationHidden: false,
                         })
                         .catch(() => {});
@@ -3123,7 +3148,8 @@ export function useGenerate() {
       }
       useChatStore.getState().setAbortController(chatId, abortController);
       useChatStore.getState().setBackgroundIllustration(chatId, false);
-      const isIllustratorOnlyRetry = agentTypes.length === 1 && agentTypes[0] === "illustrator";
+      const isIllustratorOnlyRetry =
+        agentTypes.length > 0 && agentTypes.every((agentType) => agentType === "illustrator");
       const isTrackerRetry = agentTypes.some(
         (agentType) => isBuiltInTrackerAgentType(agentType) || !isBuiltInAgentType(agentType),
       );
