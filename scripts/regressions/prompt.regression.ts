@@ -1285,8 +1285,10 @@ const cases: RegressionCase[] = [
         "utf8",
       );
 
-      assert.equal(OFFICIAL_AGENT_KNOWLEDGE_ENTRIES.length, 29);
-      assert.equal(new Set(OFFICIAL_AGENT_KNOWLEDGE_ENTRIES.map((entry) => entry.id)).size, 29);
+      assert.equal(OFFICIAL_AGENT_KNOWLEDGE_ENTRIES.length, 31);
+      assert.equal(new Set(OFFICIAL_AGENT_KNOWLEDGE_ENTRIES.map((entry) => entry.id)).size, 31);
+      assert.ok(OFFICIAL_AGENT_KNOWLEDGE_ENTRIES.some((entry) => entry.id === "long-term-memory"));
+      assert.ok(OFFICIAL_AGENT_KNOWLEDGE_ENTRIES.some((entry) => entry.id === "storyboard"));
       assert.deepEqual(
         Object.fromEntries(
           (["writer", "tracker", "misc"] as const).map((category) => [
@@ -1294,7 +1296,7 @@ const cases: RegressionCase[] = [
             OFFICIAL_AGENT_KNOWLEDGE_ENTRIES.filter((entry) => entry.category === category).length,
           ]),
         ),
-        { writer: 6, tracker: 8, misc: 15 },
+        { writer: 6, tracker: 8, misc: 17 },
       );
 
       for (const entry of OFFICIAL_AGENT_KNOWLEDGE_ENTRIES) {
