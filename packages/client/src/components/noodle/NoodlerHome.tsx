@@ -1246,7 +1246,7 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
     <aside className="hidden w-[22rem] shrink-0 px-4 py-3 @min-[1280px]:block">
       <div className="sticky top-3 space-y-4">
         <label className="flex h-11 items-center gap-2 rounded-full border border-[var(--noodle-divider)] bg-[var(--background)] px-4 text-sm transition-colors focus-within:border-[var(--noodle-accent)]">
-          <Search size={17} className="shrink-0 text-[var(--noodle-accent)]" />
+          <Search size={17} className="shrink-0 !text-[var(--noodle-accent)]" />
           <input
             value={feedSearch}
             onChange={(event) => setFeedSearch(event.target.value)}
@@ -1944,7 +1944,7 @@ function StageProfileSourcePicker({
           {localizeUi("ui.noodle.stageprofilesourcepicker.noodlerWillCreateASeparateStageIdentityFromThis")}
         </p>
         <label className="relative mt-5 block">
-          <Search size={16} className="absolute left-3 top-3 text-[var(--muted-foreground)]" />
+          <Search size={16} className="absolute left-3 top-3 !text-[var(--noodle-accent)]" />
           <input
             value={search}
             onChange={(event) => onSearch(event.target.value)}
@@ -3841,7 +3841,7 @@ function EmptyState({
 }) {
   return (
     <div className="px-8 py-8 text-center sm:py-16">
-      <UserRound size={36} className="mx-auto text-[var(--noodle-accent)]" />
+      <UserRound size={36} className="mx-auto !text-[var(--noodle-accent)]" />
       <p className="mt-4 font-bold">{title}</p>
       {detail && <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-[var(--muted-foreground)]">{detail}</p>}
       {action && onAction && (

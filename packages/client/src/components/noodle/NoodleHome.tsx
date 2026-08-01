@@ -3605,7 +3605,7 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
       <div className="sticky top-0 z-20 flex items-center gap-2 border-b border-[var(--noodle-divider)] bg-[var(--background)]/95 px-2 py-3 backdrop-blur">
         <MobileTimelineBackButton onClick={openMobileHomeTimeline} />
         <label className="flex h-11 min-w-0 flex-1 items-center gap-2 rounded-full bg-[var(--accent)] px-4 text-sm ring-1 ring-inset ring-[var(--noodle-divider)] transition-colors focus-within:ring-[var(--noodle-accent)]">
-          <Search size={18} className="shrink-0 text-[var(--noodle-accent)]" />
+          <Search size={18} className="shrink-0 !text-[var(--noodle-accent)]" />
           <input
             type="search"
             value={postSearch}
@@ -3688,7 +3688,7 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
     <aside className="hidden w-[22rem] shrink-0 px-4 py-3 @min-[1280px]:block">
       <div className="sticky top-3 space-y-4">
         <label className="flex h-11 items-center gap-2 rounded-full border border-[var(--noodle-divider)] bg-[var(--background)] px-4 text-sm transition-colors focus-within:border-[var(--noodle-accent)]">
-          <Search size={17} className="shrink-0 text-[var(--noodle-accent)]" />
+          <Search size={17} className="shrink-0 !text-[var(--noodle-accent)]" />
           <input
             value={postSearch}
             onChange={(event) => handleSearchChange(event.target.value)}

@@ -547,7 +547,7 @@ export function NoodleShell({
               <Avatar account={personaAccount} size="sm" />
             ) : (
               <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--noodle-accent)]/15 ring-1 ring-[var(--noodle-accent)]/25">
-                <AtSign size={18} />
+                <AtSign size={18} className="!text-[var(--noodle-accent)]" />
               </span>
             )}
           </button>
@@ -558,7 +558,7 @@ export function NoodleShell({
             aria-current={homeActive ? "page" : undefined}
             className="relative flex items-center justify-center transition-colors hover:bg-[var(--accent)]"
           >
-            <Home size={22} strokeWidth={homeActive ? 2.8 : 2} />
+            <Home size={22} strokeWidth={homeActive ? 2.8 : 2} className="!text-[var(--noodle-accent)]" />
             {homeActive && <span className="absolute top-1 h-1 w-1 rounded-full bg-[var(--noodle-accent)]" />}
           </button>
           <button
@@ -569,7 +569,7 @@ export function NoodleShell({
             aria-current={activeView === "search" ? "page" : undefined}
             className="relative flex items-center justify-center transition-colors hover:bg-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
           >
-            <Search size={22} strokeWidth={activeView === "search" ? 2.8 : 2} />
+            <Search size={22} strokeWidth={activeView === "search" ? 2.8 : 2} className="!text-[var(--noodle-accent)]" />
             {activeView === "search" && <span className="absolute top-1 h-1 w-1 rounded-full bg-[var(--noodle-accent)]" />}
           </button>
           <button
@@ -581,7 +581,7 @@ export function NoodleShell({
             className="relative flex items-center justify-center transition-colors hover:bg-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
           >
             <span className="relative flex h-6 w-6 items-center justify-center">
-              <Bell size={22} strokeWidth={activeView === "notifications" ? 2.8 : 2} />
+              <Bell size={22} strokeWidth={activeView === "notifications" ? 2.8 : 2} className="!text-[var(--noodle-accent)]" />
               {notificationCount > 0 && (
                 <span
                   data-component="NoodleView.NotificationBadge"
