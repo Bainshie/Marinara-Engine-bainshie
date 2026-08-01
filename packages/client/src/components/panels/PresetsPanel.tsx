@@ -1082,7 +1082,7 @@ export function PresetsPanel() {
           />
           <input
             type="text"
-            placeholder={localize("Search presets…")}
+            placeholder={localize("Search presets")}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="mari-chrome-field h-10 w-full py-0 pl-8 pr-3 text-xs md:h-9"
