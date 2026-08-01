@@ -158,12 +158,13 @@ test("What's New opens once for each Marinara Engine version", async ({ page }) 
   const announcement = page.getByRole("dialog", { name: "What's New?" });
   await expect(announcement).toBeVisible();
   await expect(announcement.getByText(`Version ${APP_VERSION}`, { exact: true })).toBeVisible();
-  await expect(announcement.getByRole("heading", { name: "More control, polished down to the card." })).toBeVisible();
-  await expect(announcement.getByText(/custom quick replies/)).toBeVisible();
-  await expect(announcement.getByText(/richer translation controls/)).toBeVisible();
-  await expect(announcement.getByText(/Atlas image and video generation/)).toBeVisible();
-  await expect(announcement.getByText(/interface localization/)).toBeVisible();
-  await expect(announcement.getByText(/Character and Persona cards/)).toBeVisible();
+  await expect(
+    announcement.getByRole("heading", { name: "Broader horizons, finer control, stronger foundations." }),
+  ).toBeVisible();
+  await expect(announcement.getByText(/Z\.AI image generation/)).toBeVisible();
+  await expect(announcement.getByText(/smarter Roleplay animation planning/)).toBeVisible();
+  await expect(announcement.getByText(/four new documentation languages/)).toBeVisible();
+  await expect(announcement.getByText(/runtime security/)).toBeVisible();
   await expect(announcement.getByText("Marinara Engine has been updated.", { exact: true })).toHaveCount(0);
   await expect(announcement.getByText("Tactical Combat Mode in Games")).toHaveCount(0);
   await expect(announcement.getByRole("link", { name: "View release" })).toHaveAttribute(
@@ -8898,7 +8899,7 @@ test("Professor Mari chat fills the mobile home viewport and keeps its composer 
 
   const topBar = page.locator('[data-component="TopBar"]');
   const window = page.locator('[data-component="HomeProfessorMariChat.Window"]');
-  const composer = window.getByPlaceholder("Ask Professor Mari...");
+  const composer = window.getByPlaceholder("Ask Professor Mari");
   await expect(window).toBeVisible();
   await expect(composer).toBeVisible();
   await expect
@@ -10805,6 +10806,7 @@ test("Noodle uses its mobile shell when the desktop center pane is narrow", asyn
   await page.locator('[data-tour="panel-settings"]').click();
   await page.locator('[data-tour="sidebar-toggle"]').click();
   await expect(desktopAccountSwitcher).toBeVisible();
+  await expect(mobileHeader).toBeHidden();
   await expect(mobileBottomNav).toBeHidden();
 
   await page.setViewportSize({ width: 900, height: 800 });
@@ -11545,7 +11547,7 @@ test("Conversation media searches match GIFs and internal presses keep the picke
     await mediaButton.click();
     const mediaPicker = page.locator("[data-conversation-media-picker]:visible");
     await expect(mediaPicker).toBeVisible();
-    const emojiSearchInput = page.locator('input[placeholder="Search emojis..."]:visible');
+    const emojiSearchInput = page.getByRole("textbox", { name: "Search emojis", exact: true });
     const emojiSearchStyle = await emojiSearchInput.evaluate((input) => {
       const style = getComputedStyle(input);
       const shellStyle = getComputedStyle(input.parentElement!);
@@ -11745,8 +11747,9 @@ test("mobile topbar remains reachable while sidebars switch", async ({ page }, t
   expect((await mobileChatSidebar.boundingBox())?.width ?? 0).toBeGreaterThan(
     (await page.evaluate(() => innerWidth)) * 0.9,
   );
-  await page.waitForTimeout(70);
-  expect((await mobileChatSidebar.boundingBox())?.x ?? 0).toBeLessThan(openMobileSidebarX - 8);
+  await expect
+    .poll(async () => (await mobileChatSidebar.boundingBox())?.x ?? 0)
+    .toBeLessThan(openMobileSidebarX - 8);
   await expect(mobileChatSidebar).toHaveAttribute("aria-hidden", "true");
 
   await page.locator('[data-tour="sidebar-toggle"]').click();
