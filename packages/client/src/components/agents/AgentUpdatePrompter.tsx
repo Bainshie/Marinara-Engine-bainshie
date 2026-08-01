@@ -11,14 +11,14 @@ import { useTranslation as useUiTranslation } from "react-i18next";
 
 export function AgentUpdatePrompter({ presentationAllowed }: { presentationAllowed: boolean }) {
   const { t: localizeUi } = useUiTranslation();
-  const pendingUpdates = usePendingCapabilityPackageUpdates();
+  const { data: pendingUpdateData, refetch: refetchPendingUpdates } = usePendingCapabilityPackageUpdates();
   const install = useInstallCapabilityPackage();
   const decline = useDeclineCapabilityPackageUpdate();
   const activeUpdate = useRef<string | null>(null);
   const handledUpdates = useRef(new Set<string>());
 
   useEffect(() => {
-    const updates = (pendingUpdates.data ?? []).filter(
+    const updates = (pendingUpdateData ?? []).filter(
       (update) => !handledUpdates.current.has(`${update.id}@${update.version}`),
     );
     if (!presentationAllowed || updates.length === 0 || activeUpdate.current) return;
@@ -87,9 +87,10 @@ export function AgentUpdatePrompter({ presentationAllowed }: { presentationAllow
         }
       } finally {
         activeUpdate.current = null;
+        await refetchPendingUpdates();
       }
     })();
-  }, [decline, install, pendingUpdates.data, presentationAllowed, localizeUi]);
+  }, [decline, install, pendingUpdateData, presentationAllowed, localizeUi, refetchPendingUpdates]);
 
   return null;
 }
