@@ -1997,6 +1997,10 @@ test("Character Chat actions reuse mode selection and seed the chosen setup wiza
 
     const actions = characterRow.locator("[data-character-row-actions]");
     await expect(actions).toBeVisible();
+    const addToActiveChatButton = actions.getByRole("button", {
+      name: `Add ${characterName} to the active chat`,
+      exact: true,
+    });
     const duplicateButton = actions.getByRole("button", { name: "Duplicate", exact: true });
     const deleteButton = actions.getByRole("button", { name: "Delete", exact: true });
     const chatButton = actions.getByRole("button", {
@@ -2040,23 +2044,29 @@ test("Character Chat actions reuse mode selection and seed the chosen setup wiza
     );
     expect(copiedTagsBox!.y + copiedTagsBox!.height).toBeLessThanOrEqual(copiedRowBox!.y + copiedRowBox!.height);
 
-    const [duplicateBox, deleteBox, chatBox, duplicateIconBox, deleteIconBox, chatIconBox] = await Promise.all([
-      duplicateButton.boundingBox(),
-      deleteButton.boundingBox(),
-      chatButton.boundingBox(),
-      duplicateButton.locator("svg").boundingBox(),
-      deleteButton.locator("svg").boundingBox(),
-      chatButton.locator("svg").boundingBox(),
-    ]);
+    const [addToActiveChatBox, duplicateBox, deleteBox, chatBox, duplicateIconBox, deleteIconBox, chatIconBox] =
+      await Promise.all([
+        addToActiveChatButton.boundingBox(),
+        duplicateButton.boundingBox(),
+        deleteButton.boundingBox(),
+        chatButton.boundingBox(),
+        duplicateButton.locator("svg").boundingBox(),
+        deleteButton.locator("svg").boundingBox(),
+        chatButton.locator("svg").boundingBox(),
+      ]);
+    expect(addToActiveChatBox).not.toBeNull();
     expect(duplicateBox).not.toBeNull();
     expect(deleteBox).not.toBeNull();
     expect(chatBox).not.toBeNull();
     expect(duplicateIconBox).not.toBeNull();
     expect(deleteIconBox).not.toBeNull();
     expect(chatIconBox).not.toBeNull();
+    expect(Math.abs(addToActiveChatBox!.height - duplicateBox!.height)).toBeLessThan(0.1);
     expect(Math.abs(duplicateBox!.height - deleteBox!.height)).toBeLessThan(0.1);
     expect(Math.abs(duplicateBox!.height - chatBox!.height)).toBeLessThan(0.1);
-    expect(Math.abs(chatBox!.width - (duplicateBox!.width + deleteBox!.width + 2))).toBeLessThan(0.5);
+    expect(
+      Math.abs(chatBox!.width - (addToActiveChatBox!.width + duplicateBox!.width + deleteBox!.width + 4)),
+    ).toBeLessThan(0.5);
     expect(duplicateIconBox!.height / duplicateBox!.height).toBeGreaterThan(0.52);
     expect(duplicateIconBox!.width / duplicateBox!.width).toBeGreaterThan(0.52);
     expect(deleteIconBox!.height / deleteBox!.height).toBeGreaterThan(0.52);
