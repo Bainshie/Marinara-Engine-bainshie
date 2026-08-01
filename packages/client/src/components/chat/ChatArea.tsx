@@ -717,10 +717,14 @@ export function ChatArea() {
   }, []);
   // A dropped agent parks a setup request; open chat settings so its modal can run.
   useEffect(() => {
-    const openAgentSetup = () => handleOpenSettingsPanel();
+    const openAgentSetup = (event: Event) => {
+      const chatId = (event as CustomEvent<{ chatId?: string }>).detail?.chatId;
+      if (chatId && chatId !== activeChatId) return;
+      handleOpenSettingsPanel();
+    };
     window.addEventListener(CHAT_RESOURCE_AGENT_SETUP_EVENT, openAgentSetup);
     return () => window.removeEventListener(CHAT_RESOURCE_AGENT_SETUP_EVENT, openAgentSetup);
-  }, [handleOpenSettingsPanel]);
+  }, [activeChatId, handleOpenSettingsPanel]);
 
   useEffect(() => {
     window.addEventListener(CHAT_TOOLBAR_ACTION_EVENT, closeFloatingChatDrawers);

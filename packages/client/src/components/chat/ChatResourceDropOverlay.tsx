@@ -420,7 +420,7 @@ export function ChatResourceDropOverlay({ chat }: { chat: Chat }) {
             [key]: nextIds,
             ...(latestAction.type === "add-agents" && latestAction.mustEnableAgents ? { enableAgents: true } : {}),
           });
-          if (latestAction.type === "add-agents") {
+          if (latestAction.type === "add-agents" && useChatStore.getState().activeChatId === currentChat.id) {
             requestChatAgentSetup(currentChat.id, latestAction.ids);
             // The setup drawer owns the panel restore from here, so it happens after its modal.
             agentSetupHandoffRef.current = true;
@@ -602,11 +602,15 @@ export function ChatResourceDropOverlay({ chat }: { chat: Chat }) {
       const payload = (event as CustomEvent<ChatResourceDragPayload>).detail;
       if (!payload) return;
       setAssigning(true);
-      void applyAction(payload).finally(() => setAssigning(false));
+      void applyAction(payload)
+        .catch((error) => {
+          toast.error(error instanceof Error ? error.message : t("ui.chat.chatresourcedropoverlay.failed"));
+        })
+        .finally(() => setAssigning(false));
     };
     window.addEventListener(CHAT_RESOURCE_ASSIGN_EVENT, assign);
     return () => window.removeEventListener(CHAT_RESOURCE_ASSIGN_EVENT, assign);
-  }, [applyAction]);
+  }, [applyAction, t]);
 
   // A mobile dock drop closes the library panel to show the result; once the drop is fully done and
   // its follow-up modals are gone, put the user back in the panel they were dragging from.
