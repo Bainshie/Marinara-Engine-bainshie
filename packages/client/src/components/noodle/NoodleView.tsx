@@ -1,12 +1,12 @@
-import { useState } from "react";
+import { useUIStore } from "../../stores/ui.store";
 import { NoodleHome } from "./NoodleHome";
 import { NoodlerHome } from "./NoodlerHome";
-import type { NoodleNavigationState } from "./noodle-navigation.types";
 
 export function NoodleView() {
-  const [navigation, setNavigation] = useState<NoodleNavigationState>({ mode: "public", view: "home" });
+  const navigation = useUIStore((state) => state.noodleNavigation);
+  const setNavigation = useUIStore((state) => state.setNoodleNavigation);
 
-  if (navigation.mode === "private" || navigation.mode === "verification") {
+  if (navigation.mode === "noodler" || navigation.mode === "verification") {
     return <NoodlerHome navigation={navigation} onNavigate={setNavigation} />;
   }
 

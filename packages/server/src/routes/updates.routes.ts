@@ -15,7 +15,7 @@ import {
   isUpdatesApplyEnabled,
   isUpdatesRemoteApplyAllowed,
 } from "../config/runtime-config.js";
-import { getBuildCommit, getBuildLabel } from "../config/build-info.js";
+import { getBuildBranch, getBuildCommit, getBuildLabel } from "../config/build-info.js";
 import { requirePrivilegedAccess } from "../middleware/privileged-gate.js";
 import { isLoopbackIp } from "../middleware/ip-allowlist.js";
 import { isGitUpdateApplyAllowed } from "../services/updates/update-apply-policy.js";
@@ -57,6 +57,16 @@ const UPDATE_CHANNELS: Record<UpdateChannel, UpdateChannelInfo> = {
 const DEFAULT_PNPM_VERSION = "10.33.2";
 const PNPM_NONINTERACTIVE_ARGS = ["--config.trustPolicy=off", "--config.confirmModulesPurge=false"];
 const PNPM_UPDATE_INSTALL_ARGS = ["install", "--force", "--frozen-lockfile"];
+// A forced reinstall is verbose; the execFile default (1 MiB) can abort an
+// otherwise healthy install with a maxBuffer error.
+const PNPM_OUTPUT_MAX_BUFFER = 32 * 1024 * 1024;
+// Termux on Android runs on slow flash storage without prebuilt-binary
+// caches, so channel switches (full dependency purge + reinstall) routinely
+// need far longer than desktop installs.
+const UPDATE_STEP_TIMEOUT_MULTIPLIER = process.platform === "android" ? 4 : 1;
+function updateStepTimeout(baseMs: number): number {
+  return baseMs * UPDATE_STEP_TIMEOUT_MULTIPLIER;
+}
 const MANUAL_PNPM_COMMAND = `corepack pnpm@${DEFAULT_PNPM_VERSION}`;
 const DOCKER_IMAGE = "ghcr.io/pasta-devs/marinara-engine";
 const MANUAL_GIT_UPDATE_COMMAND =
@@ -455,15 +465,34 @@ type PnpmRunner = {
   prefixArgs: string[];
 };
 
+function commandInvocation(command: string, args: string[]) {
+  if (process.platform !== "win32") {
+    return { command, args };
+  }
+
+  const commandLine = [command, ...args]
+    .map((part) => {
+      if (!/^[A-Za-z0-9@._/:=+-]+$/u.test(part)) {
+        throw new Error(`Unsupported character in update command argument: ${part}`);
+      }
+      return part;
+    })
+    .join(" ");
+  return {
+    command: process.env.ComSpec ?? "cmd.exe",
+    args: ["/d", "/s", "/c", commandLine],
+  };
+}
+
 async function resolvePinnedPnpmRunner(root: string): Promise<PnpmRunner> {
   const pnpmVersion = getPinnedPnpmVersion(root);
-  const shell = process.platform === "win32";
 
   try {
-    const { stdout } = await execFileAsync("corepack", [`pnpm@${pnpmVersion}`, "--version"], {
+    const invocation = commandInvocation("corepack", [`pnpm@${pnpmVersion}`, "--version"]);
+    const { stdout } = await execFileAsync(invocation.command, invocation.args, {
       cwd: root,
-      timeout: 20_000,
-      shell,
+      // First run downloads the pinned pnpm; slow devices need extra headroom.
+      timeout: updateStepTimeout(20_000),
     });
     if (stdout.trim() === pnpmVersion) {
       return { command: "corepack", prefixArgs: [`pnpm@${pnpmVersion}`] };
@@ -475,10 +504,10 @@ async function resolvePinnedPnpmRunner(root: string): Promise<PnpmRunner> {
   }
 
   try {
-    const { stdout } = await execFileAsync("pnpm", ["--version"], {
+    const invocation = commandInvocation("pnpm", ["--version"]);
+    const { stdout } = await execFileAsync(invocation.command, invocation.args, {
       cwd: root,
-      timeout: 10_000,
-      shell,
+      timeout: updateStepTimeout(10_000),
     });
     if (stdout.trim() === pnpmVersion) {
       return { command: "pnpm", prefixArgs: [] };
@@ -488,10 +517,10 @@ async function resolvePinnedPnpmRunner(root: string): Promise<PnpmRunner> {
   }
 
   try {
-    const { stdout } = await execFileAsync("npx", ["--yes", `pnpm@${pnpmVersion}`, "--version"], {
+    const invocation = commandInvocation("npx", ["--yes", `pnpm@${pnpmVersion}`, "--version"]);
+    const { stdout } = await execFileAsync(invocation.command, invocation.args, {
       cwd: root,
-      timeout: 60_000,
-      shell,
+      timeout: updateStepTimeout(60_000),
     });
     if (stdout.trim() === pnpmVersion) {
       return { command: "npx", prefixArgs: ["--yes", `pnpm@${pnpmVersion}`] };
@@ -505,13 +534,48 @@ async function resolvePinnedPnpmRunner(root: string): Promise<PnpmRunner> {
   );
 }
 
-async function runPinnedPnpm(root: string, args: string[], timeout: number) {
+function describePnpmFailure(err: unknown, args: string[], timeout: number): Error {
+  const execError = err as NodeJS.ErrnoException & {
+    killed?: boolean;
+    signal?: string | null;
+    code?: number | string | null;
+    stderr?: string;
+    stdout?: string;
+  };
+  const step = `pnpm ${args.join(" ")}`;
+  const parts: string[] = [];
+  if (execError?.killed || execError?.signal) {
+    parts.push(
+      `"${step}" was stopped after ${Math.round(timeout / 1000)}s (signal ${execError.signal ?? "unknown"}). Slow devices can need this long for a full reinstall; try again or run the update manually.`,
+    );
+  } else {
+    parts.push(`"${step}" failed${execError?.code != null ? ` with code ${String(execError.code)}` : ""}.`);
+  }
+  const outputTail = [execError?.stderr, execError?.stdout]
+    .filter((value): value is string => Boolean(value))
+    .flatMap((value) => value.trim().split(/\r?\n/).slice(-8))
+    .join("\n")
+    .slice(-600)
+    .trim();
+  if (outputTail) {
+    parts.push(`Output: ${outputTail}`);
+  }
+  return new Error(parts.join(" "));
+}
+
+async function runPinnedPnpm(root: string, args: string[], baseTimeout: number) {
   const runner = await resolvePinnedPnpmRunner(root);
-  await execFileAsync(runner.command, [...runner.prefixArgs, ...PNPM_NONINTERACTIVE_ARGS, ...args], {
-    cwd: root,
-    timeout,
-    shell: process.platform === "win32",
-  });
+  const timeout = updateStepTimeout(baseTimeout);
+  const invocation = commandInvocation(runner.command, [...runner.prefixArgs, ...PNPM_NONINTERACTIVE_ARGS, ...args]);
+  try {
+    await execFileAsync(invocation.command, invocation.args, {
+      cwd: root,
+      timeout,
+      maxBuffer: PNPM_OUTPUT_MAX_BUFFER,
+    });
+  } catch (err) {
+    throw describePnpmFailure(err, args, timeout);
+  }
   return { runner, pnpmVersion: getPinnedPnpmVersion(root) };
 }
 
@@ -672,8 +736,8 @@ export async function updatesRoutes(app: FastifyInstance) {
     const serverPlatform = getServerPlatform();
     const clientPlatform = getClientPlatform(req.headers["user-agent"]);
     const root = getMonorepoRoot();
-    const currentBranch = gitInstall ? await getCurrentBranch(root).catch(() => null) : null;
-    const currentChannel = gitInstall ? await getUpdateChannelForCheckout(root, currentBranch) : UPDATE_CHANNELS.stable;
+    const currentBranch = gitInstall ? await getCurrentBranch(root).catch(() => null) : getBuildBranch();
+    const currentChannel = await getUpdateChannelForCheckout(root, currentBranch);
     const channel = await resolveUpdateChannel(
       root,
       (req.query as { channel?: unknown } | undefined)?.channel,
@@ -959,8 +1023,9 @@ export async function updatesRoutes(app: FastifyInstance) {
         // Otherwise, source differs from running build — need to rebuild
       }
 
-      // Step 2: pnpm install
-      await runPinnedPnpm(root, PNPM_UPDATE_INSTALL_ARGS, 180_000);
+      // Step 2: pnpm install. Channel switches (stable <-> staging) force a
+      // near-full dependency reinstall, so this step gets a generous budget.
+      await runPinnedPnpm(root, PNPM_UPDATE_INSTALL_ARGS, 300_000);
 
       // Step 3: Rebuild all packages
       await runPinnedBuild(root);

@@ -82,7 +82,7 @@ export const OFFICIAL_AGENT_KNOWLEDGE_ENTRIES: readonly OfficialAgentKnowledgeEn
     name: "Background",
     category: "tracker",
     modes: "Roleplay",
-    summary: "selects a fitting scene background and can generate missing locations when configured",
+    summary: "selects a fitting scene background from the existing background library",
   },
   {
     id: "character-tracker",
@@ -107,7 +107,7 @@ export const OFFICIAL_AGENT_KNOWLEDGE_ENTRIES: readonly OfficialAgentKnowledgeEn
   },
   {
     id: "hierarchical-maps",
-    name: "Hierarchical Maps",
+    name: "World Maps",
     category: "tracker",
     modes: "Roleplay and Game",
     summary: "adds persistent nested locations, spatial context, map authoring, movement, and a Game world-map view",

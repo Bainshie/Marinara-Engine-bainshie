@@ -11,7 +11,6 @@ import { resolveBaseUrl } from "../generation/connection-base-url.js";
 import { resolveStoredChatOptions, resolveStoredMaxTokens } from "../generation/generation-parameters.js";
 import type { ImageCaptioningRuntime } from "../generation/image-captioning-runtime.js";
 import { clampGenerationMaxOutputTokens } from "../generation/output-token-limits.js";
-import { parseGameJsonish } from "../game/jsonish.js";
 import { withConnectionFallbackProvider } from "../llm/connection-fallback-provider.js";
 import type { ChatMessage } from "../llm/base-provider.js";
 import { createLLMProvider } from "../llm/provider-registry.js";
@@ -23,7 +22,11 @@ import { createGalleryStorage } from "../storage/gallery.storage.js";
 import { createNoodleStorage } from "../storage/noodle.storage.js";
 import { createPromptOverridesStorage } from "../storage/prompt-overrides.storage.js";
 import { commitGeneratedNoodleActivity, prepareGeneratedNoodleMedia } from "./noodle-generated-activity.service.js";
-import { parseNoodleGeneratedRefresh, validateNoodleGeneratedRefresh } from "./noodle-generated-refresh.js";
+import {
+  deduplicateGeneratedNoodleContent,
+  parseNoodleGeneratedRefreshResponse,
+  validateNoodleGeneratedRefresh,
+} from "./noodle-generated-refresh.js";
 import { normalizeNoodleHandle } from "./noodle-handle.js";
 import { chooseNoodleParticipantAccounts, collectNoodlePriorityAccountIds } from "./noodle-participant-selection.js";
 import { buildRefreshPrompt } from "./noodle-public-prompt.service.js";
@@ -34,6 +37,7 @@ import {
   characterNameFromRow,
   ensurePersonaAccounts,
   ensureProfessorMariAccount,
+  filterResolvableNoodleParticipants,
   getErrorMessage,
   parseRecord,
   resolvePersonaAccount,
@@ -52,6 +56,7 @@ type PublicGenerationInput = {
   imageCaptioning: ImageCaptioningRuntime;
   settings: NoodleSettings;
   personaId?: string;
+  timeZone?: string;
   debugMode: boolean;
   reviewImagePromptsBeforeSend: boolean;
 };
@@ -192,7 +197,17 @@ export function createPublicNoodleGenerationService(db: DB) {
           settings.invitedCharacterGroupIds,
         );
         if (settings.allowRandomUsers) await ensureRandomUserAccounts(noodle);
-        const participantAccounts = await noodle.listAccounts();
+        const { resolvable: participantAccounts, staleAccounts } = await filterResolvableNoodleParticipants(
+          await noodle.listAccounts(),
+          characters,
+        );
+        if (staleAccounts.length > 0) {
+          logger.warn(
+            "[noodle] Skipping %d Noodle account(s) whose character no longer exists: %s",
+            staleAccounts.length,
+            staleAccounts.map((account) => `@${account.handle} (${account.entityId})`).join(", "),
+          );
+        }
         const selectionCutoff = sinceHoursIso(48);
         const [recentCreatedSelectionPosts, recentPersonaSelectionReplies] = await Promise.all([
           noodle.listPosts({ since: selectionCutoff, limit: 200 }),
@@ -232,7 +247,10 @@ export function createPublicNoodleGenerationService(db: DB) {
         if (selectedParticipants.length === 0) {
           return {
             ok: false as const,
-            error: "Invite a character, select a character folder, or enable random users before refreshing.",
+            error:
+              staleAccounts.length > 0
+                ? "Every invited Noodle character points at a character card that no longer exists. Re-invite the characters you want on your timeline."
+                : "Invite a character, select a character folder, or enable random users before refreshing.",
           };
         }
 
@@ -258,6 +276,7 @@ export function createPublicNoodleGenerationService(db: DB) {
           activeAccounts: selectedParticipants,
           personaAccount,
           settings,
+          timeZone: input.timeZone,
           imageCaptioning,
           debugMode,
         });
@@ -338,14 +357,14 @@ export function createPublicNoodleGenerationService(db: DB) {
           1,
           content,
         );
-        let parsedGenerated: ReturnType<typeof parseNoodleGeneratedRefresh> | null = null;
+        let parsedGenerated: ReturnType<typeof parseNoodleGeneratedRefreshResponse> | null = null;
         let retryReason: string | null = null;
         const allowedActorHandles = new Set(
           selectedParticipants.map((account) => normalizeNoodleHandle(account.handle)),
         );
         const knownHandles = new Set(activeAccounts.map((account) => normalizeNoodleHandle(account.handle)));
         try {
-          parsedGenerated = parseNoodleGeneratedRefresh(parseGameJsonish(content));
+          parsedGenerated = parseNoodleGeneratedRefreshResponse(content);
           retryReason = validateNoodleGeneratedRefresh(parsedGenerated.refresh, allowedActorHandles, knownHandles);
         } catch (error) {
           retryReason = `the response was not valid timeline JSON (${getErrorMessage(error)})`;
@@ -386,7 +405,7 @@ export function createPublicNoodleGenerationService(db: DB) {
           parsedGenerated = null;
           let correctedRetryReason: string | null = null;
           try {
-            parsedGenerated = parseNoodleGeneratedRefresh(parseGameJsonish(content));
+            parsedGenerated = parseNoodleGeneratedRefreshResponse(content);
             correctedRetryReason = validateNoodleGeneratedRefresh(
               parsedGenerated.refresh,
               allowedActorHandles,
@@ -415,6 +434,14 @@ export function createPublicNoodleGenerationService(db: DB) {
             rejected.issueCount === 1 ? "" : "s",
           );
         }
+        const deduplicated = deduplicateGeneratedNoodleContent(parsedGenerated.refresh);
+        if (deduplicated.removedCount > 0) {
+          logger.warn(
+            "[noodle] Removed %d duplicate generated post/reply item%s",
+            deduplicated.removedCount,
+            deduplicated.removedCount === 1 ? "" : "s",
+          );
+        }
         const preparedMedia = await prepareGeneratedNoodleMedia({
           db,
           characters,
@@ -422,7 +449,7 @@ export function createPublicNoodleGenerationService(db: DB) {
           gallery,
           characterGallery,
           promptOverrides,
-          generated: parsedGenerated.refresh,
+          generated: deduplicated.generated,
           selectedParticipants,
           personaAccount,
           settings,
@@ -432,7 +459,7 @@ export function createPublicNoodleGenerationService(db: DB) {
         });
         const activity = await commitGeneratedNoodleActivity({
           db,
-          generated: parsedGenerated.refresh,
+          generated: deduplicated.generated,
           selectedParticipants,
           personaAccount,
           settings,

@@ -6,7 +6,6 @@ const root = process.cwd();
 const supportedOnnxTuples = new Set(["darwin/arm64", "darwin/x64", "linux/arm64", "linux/x64", "win32/arm64", "win32/x64"]);
 const checks = [
   { workspace: ".", packageName: "esbuild" },
-  { workspace: "packages/shared", packageName: "chess.js" },
   { workspace: "packages/server", packageName: "pino" },
   { workspace: "packages/client", packageName: "react" },
 ];
@@ -33,6 +32,15 @@ if (supportedOnnxTuples.has(onnxTuple)) {
     }
   } catch {
     missing.push(`onnxruntime-node from packages/server`);
+  }
+}
+
+if (process.platform === "android") {
+  const requireFromServer = createRequire(resolve(root, "packages/server/package.json"));
+  try {
+    requireFromServer("sharp");
+  } catch {
+    missing.push("sharp WebAssembly runtime for android");
   }
 }
 

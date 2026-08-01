@@ -16,7 +16,6 @@ import { createChatsStorage } from "../../services/storage/chats.storage.js";
 import { createConnectionsStorage } from "../../services/storage/connections.storage.js";
 import { createPromptsStorage } from "../../services/storage/prompts.storage.js";
 import { createCharactersStorage } from "../../services/storage/characters.storage.js";
-import { createLorebooksStorage } from "../../services/storage/lorebooks.storage.js";
 import { createRegexScriptsStorage } from "../../services/storage/regex-scripts.storage.js";
 import {
   injectOwnerSpatialPrompt,
@@ -43,7 +42,12 @@ import {
 } from "../../services/prompt/index.js";
 import { mergeAdjacentMessages } from "../../services/prompt/merger.js";
 import { wrapContent } from "../../services/prompt/format-engine.js";
-import { yieldToEventLoop, type BaseLLMProvider, type ChatMessage } from "../../services/llm/base-provider.js";
+import {
+  yieldToEventLoop,
+  type BaseLLMProvider,
+  type ChatMessage,
+  type ChatOptions,
+} from "../../services/llm/base-provider.js";
 import {
   fitMessagesForModelAccess,
   mergeModelContextLimit,
@@ -71,10 +75,12 @@ import {
   parseExtra,
   parseStoredGenerationParameters,
   prefixGroupIndividualHistorySpeakers,
+  readPersonaSnapshotName,
   resolveActiveCharacterIds,
   resolveActivePersonaCandidate,
   resolvePromptCharacterIdsForTarget,
   resolveCharacterNameMap,
+  resolveGroupGenerationMode,
   resolveRegenerationGameStateAnchor,
   resolveProviderTopK,
   resolveRoleplayChatSummary,
@@ -85,6 +91,7 @@ import {
   type PromptAttachment,
 } from "../generate/generate-route-utils.js";
 import { buildGenerationPromptPresetCandidates, type PromptPresetCandidateSource } from "./prompt-preset-selection.js";
+import { CONVERSATION_NO_REPEAT_INSTRUCTION } from "./conversation-prompt-formatting.js";
 import { createGameStateStorage, type GameStateVisibleAnchor } from "../../services/storage/game-state.storage.js";
 import { buildCommittedTrackerContextBlock } from "../../services/generation/committed-tracker-context.js";
 import { logger } from "../../lib/logger.js";
@@ -98,6 +105,7 @@ type DryRunPromptMessage = {
   files?: Array<{ type: string; data: string; filename?: string }>;
   contextKind?: "prompt" | "history" | "injection";
   characterId?: string | null;
+  personaSnapshotName?: string | null;
   providerMetadata?: Record<string, unknown>;
 };
 
@@ -185,17 +193,6 @@ function injectTrackerContext(
   dedupeLastMessageWrappers(finalMessages);
   finalMessages.splice(findTrackerContextInsertIndex(finalMessages), 0, trackerMessage);
   return finalMessages;
-}
-
-function wrapperMessages(
-  wrapFormat: WrapFormat,
-  key: string,
-): { start?: { role: "system"; content: string }; end?: { role: "system"; content: string } } {
-  if (wrapFormat === "none") return {};
-  if (wrapFormat === "xml")
-    return { start: { role: "system", content: `<${key}>` }, end: { role: "system", content: `</${key}>` } };
-  // markdown
-  return { start: { role: "system", content: `## ${key}` }, end: undefined };
 }
 
 function wrapConversationHistoryAndLastMessageInPlace(
@@ -422,7 +419,6 @@ export async function registerDryRunRoute(app: FastifyInstance) {
   const connections = createConnectionsStorage(app.db);
   const presets = createPromptsStorage(app.db);
   const chars = createCharactersStorage(app.db);
-  const lorebooksStore = createLorebooksStorage(app.db);
   const regexScriptsStore = createRegexScriptsStorage(app.db);
 
   // Track active dry-runs so extensions can abort in-flight requests.
@@ -591,7 +587,7 @@ export async function registerDryRunRoute(app: FastifyInstance) {
       impersonate,
       impersonateBlockAgents: false,
     });
-    const supportsHiddenFromAI = chatMode === "conversation" || chatMode === "roleplay" || chatMode === "visual_novel";
+    const supportsHiddenFromAI = chatMode === "conversation" || chatMode === "roleplay";
     let startIdx = 0;
     for (let i = allChatMessages.length - 1; i >= 0; i--) {
       const extra = parseExtra(allChatMessages[i]!.extra);
@@ -615,7 +611,7 @@ export async function registerDryRunRoute(app: FastifyInstance) {
     );
     const promptSpatialProjection =
       (ownerSpatialProjection?.ownerMode === "game" && chatMode === "game") ||
-      (ownerSpatialProjection?.ownerMode === "roleplay" && (chatMode === "roleplay" || chatMode === "visual_novel"))
+      (ownerSpatialProjection?.ownerMode === "roleplay" && chatMode === "roleplay")
         ? ownerSpatialProjection
         : null;
     const ownerSpatialLorebookEntryIds = promptSpatialProjection?.lorebookEntryIds ?? [];
@@ -672,6 +668,7 @@ export async function registerDryRunRoute(app: FastifyInstance) {
     const excludePastReasoning = chatMeta.excludePastReasoning !== false;
     let mappedMessages = chatMessages.map((m: any) => {
       const extra = parseExtra(m.extra);
+      const personaSnapshotName = m.role === "user" ? readPersonaSnapshotName(extra) : null;
       const attachments = extra.attachments as PromptAttachment[] | undefined;
       const images = extractImageAttachmentDataUrls(attachments);
       const files = extractFileAttachmentInputs(attachments);
@@ -686,6 +683,7 @@ export async function registerDryRunRoute(app: FastifyInstance) {
         content: appendReadableAttachmentsToContent((m.content as string) ?? "", attachments),
         contextKind: "history" as const,
         characterId: typeof m.characterId === "string" && m.characterId ? m.characterId : null,
+        ...(personaSnapshotName ? { personaSnapshotName } : {}),
         ...(hiddenFromAICharacterIds.length ? { hiddenFromAICharacterIds } : {}),
         ...(images?.length ? { images } : {}),
         ...(files.length ? { files } : {}),
@@ -724,11 +722,14 @@ export async function registerDryRunRoute(app: FastifyInstance) {
         ? body.forCharacterId
         : null;
     const promptCharacterIds = resolvePromptCharacterIdsForTarget(characterIds, promptTargetCharacterId);
-    const audienceCharacterIds = impersonate
-      ? []
-      : promptTargetCharacterId
-        ? [promptTargetCharacterId]
-        : characterIds;
+    const promptGroupResponseOrder = (chatMeta.groupResponseOrder as string) ?? "sequential";
+    const dryRunGroupChatMode = resolveGroupGenerationMode(chatMode, chatMeta.groupChatMode);
+    const deferCharacterMacros =
+      characterIds.length > 1 &&
+      dryRunGroupChatMode === "individual" &&
+      (promptGroupResponseOrder !== "manual" || chatMode === "conversation") &&
+      !impersonate;
+    const audienceCharacterIds = impersonate ? [] : promptTargetCharacterId ? [promptTargetCharacterId] : characterIds;
     if (audienceCharacterIds.length > 0) {
       const audience = new Set(audienceCharacterIds);
       mappedMessages = mappedMessages.filter(
@@ -850,7 +851,6 @@ export async function registerDryRunRoute(app: FastifyInstance) {
       msg.content = msg.content.replace(/\n([ \t]*\n){2,}/g, "\n\n");
     }
     mappedMessages = resolveHistoryMessageMacros(mappedMessages);
-    const dryRunGroupChatMode = ((chatMeta.groupChatMode as string) ?? "merged") as string;
     const shouldPrefixGroupHistorySpeakers =
       chatMeta.groupSpeakerNamesInHistory === true &&
       characterIds.length > 1 &&
@@ -1290,9 +1290,15 @@ export async function registerDryRunRoute(app: FastifyInstance) {
         idleDuration: promptIdleDuration,
         impersonate,
         preserveImpersonatePresetSections: impersonate && effectivePresetSource === "impersonate",
+        deferCharacterMacros,
       };
 
       const assembled = await assemblePrompt(assemblerInput);
+      Object.assign(promptMacroContext.variables, assembled.macroVariables);
+      promptMacroContext.agentData = {
+        ...promptMacroContext.agentData,
+        ...assembled.macroAgentData,
+      };
       finalMessages = assembled.messages;
       temperature = assembled.parameters.temperature;
       maxTokens = assembled.parameters.maxTokens;
@@ -1356,7 +1362,13 @@ export async function registerDryRunRoute(app: FastifyInstance) {
         conversationPromptTemplate.replace(/\{\{charName\}\}/g, charNameList).replace(/\{\{userName\}\}/g, personaName),
       );
       finalMessages = [
-        { role: "system", content: formatConversationInstructionsForWrap(renderedConversationPrompt, wrapFormat) },
+        {
+          role: "system",
+          content: formatConversationInstructionsForWrap(
+            `${renderedConversationPrompt}\n${CONVERSATION_NO_REPEAT_INSTRUCTION}`,
+            wrapFormat,
+          ),
+        },
         ...finalMessages,
       ];
     }
@@ -1462,6 +1474,24 @@ export async function registerDryRunRoute(app: FastifyInstance) {
       }
     }
 
+    const authorNotesRaw = typeof chatMeta.authorNotes === "string" ? chatMeta.authorNotes.trim() : "";
+    const authorNotes = authorNotesRaw
+      ? resolveMacros(
+          authorNotesRaw,
+          promptMacroContext,
+          deferCharacterMacros ? { deferCharacterMacros: "all" } : undefined,
+        ).trim()
+      : "";
+    if (authorNotes) {
+      const authorNotesDepth =
+        typeof chatMeta.authorNotesDepth === "number" && Number.isFinite(chatMeta.authorNotesDepth)
+          ? Math.max(0, Math.floor(chatMeta.authorNotesDepth))
+          : 4;
+      finalMessages = injectAtDepth(finalMessages as any, [
+        { content: authorNotes, role: "system", depth: authorNotesDepth },
+      ]) as any;
+    }
+
     // Optional injection: tracker context (read-only snapshot)
     const resolvedInjectTrackersForRun = usePromptParts ? false : resolvedInjectTrackers;
     if (resolvedInjectTrackersForRun) {
@@ -1539,6 +1569,12 @@ export async function registerDryRunRoute(app: FastifyInstance) {
 
     // enableThinking activates provider reasoning mode (separate from showing thoughts).
     const enableThinking = !!resolvedEffort;
+    const providerReasoningEffort: ChatOptions["reasoningEffort"] =
+      enabledParameters?.reasoningEffort === false
+        ? undefined
+        : reasoningEffort === null
+          ? "none"
+          : (resolvedEffort ?? undefined);
 
     // ── Claude 4.5+ sampling parameter restrictions ──
     const modelLc = (conn.model ?? "").toLowerCase();
@@ -1645,7 +1681,7 @@ export async function registerDryRunRoute(app: FastifyInstance) {
           frequencyPenalty: suppressModelParameters ? undefined : frequencyPenalty || undefined,
           presencePenalty: suppressModelParameters ? undefined : presencePenalty || undefined,
           enableThinking: suppressModelParameters ? undefined : enableThinking || undefined,
-          reasoningEffort: suppressModelParameters ? undefined : resolvedEffort || undefined,
+          reasoningEffort: suppressModelParameters ? undefined : providerReasoningEffort,
           verbosity: suppressModelParameters ? undefined : verbosity || undefined,
           serviceTier: serviceTier || undefined,
           showThoughts: showThoughts || undefined,
@@ -1710,7 +1746,7 @@ export async function registerDryRunRoute(app: FastifyInstance) {
           presencePenalty: presencePenalty || undefined,
           minP: minP || undefined,
           enableThinking,
-          reasoningEffort: resolvedEffort ?? undefined,
+          reasoningEffort: providerReasoningEffort,
           excludePastReasoning,
           verbosity: verbosity ?? undefined,
           serviceTier,
@@ -1775,7 +1811,7 @@ export async function registerDryRunRoute(app: FastifyInstance) {
         presencePenalty: presencePenalty || undefined,
         minP: minP || undefined,
         enableThinking,
-        reasoningEffort: resolvedEffort ?? undefined,
+        reasoningEffort: providerReasoningEffort,
         excludePastReasoning,
         verbosity: verbosity ?? undefined,
         serviceTier,

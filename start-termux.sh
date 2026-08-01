@@ -157,7 +157,9 @@ prune_pnpm_store() {
 install_workspace_dependencies() {
     # Avoid --force here. On constrained Android devices it recreates the entire
     # virtual store and may download optional binaries for platforms we cannot run.
-    run_pnpm install --frozen-lockfile --prefer-offline
+    # Termux provides a global libvips but no Android NDK; Sharp must use its
+    # supported WebAssembly fallback rather than attempting a native source build.
+    SHARP_IGNORE_GLOBAL_LIBVIPS=1 run_pnpm install --frozen-lockfile --prefer-offline
 }
 
 if command -v corepack &> /dev/null; then
@@ -228,6 +230,7 @@ if [ "$SKIP_UPDATE" = "1" ]; then
     echo "  [OK] Skipping update check; starting the current local install."
 elif [ "$AUTO_UPDATE_DISABLED" = "1" ]; then
     echo "  [OK] Automatic Engine updates disabled by AUTO_UPDATE_ENABLED=false."
+    node scripts/check-launcher-update.mjs
 elif [ -d ".git" ]; then
     echo "  [..] Checking for updates..."
     OLD_HEAD=$(git rev-parse HEAD 2>/dev/null)
@@ -256,7 +259,14 @@ elif [ -d ".git" ]; then
         STASHED=0
         STASH_REF=""
         SKIP_UPDATE_FOR_LOCAL_CHANGES=0
-        if has_git_worktree_changes; then
+        DATA_SNAPSHOT_READY=0
+        if node scripts/protect-launcher-data.mjs snapshot; then
+            DATA_SNAPSHOT_READY=1
+        else
+            SKIP_UPDATE_FOR_LOCAL_CHANGES=1
+            echo "  [WARN] Could not create an update snapshot. Skipping auto-update to protect your data."
+        fi
+        if [ "$SKIP_UPDATE_FOR_LOCAL_CHANGES" != "1" ] && has_git_worktree_changes; then
             if git stash push -u -q -m "auto-stash before update" 2>/dev/null; then
                 STASHED=1
                 STASH_REF=$(git stash list -1 --format=%gd 2>/dev/null || true)
@@ -310,6 +320,11 @@ elif [ -d ".git" ]; then
         fi
         rm -f "$UPDATE_LOG"
     fi
+fi
+
+if [ "${DATA_SNAPSHOT_READY:-0}" = "1" ] && ! node scripts/protect-launcher-data.mjs restore-if-missing; then
+    echo "  [ERROR] User data verification failed after the update attempt. Startup stopped to avoid creating empty data."
+    exit 1
 fi
 
 # ── Guard: validate workspace package.json files ──

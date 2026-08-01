@@ -3,6 +3,7 @@ import { ExternalLink, MapPinned, Swords, type LucideIcon } from "lucide-react";
 import { APP_VERSION } from "@marinara-engine/shared";
 import { useUIStore } from "../../stores/ui.store";
 import { Modal } from "../ui/Modal";
+import { useTranslation as useUiTranslation } from "react-i18next";
 
 export const WHATS_NEW_SEEN_VERSION_KEY = "marinara:whats-new:seen-version";
 
@@ -26,6 +27,24 @@ type ReleaseAnnouncement = {
 // Add each release here before its version ships. Versions without a tailored
 // entry still get a one-time update notice and a link to their full release.
 const RELEASE_ANNOUNCEMENTS: Record<string, ReleaseAnnouncement> = {
+  "2.4.0": {
+    headline: "Broader horizons, finer control, stronger foundations.",
+    intro:
+      "Professor Mari here! This release adds Z.AI image generation, richer custom Agent context and image controls, smarter Roleplay animation planning, bulk history and summary tools, and four new documentation languages. It also strengthens extension and runtime security while polishing chat, card, model, gallery, and mobile behavior throughout the Engine.",
+    highlights: [],
+  },
+  "2.3.5": {
+    headline: "More control, polished down to the card.",
+    intro:
+      "Professor Mari here! This release adds custom quick replies, richer translation controls, Atlas image and video generation, interface localization, stronger update and extension protections, and a substantial collection of chat, card, launcher, image, and settings fixes. Character and Persona cards also keep their creator and version neatly beside the name, even when space is tight.",
+    highlights: [],
+  },
+  "2.3.4": {
+    headline: "A safer engine with finer control.",
+    intro:
+      "Professor Mari here! I removed Extensions, sealed their unsafe code path, and arranged for every old record to be cleared automatically. I also added new prompt macros, character-specific Hide From AI controls, and Grouped or Individual response handling for multi-character Conversations, then corrected a generous stack of smaller regressions. Every good experiment deserves a clean bench.",
+    highlights: [],
+  },
   "2.3.3": {
     headline: "We fixed the most glaring issues.",
     intro:
@@ -87,26 +106,41 @@ function hasSeenCurrentAnnouncement() {
   }
 }
 
-export function WhatsNewModal({ presentationAllowed }: { presentationAllowed: boolean }) {
+export function WhatsNewModal({
+  presentationAllowed,
+  onOpenChange,
+  onResolved,
+}: {
+  presentationAllowed: boolean;
+  onOpenChange?: (open: boolean) => void;
+  onResolved?: () => void;
+}) {
+  const { t: localizeUi } = useUiTranslation();
   const hasCompletedOnboarding = useUIStore((state) => state.hasCompletedOnboarding);
   const [open, setOpen] = useState(false);
   const announcement = RELEASE_ANNOUNCEMENTS[APP_VERSION] ?? FALLBACK_ANNOUNCEMENT;
   const releaseUrl = `${RELEASES_URL}/tag/v${encodeURIComponent(APP_VERSION)}`;
 
   useEffect(() => {
-    if (!presentationAllowed || !hasCompletedOnboarding || hasSeenCurrentAnnouncement()) return;
+    if (!presentationAllowed || !hasCompletedOnboarding) return;
+    if (!hasSeenCurrentAnnouncement()) {
+      // Record presentation immediately so closing the app without pressing a
+      // button cannot make the same release announcement reappear next launch.
+      rememberAnnouncementWasShown();
+      setOpen(true);
+    }
+    onResolved?.();
+  }, [hasCompletedOnboarding, presentationAllowed, onResolved]);
 
-    // Record presentation immediately so closing the app without pressing a
-    // button cannot make the same release announcement reappear next launch.
-    rememberAnnouncementWasShown();
-    setOpen(true);
-  }, [hasCompletedOnboarding, presentationAllowed]);
+  useEffect(() => {
+    onOpenChange?.(open);
+  }, [onOpenChange, open]);
 
   return (
     <Modal
       open={open}
       onClose={() => setOpen(false)}
-      title="What's New?"
+      title={localizeUi("ui.modals.whatsnewmodal.whatSNew")}
       width="max-w-xl"
       mobileFullscreen
       panelClassName="overflow-hidden"
@@ -119,15 +153,14 @@ export function WhatsNewModal({ presentationAllowed }: { presentationAllowed: bo
           />
           <img
             src="/illustrations/professor-mari-whats-new.webp"
-            alt="Professor Mari winking and waving"
+            alt={localizeUi("ui.modals.whatsnewmodal.professorMariWinkingAndWaving")}
             className="relative mx-auto h-44 w-auto max-w-full object-contain object-bottom drop-shadow-[0_12px_24px_rgba(0,0,0,0.28)] sm:h-52"
           />
         </div>
 
         <div className="space-y-5 px-5 py-5 sm:px-6 sm:py-6">
           <header>
-            <span className="inline-flex rounded-full border border-[var(--marinara-chat-chrome-button-border-active)] bg-[var(--marinara-chat-chrome-button-bg-active)] px-2.5 py-1 text-[0.625rem] font-bold uppercase tracking-[0.14em] text-[var(--marinara-chat-chrome-button-text-active)]">
-              Version {APP_VERSION}
+            <span className="inline-flex rounded-full border border-[var(--marinara-chat-chrome-button-border-active)] bg-[var(--marinara-chat-chrome-button-bg-active)] px-2.5 py-1 text-[0.625rem] font-bold uppercase tracking-[0.14em] text-[var(--marinara-chat-chrome-button-text-active)]">{localizeUi("ui.characters.metadatatab.version")} {APP_VERSION}
             </span>
             <h3 className="mt-3 text-balance text-2xl font-bold tracking-tight text-[var(--marinara-chat-chrome-panel-title)] sm:text-3xl">
               {announcement.headline}
@@ -182,17 +215,13 @@ export function WhatsNewModal({ presentationAllowed }: { presentationAllowed: bo
               target="_blank"
               rel="noreferrer"
               className="mari-chrome-control min-h-10 justify-center px-4 py-2 text-sm"
-            >
-              View release
-              <ExternalLink size="0.875rem" aria-hidden="true" />
+            >{localizeUi("ui.modals.whatsnewmodal.viewRelease")}<ExternalLink size="0.875rem" aria-hidden="true" />
             </a>
             <button
               type="button"
               onClick={() => setOpen(false)}
               className="mari-chrome-control mari-chrome-control--primary min-h-10 justify-center px-5 py-2 text-sm"
-            >
-              Got it
-            </button>
+            >{localizeUi("ui.modals.whatsnewmodal.gotIt")}</button>
           </footer>
         </div>
       </div>

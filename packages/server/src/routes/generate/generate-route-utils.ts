@@ -3,8 +3,11 @@ import {
   GENERATION_PARAMETER_SEND_KEYS,
   SUMMARY_TAIL_MESSAGES,
   applyTrackerFieldLocksToGameStatePatch,
+  compileChatSummaryEntries,
   generationParametersSchema,
+  normalizeChatSummaryEntries,
   normalizeTextForMatch,
+  normalizeSummaryTailMessages,
   normalizeWorldCustomFields,
   normalizeThinkingTagPairs,
   parseTrackerFieldLocks,
@@ -57,6 +60,7 @@ export type SimpleMessage = {
 export type SpeakerPrefixMessage = SimpleMessage & {
   characterId?: string | null;
   name?: string | null;
+  personaSnapshotName?: string | null;
   providerMetadata?: Record<string, unknown>;
 };
 export type StoredGenerationParameters = Partial<GenerationParameters>;
@@ -526,7 +530,7 @@ export function isMessageHiddenFromAIForCharacter(
 }
 
 export function isRoleplaySummaryMode(chatMode: string): boolean {
-  return chatMode === "roleplay" || chatMode === "visual_novel";
+  return chatMode === "roleplay";
 }
 
 /**
@@ -535,14 +539,10 @@ export function isRoleplaySummaryMode(chatMode: string): boolean {
  * `DEFAULT` only when the value is genuinely unset; an explicit `MIN` (0) means
  * "hide the whole batch". A present-but-invalid value (NaN, negative) fails
  * closed to `MIN` so corrupt metadata hides more rather than silently leaking
- * extra context. Clamped to [MIN, MAX].
+ * extra context. There is intentionally no upper cap.
  */
 export function resolveRoleplaySummaryTail(value: unknown): number {
-  const { MIN, MAX, DEFAULT } = SUMMARY_TAIL_MESSAGES;
-  if (value === undefined || value === null) return DEFAULT;
-  const n = Math.floor(Number(value));
-  if (!Number.isFinite(n) || n < MIN) return MIN;
-  return Math.min(MAX, n);
+  return normalizeSummaryTailMessages(value);
 }
 
 /**
@@ -558,8 +558,8 @@ export function computeSummaryHideIds(args: {
 }): string[] {
   const { messages, entryMessageIds, tail } = args;
   if (entryMessageIds.length === 0) return [];
-  const { MIN, MAX } = SUMMARY_TAIL_MESSAGES;
-  const clampedTail = Number.isFinite(tail) ? Math.max(MIN, Math.min(MAX, Math.floor(tail))) : MIN;
+  const { MIN } = SUMMARY_TAIL_MESSAGES;
+  const clampedTail = Number.isFinite(tail) ? Math.max(MIN, Math.floor(tail)) : MIN;
   const visible = messages.filter((message) => !isMessageHiddenFromAI(message));
   const tailIdSet = new Set(clampedTail > 0 ? visible.slice(-clampedTail).map((message) => message.id) : []);
   const entryIdSet = new Set(entryMessageIds);
@@ -627,9 +627,25 @@ export function selectRollingSummaryMessages<T extends { id: string; extra?: unk
   return visible.slice(-Math.max(size, sinceBoundary));
 }
 
-export function resolveRoleplayChatSummary(chatMode: string, chatMetadata: Record<string, unknown>): string | null {
+export function resolveRoleplayChatSummary(
+  chatMode: string,
+  chatMetadata: Record<string, unknown>,
+  options: { excludeMessageIds?: readonly string[] } = {},
+): string | null {
   if (!isRoleplaySummaryMode(chatMode)) return null;
-  return ((chatMetadata.summary as string) ?? "").trim() || null;
+  const summary = ((chatMetadata.summary as string) ?? "").trim() || null;
+  const excludedMessageIds = new Set((options.excludeMessageIds ?? []).filter(Boolean));
+  if (excludedMessageIds.size === 0) return summary;
+
+  const entries = normalizeChatSummaryEntries(chatMetadata.summaryEntries);
+  // Legacy summaries have no per-message provenance, so they cannot be
+  // safely retained while regenerating a historical message.
+  if (entries.length === 0) return null;
+  const retainedEntries = entries.filter((entry) => {
+    const coveredMessageIds = [...(entry.messageIds ?? []), ...(entry.hiddenMessageIds ?? [])];
+    return !coveredMessageIds.some((messageId) => excludedMessageIds.has(messageId));
+  });
+  return retainedEntries.length === entries.length ? summary : compileChatSummaryEntries(retainedEntries);
 }
 
 function escapeRegex(value: string): string {
@@ -671,6 +687,13 @@ function prefixSpeakerName(content: string, speakerName: string): string {
   return trimmed ? `${speaker}: ${trimmed}` : `${speaker}:`;
 }
 
+export function readPersonaSnapshotName(extra: unknown): string | null {
+  const snapshot = parseExtra(extra).personaSnapshot;
+  if (!snapshot || typeof snapshot !== "object" || Array.isArray(snapshot)) return null;
+  const name = (snapshot as { name?: unknown }).name;
+  return typeof name === "string" && name.trim() ? name.trim() : null;
+}
+
 export function prefixGroupIndividualHistorySpeakers<T extends SpeakerPrefixMessage>(
   messages: T[],
   options: {
@@ -683,7 +706,7 @@ export function prefixGroupIndividualHistorySpeakers<T extends SpeakerPrefixMess
   return messages.map((message) => {
     let speakerName: string | null = null;
     if (message.role === "user") {
-      speakerName = personaName;
+      speakerName = message.personaSnapshotName?.trim() || personaName;
     } else if (message.role === "assistant") {
       speakerName =
         (message.characterId ? (options.characterNamesById.get(message.characterId) ?? null) : null) ??
@@ -841,16 +864,11 @@ export function resolveActiveCharacterIds(
 
 export type GroupGenerationMode = "merged" | "individual";
 
-/**
- * Conversation groups are always generated as one merged provider response so
- * the model can decide which present characters speak in the turn. Only
- * roleplay-style chats honor an explicit merged/individual mode.
- */
+/** Resolve the stored generation mode for every group-capable chat mode. */
 export function resolveGroupGenerationMode(
-  chatMode: string | null | undefined,
+  _chatMode: string | null | undefined,
   configuredMode: unknown,
 ): GroupGenerationMode {
-  if (chatMode === "conversation") return "merged";
   return configuredMode === "individual" ? "individual" : "merged";
 }
 
@@ -859,7 +877,7 @@ export function shouldRestoreRegenerationCharacterTarget(
   configuredMode: unknown,
   characterIds: string[],
 ): boolean {
-  const isRoleplayGroup = chatMode === "roleplay" || chatMode === "visual_novel";
+  const isRoleplayGroup = chatMode === "roleplay";
   return !(isRoleplayGroup && characterIds.length > 1 && resolveGroupGenerationMode(chatMode, configuredMode) === "merged");
 }
 
@@ -942,7 +960,9 @@ export function formatSeparateAgentInjection(agentType: string, text: string, wr
         ? { heading: "Knowledge Retrieval", tag: "knowledge_retrieval" }
         : agentType === "director"
           ? { heading: "Narrative Director", tag: "narrative_director" }
-          : { heading: agentType, tag: agentType.replace(/[^a-z0-9_-]/gi, "_") };
+          : agentType === "long-term-memory"
+            ? { heading: "Long-Term Memory", tag: "long_term_memory" }
+            : { heading: agentType, tag: agentType.replace(/[^a-z0-9_-]/gi, "_") };
 
   if (wrapFormat === "none") return `${meta.heading}:\n${text}`;
   if (wrapFormat === "markdown") return `## ${meta.heading}\n${text}`;
@@ -1064,6 +1084,11 @@ export function parseStoredGenerationParameters(raw: unknown): StoredGenerationP
   }
   if (isPlainRecord(source.customParameters)) {
     out.customParameters = mergeCustomParameters({}, source.customParameters);
+  }
+  if (isPlainRecord(source.managedCustomParameters)) {
+    const managedCustomParameters =
+      generationParametersSchema.shape.managedCustomParameters.safeParse(source.managedCustomParameters);
+    if (managedCustomParameters.success) out.managedCustomParameters = managedCustomParameters.data;
   }
   if (isPlainRecord(source.enabledParameters)) {
     const enabledParameters: GenerationParameterSendMap = {};
