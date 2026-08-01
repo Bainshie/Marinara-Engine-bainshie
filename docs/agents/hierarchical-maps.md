@@ -1,6 +1,6 @@
 # World Maps: Setup, Authoring, and Travel
 
-> **Current compatibility:** This guide matches World Maps **1.2.4** on
+> **Current compatibility:** This guide matches World Maps **1.2.5** on
 > Marinara Engine **2.3.5 or later**. The package supports Roleplay and Game
 > chats.
 
@@ -29,7 +29,7 @@ current location, travel history, snapshots, and Game bindings.
 
 ## Feature overview
 
-World Maps 1.2.4 provides:
+World Maps 1.2.5 provides:
 
 - nested regions, settlements, places, buildings, floors, and rooms;
 - breadcrumbs and an authoritative current story location;
@@ -57,7 +57,7 @@ the next options. The exact choices remain model-generated.
 
 The library contains two reusable account-owned resources, while every chat
 keeps its own runtime location and history. A resource's friendly name is not
-its identity; World Maps 1.2.4 adds **(copy)** or a number when a newly saved
+its identity; World Maps 1.2.5 adds **(copy)** or a number when a newly saved
 resource would otherwise have the same name.
 
 | Resource or state             | Owned by                        | Choose it when                                                                    | What later edits affect                       |
@@ -197,9 +197,11 @@ canonical world changes while a draft is pending, Maps reports a conflict and
 requires a detach or discard instead of silently overwriting either version.
 
 Editing a shared world from the library updates the canonical definition
-directly. Locations used by linked chats cannot be deleted; archive them so
-their stable IDs remain available. A shared world also cannot be deleted until
-all linked chats are detached or relinked.
+directly. The shared-world editor does not offer permanent location deletion;
+archive locations so their stable IDs remain available. A linked chat also
+cannot permanently delete any location until you choose **Detach and keep
+copy**. A shared world itself cannot be deleted until all linked chats are
+detached or relinked.
 
 Shared worlds and templates retain Global Gallery artwork references without
 copying the image file into every chat. Marinara blocks deletion of a Global
@@ -409,6 +411,15 @@ directive, which the application validates. Different language models may vary
 on ambiguous prose. Use **Set destination** for a deterministic next-turn move,
 or **Set current story location** to correct already-saved state.
 
+A validated user-led arrival can bypass one-step reachability: Maps records an
+available direct link from the current location when necessary. If a destination
+was already queued, that queued move is first saved with the user message, then
+the user-led arrival becomes the final location on the assistant response; the
+one-shot queue is cleared. On a planned route, arrival at the next planned step
+advances normally. Arrival elsewhere, including a jump to a later route step,
+puts the route in **Needs review** so Maps does not silently rewrite the plan.
+Cancel or re-plan that route from the resulting current location.
+
 ### Starting location versus current story location
 
 The **starting location** is the default when a new story begins. The **current
@@ -575,8 +586,9 @@ To attach runtime lore, select the location, open **Linked lore**, search the
 available entries, attach the desired entries, and save.
 
 Opening a linked lorebook entry leaves the map editor. Save the map first when
-you want to keep other pending edits. World Maps 1.2.4 warns before that action
-can discard unsaved map changes.
+you want to keep other pending edits, or intentionally confirm that they can be
+discarded. World Maps 1.2.5 warns before that action can discard unsaved map
+changes.
 
 Linked entries do not pass from parent to child. Lore attached to Brinewatch
 does not activate at the Tideglass Inn unless it is attached there too.
@@ -634,13 +646,15 @@ Archiving preserves old references. Before archiving a location:
 - choose another active starting location if needed; and
 - choose an active replacement if it is the current runtime location.
 
-Archived locations can be restored from the Details pane. World Maps 1.2.4
+Archived locations can be restored from the Details pane. World Maps 1.2.5
 also offers **Delete permanently** for an archived location or fully archived
 branch when it is safe to remove. The editor disables that action when the
 location is the saved starting or current story location, appears in message
 history, has a Game map binding, participates in a queued destination or route,
-or belongs to a linked shared world. Resolve the named dependency first, or
-keep the location archived.
+or belongs to a chat that is still linked to a shared world. The shared-world
+and template editors do not offer permanent location deletion. Resolve the
+named dependency first, detach the linked chat when appropriate, or keep the
+location archived.
 
 Permanent deletion removes the location from the working draft and cleans up
 its hierarchy and direct-link references when you click **Save**. Closing
@@ -666,9 +680,10 @@ and **Use shared world**.
 
 If the library lists shared worlds during Game setup but does not show **Use
 shared world**, the browser may still be running an older package client from
-before the update. Save unrelated work, hard-refresh Marinara once, and reopen
-Game setup. Newer Engine builds explicitly report when a package update needs
-that refresh.
+before the update. In any open map editor, save the map or intentionally discard
+its draft, then close the editor. Save unrelated work, hard-refresh Marinara
+once, and reopen Game setup. Newer Engine builds explicitly report when a
+package update needs that refresh.
 
 ### Game setup used the wrong or fallback locations
 
