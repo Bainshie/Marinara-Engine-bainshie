@@ -968,7 +968,31 @@ try {
     true,
     `Professor Mari CLI must create visible lorebooks: ${JSON.stringify(professorMariCliLorebookResult)}`,
   );
-  assert.equal((await lorebookStorage.getById(professorMariCliLorebookId))?.hiddenFromLibrary, false);
+  const professorMariCliLorebook = await lorebookStorage.getById(professorMariCliLorebookId);
+  assert.deepEqual(
+    {
+      hiddenFromLibrary: professorMariCliLorebook?.hiddenFromLibrary,
+      scanDepth: professorMariCliLorebook?.scanDepth,
+      tokenBudget: professorMariCliLorebook?.tokenBudget,
+      recursiveScanning: professorMariCliLorebook?.recursiveScanning,
+      maxRecursionDepth: professorMariCliLorebook?.maxRecursionDepth,
+      excludeFromVectorization: professorMariCliLorebook?.excludeFromVectorization,
+      vectorQueryDepth: professorMariCliLorebook?.vectorQueryDepth,
+      vectorScoreThreshold: professorMariCliLorebook?.vectorScoreThreshold,
+      vectorMaxResults: professorMariCliLorebook?.vectorMaxResults,
+    },
+    {
+      hiddenFromLibrary: false,
+      scanDepth: 2,
+      tokenBudget: 2048,
+      recursiveScanning: false,
+      maxRecursionDepth: 3,
+      excludeFromVectorization: false,
+      vectorQueryDepth: 10,
+      vectorScoreThreshold: 0.3,
+      vectorMaxResults: 10,
+    },
+  );
   await lorebookStorage.remove(professorMariCliLorebookId);
   assert.equal(await lorebookStorage.getById(professorMariCliLorebookId), null);
   const rangedChatId = "professor-mari-range-regression";
