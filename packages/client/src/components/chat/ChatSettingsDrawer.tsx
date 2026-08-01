@@ -8741,7 +8741,9 @@ export function ChatSettingsDrawer({
               availableTools={availableTools}
               showToolPicker={showToolPicker}
               toolSearch={toolSearch}
+              forceDiceRollTool={metadata.forceDiceRollTool as boolean | undefined}
               onEnableToolsChange={(enableTools) => updateMeta.mutate({ id: chat.id, enableTools })}
+              onForceDiceRollToolChange={(forceDiceRollTool) => updateMeta.mutate({ id: chat.id, forceDiceRollTool })}
               onToggleTool={toggleTool}
               onShowToolPickerChange={setShowToolPicker}
               onToolSearchChange={setToolSearch}

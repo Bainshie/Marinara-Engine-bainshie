@@ -5276,7 +5276,10 @@ export async function generateRoutes(app: FastifyInstance) {
                   minP: minP || undefined,
                   stop: stopSequences.length ? stopSequences : undefined,
                   tools: toolDefs,
-                  toolChoice: round === 0 && chatResolvedToolNames.has("roll_dice") ? "required" : "auto",
+                  toolChoice:
+                    round === 0 && chatResolvedToolNames.has("roll_dice") && chatMeta.forceDiceRollTool === true
+                      ? "required"
+                      : "auto",
                   enableCaching: conn.enableCaching === "true",
                   anthropicExtendedCacheTtl: conn.anthropicExtendedCacheTtl === "true",
                   cachingAtDepth: conn.cachingAtDepth ?? 5,

@@ -375,6 +375,9 @@ export interface ChatMetadata {
   manualTrackers?: boolean;
   /** Per-agent manual tracker mode overrides (agent type → manual). */
   manualTrackerAgentTypes?: Record<string, boolean>;
+  /** When true and the roll_dice tool is active for this chat, forces the model to call a
+   *  tool on its first response instead of allowing it to skip straight to text. Default: false. */
+  forceDiceRollTool?: boolean;
   /** Whether to recall memories from this chat during generation. Default: true for conversation/scenes, false for roleplay. */
   enableMemoryRecall?: boolean;
   /** Discord webhook URL to mirror messages to a Discord channel. */

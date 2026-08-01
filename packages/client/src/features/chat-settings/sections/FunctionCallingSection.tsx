@@ -17,6 +17,7 @@ interface FunctionCallingSectionProps {
   availableTools: FunctionToolOption[];
   showToolPicker: boolean;
   toolSearch: string;
+  forceDiceRollTool: boolean | undefined;
   onEnableToolsChange: (enabled: boolean) => void;
   onToggleTool: (toolId: string) => void;
   onShowToolPickerChange: (show: boolean) => void;
@@ -24,6 +25,7 @@ interface FunctionCallingSectionProps {
   onPendingToolIdsChange: (updater: (previous: string[]) => string[]) => void;
   onAddPendingTools: () => void;
   onCreateCustomTool: () => void;
+  onForceDiceRollToolChange: (enabled: boolean) => void;
 }
 
 export function FunctionCallingSection({
@@ -33,6 +35,7 @@ export function FunctionCallingSection({
   availableTools,
   showToolPicker,
   toolSearch,
+  forceDiceRollTool,
   onEnableToolsChange,
   onToggleTool,
   onShowToolPickerChange,
@@ -40,6 +43,7 @@ export function FunctionCallingSection({
   onPendingToolIdsChange,
   onAddPendingTools,
   onCreateCustomTool,
+  onForceDiceRollToolChange,
 }: FunctionCallingSectionProps) {
   const inactiveTools = availableTools.filter((tool) => !activeToolIds.includes(tool.id));
   const visibleInactiveTools = inactiveTools.filter((tool) => tool.name.toLowerCase().includes(toolSearch.toLowerCase()));
@@ -104,6 +108,18 @@ export function FunctionCallingSection({
                   );
                 })}
               </div>
+            )}
+
+            {(activeToolIds.length === 0 || activeToolIds.includes("roll_dice")) && (
+              <SettingsSwitch
+                label="Force Dice Rolls"
+                description="Require the AI to call a tool on its first response instead of skipping straight to text — reduces hallucinated dice results, but can cause an unrelated tool to be called when other tools are also active."
+                checked={!!forceDiceRollTool}
+                onChange={onForceDiceRollToolChange}
+                labelPosition="start"
+                className="justify-between rounded-lg bg-[var(--secondary)] px-3 py-2.5 text-left hover:bg-[var(--accent)]"
+                labelClassName="text-xs font-medium"
+              />
             )}
 
             {!showToolPicker ? (
