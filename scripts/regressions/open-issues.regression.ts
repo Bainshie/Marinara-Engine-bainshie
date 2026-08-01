@@ -411,6 +411,30 @@ assert.equal(parseBuildMeta('{"commit":"abcdef123456","branch":42}'), null);
 assert.equal(parseBuildMeta(undefined), null);
 assert.equal(resolveBuildBranch(undefined, validBuildMeta?.branch, "main"), "staging");
 assert.equal(resolveBuildBranch(undefined, parseBuildMeta(undefined)?.branch, "refs/heads/feature/test"), "feature/test");
+const lorebookEnglishLocale = JSON.parse(
+  readFileSync(join(REPOSITORY_ROOT, "packages/client/src/localization/locales/en.json"), "utf8"),
+) as Record<string, unknown>;
+const lorebookKoreanLocale = JSON.parse(
+  readFileSync(join(REPOSITORY_ROOT, "packages/client/src/localization/locales/ko.json"), "utf8"),
+) as Record<string, unknown>;
+assert.equal(lorebookKoreanLocale["ui.lorebooks.lorebookeditor.es"], "");
+assert.equal(lorebookKoreanLocale["ui.noodle.stageprofileview.s"], "");
+assert.equal(lorebookEnglishLocale["ui.lorebooks.lorebookentryrow.beforeCharacter"], "Before character definitions");
+assert.equal(lorebookEnglishLocale["ui.lorebooks.lorebookentryrow.afterCharacter"], "After character definitions");
+assert.equal(lorebookEnglishLocale["ui.lorebooks.lorebookentryrow.beforeCompact"], "↑Char");
+assert.equal(lorebookEnglishLocale["ui.lorebooks.lorebookentryrow.afterCompact"], "↓Char");
+assert.match(
+  String(lorebookEnglishLocale["ui.lorebooks.lorebookentryrow.positionInThePromptBeforeCharacterAfterCharacterOr"]),
+  /Before Character Definitions, After Character Definitions/u,
+);
+assert.equal(lorebookKoreanLocale["ui.lorebooks.lorebookentryrow.beforeCharacter"], "캐릭터 정의 전");
+assert.equal(lorebookKoreanLocale["ui.lorebooks.lorebookentryrow.afterCharacter"], "캐릭터 정의 후");
+assert.equal(lorebookKoreanLocale["ui.lorebooks.lorebookentryrow.beforeCompact"], "↑캐릭터");
+assert.equal(lorebookKoreanLocale["ui.lorebooks.lorebookentryrow.afterCompact"], "↓캐릭터");
+assert.match(
+  String(lorebookKoreanLocale["ui.lorebooks.lorebookentryrow.positionInThePromptBeforeCharacterAfterCharacterOr"]),
+  /캐릭터 정의 전, 캐릭터 정의 후/u,
+);
 const updatesRouteSource = readFileSync(join(REPOSITORY_ROOT, "packages/server/src/routes/updates.routes.ts"), "utf8");
 assert.match(updatesRouteSource, /gitInstall \? await getCurrentBranch\(root\)\.catch\(\(\) => null\) : getBuildBranch\(\)/u);
 assert.match(updatesRouteSource, /const currentChannel = await getUpdateChannelForCheckout\(root, currentBranch\)/u);
@@ -909,6 +933,68 @@ try {
   );
 
   const mariDb = new MariDbService(db);
+  const professorMariLorebookId = "professor-mari-lorebook-create-regression";
+  const professorMariLorebookResult = await mariDb.executeAction({
+    action: "lorebook.create",
+    lorebookId: professorMariLorebookId,
+    data: {
+      name: "Professor Mari lorebook regression",
+      entries: [{ name: "Verified entry", content: "Saved with the lorebook.", keys: ["verified"] }],
+    },
+    apply: true,
+  });
+  assert.equal(professorMariLorebookResult.ok, true, "Professor Mari must create lorebooks after visibility was added");
+  const professorMariLorebook = await lorebookStorage.getById(professorMariLorebookId);
+  assert.equal(professorMariLorebook?.hiddenFromLibrary, false);
+  assert.equal((await lorebookStorage.listEntries(professorMariLorebookId)).length, 1);
+  await lorebookStorage.remove(professorMariLorebookId);
+  assert.equal(await lorebookStorage.getById(professorMariLorebookId), null);
+  assert.equal((await lorebookStorage.listEntries(professorMariLorebookId)).length, 0);
+
+  const professorMariCliLorebookId = "professor-mari-cli-lorebook-create-regression";
+  const professorMariCliLorebookResult = await mariDb.executeCli({
+    argv: [
+      "lorebooks",
+      "create",
+      "--id",
+      professorMariCliLorebookId,
+      "--name",
+      "Professor Mari CLI lorebook regression",
+      "--apply",
+    ],
+  });
+  assert.equal(
+    professorMariCliLorebookResult.ok,
+    true,
+    `Professor Mari CLI must create visible lorebooks: ${JSON.stringify(professorMariCliLorebookResult)}`,
+  );
+  const professorMariCliLorebook = await lorebookStorage.getById(professorMariCliLorebookId);
+  assert.deepEqual(
+    {
+      hiddenFromLibrary: professorMariCliLorebook?.hiddenFromLibrary,
+      scanDepth: professorMariCliLorebook?.scanDepth,
+      tokenBudget: professorMariCliLorebook?.tokenBudget,
+      recursiveScanning: professorMariCliLorebook?.recursiveScanning,
+      maxRecursionDepth: professorMariCliLorebook?.maxRecursionDepth,
+      excludeFromVectorization: professorMariCliLorebook?.excludeFromVectorization,
+      vectorQueryDepth: professorMariCliLorebook?.vectorQueryDepth,
+      vectorScoreThreshold: professorMariCliLorebook?.vectorScoreThreshold,
+      vectorMaxResults: professorMariCliLorebook?.vectorMaxResults,
+    },
+    {
+      hiddenFromLibrary: false,
+      scanDepth: 2,
+      tokenBudget: 2048,
+      recursiveScanning: false,
+      maxRecursionDepth: 3,
+      excludeFromVectorization: false,
+      vectorQueryDepth: 10,
+      vectorScoreThreshold: 0.3,
+      vectorMaxResults: 10,
+    },
+  );
+  await lorebookStorage.remove(professorMariCliLorebookId);
+  assert.equal(await lorebookStorage.getById(professorMariCliLorebookId), null);
   const rangedChatId = "professor-mari-range-regression";
   const rangedChatTimestamp = "2026-07-30T12:00:00.000Z";
   await db.insert(chats).values({
