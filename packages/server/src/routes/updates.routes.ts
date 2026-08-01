@@ -177,6 +177,11 @@ async function getUpdateChannelForCheckout(root: string, branch: string | null |
   return UPDATE_CHANNELS.stable;
 }
 
+// Only tracked source belongs here, so untracked files are always leftovers.
+// Kept narrow on purpose: user data, .env, config, and node_modules must never
+// be in range of a clean.
+const STALE_SOURCE_CLEAN_PATHS = ["packages/shared/src", "packages/server/src", "packages/client/src"];
+
 function getManualGitApplyCommand(
   channel = UPDATE_CHANNELS.stable,
   platform: ServerPlatform = "unknown",
@@ -186,11 +191,15 @@ function getManualGitApplyCommand(
     channel.id === "staging"
       ? `git show-ref --verify --quiet refs/heads/${channel.branch} && (git checkout ${channel.branch} && git merge --ff-only ${channel.targetRef}) || git checkout -b ${channel.branch} ${channel.targetRef}`
       : `(git merge --ff-only ${channel.targetRef} || git checkout --detach ${channel.targetRef})`;
+  // Same scoped cleanup cleanStaleSourceFiles performs, so a manual apply (the
+  // only path available when UPDATES_APPLY_ENABLED is false) cannot build with
+  // stale untracked sources left behind by a failed checkout.
+  const cleanCommand = `git clean -fd -- ${STALE_SOURCE_CLEAN_PATHS.join(" ")}`;
   const buildCommand =
     platform === "android-termux"
       ? `${pnpmCommand} --filter @marinara-engine/shared build && ${pnpmCommand} --filter @marinara-engine/server build && ${pnpmCommand} --filter @marinara-engine/client build`
       : `${pnpmCommand} --filter @marinara-engine/shared build && ${pnpmCommand} --filter @marinara-engine/server --filter @marinara-engine/client --parallel run build`;
-  return `git fetch ${UPDATE_REMOTE} ${channel.fetchRef} && ${checkoutCommand} && ${pnpmCommand} --config.trustPolicy=off --config.confirmModulesPurge=false ${PNPM_UPDATE_INSTALL_ARGS.join(" ")} && ${buildCommand}`;
+  return `git fetch ${UPDATE_REMOTE} ${channel.fetchRef} && ${checkoutCommand} && ${cleanCommand} && ${pnpmCommand} --config.trustPolicy=off --config.confirmModulesPurge=false ${PNPM_UPDATE_INSTALL_ARGS.join(" ")} && ${buildCommand}`;
 }
 
 function getManualUpdateCommand(installType: InstallType, platform: ServerPlatform, channel = UPDATE_CHANNELS.stable) {
@@ -256,7 +265,7 @@ async function getCurrentBranch(root: string): Promise<string | null> {
 // because the launcher retries this same clean on the next start.
 async function cleanStaleSourceFiles(root: string): Promise<void> {
   try {
-    await execFileAsync("git", ["clean", "-fdq", "--", "packages/shared/src", "packages/server/src", "packages/client/src"], {
+    await execFileAsync("git", ["clean", "-fdq", "--", ...STALE_SOURCE_CLEAN_PATHS], {
       cwd: root,
       timeout: 30_000,
     });
