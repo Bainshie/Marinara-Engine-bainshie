@@ -48,11 +48,14 @@ type ResourceRegistryRow = {
   id?: unknown;
   type?: unknown;
   url?: unknown;
+  model?: unknown;
+  provider?: unknown;
   settings?: unknown;
   libraryHidden?: unknown;
 };
 
 type ResourceListRefetch = () => Promise<{ data?: unknown }>;
+type AvailableResourceRegistry = { ids: Set<string>; rows: ResourceRegistryRow[] };
 
 function findDropSurface(target: EventTarget | null) {
   if (!(target instanceof Element) || target.closest("[data-chat-resource-drop-exclude]")) return null;
@@ -145,7 +148,7 @@ function sameAction(left: ChatResourceDropResult, right: ChatResourceDropResult)
 async function readAvailableResourceIds(
   kind: ChatResourceDragPayload["kind"],
   refetch: { presets: ResourceListRefetch; connections: ResourceListRefetch },
-): Promise<Set<string>> {
+): Promise<AvailableResourceRegistry> {
   if (kind === "agent") {
     const [manifests, configs] = await Promise.all([
       api.get<ResourceRegistryRow[]>("/capability-packages/agents"),
@@ -157,24 +160,30 @@ async function readAvailableResourceIds(
         .map((config) => config.type)
         .filter((type): type is string => typeof type === "string"),
     );
-    return new Set([
-      ...manifests
-        .filter((manifest) => manifest.libraryHidden !== true)
-        .map((manifest) => manifest.id)
-        .filter((id): id is string => typeof id === "string" && !deletedTypes.has(id)),
-      ...configs
-        .filter((config) => !isAgentConfigDeleted(config.settings))
-        .map((config) => config.type)
-        .filter((type): type is string => typeof type === "string"),
-    ]);
+    return {
+      ids: new Set([
+        ...manifests
+          .filter((manifest) => manifest.libraryHidden !== true)
+          .map((manifest) => manifest.id)
+          .filter((id): id is string => typeof id === "string" && !deletedTypes.has(id)),
+        ...configs
+          .filter((config) => !isAgentConfigDeleted(config.settings))
+          .map((config) => config.type)
+          .filter((type): type is string => typeof type === "string"),
+      ]),
+      rows: [...manifests, ...configs],
+    };
   }
 
   if (kind === "preset" || kind === "connection") {
     const result = await refetch[kind === "preset" ? "presets" : "connections"]();
     const rows = Array.isArray(result.data) ? (result.data as ResourceRegistryRow[]) : [];
-    return new Set(
-      rows.map((row) => row.id).filter((id): id is string => typeof id === "string" && id.length > 0),
-    );
+    return {
+      ids: new Set(
+        rows.map((row) => row.id).filter((id): id is string => typeof id === "string" && id.length > 0),
+      ),
+      rows,
+    };
   }
 
   const endpoint =
@@ -187,9 +196,12 @@ async function readAvailableResourceIds(
           : "/backgrounds";
   const rows = await api.get<ResourceRegistryRow[]>(endpoint);
   const field = kind === "background" ? "url" : "id";
-  return new Set(
-    rows.map((row) => row[field]).filter((id): id is string => typeof id === "string" && id.length > 0),
-  );
+  return {
+    ids: new Set(
+      rows.map((row) => row[field]).filter((id): id is string => typeof id === "string" && id.length > 0),
+    ),
+    rows,
+  };
 }
 
 function hasPresetChoices(value: unknown) {
@@ -256,8 +268,9 @@ export function ChatResourceDropOverlay({ chat }: { chat: Chat }) {
       }
 
       const targetChatId = currentChat.id;
+      let validatedConnectionRows: ResourceRegistryRow[] | null = null;
       try {
-        const availableResourceIds = await readAvailableResourceIds(payload.kind, {
+        const availableResources = await readAvailableResourceIds(payload.kind, {
           presets: refetchPresets,
           connections: refetchConnections,
         });
@@ -266,7 +279,8 @@ export function ChatResourceDropOverlay({ chat }: { chat: Chat }) {
           return;
         }
         currentChat = useChatStore.getState().activeChat ?? chatRef.current;
-        latestAction = resolveChatResourceDropAction(payload, currentChat, availableResourceIds);
+        if (payload.kind === "connection") validatedConnectionRows = availableResources.rows;
+        latestAction = resolveChatResourceDropAction(payload, currentChat, availableResources.ids);
       } catch (error) {
         toast.error(error instanceof Error ? error.message : t("ui.chat.chatresourcedropoverlay.failed"));
         return;
@@ -282,10 +296,12 @@ export function ChatResourceDropOverlay({ chat }: { chat: Chat }) {
 
       if (latestAction.type === "set-connection") {
         const connectionId = latestAction.id;
-        const connection = (connections as Array<{ id: string; model?: string | null; provider?: string | null }>).find(
+        const connection = (validatedConnectionRows ?? (connections as ResourceRegistryRow[])).find(
           (item) => item.id === connectionId,
         );
-        if (!connection?.model?.trim() && connection?.provider !== "grok_subscription") {
+        const model = typeof connection?.model === "string" ? connection.model.trim() : "";
+        const provider = typeof connection?.provider === "string" ? connection.provider : "";
+        if (!model && provider !== "grok_subscription") {
           useUIStore.getState().openConnectionDetail(connectionId);
           toast.info(t("ui.chat.chatresourcedropoverlay.connectionNeedsSetup", { name: latestAction.label }));
           return;
@@ -327,13 +343,14 @@ export function ChatResourceDropOverlay({ chat }: { chat: Chat }) {
         });
         if (!confirmed || useChatStore.getState().activeChatId !== targetChatId) return;
         try {
-          const availableResourceIds = await readAvailableResourceIds(payload.kind, {
+          const availableResources = await readAvailableResourceIds(payload.kind, {
             presets: refetchPresets,
             connections: refetchConnections,
           });
           if (useChatStore.getState().activeChatId !== targetChatId) return;
           currentChat = useChatStore.getState().activeChat ?? chatRef.current;
-          latestAction = resolveChatResourceDropAction(payload, currentChat, availableResourceIds);
+          if (payload.kind === "connection") validatedConnectionRows = availableResources.rows;
+          latestAction = resolveChatResourceDropAction(payload, currentChat, availableResources.ids);
         } catch (error) {
           toast.error(error instanceof Error ? error.message : t("ui.chat.chatresourcedropoverlay.failed"));
           return;
@@ -397,7 +414,7 @@ export function ChatResourceDropOverlay({ chat }: { chat: Chat }) {
             [key]: nextIds,
             ...(latestAction.type === "add-agents" && latestAction.mustEnableAgents ? { enableAgents: true } : {}),
           });
-          if (latestAction.type === "add-agents") requestChatAgentSetup(latestAction.ids);
+          if (latestAction.type === "add-agents") requestChatAgentSetup(currentChat.id, latestAction.ids);
           toast.success(
             t(
               latestAction.type === "add-lorebooks"

@@ -21,7 +21,7 @@ export type ChatResourceDragPayload = {
 };
 
 let activeChatResourceDrag: ChatResourceDragPayload | null = null;
-let pendingChatAgentSetupIds: string[] = [];
+let pendingChatAgentSetup: { chatId: string; ids: string[] } | null = null;
 
 export function parseChatResourceDragPayload(value: unknown): ChatResourceDragPayload | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
@@ -88,13 +88,14 @@ export function requestChatResourceAssignment(payload: ChatResourceDragPayload) 
   window.dispatchEvent(new CustomEvent<ChatResourceDragPayload>(CHAT_RESOURCE_ASSIGN_EVENT, { detail: payload }));
 }
 
-export function requestChatAgentSetup(ids: string[]) {
-  pendingChatAgentSetupIds = Array.from(new Set(ids.filter(Boolean)));
-  window.dispatchEvent(new CustomEvent<string[]>(CHAT_RESOURCE_AGENT_SETUP_EVENT, { detail: pendingChatAgentSetupIds }));
+export function requestChatAgentSetup(chatId: string, ids: string[]) {
+  const pendingIds = pendingChatAgentSetup?.chatId === chatId ? pendingChatAgentSetup.ids : [];
+  pendingChatAgentSetup = { chatId, ids: Array.from(new Set([...pendingIds, ...ids.filter(Boolean)])) };
+  window.dispatchEvent(new CustomEvent(CHAT_RESOURCE_AGENT_SETUP_EVENT));
 }
 
-export function takePendingChatAgentSetupIds() {
-  const ids = pendingChatAgentSetupIds;
-  pendingChatAgentSetupIds = [];
-  return ids;
+export function takePendingChatAgentSetupIds(chatId: string) {
+  const pending = pendingChatAgentSetup;
+  pendingChatAgentSetup = null;
+  return pending?.chatId === chatId ? pending.ids : [];
 }

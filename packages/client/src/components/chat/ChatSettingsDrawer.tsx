@@ -3117,9 +3117,14 @@ export function ChatSettingsDrawer({
   ]);
 
   useEffect(() => {
+    setAgentAddPreview(null);
+    setAgentSetupQueue([]);
+  }, [chat.id]);
+
+  useEffect(() => {
     if (!open) return;
     const consumeRequest = () => {
-      const ids = takePendingChatAgentSetupIds();
+      const ids = takePendingChatAgentSetupIds(chat.id);
       if (ids.length > 0) {
         // Dropped agents are already active by this point, so only dedupe against the setup queue.
         setAgentSetupQueue((current) => Array.from(new Set([...current, ...ids])));
@@ -3128,7 +3133,7 @@ export function ChatSettingsDrawer({
     consumeRequest();
     window.addEventListener(CHAT_RESOURCE_AGENT_SETUP_EVENT, consumeRequest);
     return () => window.removeEventListener(CHAT_RESOURCE_AGENT_SETUP_EVENT, consumeRequest);
-  }, [open]);
+  }, [chat.id, open]);
 
   useEffect(() => {
     if (!open || agentAddPreview || agentSetupQueue.length === 0) return;
@@ -3203,7 +3208,7 @@ export function ChatSettingsDrawer({
         localizeUi("ui.chat.chatsettingsdrawer.addedValue1YouCanAccessItsSettingsInAgents", { value1: agent.name }),
       );
       setAgentAddPreview(null);
-      setAgentSetupQueue((current) => current.slice(1));
+      setAgentSetupQueue((current) => (current[0] === agent.id ? current.slice(1) : current));
     } catch (error) {
       await showAlertDialog({
         title: "Couldn’t Add Agent",
