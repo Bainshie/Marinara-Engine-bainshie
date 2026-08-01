@@ -9418,6 +9418,43 @@ test("Lorebook Save keeps Overview stable while the updated detail cache settles
   }
 });
 
+test("Lorebook entry type descriptions inherit editor chrome text", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name.includes("mobile"), "Desktop entry-type popover regression.");
+
+  const name = `Lorebook entry chrome ${Date.now()}`;
+  const createResponse = await page.request.post("/api/lorebooks", {
+    data: { name, description: "Temporary entry-type color regression lorebook.", category: "world", enabled: true },
+  });
+  expect(createResponse.ok()).toBeTruthy();
+  const lorebook = (await createResponse.json()) as { id: string };
+  const entryResponse = await page.request.post(`/api/lorebooks/${lorebook.id}/entries`, {
+    data: { name: "Entry type color", content: "Regression content", keys: ["regression"] },
+  });
+  expect(entryResponse.ok()).toBeTruthy();
+  const entry = (await entryResponse.json()) as { id: string };
+
+  try {
+    await page.goto("/");
+    await page.locator('[data-tour="panel-lorebooks"]').click();
+    await page.getByText(name, { exact: true }).click();
+    await page.getByRole("button", { name: /^Entries/ }).click();
+    const row = page.locator(`[data-lorebook-entry-row-id="${entry.id}"]`);
+    await row.getByRole("button", { name: /Entry type: Normal\. Choose entry type\./ }).click();
+    const menu = page.getByRole("menu", { name: "Choose entry type" });
+    await expect(menu).toBeVisible();
+    const editorMutedColor = await readCssVariableColor(page, "--marinara-editor-muted");
+    for (const description of [
+      "Triggers when primary keys match the scanned text.",
+      "Injects every time this lorebook is active.",
+      "Primary keys must match with the secondary-key logic.",
+    ]) {
+      await expect(menu.getByText(description, { exact: true })).toHaveCSS("color", editorMutedColor);
+    }
+  } finally {
+    await page.request.delete(`/api/lorebooks/${lorebook.id}`);
+  }
+});
+
 test("selected Lorebook entries mirror safe edits and choose a move destination on demand", async ({ page }) => {
   const name = `Lorebook batch edit ${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
   const targetName = `${name} destination`;
@@ -9926,6 +9963,69 @@ test("Noodle interface icons consistently use Noodle blue", async ({ page }, tes
   await resetDialog.getByRole("button", { name: "Cancel" }).click();
 
   expect(errors).toEqual([]);
+});
+
+test("NoodleR profile controls and mobile navigation use its pink accent", async ({ page }, testInfo) => {
+  const initialResponse = await page.request.get("/api/noodle");
+  expect(initialResponse.ok()).toBe(true);
+  const initial = (await initialResponse.json()) as { settings: { enableNoodler: boolean } };
+  const personaResponse = await page.request.post("/api/characters/personas", {
+    data: { name: `NoodleR color viewer ${Date.now()}` },
+  });
+  expect(personaResponse.ok()).toBe(true);
+  const persona = (await personaResponse.json()) as { id: string };
+
+  try {
+    const enableResponse = await page.request.put("/api/noodle/settings", { data: { enableNoodler: true } });
+    expect(enableResponse.ok()).toBe(true);
+
+    await page.goto("/");
+    await page.locator('[data-tour="noodle-tab"]').click();
+    await page.evaluate(async (personaId) => {
+      const { useUIStore } = (await import("/src/stores/ui.store.ts")) as {
+        useUIStore: {
+          getState: () => {
+            setNoodleSelectedPersonaId: (id: string | null) => void;
+            setNoodleNavigation: (destination: { mode: "noodler"; view: "hub" }) => void;
+          };
+        };
+      };
+      const ui = useUIStore.getState();
+      ui.setNoodleSelectedPersonaId(personaId);
+      ui.setNoodleNavigation({ mode: "noodler", view: "hub" });
+    }, persona.id);
+
+    const noodle = page.locator('[data-component="NoodleView"]');
+    await expect
+      .poll(() => noodle.evaluate((element) => getComputedStyle(element).getPropertyValue("--noodle-accent").trim()))
+      .toBe("#FF7EC1");
+    const emptyMessage = noodle.getByText("No stage profiles are visible to this persona.", { exact: true });
+    await expect(emptyMessage).toBeVisible();
+    await expect(emptyMessage.locator("..").locator("svg")).toHaveCSS("color", "rgb(255, 126, 193)");
+
+    const bottomNav = noodle.locator('[data-component="NoodleView.MobileBottomNav"]');
+    if (testInfo.project.name.includes("mobile")) {
+      await expect(bottomNav).toBeVisible();
+      const colors = await bottomNav
+        .locator("svg:visible")
+        .evaluateAll((icons) => Array.from(new Set(icons.map((icon) => getComputedStyle(icon).color))));
+      expect(colors.length).toBeGreaterThan(0);
+      expect(colors).toEqual(["rgb(255, 126, 193)"]);
+    } else {
+      await expect(bottomNav).toBeHidden();
+      const search = noodle.getByPlaceholder("Search posts or @creators").locator("..").locator("svg").first();
+      await expect(search).toHaveCSS("color", "rgb(255, 126, 193)");
+      const bulkCreate = noodle.getByRole("button", { name: "Bulk-create creators", exact: true });
+      await expect(bulkCreate.locator("svg")).toHaveCSS("color", "rgb(255, 126, 193)");
+      await bulkCreate.click();
+      const bulkDialog = page.getByRole("dialog", { name: "Bulk-create creators" });
+      const bulkSearch = bulkDialog.locator('input[placeholder="Search accounts"]').locator("..").locator("svg").first();
+      await expect(bulkSearch).toHaveCSS("color", "rgb(255, 126, 193)");
+    }
+  } finally {
+    await page.request.put("/api/noodle/settings", { data: { enableNoodler: initial.settings.enableNoodler } });
+    await page.request.delete(`/api/characters/personas/${persona.id}`);
+  }
 });
 
 test("Noodle settings edit and restore the timeline base prompt", async ({ page }, testInfo) => {
@@ -11154,6 +11254,11 @@ test("Noodle mobile shell keeps navigation usable across every view", async ({ p
   await expect(header).toBeVisible();
   await expect(bottomNav).toBeVisible();
   await expect(header.locator('img[src="/noodle-klusek.png"]')).toBeVisible();
+  const bottomNavIconColors = await bottomNav
+    .locator("svg:visible")
+    .evaluateAll((icons) => Array.from(new Set(icons.map((icon) => getComputedStyle(icon).color))));
+  expect(bottomNavIconColors.length).toBeGreaterThan(0);
+  expect(bottomNavIconColors).toEqual(["rgb(126, 167, 255)"]);
 
   const [noodleRect, logoRect, bottomNavRect, bottomNavRowRect] = await Promise.all([
     noodle.boundingBox(),
