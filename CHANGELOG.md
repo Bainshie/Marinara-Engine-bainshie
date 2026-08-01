@@ -4,6 +4,8 @@ This file is the release-notes source of truth for Marinara Engine. Reuse these 
 
 ## [Unreleased]
 
+## [2.4.0]
+
 ### Added
 
 - Added Z.AI as a native Image Generation service with GLM-Image and CogView 4 models, model-aware aspect-ratio sizing, authenticated native requests, and safe local storage of returned image URLs (#4350).
@@ -37,6 +39,12 @@ This file is the release-notes source of truth for Marinara Engine. Reuse these 
 
 ### Changed
 
+- Matched the **Read how this agent works** action to the install, update, and uninstall button typography and styling in Download Agents.
+- Made Noodle and NoodleR switch to their existing mobile layouts whenever the center pane falls below the desktop width, including when sidebars reduce the available space on a desktop device.
+- Standardized resource-panel sorting controls on the shared width used by the Chats tab, so the Lorebooks selector no longer expands beyond neighboring tabs.
+- Made the empty **No messages yet** chat hover preview inherit the configured app accent instead of the default theme's fixed lavender-pink.
+- Kept World Maps navigation inside the **Agents** tab and **Chat Settings** by removing its dedicated launchers from the Chats sidebar and top bar.
+- Advanced the stable release identity to v2.4.0 across the Engine, PWA manifest, Windows installer, Android bootstrap APK, update checks, Home release link, and Professor Mari's What's New announcement. Android uses `versionName` `2.4.0` with `versionCode` `41` so it updates over every previously published APK.
 - Removed the retired Visual Novel mode identifier and its remaining compatibility branches from active schemas, runtime routing, UI labels, imports, and current documentation; Marinara's supported modes are now consistently Conversation, Roleplay, and Game (#4368).
 - Capitalized the native language names in the **Settings → General → Language** dropdown (Español, Français, Polski, Português (Brasil), Русский) to match the Documentation Language selector (#4191).
 - Renamed reusable Chat Settings Presets to **Settings Profiles** throughout Chat Settings, Roleplay quick setup, import/export, localization, and documentation. The word **preset** now identifies prompt presets in these flows, while existing exported profile files remain importable.
