@@ -121,6 +121,15 @@ goto :eof
 set "INSTALL_REQUIRED=0"
 set "BUILD_REQUIRED=0"
 
+:: Drop untracked leftovers in the source trees (e.g. files a failed Windows
+:: checkout could not delete after a channel switch); they break tsc. This is
+:: working-tree repair, not an update, so it runs even when auto-update is
+:: disabled -- and before "stash push -u", which would otherwise capture the
+:: stale file and restore it again after every update.
+:: Not quiet: git prints "Removing <path>" only when it actually deletes
+:: something, so a stray file of your own does not vanish without a trace.
+if exist ".git" git clean -fd -- packages/shared/src packages/server/src packages/client/src 2>nul
+
 :: Auto-update from Git
 if defined SKIP_UPDATE (
     echo  [OK] Skipping update check; starting the current local install.

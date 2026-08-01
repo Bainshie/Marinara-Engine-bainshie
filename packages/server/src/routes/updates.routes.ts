@@ -239,6 +239,22 @@ async function getCurrentBranch(root: string): Promise<string | null> {
   return stdout.trim() || null;
 }
 
+// Untracked leftovers in the source trees (e.g. files a failed Windows checkout
+// could not delete) break tsc, so drop them after a channel switch. Scoped to
+// packages/*/src so user data, config, and node_modules are never touched.
+// A locked file can make the clean itself fail; that must not fail the update,
+// because the launcher retries this same clean on the next start.
+async function cleanStaleSourceFiles(root: string): Promise<void> {
+  try {
+    await execFileAsync("git", ["clean", "-fdq", "--", "packages/shared/src", "packages/server/src", "packages/client/src"], {
+      cwd: root,
+      timeout: 30_000,
+    });
+  } catch (err) {
+    logger.warn(err, "[Update] Could not clean stale untracked source files after channel switch");
+  }
+}
+
 async function checkoutOrCreateUpdateBranch(root: string, channel: UpdateChannelInfo, targetHead: string): Promise<void> {
   const branchRef = `refs/heads/${channel.branch}`;
   const branchExists = await gitCommandSucceeds(root, ["show-ref", "--verify", "--quiet", branchRef]);
@@ -251,12 +267,14 @@ async function checkoutOrCreateUpdateBranch(root: string, channel: UpdateChannel
       cwd: root,
       timeout: 60_000,
     });
+    await cleanStaleSourceFiles(root);
     return;
   }
   await execFileAsync("git", ["checkout", "-b", channel.branch, targetHead], {
     cwd: root,
     timeout: 60_000,
   });
+  await cleanStaleSourceFiles(root);
 }
 
 type UpdateStash = { oid: string; marker: string };
