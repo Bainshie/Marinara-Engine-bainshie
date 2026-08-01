@@ -7,9 +7,10 @@ import type { ChatResourceDragPayload } from "./chat-resource-drag";
 export type ChatResourceDropAction =
   | { type: "add-characters"; ids: string[]; label: string }
   /**
-   * `inheritedFrom` lists the non-pin sources (character, persona, global) that already pull the
-   * dropped book into context. Pinning it is still a real change — the pin survives swapping that
-   * source out — so this is a note on the drop, not a reason to block it.
+   * `inheritedFrom` lists the non-pin sources that already pull the dropped book into context:
+   * character, persona, global, or `Chat` for a book scoped or owned by this chat without being
+   * pinned. Pinning it is still a real change — the pin survives swapping that source out — so this
+   * is a note on the drop, not a reason to block it.
    */
   | { type: "add-lorebooks"; ids: string[]; label: string; inheritedFrom: LorebookActiveReason[] }
   | { type: "add-agents"; ids: string[]; label: string; mustEnableAgents: boolean }

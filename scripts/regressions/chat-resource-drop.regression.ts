@@ -102,6 +102,8 @@ const inheritedLorebooks = [
   { id: "lorebook-3", name: "Persona lore", personaIds: ["persona-1"], enabled: true },
   { id: "lorebook-4", name: "Unrelated lore", characterIds: ["character-9"], enabled: true },
   { id: "lorebook-5", name: "Excluded lore", characterIds: ["character-1"], enabled: true },
+  { id: "lorebook-6", name: "Global lore", isGlobal: true, enabled: true },
+  { id: "lorebook-7", name: "Chat-scoped lore", chatId: "chat-1", enabled: true },
 ] as unknown as Parameters<typeof resolveChatResourceDropAction>[3];
 
 assert.deepEqual(
@@ -138,6 +140,48 @@ assert.deepEqual(
     inheritedLorebooks,
   ),
   { type: "add-lorebooks", ids: ["lorebook-5"], label: "Excluded lore", inheritedFrom: [] },
+);
+
+assert.deepEqual(
+  resolveChatResourceDropAction(
+    { version: 1, kind: "lorebook", ids: ["lorebook-6"], label: "Global lore" },
+    baseChat,
+    undefined,
+    inheritedLorebooks,
+  ),
+  { type: "add-lorebooks", ids: ["lorebook-6"], label: "Global lore", inheritedFrom: ["Global"] },
+);
+
+// A book owned by this chat but never pinned still counts as an inherited source.
+assert.deepEqual(
+  resolveChatResourceDropAction(
+    { version: 1, kind: "lorebook", ids: ["lorebook-7"], label: "Chat-scoped lore" },
+    baseChat,
+    undefined,
+    inheritedLorebooks,
+  ),
+  { type: "add-lorebooks", ids: ["lorebook-7"], label: "Chat-scoped lore", inheritedFrom: ["Chat"] },
+);
+
+// Sources report in the resolver's fixed order, not in the order the books happen to arrive.
+assert.deepEqual(
+  resolveChatResourceDropAction(
+    {
+      version: 1,
+      kind: "lorebook",
+      ids: ["lorebook-7", "lorebook-6", "lorebook-3", "lorebook-2"],
+      label: "Every source",
+    },
+    baseChat,
+    undefined,
+    inheritedLorebooks,
+  ),
+  {
+    type: "add-lorebooks",
+    ids: ["lorebook-7", "lorebook-6", "lorebook-3", "lorebook-2"],
+    label: "Every source",
+    inheritedFrom: ["Character", "Persona", "Global", "Chat"],
+  },
 );
 
 assert.deepEqual(

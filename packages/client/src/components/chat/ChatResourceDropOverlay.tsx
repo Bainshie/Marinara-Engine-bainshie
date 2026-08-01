@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { Ban, Bot, BookOpen, FileText, Image, Link, UserPlus, VenetianMask } from "lucide-react";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
-import { isAgentConfigDeleted, type Chat } from "@marinara-engine/shared";
+import { isAgentConfigDeleted, type Chat, type Lorebook } from "@marinara-engine/shared";
 import { useUpdateChat, useUpdateChatMetadata } from "../../hooks/use-chats";
 import { usePersona } from "../../hooks/use-characters";
 import { useLorebooks } from "../../hooks/use-lorebooks";
@@ -226,8 +226,6 @@ export function ChatResourceDropOverlay({ chat }: { chat: Chat }) {
   const { data: connections = [], refetch: refetchConnections } = useConnections();
   const { data: lorebooks = [] } = useLorebooks(undefined, { includeHidden: true });
   const chatRef = useRef(chat);
-  // Read through a ref: the drag handlers are stable callbacks that outlive any one lorebook fetch.
-  const lorebooksRef = useRef(lorebooks);
   const overlayRef = useRef<OverlayState | null>(null);
   const [overlay, setOverlay] = useState<OverlayState | null>(null);
   const [choicePresetId, setChoicePresetId] = useState<string | null>(null);
@@ -235,7 +233,6 @@ export function ChatResourceDropOverlay({ chat }: { chat: Chat }) {
   const [assigning, setAssigning] = useState(false);
   const agentSetupHandoffRef = useRef(false);
   chatRef.current = chat;
-  lorebooksRef.current = lorebooks;
 
   const resolveOverlay = useCallback((target: EventTarget | null, dataTransfer: DataTransfer) => {
     if (!dataTransfer.types.includes(CHAT_RESOURCE_DRAG_MIME) && !getActiveChatResourceDrag()) return null;
@@ -244,9 +241,9 @@ export function ChatResourceDropOverlay({ chat }: { chat: Chat }) {
     const payload = readChatResourceDragPayload(dataTransfer);
     if (!payload) return null;
     const currentChat = chatRef.current;
-    const action = resolveChatResourceDropAction(payload, currentChat, undefined, lorebooksRef.current);
+    const action = resolveChatResourceDropAction(payload, currentChat, undefined, lorebooks);
     return action ? { payload, action, surface } : null;
-  }, []);
+  }, [lorebooks]);
 
   const updateOverlay = useCallback((candidate: OverlayCandidate | null) => {
     const current = overlayRef.current;
@@ -289,7 +286,7 @@ export function ChatResourceDropOverlay({ chat }: { chat: Chat }) {
         toast.info(t("ui.chat.chatresourcedropoverlay.chatChanged"));
         return;
       }
-      let latestAction = resolveChatResourceDropAction(payload, currentChat, undefined, lorebooksRef.current);
+      let latestAction = resolveChatResourceDropAction(payload, currentChat, undefined, lorebooks);
       if (!latestAction) return;
       if (latestAction.type === "blocked") {
         toast.info(t(chatResourceBlockedKey(latestAction), { name: latestAction.label }));
@@ -309,7 +306,11 @@ export function ChatResourceDropOverlay({ chat }: { chat: Chat }) {
         }
         currentChat = useChatStore.getState().activeChat ?? chatRef.current;
         if (payload.kind === "connection") validatedConnectionRows = availableResources.rows;
-        latestAction = resolveChatResourceDropAction(payload, currentChat, availableResources.ids, lorebooksRef.current);
+        // A lorebook drop revalidates against /lorebooks, so prefer those rows over the cached query
+        // result: a book attached to the character seconds ago must still report its source.
+        const validatedLorebooks =
+          payload.kind === "lorebook" ? (availableResources.rows as unknown as Lorebook[]) : lorebooks;
+        latestAction = resolveChatResourceDropAction(payload, currentChat, availableResources.ids, validatedLorebooks);
       } catch (error) {
         toast.error(error instanceof Error ? error.message : t("ui.chat.chatresourcedropoverlay.failed"));
         return;
@@ -367,7 +368,7 @@ export function ChatResourceDropOverlay({ chat }: { chat: Chat }) {
           if (useChatStore.getState().activeChatId !== targetChatId) return;
           currentChat = useChatStore.getState().activeChat ?? chatRef.current;
           if (payload.kind === "connection") validatedConnectionRows = availableResources.rows;
-          latestAction = resolveChatResourceDropAction(payload, currentChat, availableResources.ids, lorebooksRef.current);
+          latestAction = resolveChatResourceDropAction(payload, currentChat, availableResources.ids, lorebooks);
         } catch (error) {
           toast.error(error instanceof Error ? error.message : t("ui.chat.chatresourcedropoverlay.failed"));
           return;
@@ -566,6 +567,7 @@ export function ChatResourceDropOverlay({ chat }: { chat: Chat }) {
     [
       connections,
       currentPersona?.name,
+      lorebooks,
       ensureConnectionReady,
       presets,
       refetchConnections,
