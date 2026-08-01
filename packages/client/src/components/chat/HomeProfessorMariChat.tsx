@@ -3714,6 +3714,7 @@ export function HomeProfessorMariChat({
                               return (
                                 <div
                                   key={item.id}
+                                  data-professor-mari-chat-id={item.id}
                                   className={cn(
                                     "rounded-lg border border-[var(--border)] bg-[var(--card)]/70 p-2",
                                     active && "border-[var(--primary)]/50 bg-[var(--primary)]/5",

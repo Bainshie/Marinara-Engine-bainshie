@@ -14,6 +14,7 @@ const COMMIT_LENGTH = 12;
 
 let cachedCommit: string | null | undefined;
 let cachedBranch: string | null | undefined;
+let cachedBuildMeta: { commit?: string | null; branch?: string | null } | null | undefined;
 
 function normalizeCommit(value: string | undefined | null) {
   const trimmed = value?.trim();
@@ -21,15 +22,26 @@ function normalizeCommit(value: string | undefined | null) {
   return trimmed.slice(0, COMMIT_LENGTH);
 }
 
-function readBuiltCommit() {
-  if (!existsSync(BUILD_META_PATH)) return null;
+function readBuildMeta() {
+  if (cachedBuildMeta !== undefined) return cachedBuildMeta;
+  if (!existsSync(BUILD_META_PATH)) {
+    cachedBuildMeta = null;
+    return cachedBuildMeta;
+  }
 
   try {
-    const parsed = JSON.parse(readFileSync(BUILD_META_PATH, "utf8")) as { commit?: string | null };
-    return normalizeCommit(parsed.commit);
+    cachedBuildMeta = JSON.parse(readFileSync(BUILD_META_PATH, "utf8")) as {
+      commit?: string | null;
+      branch?: string | null;
+    };
   } catch {
-    return null;
+    cachedBuildMeta = null;
   }
+  return cachedBuildMeta;
+}
+
+function readBuiltCommit() {
+  return normalizeCommit(readBuildMeta()?.commit);
 }
 
 export function getBuildCommit() {
@@ -78,6 +90,12 @@ export function getBuildBranch() {
   const envBranch = normalizeBranch(process.env.MARINARA_GIT_BRANCH ?? process.env.GITHUB_REF_NAME);
   if (envBranch) {
     cachedBranch = envBranch;
+    return cachedBranch;
+  }
+
+  const builtBranch = normalizeBranch(readBuildMeta()?.branch);
+  if (builtBranch) {
+    cachedBranch = builtBranch;
     return cachedBranch;
   }
 
