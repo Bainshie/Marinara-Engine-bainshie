@@ -8348,8 +8348,8 @@ test("Hierarchical Maps settings stay inside the active agent entry", async ({ p
     await expect(page.locator('[data-tour="panel-agents"]')).not.toHaveClass(/mari-topbar-panel-icon--active/);
     await page.getByRole("button", { name: "Back to Agents" }).click();
     await expect(page.getByTestId("hierarchical-maps-detail")).toHaveCount(0);
+    await expect(page.locator('[data-tour="panel-agents"]')).toHaveClass(/mari-topbar-panel-icon--active/);
 
-    await page.locator('[data-tour="panel-agents"]').click();
     const agentsPanel = page.locator('[data-component="RightPanelDesktop"]');
     const mapsCard = agentsPanel.locator('[data-agent-name="Hierarchical Maps"]');
     await expect(mapsCard).toBeVisible();
@@ -8361,6 +8361,7 @@ test("Hierarchical Maps settings stay inside the active agent entry", async ({ p
     await expect(page.getByText("System Prompt", { exact: true })).toHaveCount(0);
     await page.getByRole("button", { name: "Back to Agents" }).click();
     await expect(page.getByTestId("hierarchical-maps-detail")).toHaveCount(0);
+    await expect(page.locator('[data-tour="panel-agents"]')).toHaveClass(/mari-topbar-panel-icon--active/);
 
     for (const chat of chats) {
       await page.evaluate((chatId) => localStorage.setItem("marinara-active-chat-id", chatId), chat.id);
