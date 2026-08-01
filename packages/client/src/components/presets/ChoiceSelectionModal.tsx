@@ -161,9 +161,11 @@ export function ChoiceSelectionModal({
   // Reset when modal re-opens so stale overrides don't persist.
   const [overrides, setOverrides] = useState<Record<string, string | string[]>>({});
   const prevOpenRef = useRef(false);
+  const autoConfirmedRef = useRef(false);
   useEffect(() => {
     if (open && !prevOpenRef.current) {
       setOverrides({});
+      autoConfirmedRef.current = false;
     }
     prevOpenRef.current = open;
   }, [open]);
@@ -190,20 +192,12 @@ export function ChoiceSelectionModal({
   }, [chatId, presetId, selections, saveAsDefault, updateMetadata, updatePreset, onClose]);
 
   // Auto-confirm when all variables use randomPick — no user interaction needed.
-  const autoConfirmedRef = useRef(false);
   const allRandomPick = variables.length > 0 && variables.every((v) => v.randomPick);
   useEffect(() => {
     if (!open || isLoading || !allRandomPick || !allSelected || autoConfirmedRef.current) return;
     autoConfirmedRef.current = true;
     handleConfirm();
   }, [open, isLoading, allRandomPick, allSelected, handleConfirm]);
-
-  // Reset auto-confirm flag when modal re-opens
-  useEffect(() => {
-    if (open && !prevOpenRef.current) {
-      autoConfirmedRef.current = false;
-    }
-  }, [open]);
 
   // Toggle a single option in a multi-select variable
   const toggleMulti = useCallback(
