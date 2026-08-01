@@ -998,7 +998,7 @@ export function CharacterScheduleEditorModal({
               disabled={scheduleTransferDisabled}
               className="inline-flex min-h-9 items-center gap-1.5 rounded-md bg-[var(--background)] px-3 py-2 text-xs font-semibold text-[var(--muted-foreground)] ring-1 ring-[var(--border)] transition-colors hover:bg-[var(--accent)] hover:text-[var(--foreground)] disabled:cursor-not-allowed disabled:opacity-60"
             >
-              <Download size="0.75rem" />
+              <Upload size="0.75rem" />
               {localizeUi("ui.chat.characterscheduleeditormodal.importSchedule")}
             </button>
             <button
@@ -1007,7 +1007,7 @@ export function CharacterScheduleEditorModal({
               disabled={scheduleTransferDisabled}
               className="inline-flex min-h-9 items-center gap-1.5 rounded-md bg-[var(--background)] px-3 py-2 text-xs font-semibold text-[var(--muted-foreground)] ring-1 ring-[var(--border)] transition-colors hover:bg-[var(--accent)] hover:text-[var(--foreground)] disabled:cursor-not-allowed disabled:opacity-60"
             >
-              <Upload size="0.75rem" />
+              <Download size="0.75rem" />
               {localizeUi("ui.chat.characterscheduleeditormodal.exportSchedule")}
             </button>
           </div>
