@@ -11748,7 +11748,7 @@ test("mobile topbar remains reachable while sidebars switch", async ({ page }, t
     (await page.evaluate(() => innerWidth)) * 0.9,
   );
   await expect
-    .poll(async () => (await mobileChatSidebar.boundingBox())?.x ?? 0)
+    .poll(async () => (await mobileChatSidebar.boundingBox())?.x ?? Number.POSITIVE_INFINITY)
     .toBeLessThan(openMobileSidebarX - 8);
   await expect(mobileChatSidebar).toHaveAttribute("aria-hidden", "true");
 
