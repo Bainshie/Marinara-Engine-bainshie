@@ -2055,8 +2055,9 @@ test("Character Chat actions reuse mode selection and seed the chosen setup wiza
     expect(deleteIconBox).not.toBeNull();
     expect(chatIconBox).not.toBeNull();
     expect(Math.abs(duplicateBox!.height - deleteBox!.height)).toBeLessThan(0.1);
+    expect(Math.abs(duplicateBox!.width - deleteBox!.width)).toBeLessThan(0.1);
     expect(Math.abs(duplicateBox!.height - chatBox!.height)).toBeLessThan(0.1);
-    expect(Math.abs(chatBox!.width - (duplicateBox!.width + deleteBox!.width + 2))).toBeLessThan(0.5);
+    expect(Math.abs(chatBox!.width - (duplicateBox!.width * 3 + 4))).toBeLessThan(0.5);
     expect(duplicateIconBox!.height / duplicateBox!.height).toBeGreaterThan(0.52);
     expect(duplicateIconBox!.width / duplicateBox!.width).toBeGreaterThan(0.52);
     expect(deleteIconBox!.height / deleteBox!.height).toBeGreaterThan(0.52);
