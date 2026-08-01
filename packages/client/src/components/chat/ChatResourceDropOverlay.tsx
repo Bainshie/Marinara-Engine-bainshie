@@ -17,6 +17,7 @@ import {
   clearActiveChatResourceDrag,
   getActiveChatResourceDrag,
   readChatResourceDragPayload,
+  takePendingChatResourcePanelRestore,
   type ChatResourceDragPayload,
 } from "../../lib/chat-resource-drag";
 import {
@@ -220,6 +221,7 @@ export function ChatResourceDropOverlay({ chat }: { chat: Chat }) {
   const [overlay, setOverlay] = useState<OverlayState | null>(null);
   const [choicePresetId, setChoicePresetId] = useState<string | null>(null);
   const [characterOptions, setCharacterOptions] = useState<CharacterDropOptions | null>(null);
+  const [assigning, setAssigning] = useState(false);
   chatRef.current = chat;
 
   const resolveOverlay = useCallback((target: EventTarget | null, dataTransfer: DataTransfer) => {
@@ -593,11 +595,22 @@ export function ChatResourceDropOverlay({ chat }: { chat: Chat }) {
   useEffect(() => {
     const assign = (event: Event) => {
       const payload = (event as CustomEvent<ChatResourceDragPayload>).detail;
-      if (payload) void applyAction(payload);
+      if (!payload) return;
+      setAssigning(true);
+      void applyAction(payload).finally(() => setAssigning(false));
     };
     window.addEventListener(CHAT_RESOURCE_ASSIGN_EVENT, assign);
     return () => window.removeEventListener(CHAT_RESOURCE_ASSIGN_EVENT, assign);
   }, [applyAction]);
+
+  // A mobile dock drop closes the library panel to show the result; once the drop is fully done and
+  // its follow-up modals are gone, put the user back in the panel they were dragging from.
+  useEffect(() => {
+    if (assigning || characterOptions || choicePresetId !== null) return;
+    const panel = takePendingChatResourcePanelRestore();
+    // Respect wherever the user navigated to in the meantime.
+    if (panel && !useUIStore.getState().rightPanelOpen) useUIStore.getState().openRightPanel(panel);
+  }, [assigning, characterOptions, choicePresetId]);
 
   return (
     <>

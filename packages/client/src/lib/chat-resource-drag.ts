@@ -1,3 +1,5 @@
+import type { Panel } from "../stores/ui.store";
+
 export const CHAT_RESOURCE_DRAG_MIME = "application/x-marinara-chat-resource";
 export const CHAT_RESOURCE_ASSIGN_EVENT = "marinara:assign-chat-resource";
 export const CHAT_RESOURCE_AGENT_SETUP_EVENT = "marinara:setup-chat-agent";
@@ -35,6 +37,22 @@ export function subscribeChatResourceTouchDrag(listener: () => void) {
   return () => {
     touchDragListeners.delete(listener);
   };
+}
+
+/**
+ * The mobile dock closes the library panel so the drop result is visible. Remember which panel that
+ * was, so the flow can put the user back where they were once the follow-up modal is gone.
+ */
+let pendingChatResourcePanelRestore: Panel | null = null;
+
+export function setPendingChatResourcePanelRestore(panel: Panel | null) {
+  pendingChatResourcePanelRestore = panel;
+}
+
+export function takePendingChatResourcePanelRestore() {
+  const panel = pendingChatResourcePanelRestore;
+  pendingChatResourcePanelRestore = null;
+  return panel;
 }
 
 export function getActiveChatResourceTouchDrag() {

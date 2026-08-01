@@ -5,7 +5,9 @@ import {
   clearActiveChatResourceDrag,
   getActiveChatResourceTouchDrag,
   parseChatResourceDragPayload,
+  setPendingChatResourcePanelRestore,
   subscribeChatResourceTouchDrag,
+  takePendingChatResourcePanelRestore,
 } from "../../packages/client/src/lib/chat-resource-drag.js";
 import { readCharacterGreetings } from "../../packages/client/src/lib/character-greetings.js";
 
@@ -266,5 +268,11 @@ assert.deepEqual(readCharacterGreetings({ alternate_greetings: ["Only alt"] }), 
   assert.equal(notifications, 2);
   clearActiveChatResourceDrag();
 }
+
+// The panel the dock closed is restored exactly once, so a later drop cannot reopen it again.
+assert.equal(takePendingChatResourcePanelRestore(), null);
+setPendingChatResourcePanelRestore("characters");
+assert.equal(takePendingChatResourcePanelRestore(), "characters");
+assert.equal(takePendingChatResourcePanelRestore(), null);
 
 console.info("Chat resource drop regressions passed.");

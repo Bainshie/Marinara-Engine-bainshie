@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import {
   getActiveChatResourceTouchDrag,
   requestChatResourceAssignment,
+  setPendingChatResourcePanelRestore,
   subscribeChatResourceTouchDrag,
 } from "../../lib/chat-resource-drag";
 import { resolveChatResourceDropAction } from "../../lib/chat-resource-drop-capabilities";
@@ -65,7 +66,9 @@ export function ChatResourceMobileDropDock() {
       const touch = event.changedTouches[0];
       setOver(false);
       if (!touch || !isOverDock(touch)) return;
-      // Land the user back on the chat so the result, the toast and its undo are actually visible.
+      // Land the user back on the chat so the result, the toast and its undo are actually visible,
+      // then return to the library once the drop's follow-up is done.
+      setPendingChatResourcePanelRestore(useUIStore.getState().rightPanel);
       useUIStore.getState().closeRightPanel();
       requestChatResourceAssignment(payload);
     };
