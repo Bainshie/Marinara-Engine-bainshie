@@ -2393,7 +2393,6 @@
   "ui.chat.chatresourcedropoverlay.useBackground": "Use {{name}} as this chat's background",
   "ui.chat.chatresourcedropoverlay.useConnection": "Use {{name}} for this chat",
   "ui.chat.chatresourcedropoverlay.usePersona": "Use {{name}} as this chat's persona",
-  "ui.chat.chatresourcemobiledropdock.label": "Drop here to add to the chat",
   "ui.chat.chatroleplaysurface.loadMore": "Load More",
   "ui.chat.chatsettingsdrawer.above": "above.",
   "ui.chat.chatsettingsdrawer.accessMemoriesForThisChat": "Access memories for this chat",

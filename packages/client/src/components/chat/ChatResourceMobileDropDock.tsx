@@ -16,6 +16,9 @@ import {
   getChatResourceActionIcon,
 } from "./ChatResourceDropOverlay";
 
+/** The dock stays small on screen, but a dragging thumb gets a forgiving margin around it. */
+const DOCK_HIT_PADDING_PX = 16;
+
 /**
  * The library panel covers the whole screen on mobile, so a touch drag has no chat surface to aim
  * at. This dock rides above the panel while a chat-resource touch drag is active and hands the drop
@@ -47,10 +50,10 @@ export function ChatResourceMobileDropDock() {
       const rect = rectRef.current;
       return (
         !!rect &&
-        touch.clientX >= rect.left &&
-        touch.clientX <= rect.right &&
-        touch.clientY >= rect.top &&
-        touch.clientY <= rect.bottom
+        touch.clientX >= rect.left - DOCK_HIT_PADDING_PX &&
+        touch.clientX <= rect.right + DOCK_HIT_PADDING_PX &&
+        touch.clientY >= rect.top - DOCK_HIT_PADDING_PX &&
+        touch.clientY <= rect.bottom + DOCK_HIT_PADDING_PX
       );
     };
     const handleTouchMove = (event: TouchEvent) => {
@@ -87,27 +90,19 @@ export function ChatResourceMobileDropDock() {
       data-chat-resource-mobile-dock={blocked ? "blocked" : action.type}
       role="status"
       aria-live="polite"
-      aria-label={t("ui.chat.chatresourcemobiledropdock.label")}
-      className={`mari-chat-drop-dock fixed left-2 top-1/2 z-[9000] flex w-14 -translate-y-1/2 flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dotted px-2 py-6 text-center backdrop-blur-sm ${
+      aria-label={title}
+      className={`mari-chat-drop-dock fixed left-2 top-1/2 z-[9000] flex h-12 w-12 -translate-y-1/2 items-center justify-center rounded-2xl border-2 border-dotted backdrop-blur-sm ${
         blocked ? "mari-chat-drop-dock--blocked" : CHAT_RESOURCE_ACTION_ACCENT_CLASS[action.type]
       } ${over ? "mari-chat-drop-dock--over" : ""}`}
-      style={{ height: "min(40dvh, 20rem)" }}
     >
       <span
         className={
           blocked
-            ? "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--destructive)]/15 text-[var(--destructive)]"
-            : "mari-chat-drop-icon flex h-10 w-10 shrink-0 items-center justify-center rounded-xl"
+            ? "flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-[var(--destructive)]/15 text-[var(--destructive)]"
+            : "mari-chat-drop-icon flex h-8 w-8 shrink-0 items-center justify-center rounded-xl"
         }
       >
         {getChatResourceActionIcon(action)}
-      </span>
-      <span
-        className={`text-[0.625rem] font-semibold leading-tight [writing-mode:vertical-rl] ${
-          blocked ? "text-[var(--muted-foreground)]" : "text-[var(--foreground)]"
-        }`}
-      >
-        {title}
       </span>
     </div>,
     document.body,
