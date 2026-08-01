@@ -15,6 +15,7 @@ import {
   type IllustratorRetryTarget,
 } from "../lib/agent-failures";
 import { chatBackgroundMetadataToUrl, chatBackgroundUrlToMetadata } from "../lib/backgrounds";
+import { hasVisibleUserMessagePayload } from "../lib/chat-message-visibility";
 import { formatGenerationParameterError } from "../lib/generation-parameter-errors";
 import { sanitizeAppCss } from "../lib/theme-css";
 import {
@@ -1212,10 +1213,7 @@ export function useGenerate() {
       const pendingAttachments = params.attachments ?? [];
 
       // Optimistically show the user message in the chat immediately
-      if (
-        (params.userMessage || pendingAttachments.length > 0 || params.pendingSpatialTransition) &&
-        !params.impersonate
-      ) {
+      if (hasVisibleUserMessagePayload(params.userMessage, pendingAttachments) && !params.impersonate) {
         // Build persona snapshot for per-message persona tracking
         const cachedPersonas = qc.getQueryData<
           Array<{
@@ -1605,9 +1603,7 @@ export function useGenerate() {
               if (transitionData?.chatId === params.chatId && transitionData.commandId) {
                 spatialTransitionCommitted = true;
                 spatialCapabilityRefreshDispatched = true;
-                useChatStore
-                  .getState()
-                  .clearPendingSpatialTransition(params.chatId, transitionData.commandId);
+                useChatStore.getState().clearPendingSpatialTransition(params.chatId, transitionData.commandId);
                 dispatchCapabilityClientEvent({
                   packageId: "hierarchical-maps",
                   type: event.type,
