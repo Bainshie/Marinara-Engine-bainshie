@@ -83,6 +83,7 @@ export {
   isBuiltInAgentRuntimeDisabled,
 } from "./features/agents/agent-registry.js";
 export * from "./features/function-calls/tool-definitions.js";
+export * from "./features/function-calls/tools/roll-dice/fixer-pattern.js";
 export * from "./features/folder-packages/manifest-package.js";
 
 // Turn-game framework (UNO and future turn-based games)

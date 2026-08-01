@@ -378,6 +378,11 @@ export interface ChatMetadata {
   /** When true and the roll_dice tool is active for this chat, forces the model to call a
    *  tool on its first response instead of allowing it to skip straight to text. Default: false. */
   forceDiceRollTool?: boolean;
+  /** Regex source (no delimiters/flags — always applied as "gi") used to detect hallucinated
+   *  dice-roll lines in the response text so they can be replaced with a real roll. Only used
+   *  when forceDiceRollTool is true. Falls back to DEFAULT_DICE_ROLL_FIXER_PATTERN if unset or
+   *  invalid. */
+  diceRollFixerPattern?: string;
   /** Whether to recall memories from this chat during generation. Default: true for conversation/scenes, false for roleplay. */
   enableMemoryRecall?: boolean;
   /** Discord webhook URL to mirror messages to a Discord channel. */

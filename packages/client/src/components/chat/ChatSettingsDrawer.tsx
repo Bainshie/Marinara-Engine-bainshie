@@ -8742,8 +8742,12 @@ export function ChatSettingsDrawer({
               showToolPicker={showToolPicker}
               toolSearch={toolSearch}
               forceDiceRollTool={metadata.forceDiceRollTool as boolean | undefined}
+              diceRollFixerPattern={metadata.diceRollFixerPattern as string | undefined}
               onEnableToolsChange={(enableTools) => updateMeta.mutate({ id: chat.id, enableTools })}
               onForceDiceRollToolChange={(forceDiceRollTool) => updateMeta.mutate({ id: chat.id, forceDiceRollTool })}
+              onDiceRollFixerPatternChange={(diceRollFixerPattern) =>
+                updateMeta.mutate({ id: chat.id, diceRollFixerPattern })
+              }
               onToggleTool={toggleTool}
               onShowToolPickerChange={setShowToolPicker}
               onToolSearchChange={setToolSearch}

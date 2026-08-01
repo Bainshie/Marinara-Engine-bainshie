@@ -38,6 +38,8 @@ import {
   LOCAL_SIDECAR_CONNECTION_ID,
   normalizeTextForMatch,
   normalizeGameStoryboardKeyframeCount,
+  DEFAULT_DICE_ROLL_FIXER_PATTERN,
+  isValidDiceRollFixerPattern,
   type APIProvider,
   type MacroContext,
 } from "@marinara-engine/shared";
@@ -5623,14 +5625,25 @@ export async function generateRoutes(app: FastifyInstance) {
           const durationMs = Date.now() - genStartTime;
 
           let contentReplaced = false;
-          // Post-processing: replace hallucinated dice rolls with real ones
+          // Post-processing: replace hallucinated dice rolls with real ones. Only runs when
+          // the chat has explicitly opted into Force Dice Rolls — otherwise a model that
+          // never intended to use dice mechanics could have its prose rewritten unexpectedly.
+          const forceDiceRollTool = chatMeta.forceDiceRollTool === true;
           logger.debug(
-            "[generate] dice fixer check: hasRollDice=%s hadRealDiceRoll=%s",
+            "[generate] dice fixer check: forceDiceRollTool=%s hasRollDice=%s hadRealDiceRoll=%s",
+            forceDiceRollTool,
             chatResolvedToolNames.has("roll_dice"),
             hadRealDiceRoll,
           );
-          if (chatResolvedToolNames.has("roll_dice") && !hadRealDiceRoll) {
-            const dicePattern = /([^\n]*?\|\s*Roll:\s*(\d+)\s*\|\s*Result:\s*([A-Z\s]+))/gi;
+          if (forceDiceRollTool && chatResolvedToolNames.has("roll_dice") && !hadRealDiceRoll) {
+            const configuredPattern =
+              typeof chatMeta.diceRollFixerPattern === "string" ? chatMeta.diceRollFixerPattern : "";
+            const dicePattern = new RegExp(
+              configuredPattern && isValidDiceRollFixerPattern(configuredPattern)
+                ? configuredPattern
+                : DEFAULT_DICE_ROLL_FIXER_PATTERN,
+              "gi",
+            );
             const dcPattern = /DC\s*(\d+)/i;
             let diceMatch;
             const replacements = [];

@@ -1,4 +1,6 @@
-import { Check, FilePlus2, Plus, Trash2, Wrench } from "lucide-react";
+import { useId } from "react";
+import { Check, FilePlus2, Plus, RotateCcw, Trash2, Wrench } from "lucide-react";
+import { DEFAULT_DICE_ROLL_FIXER_PATTERN, isValidDiceRollFixerPattern } from "@marinara-engine/shared";
 import { cn } from "../../../lib/utils";
 import { SettingsSwitch } from "../../../components/panels/settings/SettingControls";
 import { ChatSettingsSection } from "../ChatSettingsSection";
@@ -18,6 +20,7 @@ interface FunctionCallingSectionProps {
   showToolPicker: boolean;
   toolSearch: string;
   forceDiceRollTool: boolean | undefined;
+  diceRollFixerPattern: string | undefined;
   onEnableToolsChange: (enabled: boolean) => void;
   onToggleTool: (toolId: string) => void;
   onShowToolPickerChange: (show: boolean) => void;
@@ -26,6 +29,7 @@ interface FunctionCallingSectionProps {
   onAddPendingTools: () => void;
   onCreateCustomTool: () => void;
   onForceDiceRollToolChange: (enabled: boolean) => void;
+  onDiceRollFixerPatternChange: (pattern: string) => void;
 }
 
 export function FunctionCallingSection({
@@ -36,6 +40,7 @@ export function FunctionCallingSection({
   showToolPicker,
   toolSearch,
   forceDiceRollTool,
+  diceRollFixerPattern,
   onEnableToolsChange,
   onToggleTool,
   onShowToolPickerChange,
@@ -44,7 +49,13 @@ export function FunctionCallingSection({
   onAddPendingTools,
   onCreateCustomTool,
   onForceDiceRollToolChange,
+  onDiceRollFixerPatternChange,
 }: FunctionCallingSectionProps) {
+  const dicePatternInputId = useId();
+  const dicePatternErrorId = useId();
+  const effectiveDicePattern = diceRollFixerPattern ?? "";
+  const dicePatternIsInvalid =
+    effectiveDicePattern.trim().length > 0 && !isValidDiceRollFixerPattern(effectiveDicePattern);
   const inactiveTools = availableTools.filter((tool) => !activeToolIds.includes(tool.id));
   const visibleInactiveTools = inactiveTools.filter((tool) => tool.name.toLowerCase().includes(toolSearch.toLowerCase()));
 
@@ -111,15 +122,57 @@ export function FunctionCallingSection({
             )}
 
             {(activeToolIds.length === 0 || activeToolIds.includes("roll_dice")) && (
-              <SettingsSwitch
-                label="Force Dice Rolls"
-                description="Require the AI to call a tool on its first response instead of skipping straight to text — reduces hallucinated dice results, but can cause an unrelated tool to be called when other tools are also active."
-                checked={!!forceDiceRollTool}
-                onChange={onForceDiceRollToolChange}
-                labelPosition="start"
-                className="justify-between rounded-lg bg-[var(--secondary)] px-3 py-2.5 text-left hover:bg-[var(--accent)]"
-                labelClassName="text-xs font-medium"
-              />
+              <>
+                <SettingsSwitch
+                  label="Force Dice Rolls"
+                  description="Require the AI to call a tool on its first response instead of skipping straight to text — reduces hallucinated dice results, but can cause an unrelated tool to be called when other tools are also active."
+                  checked={!!forceDiceRollTool}
+                  onChange={onForceDiceRollToolChange}
+                  labelPosition="start"
+                  className="justify-between rounded-lg bg-[var(--secondary)] px-3 py-2.5 text-left hover:bg-[var(--accent)]"
+                  labelClassName="text-xs font-medium"
+                />
+
+                {forceDiceRollTool && (
+                  <div className="space-y-1 rounded-lg bg-[var(--secondary)] px-3 py-2.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <label htmlFor={dicePatternInputId} className="text-xs font-medium">
+                        Roll Detection Pattern
+                      </label>
+                      {effectiveDicePattern.trim().length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => onDiceRollFixerPatternChange("")}
+                          className="flex items-center gap-1 text-[0.625rem] text-[var(--muted-foreground)] transition-colors hover:text-[var(--foreground)]"
+                          title="Reset to default pattern"
+                        >
+                          <RotateCcw size="0.625rem" /> Reset
+                        </button>
+                      )}
+                    </div>
+                    <p className="text-[0.625rem] text-[var(--muted-foreground)]">
+                      Regex (no delimiters/flags) used to find hallucinated dice-roll lines in the AI's text so they
+                      can be swapped for a real roll. Applied with the "gi" flags.
+                    </p>
+                    <input
+                      id={dicePatternInputId}
+                      type="text"
+                      spellCheck={false}
+                      placeholder={DEFAULT_DICE_ROLL_FIXER_PATTERN}
+                      value={effectiveDicePattern}
+                      onChange={(e) => onDiceRollFixerPatternChange(e.target.value)}
+                      aria-invalid={dicePatternIsInvalid}
+                      aria-describedby={dicePatternIsInvalid ? dicePatternErrorId : undefined}
+                      className="w-full rounded-lg bg-[var(--background)] px-3 py-2 font-mono text-[0.6875rem] text-[var(--foreground)] placeholder:text-[var(--muted-foreground)]/50 ring-1 ring-transparent focus:ring-[var(--primary)]/40 focus:outline-none transition-all"
+                    />
+                    {dicePatternIsInvalid && (
+                      <p id={dicePatternErrorId} className="text-[0.625rem] text-red-400">
+                        Invalid regex — the built-in default pattern will be used instead until this is fixed.
+                      </p>
+                    )}
+                  </div>
+                )}
+              </>
             )}
 
             {!showToolPicker ? (
