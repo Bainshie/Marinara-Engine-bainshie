@@ -1747,7 +1747,7 @@ export function ConnectionsPanel() {
           />
           <input
             type="text"
-            placeholder={localize("Search connections...")}
+            placeholder={localize("Search connections")}
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             className="mari-chrome-field h-10 w-full py-0 pl-8 pr-3 text-xs md:h-9"
