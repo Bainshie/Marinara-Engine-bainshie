@@ -3877,6 +3877,7 @@ strong {
 .mari-chat-drop-zone {
   --mari-chat-drop-accent: var(--mari-panel-gradient-end, var(--primary));
   --mari-chat-drop-accent-soft: var(--mari-panel-gradient-start, var(--primary));
+
   border: 0.25rem dotted color-mix(in srgb, var(--mari-chat-drop-accent) 80%, transparent);
   border-radius: 1rem;
   background: radial-gradient(

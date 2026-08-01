@@ -1,5 +1,6 @@
 import { isAgentAvailableInChatMode, type Chat } from "@marinara-engine/shared";
 import { chatBackgroundMetadataToUrl, chatBackgroundUrlToMetadata } from "./backgrounds";
+import { parseChatMetadata } from "./chat-display";
 import type { ChatResourceDragPayload } from "./chat-resource-drag";
 
 export type ChatResourceDropAction =
@@ -29,12 +30,14 @@ function readStringArray(value: unknown): string[] {
 export function resolveChatResourceDropAction(
   payload: ChatResourceDragPayload,
   chat: Pick<Chat, "characterIds" | "metadata" | "mode" | "personaId" | "promptPresetId" | "connectionId">,
+  availableIds?: ReadonlySet<string>,
 ): ChatResourceDropResult | null {
-  const metadata: Record<string, unknown> =
-    chat.metadata && typeof chat.metadata === "object" ? chat.metadata : {};
+  const metadata = parseChatMetadata(chat.metadata);
   if (payload.unsupported) {
     return { type: "blocked", reason: payload.unsupported, label: payload.label };
   }
+  const payloadIds = availableIds ? payload.ids.filter((id) => availableIds.has(id)) : payload.ids;
+  if (payloadIds.length === 0) return null;
   const alreadyActive: ChatResourceDropBlock = {
     type: "blocked",
     reason: "already-active",
@@ -43,19 +46,19 @@ export function resolveChatResourceDropAction(
 
   if (payload.kind === "character") {
     const currentIds = new Set(readStringArray(chat.characterIds));
-    const ids = payload.ids.filter((id) => !currentIds.has(id));
+    const ids = payloadIds.filter((id) => !currentIds.has(id));
     return ids.length > 0 ? { type: "add-characters", ids, label: payload.label } : alreadyActive;
   }
 
   if (payload.kind === "lorebook") {
     const currentIds = new Set(readStringArray(metadata.activeLorebookIds));
-    const ids = payload.ids.filter((id) => !currentIds.has(id));
+    const ids = payloadIds.filter((id) => !currentIds.has(id));
     return ids.length > 0 ? { type: "add-lorebooks", ids, label: payload.label } : alreadyActive;
   }
 
   if (payload.kind === "agent") {
     const currentIds = new Set(readStringArray(metadata.activeAgentIds));
-    const supported = payload.ids.filter((id) => isAgentAvailableInChatMode(chat.mode, id));
+    const supported = payloadIds.filter((id) => isAgentAvailableInChatMode(chat.mode, id));
     if (supported.length === 0) {
       return { type: "blocked", reason: "agent-unsupported-mode", label: payload.label };
     }
@@ -70,7 +73,7 @@ export function resolveChatResourceDropAction(
       : alreadyActive;
   }
 
-  const id = payload.ids[0];
+  const id = payloadIds[0];
   if (!id) return null;
   if (payload.kind === "persona") {
     return chat.personaId === id

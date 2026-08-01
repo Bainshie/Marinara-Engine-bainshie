@@ -396,10 +396,9 @@ Required commands:
 ```bash
 pnpm localization:check
 pnpm check
+pnpm regression:prompt
 pnpm smoke:ui
 ```
-
-Run `pnpm regression:prompt` only if implementation changes prompt assembly or generation request shaping. The current plan explicitly avoids those changes.
 
 ## Risks and Mitigations
 

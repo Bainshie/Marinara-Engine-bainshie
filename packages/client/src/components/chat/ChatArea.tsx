@@ -132,7 +132,6 @@ import {
 } from "../ui/ImagePromptReviewModal";
 import { useTranslation, useTranslation as useUiTranslation } from "react-i18next";
 import { ChatResourceDropOverlay } from "./ChatResourceDropOverlay";
-import { CHAT_RESOURCE_AGENT_SETUP_EVENT } from "../../lib/chat-resource-drag";
 
 export type { CharacterMap };
 
@@ -689,15 +688,6 @@ export function ChatArea() {
     setSettingsInitialSection(null);
   }, []);
 
-  useEffect(() => {
-    const openAgentSetup = (event: Event) => {
-      const ids = (event as CustomEvent<string[]>).detail?.filter(Boolean) ?? [];
-      if (ids.length === 0) return;
-      handleOpenSettingsPanel();
-    };
-    window.addEventListener(CHAT_RESOURCE_AGENT_SETUP_EVENT, openAgentSetup);
-    return () => window.removeEventListener(CHAT_RESOURCE_AGENT_SETUP_EVENT, openAgentSetup);
-  }, [handleOpenSettingsPanel]);
   const handleCloseGalleryPanel = useCallback(() => {
     blurActiveChatFloatingUiControl();
     setGalleryOpen(false);

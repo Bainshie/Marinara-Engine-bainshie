@@ -25,6 +25,15 @@ assert.deepEqual(
   { type: "add-characters", ids: ["character-2"], label: "Two characters" },
 );
 
+assert.equal(
+  resolveChatResourceDropAction(
+    { version: 1, kind: "character", ids: ["deleted-character"], label: "Deleted character" },
+    baseChat,
+    new Set(["character-1", "character-2"]),
+  ),
+  null,
+);
+
 assert.deepEqual(
   resolveChatResourceDropAction(
     { version: 1, kind: "character", ids: ["character-1"], label: "Existing character" },
@@ -105,6 +114,19 @@ assert.deepEqual(
 assert.equal(parseChatResourceDragPayload({ version: 2, kind: "character", ids: ["character-1"], label: "A" }), null);
 assert.equal(parseChatResourceDragPayload({ version: 1, kind: "unknown", ids: ["resource-1"], label: "A" }), null);
 assert.equal(parseChatResourceDragPayload({ version: 1, kind: "agent", ids: [], label: "A" }), null);
+assert.equal(
+  parseChatResourceDragPayload({
+    version: 1,
+    kind: "character",
+    ids: Array.from({ length: 101 }, (_, index) => `character-${index}`),
+    label: "Too many",
+  }),
+  null,
+);
+assert.equal(
+  parseChatResourceDragPayload({ version: 1, kind: "character", ids: ["character-1"], label: "   " }),
+  null,
+);
 
 assert.deepEqual(
   resolveChatResourceDropAction(

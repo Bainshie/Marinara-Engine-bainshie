@@ -279,6 +279,7 @@ import {
   type MusicProvider,
 } from "./AgentAddSetupFields";
 import { CHAT_RESOURCE_AGENT_SETUP_EVENT, takePendingChatAgentSetupIds } from "../../lib/chat-resource-drag";
+import { readCharacterGreetings, type CharacterGreeting } from "../../lib/character-greetings";
 import { GameWidgetFileControls, GameWidgetSetupEditor, normalizeGameHudWidgets } from "../game/GameWidgetSetupEditor";
 
 const QuickPresetSectionsEditor = lazy(() =>
@@ -310,11 +311,6 @@ interface ChatSettingsDrawerProps {
   onSpriteVisualSettingsChange?: (patch: Partial<LocalSpriteVisualSettings>) => void;
   onOpenScheduleEditor?: (characterId: string, options?: { initialDay?: string | null }) => void;
 }
-
-type GreetingOption = {
-  text: string;
-  alternateIndex: number | null;
-};
 
 const SPOTIFY_SOURCE_OPTIONS: Array<{ id: SpotifySourceType; label: string; description: string }> = [
   { id: "liked", label: "Liked Songs", description: "Pick from the user's saved tracks first." },
@@ -2223,7 +2219,7 @@ export function ChatSettingsDrawer({
     charId: string;
     charName: string;
     dialogueColor?: string;
-    greetings: GreetingOption[];
+    greetings: CharacterGreeting[];
     selectedIndex: number;
   } | null>(null);
   const greetingDialogRef = useRef<HTMLDivElement | null>(null);
@@ -2340,37 +2336,15 @@ export function ChatSettingsDrawer({
             if (isConversation) return;
             const char = characters.find((c) => c.id === charId);
             if (!char) return;
-            try {
-              const parsed = typeof char.data === "string" ? JSON.parse(char.data) : char.data;
-              const firstMes = (parsed as { first_mes?: unknown }).first_mes;
-              const alternateGreetings = (parsed as { alternate_greetings?: unknown }).alternate_greetings;
-              const greetings: GreetingOption[] = [];
-              if (typeof firstMes === "string" && firstMes.trim()) {
-                greetings.push({ text: firstMes.trim(), alternateIndex: null });
-              }
-              if (Array.isArray(alternateGreetings)) {
-                alternateGreetings.forEach((greeting, index) => {
-                  if (typeof greeting !== "string" || !greeting.trim()) return;
-                  greetings.push({ text: greeting.trim(), alternateIndex: index + 1 });
-                });
-              }
-              if (greetings.length > 0) {
-                const extensions = (parsed as { extensions?: unknown }).extensions;
-                const dialogueColor =
-                  extensions && typeof extensions === "object"
-                    ? (extensions as { dialogueColor?: unknown }).dialogueColor
-                    : undefined;
-                setFirstMesConfirm({
-                  charId,
-                  charName: charName(char),
-                  dialogueColor:
-                    typeof dialogueColor === "string" && dialogueColor.trim() ? dialogueColor.trim() : undefined,
-                  greetings,
-                  selectedIndex: 0,
-                });
-              }
-            } catch {
-              /* ignore parse errors */
+            const { greetings, dialogueColor } = readCharacterGreetings(char.data);
+            if (greetings.length > 0) {
+              setFirstMesConfirm({
+                charId,
+                charName: charName(char),
+                dialogueColor,
+                greetings,
+                selectedIndex: 0,
+              });
             }
           },
         },
@@ -3145,13 +3119,13 @@ export function ChatSettingsDrawer({
   useEffect(() => {
     if (!open) return;
     const consumeRequest = () => {
-      const ids = takePendingChatAgentSetupIds().filter((id) => !activeAgentIds.includes(id));
+      const ids = takePendingChatAgentSetupIds();
       if (ids.length > 0) setAgentSetupQueue(ids);
     };
     consumeRequest();
     window.addEventListener(CHAT_RESOURCE_AGENT_SETUP_EVENT, consumeRequest);
     return () => window.removeEventListener(CHAT_RESOURCE_AGENT_SETUP_EVENT, consumeRequest);
-  }, [activeAgentIds, open]);
+  }, [open]);
 
   useEffect(() => {
     if (!open || agentAddPreview || agentSetupQueue.length === 0) return;

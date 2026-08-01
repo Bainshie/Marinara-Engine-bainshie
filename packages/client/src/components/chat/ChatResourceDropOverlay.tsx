@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { Ban, Bot, BookOpen, FileText, Image, Link, UserPlus, VenetianMask } from "lucide-react";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
-import type { Chat } from "@marinara-engine/shared";
+import { isAgentConfigDeleted, type Chat } from "@marinara-engine/shared";
 import { useUpdateChat, useUpdateChatMetadata } from "../../hooks/use-chats";
 import { usePersona } from "../../hooks/use-characters";
 import { usePresets } from "../../hooks/use-presets";
@@ -26,6 +26,7 @@ import {
   type ChatResourceDropResult,
 } from "../../lib/chat-resource-drop-capabilities";
 import { getChatCharacterIds } from "../../lib/chat-macros";
+import { parseChatMetadata } from "../../lib/chat-display";
 import { chatBackgroundMetadataToUrl, chatBackgroundUrlToMetadata } from "../../lib/backgrounds";
 import { useChatStore } from "../../stores/chat.store";
 import { useUIStore } from "../../stores/ui.store";
@@ -37,7 +38,18 @@ type CharacterDropOptions = { chatId: string; characterId: string; characterName
 type OverlayState = {
   payload: ChatResourceDragPayload;
   action: ChatResourceDropResult;
+  surface: HTMLElement;
   rect: DOMRect;
+};
+
+type OverlayCandidate = Omit<OverlayState, "rect">;
+
+type ResourceRegistryRow = {
+  id?: unknown;
+  type?: unknown;
+  url?: unknown;
+  settings?: unknown;
+  libraryHidden?: unknown;
 };
 
 function findDropSurface(target: EventTarget | null) {
@@ -98,6 +110,79 @@ function sameIds(left: string[], right: string[]) {
   return left.length === right.length && left.every((id, index) => id === right[index]);
 }
 
+function samePayload(left: ChatResourceDragPayload, right: ChatResourceDragPayload) {
+  return (
+    left.kind === right.kind &&
+    left.label === right.label &&
+    left.unsupported === right.unsupported &&
+    sameIds(left.ids, right.ids)
+  );
+}
+
+function sameAction(left: ChatResourceDropResult, right: ChatResourceDropResult) {
+  if (left.type !== right.type || left.label !== right.label) return false;
+  if (left.type === "blocked" && right.type === "blocked") return left.reason === right.reason;
+  if (left.type === "add-characters" && right.type === "add-characters") return sameIds(left.ids, right.ids);
+  if (left.type === "add-lorebooks" && right.type === "add-lorebooks") return sameIds(left.ids, right.ids);
+  if (left.type === "add-agents" && right.type === "add-agents") {
+    return left.mustEnableAgents === right.mustEnableAgents && sameIds(left.ids, right.ids);
+  }
+  if (left.type === "set-background" && right.type === "set-background") return left.id === right.id;
+  if (left.type === "set-persona" && right.type === "set-persona") {
+    return left.id === right.id && left.replacesId === right.replacesId;
+  }
+  if (left.type === "set-preset" && right.type === "set-preset") {
+    return left.id === right.id && left.replacesId === right.replacesId;
+  }
+  if (left.type === "set-connection" && right.type === "set-connection") {
+    return left.id === right.id && left.replacesId === right.replacesId;
+  }
+  return false;
+}
+
+async function readAvailableResourceIds(kind: ChatResourceDragPayload["kind"]): Promise<Set<string>> {
+  if (kind === "agent") {
+    const [manifests, configs] = await Promise.all([
+      api.get<ResourceRegistryRow[]>("/capability-packages/agents"),
+      api.get<ResourceRegistryRow[]>("/agents"),
+    ]);
+    const deletedTypes = new Set(
+      configs
+        .filter((config) => isAgentConfigDeleted(config.settings))
+        .map((config) => config.type)
+        .filter((type): type is string => typeof type === "string"),
+    );
+    return new Set([
+      ...manifests
+        .filter((manifest) => manifest.libraryHidden !== true)
+        .map((manifest) => manifest.id)
+        .filter((id): id is string => typeof id === "string" && !deletedTypes.has(id)),
+      ...configs
+        .filter((config) => !isAgentConfigDeleted(config.settings))
+        .map((config) => config.type)
+        .filter((type): type is string => typeof type === "string"),
+    ]);
+  }
+
+  const endpoint =
+    kind === "character"
+      ? "/characters"
+      : kind === "persona"
+        ? "/characters/personas/list"
+        : kind === "lorebook"
+          ? "/lorebooks"
+          : kind === "preset"
+            ? "/prompts"
+            : kind === "connection"
+              ? "/connections"
+              : "/backgrounds";
+  const rows = await api.get<ResourceRegistryRow[]>(endpoint);
+  const field = kind === "background" ? "url" : "id";
+  return new Set(
+    rows.map((row) => row[field]).filter((id): id is string => typeof id === "string" && id.length > 0),
+  );
+}
+
 function hasPresetChoices(value: unknown) {
   return !!value && typeof value === "object" && !Array.isArray(value) && Object.keys(value).length > 0;
 }
@@ -110,6 +195,7 @@ export function ChatResourceDropOverlay({ chat }: { chat: Chat }) {
   const { data: presets = [] } = usePresets();
   const { data: connections = [] } = useConnections();
   const chatRef = useRef(chat);
+  const overlayRef = useRef<OverlayState | null>(null);
   const [overlay, setOverlay] = useState<OverlayState | null>(null);
   const [choicePresetId, setChoicePresetId] = useState<string | null>(null);
   const [characterOptions, setCharacterOptions] = useState<CharacterDropOptions | null>(null);
@@ -123,7 +209,27 @@ export function ChatResourceDropOverlay({ chat }: { chat: Chat }) {
     if (!payload) return null;
     const currentChat = chatRef.current;
     const action = resolveChatResourceDropAction(payload, currentChat);
-    return action ? { payload, action, rect: surface.getBoundingClientRect() } : null;
+    return action ? { payload, action, surface } : null;
+  }, []);
+
+  const updateOverlay = useCallback((candidate: OverlayCandidate | null) => {
+    const current = overlayRef.current;
+    if (!candidate) {
+      if (!current) return;
+      overlayRef.current = null;
+      setOverlay(null);
+      return;
+    }
+    if (
+      current?.surface === candidate.surface &&
+      samePayload(current.payload, candidate.payload) &&
+      sameAction(current.action, candidate.action)
+    ) {
+      return;
+    }
+    const next = { ...candidate, rect: candidate.surface.getBoundingClientRect() };
+    overlayRef.current = next;
+    setOverlay(next);
   }, []);
 
   const applyAction = useCallback(
@@ -140,8 +246,18 @@ export function ChatResourceDropOverlay({ chat }: { chat: Chat }) {
         return;
       }
 
-      if (latestAction.type === "add-agents") {
-        requestChatAgentSetup(latestAction.ids);
+      try {
+        latestAction = resolveChatResourceDropAction(payload, currentChat, await readAvailableResourceIds(payload.kind));
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : t("ui.chat.chatresourcedropoverlay.failed"));
+        return;
+      }
+      if (!latestAction) {
+        toast.info(t("ui.chat.chatresourcedropoverlay.failed"));
+        return;
+      }
+      if (latestAction.type === "blocked") {
+        toast.info(t(blockedKey(latestAction), { name: latestAction.label }));
         return;
       }
 
@@ -192,7 +308,16 @@ export function ChatResourceDropOverlay({ chat }: { chat: Chat }) {
         });
         if (!confirmed || useChatStore.getState().activeChatId !== currentChat.id) return;
         currentChat = useChatStore.getState().activeChat ?? chatRef.current;
-        latestAction = resolveChatResourceDropAction(payload, currentChat);
+        try {
+          latestAction = resolveChatResourceDropAction(
+            payload,
+            currentChat,
+            await readAvailableResourceIds(payload.kind),
+          );
+        } catch (error) {
+          toast.error(error instanceof Error ? error.message : t("ui.chat.chatresourcedropoverlay.failed"));
+          return;
+        }
         if (!latestAction) return;
         if (latestAction.type === "blocked") {
           toast.info(t(blockedKey(latestAction), { name: latestAction.label }));
@@ -240,8 +365,7 @@ export function ChatResourceDropOverlay({ chat }: { chat: Chat }) {
             },
           });
         } else if (latestAction.type === "add-lorebooks" || latestAction.type === "add-agents") {
-          const metadata: Record<string, unknown> =
-            currentChat.metadata && typeof currentChat.metadata === "object" ? currentChat.metadata : {};
+          const metadata = parseChatMetadata(currentChat.metadata);
           const key = latestAction.type === "add-lorebooks" ? "activeLorebookIds" : "activeAgentIds";
           const previousIds = Array.isArray(metadata[key])
             ? metadata[key].filter((id): id is string => typeof id === "string")
@@ -253,6 +377,7 @@ export function ChatResourceDropOverlay({ chat }: { chat: Chat }) {
             [key]: nextIds,
             ...(latestAction.type === "add-agents" && latestAction.mustEnableAgents ? { enableAgents: true } : {}),
           });
+          if (latestAction.type === "add-agents") requestChatAgentSetup(latestAction.ids);
           toast.success(
             t(
               latestAction.type === "add-lorebooks"
@@ -265,8 +390,7 @@ export function ChatResourceDropOverlay({ chat }: { chat: Chat }) {
                 label: t("ui.chat.chatresourcedropoverlay.undo"),
                 onClick: () => {
                   const activeChat = useChatStore.getState().activeChat;
-                  const activeMetadata: Record<string, unknown> =
-                    activeChat?.metadata && typeof activeChat.metadata === "object" ? activeChat.metadata : {};
+                  const activeMetadata = parseChatMetadata(activeChat?.metadata);
                   const activeIds = Array.isArray(activeMetadata[key])
                     ? activeMetadata[key].filter((id): id is string => typeof id === "string")
                     : [];
@@ -284,8 +408,9 @@ export function ChatResourceDropOverlay({ chat }: { chat: Chat }) {
             },
           );
         } else if (latestAction.type === "set-background") {
+          const metadata = parseChatMetadata(currentChat.metadata);
           const previousBackground = chatBackgroundUrlToMetadata(
-            chatBackgroundMetadataToUrl(currentChat.metadata?.background),
+            chatBackgroundMetadataToUrl(metadata.background),
           );
           const previousBackgroundUrl = useUIStore.getState().chatBackground;
           const nextBackground = chatBackgroundUrlToMetadata(latestAction.id);
@@ -301,8 +426,9 @@ export function ChatResourceDropOverlay({ chat }: { chat: Chat }) {
               label: t("ui.chat.chatresourcedropoverlay.undo"),
               onClick: () => {
                 const activeChat = useChatStore.getState().activeChat;
+                const activeMetadata = parseChatMetadata(activeChat?.metadata);
                 const activeBackground = chatBackgroundUrlToMetadata(
-                  chatBackgroundMetadataToUrl(activeChat?.metadata?.background),
+                  chatBackgroundMetadataToUrl(activeMetadata.background),
                 );
                 if (!activeChat || activeChat.id !== currentChat.id || activeBackground !== nextBackground) {
                   toast.info(t("ui.chat.chatresourcedropoverlay.undoUnavailable"));
@@ -321,8 +447,7 @@ export function ChatResourceDropOverlay({ chat }: { chat: Chat }) {
                 ? "promptPresetId"
                 : "connectionId";
           const previousId = latestAction.replacesId;
-          const metadata: Record<string, unknown> =
-            currentChat.metadata && typeof currentChat.metadata === "object" ? currentChat.metadata : {};
+          const metadata = parseChatMetadata(currentChat.metadata);
           const previousPresetChoices = metadata.presetChoices;
           if (latestAction.type === "set-preset") {
             await updateMetadata.mutateAsync({ id: currentChat.id, presetChoices: {} });
@@ -350,8 +475,7 @@ export function ChatResourceDropOverlay({ chat }: { chat: Chat }) {
               label: t("ui.chat.chatresourcedropoverlay.undo"),
               onClick: () => {
                 const activeChat = useChatStore.getState().activeChat;
-                const activeMetadata: Record<string, unknown> =
-                  activeChat?.metadata && typeof activeChat.metadata === "object" ? activeChat.metadata : {};
+                const activeMetadata = parseChatMetadata(activeChat?.metadata);
                 if (
                   !activeChat ||
                   activeChat.id !== currentChat.id ||
@@ -381,17 +505,17 @@ export function ChatResourceDropOverlay({ chat }: { chat: Chat }) {
       if (!event.dataTransfer) return;
       const next = resolveOverlay(event.target, event.dataTransfer);
       if (!next) {
-        setOverlay(null);
+        updateOverlay(null);
         return;
       }
       event.preventDefault();
       event.dataTransfer.dropEffect = next.action.type === "blocked" ? "none" : "copy";
-      setOverlay(next);
+      updateOverlay(next);
     };
     const handleDrop = (event: DragEvent) => {
       if (!event.dataTransfer) return;
       const next = resolveOverlay(event.target, event.dataTransfer);
-      setOverlay(null);
+      updateOverlay(null);
       clearActiveChatResourceDrag();
       if (!next) return;
       event.preventDefault();
@@ -403,7 +527,7 @@ export function ChatResourceDropOverlay({ chat }: { chat: Chat }) {
       void applyAction(next.payload);
     };
     const clear = () => {
-      setOverlay(null);
+      updateOverlay(null);
       clearActiveChatResourceDrag();
     };
     window.addEventListener("dragover", handleDragOver, true);
@@ -414,7 +538,7 @@ export function ChatResourceDropOverlay({ chat }: { chat: Chat }) {
       window.removeEventListener("drop", handleDrop, true);
       window.removeEventListener("dragend", clear, true);
     };
-  }, [applyAction, resolveOverlay, t]);
+  }, [applyAction, resolveOverlay, t, updateOverlay]);
 
   useEffect(() => {
     const assign = (event: Event) => {
