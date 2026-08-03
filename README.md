@@ -13,6 +13,129 @@
 
 ---
 
+## 🔱 Bainshie Fork Specific Changes
+
+> **Status:** Ongoing, being tested. Only tested on **GLM 5.2** (and **GLM 4.7 Flash** for the weaker agents I use).
+
+<details open>
+<summary><b>Force Dice Rolls</b></summary>
+<br/>
+
+One of the big issues using AI as a GM is its tendency to just go "You asked me to roll dice, let's go make it up!" Agents don't really help here, as agents are also using AI.
+
+You can now force dice rolls, including adding a custom regex for how the dice rolls are displayed in your chat. It will inject the dice format instruction into your chat if you don't change the default (otherwise it's assumed your preset is dealing with it).
+
+The system will go through the chat, work out if the AI actually used the `roll_dice` tool, and if not, will replace the roll with an actual random roll and tell the AI to try again.
+
+The UI has also been updated to add a "Dice" tab next to Agent Actions, so you can see what was rolled.
+
+<p align="center">
+  <img src="docs/screenshots/bainshie-fork/Force_Dice_Rolls_Settings.png" width="45%" alt="Force Dice Rolls settings" />
+  &nbsp;&nbsp;
+  <img src="docs/screenshots/bainshie-fork/Dice_Tab.png" width="45%" alt="Dice tab showing roll history and action log" />
+</p>
+
+</details>
+
+<details open>
+<summary><b>Random Values</b></summary>
+<br/>
+
+Added the ability to have randomly selected fields for single-select preset parameters. These will be auto-selected when you create a new chat. The UI has been updated to take this into account.
+
+</details>
+
+<details open>
+<summary><b>Auto-Enable Agents</b></summary>
+<br/>
+
+Added the ability to automatically enable agents in new chats, so you don't have to add them every time.
+
+<p align="center">
+  <img src="docs/screenshots/bainshie-fork/Auto_Enable_Agents.png" width="70%" alt="Auto-enable agent toggle for new chats" />
+</p>
+
+</details>
+
+<details open>
+<summary><b>Stop Auto-Scroll</b></summary>
+<br/>
+
+Added a setting to stop auto-scroll on generation. Useful on mobile, as scrolling away from the smaller text creates a continual "hey, I was reading that!" moment.
+
+<p align="center">
+  <img src="docs/screenshots/bainshie-fork/Disable_Autoscroll.png" width="45%" alt="Disable auto-scroll while streaming setting" />
+</p>
+
+</details>
+
+<details open>
+<summary><b>Fixed Parameters Not Firing On The Initial Chat Message</b></summary>
+<br/>
+
+Preset choice-variable macros (e.g. `{{genre}}`) weren't always resolving in the very first generated chat message. Fixed.
+
+</details>
+
+<details open>
+<summary><b>Mari Upgrade</b></summary>
+<br/>
+
+Right now, Mari has no actual information about the engine, outside of being able to look at the code. This is the equivalent of basically having a doctor who needs to do surgery to check if a patient has two lungs. It also makes silly mistakes.
+
+Added a new skills file for Mari, giving her knowledge of the chat types, settings, and that the database isn't SQL — it's JSON. Previously, Mari was only given command access, meaning for the simplest query she had to go code diving for answers. This is slow and burns through tokens. This file should be expanded over time to eventually contain a full cheat sheet for the engine.
+
+**Old version:**
+
+<p align="center">
+  <img src="docs/screenshots/bainshie-fork/Mari_Old_1.png" width="80%" alt="Mari, old version, going in circles searching the codebase for a simple answer" />
+</p>
+<p align="center">
+  <img src="docs/screenshots/bainshie-fork/Mari_Old_2.png" width="80%" alt="Mari, old version, finally digging up the answer from source files" />
+</p>
+
+**New version:**
+
+<p align="center">
+  <img src="docs/screenshots/bainshie-fork/Mari_New.png" width="80%" alt="Mari, new version, answering directly from the new skills file" />
+</p>
+
+</details>
+
+<details open>
+<summary><b>Dev Stuff</b></summary>
+<br/>
+
+Added `--build` to all start scripts to force a rebuild.
+
+</details>
+
+<details open>
+<summary><b>New Preset: GM Engine</b></summary>
+<br/>
+
+`GM Engine.marinara.json` — also installed by default.
+
+The entire reason this fork exists! This is a preset designed as a random roleplaying generator experience, able to do everything from a dystopian apocalyptic world to a legal drama.
+
+- **Positivity bias removed via random rolling.** This, in conjunction with the Force Dice Rolls feature, means the preset is more willing to let you fail. It won't roll for trivial or impossible things.
+- **Expands your commands.** If you say "I go up to the bar and ask for new jobs," it will describe you doing so — what exactly you say and do. Makes the whole thing more cinematic.
+- **Can suggest changes and push back.** The preset has final say, but will accept criticism.
+- **Random scenario generation.** Randomly chooses Genre, Setting, what your character is good at, and their social standing — nearly 54 thousand combinations, solving the "AI randomly choosing the same thing over and over again" problem.
+
+<p align="center">
+  <img src="docs/screenshots/bainshie-fork/GM_Engine_Roll_1.png" width="80%" alt="GM Engine preset — rolled Isekai / Age of Discovery scenario" />
+</p>
+<p align="center">
+  <img src="docs/screenshots/bainshie-fork/GM_Engine_Roll_2.png" width="80%" alt="GM Engine preset — rolled Cyberpunk / Artificial World scenario" />
+</p>
+
+</details>
+
+> Other stuff I might have forgotten.
+
+---
+
 ## Table of Contents
 
 - [🍝 Marinara Engine](#-marinara-engine)
