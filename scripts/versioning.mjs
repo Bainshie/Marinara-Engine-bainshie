@@ -71,7 +71,7 @@ function updateInstallerNsi(content, version) {
 function updateInstallerBat(content, version) {
   const next = replaceOrThrow(
     content,
-    /(echo\s+\^\|\s+v)(\d+\.\d+\.\d+)(\s+\^\|)/,
+    /(echo\s+\^\|\s+v)(\d+\.\d+\.\d+(?:-[\w.]+)?)(\s+\^\|)/,
     `$1${version}$3`,
     "installer banner version",
   );
