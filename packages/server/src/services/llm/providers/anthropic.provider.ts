@@ -362,15 +362,12 @@ export class AnthropicProvider extends BaseLLMProvider {
     const cacheControlMessageIndex = enableCaching
       ? resolveCacheControlMessageIndex(formattedMessages, normalizeCachingAtDepth(options.cachingAtDepth))
       : -1;
-    const toolChoice = formatAnthropicToolChoice(options.toolChoice);
-
     const body: Record<string, unknown> = {
       model: options.model,
       ...(this.shouldSendParameter(options, "maxTokens") ? { max_tokens: maxTokens } : {}),
       ...(systemField !== undefined ? { system: systemField } : {}),
       messages: applyCacheControlToPayloadMessage(formattedMessages, cacheControlMessageIndex, cacheControl),
       tools: formatAnthropicTools(options.tools),
-      ...(toolChoice ? { tool_choice: toolChoice } : {}),
       stream: false,
       ...(this.shouldSendParameter(options, "temperature") && options.temperature !== undefined
         ? { temperature: clampAnthropicTemperature(options.temperature) }

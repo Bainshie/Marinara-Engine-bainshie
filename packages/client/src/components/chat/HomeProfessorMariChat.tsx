@@ -2761,58 +2761,6 @@ function ProfessorMariSkillsMenu({
   );
 }
 
-        {hasSkills && (
-          <div className="border-t border-[var(--border)]/50 p-2.5">
-            {selectedSkill ? (
-              <div className="space-y-2">
-                {selectedSkill.source === "bundled" && (
-                  <p className="rounded-md bg-[var(--muted)]/40 px-2 py-1.5 text-[0.65rem] text-[var(--muted-foreground)]">{localizeUi("ui.chat.professormariskillsmenu.builtInSkillShipsWithMarinaraEngineAndAlways")}{" "}
-                    <code className="font-mono">mari-skills/{selectedSkill.id}/SKILL.md</code> {localizeUi("ui.chat.professormariskillsmenu.inTheRepoToChangeIt")}</p>
-                )}
-                <label className="block text-[0.6875rem] font-semibold text-[var(--muted-foreground)]">{localizeUi("ui.characters.metadatatab.name")}<input
-                    value={draft.name}
-                    onChange={(event) => onDraftChange({ ...draft, name: event.target.value })}
-                    disabled={saving || selectedSkill.source === "bundled"}
-                    className="mt-1 h-8 w-full rounded-md border border-[var(--border)] bg-[var(--card)] px-2 text-xs text-[var(--foreground)] outline-none transition-colors focus:border-[var(--primary)]/55 disabled:cursor-not-allowed disabled:opacity-70"
-                  />
-                </label>
-                <label className="block text-[0.6875rem] font-semibold text-[var(--muted-foreground)]">{localizeUi("chat.settings.inlineEditor.fields.description")}<input
-                    value={draft.description}
-                    onChange={(event) => onDraftChange({ ...draft, description: event.target.value })}
-                    disabled={saving || selectedSkill.source === "bundled"}
-                    className="mt-1 h-8 w-full rounded-md border border-[var(--border)] bg-[var(--card)] px-2 text-xs text-[var(--foreground)] outline-none transition-colors focus:border-[var(--primary)]/55 disabled:cursor-not-allowed disabled:opacity-70"
-                  />
-                </label>
-                <label className="block text-[0.6875rem] font-semibold text-[var(--muted-foreground)]">{localizeUi("ui.chat.professormariskillsmenu.instructions")}<textarea
-                    value={draft.content}
-                    onChange={(event) => onDraftChange({ ...draft, content: event.target.value })}
-                    disabled={saving || selectedSkill.source === "bundled"}
-                    rows={9}
-                    className="mt-1 min-h-40 w-full resize-y rounded-md border border-[var(--border)] bg-[var(--card)] px-2 py-2 font-mono text-[0.6875rem] leading-relaxed text-[var(--foreground)] outline-none transition-colors focus:border-[var(--primary)]/55 disabled:cursor-not-allowed disabled:opacity-70"
-                  />
-                </label>
-                {selectedSkill.source !== "bundled" && (
-                  <div className="flex items-center justify-between gap-2">
-                    <button
-                      type="button"
-                      onClick={() => onDelete(selectedSkill.id)}
-                      disabled={saving}
-                      className="inline-flex h-8 items-center gap-1.5 rounded-md px-2 text-[0.6875rem] font-semibold text-[var(--destructive)] transition-colors hover:bg-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-45"
-                    >
-                      <Trash2 size="0.75rem" />{localizeUi("lorebook.editor.batch.delete")}</button>
-                    <button
-                      type="button"
-                      onClick={onSave}
-                      disabled={saving}
-                      className="inline-flex h-8 items-center gap-1.5 rounded-md bg-[var(--primary)] px-2.5 text-[0.6875rem] font-semibold text-[var(--primary-foreground)] transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-45"
-                    >
-                      {saving ? <Loader2 size="0.75rem" className="animate-spin" /> : <Save size="0.75rem" />}{localizeUi("ui.noodle.noodlehome.save")}</button>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div className="rounded-lg border border-dashed border-[var(--border)] px-3 py-6 text-center text-xs text-[var(--muted-foreground)]">{localizeUi("ui.chat.professormariskillsmenu.noSkillSelected")}</div>
-            )}
 // #4851: the Memories management panel, next to Skills. Mirrors ProfessorMariSkillsMenu;
 // adds a Persistent toggle (with a "keep it small" tooltip) and drops file diagnostics
 // (memories are DB-backed). Enable + Persistent are direct toggles; name/description/

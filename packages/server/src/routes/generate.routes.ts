@@ -6926,8 +6926,6 @@ export async function generateRoutes(app: FastifyInstance) {
             debugLog("[generate/game/raw] chatId=%s characterId=%s END", input.chatId, targetCharId ?? "gm");
           }
 
-          let contentReplaced = false;
-
           // Some models inline reasoning blocks instead of using provider-native
           // thinking channels. Lift those blocks into message.extra.thinking.
           const inlineThinking = extractLeadingThinkingBlocks(fullResponse, customThinkingTags);
