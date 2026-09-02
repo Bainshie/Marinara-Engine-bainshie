@@ -8,6 +8,8 @@ This file is the release-notes source of truth for Marinara Engine. Reuse these 
 
 ### Fixed
 
+- Agent and chat requests for GLM 5.3 (not only GLM 5.3 Flash) no longer fail with "This model always engages in thinking and cannot be disabled": native Z.AI connections now send the documented `thinking.type: "enabled"` with the effort mapped to `low`/`high`/`max`, NanoGPT and OpenRouter keep the model's mandatory reasoning, and a reasoning-off request becomes the lightest level instead of a rejected disable (#5765).
+
 ## [2.4.4]
 
 ### Added
