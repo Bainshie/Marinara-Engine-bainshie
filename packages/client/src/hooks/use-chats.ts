@@ -654,7 +654,7 @@ export function useDeleteChat() {
       for (const affectedGroupId of affectedGroupIds) {
         qc.invalidateQueries({ queryKey: chatKeys.group(affectedGroupId) });
       }
-      if (!err) {
+      if (!error) {
         useUIStore.getState().clearDiceRollLog(getDeleteChatId(input));
       }
     },
@@ -688,7 +688,7 @@ export function useDeleteChatGroup() {
       qc.setQueryData<Chat[]>(chatKeys.group(groupId), []);
       qc.setQueryData<HomeFeedSnapshot>(homeFeedKeys.snapshot(), (old) => removeChatsFromHomeFeed(old, removedIds));
 
-      return { previous, previousGroup, previousHomeFeed, groupId };
+      return { previous, previousGroup, previousHomeFeed, groupId, deletedIds: removedIds };
     },
     onError: (_err, _input, context) => {
       if (context?.previous) qc.setQueryData(chatKeys.list(), context.previous);

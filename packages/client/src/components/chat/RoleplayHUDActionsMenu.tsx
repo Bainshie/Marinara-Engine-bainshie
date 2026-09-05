@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, Check, ChevronDown, Code2, Pencil, RefreshCw, Sparkles, Square, Trash2, X } from "lucide-react";
+import { AlertTriangle, Check, ChevronDown, Code2, Dices, Pencil, RefreshCw, Sparkles, Square, Trash2, X } from "lucide-react";
 import { BUILT_IN_AGENTS, type Message } from "@marinara-engine/shared";
 import { toast } from "sonner";
 import { useUpdateAgentRunData, type AgentConfigRow, type AgentRunRow } from "../../hooks/use-agents";
